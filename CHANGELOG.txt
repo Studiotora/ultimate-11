@@ -1,0 +1,275 @@
+ULTIMATE ELEVEN — CHANGELOG
+============================
+
+All changes tracked per session. Most recent first.
+
+────────────────────────────────────────────────
+SESSION: FORMATION INTEGRITY + SPEED REBALANCE
+────────────────────────────────────────────────
+
+[game.js] OVERALL GAME SPEED REDUCED
+  - MAX_CARRIER_STEP: W*0.0006 → W*0.00048 (carrier moves slower, more readable)
+  - MAX_DEF_STEP:     W*0.0009 → W*0.00072 (engager still faster than carrier)
+  - DRIFT_SPEED:   W*0.00035 → W*0.00020 (formation hold barely perceptible)
+  - ROLE_SPEED:    W*0.00065 → W*0.00030 (defenders track attackers calmly)
+  - SUPPORT_SPEED: W*0.00110 → W*0.00040 (runners advance purposefully)
+  - STRIKER_SPEED: W*0.00160 → W*0.00055 (strikers noticeably faster, not sprinting)
+
+[game.js] SPEED STAT NOW AFFECTS OFF-BALL MOVEMENT
+  - spdMult(pl): spd 60 → 0.70×, spd 80 → 1.00×, spd 100 → 1.20×
+  - All glide() calls now pass the player object
+  - Natureza (spd:90) moves to position ~30% faster than a CB (spd:68)
+  - Difference is meaningful but not extreme (was: everyone same speed)
+
+[game.js] HARD FORMATION ZONE CAPS
+  - Defenders: hard cap at W*0.46 — never cross halfway when team is attacking
+  - Midfielders: hard cap at W*0.78 — never reach the penalty box
+  - Strikers still push into box when carrier is in final third
+  - Defending team: tighter caps on compression depth
+
+[game.js] FORMATION TARGET RANGES TIGHTENED
+  - Defenders: safeProg capped at 0.48 (was 0.60) when attacking
+  - Midfielders: safeProg capped at 0.75 (was 0.85) when attacking
+  - Defending mids: shifted range 0.18–0.65 (was 0.18–0.68)
+  - Defending defs: defCeil W*0.52 (was W*0.58)
+
+────────────────────────────────────────────────
+SESSION: CARRIER LANE MEMORY (G_laneTarget)
+────────────────────────────────────────────────
+
+[game.js] ROOT CAUSE: CARRIER DRIFTS TO CENTRE AFTER REACHING CLICK TARGET
+  - When G_moveTarget cleared (player reached destination), AI took over
+  - AI forward push (tx = cp.x + dir*forward) dominated, ignoring sideways intent
+  - Wide run bias also incorrectly applied to human-controlled carrier
+
+[game.js] FIX: G_laneTarget — persistent lane memory
+  - New variable stores the Y coordinate from the last human click
+  - After G_moveTarget clears, carrierAdvanceVector uses G_laneTarget as Y anchor
+  - Player stays in the lane they were directed to (wing, touchline, etc.)
+  - G_laneTarget only resets on actual possession changes:
+    · Pass received by teammate
+    · One-two received
+    · Dribble success (afSucc)
+    · Turnover / possession won by opponent
+    · Goal scored
+  - NOT reset just from reaching the click destination
+  - Wide run bias (widthLean) now only applied to AI carriers, not human
+
+────────────────────────────────────────────────
+SESSION: FIELD BOUNDARIES + SHOT GATE FIX
+────────────────────────────────────────────────
+
+[game.js] PITCH BOUNDARIES EXPANDED (PB constants)
+  - x0: 0.085 → 0.060  (left touchline)
+  - x1: 0.915 → 0.940  (right touchline)
+  - y0: 0.155 → 0.120  (top touchline)
+  - y1: 0.810 → 0.850  (bottom touchline)
+  - Players can now reach the full width and depth of the visible pitch
+  - NOTE: if players still don't align with white lines, fine-tune these 4 values
+
+[game.js] MOVEMENT CLAMPS EXPANDED
+  - Carrier X: W*0.03–0.97 → W*0.01–0.99
+  - Carrier Y: H*0.05–0.95 → H*0.03–0.97
+  - Engager/defender X: same expansion
+  - Manual click target: W*0.05–0.95 → W*0.01–0.99
+  - Carrier advance vector: W*0.04–0.96 → W*0.01–0.99
+  - GK lateral range: H*0.28–0.72 → H*0.15–0.85
+
+[game.js] SHOT GATE THRESHOLD RAISED
+  - Old: progress > 0.79 && centrality > 0.42
+  - New: progress > 0.88 && centrality > 0.35
+  - Auto-duel vs GK now only triggers when carrier is genuinely deep in
+    the penalty box, not from 20% out
+  - Centrality requirement relaxed slightly so wide angles still work
+
+────────────────────────────────────────────────
+SESSION: SPECIAL MOVE CUTSCENE
+────────────────────────────────────────────────
+
+[index.html] SPECIAL CUTSCENE HTML — image only, no text/title
+  - #special-cutscene at viewport level (z-index 150)
+  - Contains: .sc-bg (vignette), .sc-lines (speed lines), .sc-face (img tag)
+  - Uses <img> tag so natural image aspect ratio is preserved
+  - Also added #referee-popup HTML
+
+[style.css] SPECIAL CUTSCENE STYLED
+  - Dark radial vignette + spinning manga speed lines
+  - .sc-face: max-width 52vw, border-radius, gold glow border
+  - img inside: width 100%, height auto — preserves natural ratio
+  - scPop entry animation (scale + translate)
+  - Mobile: 88vw width, speed lines hidden
+
+[game.js] showSpecialCutscene(pl, special, callback)
+  - Loads from assets/cutscene/{lastname}.png (dedicated cutscene images)
+  - NOT from assets/players/ — separate folder for close-up shouting faces
+  - Injects <img> tag for natural aspect ratio
+  - 2200ms duration then fires callback (resDuel)
+  - Duel timer paused during cutscene
+
+[game.js] CUTSCENE TRIGGERS
+  - confirmDuel(): human picks special → cutscene → resDuel()
+  - aiAtk(): AI picks special (all-AI) → aiDef → cutscene → resDuel()
+  - aiAtk(): AI attacks, human defends → cutscene plays alongside defence choice
+
+────────────────────────────────────────────────
+ASSET PATHS — CUTSCENE IMAGES
+────────────────────────────────────────────────
+
+  assets/cutscene/{lastname}.png  — close-up shouting face for special moves
+  Named same as player lastname, lowercase (e.g. frisina.png, ozora.png)
+  Separate from assets/players/ portraits — can be any aspect ratio
+
+────────────────────────────────────────────────
+SESSION: ENGINE + CLOCK + UX FIXES
+────────────────────────────────────────────────
+
+[game.js] CLOCK DIRECTION FIXED
+  - Match clock now counts UP: 0:00 → 45:00 (first half), 45:00 → 90:00 (second half)
+  - Was previously a countdown (wrong direction)
+
+[game.js] DUEL SLOWS MATCH CLOCK
+  - While a duel overlay is open, match clock ticks 4× slower (75% skip chance)
+  - Prevents match from burning through time while player is thinking
+
+[game.js] GK DUEL AUTO-RESOLVES IN 3s
+  - When human is attacker in a shot vs GK, the GK duel timer is 3s (not 30s)
+  - GK is AI-only — no human decision needed, so no waiting
+  - Timer display hidden during GK duel
+
+[game.js] STAMINA RANGE COMPRESSED
+  - spiritMult() range changed from 0.50→1.15 (65% swing) to 0.82→1.05 (23% swing)
+  - Tired players are weaker but never crippled by RNG
+  - Prevents late-game snowball where low-stamina players lose every duel
+
+[game.js] GK SAVES NOW STAT-BASED (afSave rewritten)
+  - Old: pure RNG (catchChance/parryChance/punchChance rolls)
+  - New: shotPow (from calcAttackPower) vs gkPow (from calcDefencePower using sav/ref stats)
+  - Normal shots weak vs good GK, specials genuinely dangerous
+  - Outcome shown: "SHOT 145 vs GK 162" in duel result panel
+  - Outcomes: CAUGHT / PARRIED / REBOUND / GOAL
+
+[game.js] EARLY "GOAL!" MESSAGE FIXED
+  - When attacker wins field duel with a shot, badge now shows "🎯 SHOT ON TARGET!"
+  - "⚽ GOAL!" only shows when actual GK duel resolves as a goal
+  - Was previously showing GOAL before GK even had a chance
+
+[game.js] SHOT POWER STORED FOR GK
+  - G.D.lastShotPow stored in resDuel() so afSave() can use it for comparison
+  - Without this, GK power comparison had no attacker reference
+
+[game.js] REFEREE POPUP RESTORED
+  - showReferee(msg, duration) function added
+  - Triggers: KICK OFF (match start), KICK OFF (after goal), GOAL!, 2ND HALF
+  - Duration: 1200ms — appears briefly then fades
+
+────────────────────────────────────────────────
+SESSION: DUEL CARD VISUAL OVERHAUL
+────────────────────────────────────────────────
+
+[index.html] DPAV MOVED OUTSIDE DPC
+  - Portrait (.dpav) is now a sibling of .dpc inside .dp-card-wrap
+  - Allows portrait to overflow above the card frame without border clipping
+
+[style.css] PORTRAIT OVERFLOW
+  - .dpav: position:absolute, bottom:0, height:95%, contain sizing
+  - Portrait floats above card frame — full body visible
+  - No more border appearing over the player image
+
+[style.css] CARD BORDER FIXED
+  - .dpc uses normal border (not outline), overflow:hidden
+  - Border always renders correctly beneath the portrait
+
+[game.js] MIRROR REMOVED
+  - Both cards show player image as supplied — no scaleX(-1) flip
+  - isLeftCard / mirrored toggle removed entirely
+
+[game.js] TEAM FLAG EMBLEM WATERMARK
+  - Team flag emoji injected into card as .dp-card-emblem
+  - Low opacity blur behind the player portrait
+
+[style.css] BALL REPLACED WITH PNG
+  - .dp-ball uses assets/pitch/ball.png instead of ⚽ emoji
+  - Sized with width/height, font-size:0 to hide emoji fallback
+
+────────────────────────────────────────────────
+SESSION: BACKGROUNDS + REFEREE POPUP
+────────────────────────────────────────────────
+
+[style.css] WALLPAPERS WIRED
+  - #s-home: assets/wallpaper/mainmenu.png (dark gradient overlay)
+  - #s-ts: assets/wallpaper/teamselect.png (dark gradient overlay)
+  - #duel-ov: assets/wallpaper/duel.png (semi-transparent overlay)
+
+[index.html] REFEREE POPUP HTML ADDED
+  - #referee-popup placed at #viewport level (not inside mviews)
+  - z-index: 200 — appears above everything including duel overlay
+
+[style.css] REFEREE POPUP STYLED
+  - Floating card: referee image + gold label bar
+  - Slides up from bottom, fades after duration
+  - Bigger image: 100–160px wide, 130–210px tall
+
+────────────────────────────────────────────────
+SESSION: TEAM EDITOR MOBILE UX
+────────────────────────────────────────────────
+
+[style.css] HEADER BAR HIDDEN
+  - .tm-hdr { display:none } — removes "DREAM TEAM EDIT" bar
+  - Frees vertical space on mobile
+
+[style.css] FORMATION SUB-LABEL HIDDEN
+  - .tm-side-sub { display:none } — removes redundant "FORMATION · 4-3-3" line
+  - Formation button already shows this info
+
+[style.css] FLOATING BACK BUTTON
+  - .tm-back-float: position:absolute, top-left, z-index:50
+  - Small gold-bordered button, no layout impact
+
+────────────────────────────────────────────────
+SESSION: SPAIN ROSTER CORRECTED
+────────────────────────────────────────────────
+
+[game.js] SPAIN — 11 CORRECT PLAYERS
+  - Casillas (GK, sav:94, rar:3)
+  - Puyol (LB), Pique (CB1), Ramos (CB2, rar:3), Carvajal (RB)
+  - Xavi (CM1, tec:96, rar:3), Hernandez (CM2), Raphael (CM3)
+  - Michael (LW), Raul (RW, rar:3), Torres (ST, rar:3)
+  - Image filenames: casillas.png, puyol.png, pique.png, ramos.png,
+    carvajal.png, xavi.png, hernandez.png, raphael.png,
+    michael.png, raul.png, torres.png
+
+────────────────────────────────────────────────
+SESSION: DUEL MOBILE LAYOUT
+────────────────────────────────────────────────
+
+[style.css] MOBILE DUEL: CARDS CENTERED
+  - .dp-card-wrap: align-items:center on mobile
+  - Cards no longer pushed to the left
+
+[style.css] MOBILE DUEL: GO BUTTON FAR RIGHT
+  - .dcfm: margin-left:auto pushes GO to end of flex row
+
+[style.css] MOBILE DUEL: CARD LOWER
+  - .dpc on mobile anchored to bottom so player art shows above
+
+────────────────────────────────────────────────
+KNOWN BUGS / DEFERRED
+────────────────────────────────────────────────
+
+- Ghost goal bug: still present in some edge cases (generation counter helps but not 100%)
+- Team editor back button: JS side still uses .tm-hdr structure (CSS hides it)
+  → pending: move button element out of .tm-hdr and assign .tm-back-float class
+- Half time / End screens: referee.png not yet wired as background
+  (opted for floating referee popup instead — may revisit)
+
+────────────────────────────────────────────────
+ASSET PATHS REFERENCE
+────────────────────────────────────────────────
+
+assets/wallpaper/mainmenu.png    — home menu background
+assets/wallpaper/teamselect.png  — team select background
+assets/wallpaper/duel.png        — duel overlay background
+assets/wallpaper/referee.png     — referee popup image
+assets/wallpaper/home.jpg        — splash screen background
+assets/pitch/ball.png            — duel ball image
+assets/players/{lastname}.png    — player portraits (lowercase lastname)

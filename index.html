@@ -1,0 +1,338 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1.0,maximum-scale=1.0,user-scalable=no,viewport-fit=cover">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="theme-color" content="#06080e">
+<title>Ultimate Eleven</title>
+<link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Rajdhani:wght@600;700&family=Orbitron:wght@400;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+<!-- Portrait warning — shown when phone is vertical -->
+<div id="portrait-warn">
+  <div class="pw-icon">📱</div>
+  <div class="pw-txt">ROTATE YOUR DEVICE</div>
+  <div class="pw-sub">THIS GAME RUNS IN LANDSCAPE MODE</div>
+</div>
+
+<div id="viewport">
+
+<!-- SPLASH -->
+<div id="s-splash" class="screen active" style="background-image:url('assets/wallpaper/home.jpg'),url('assets/wallpaper/home.png');background-size:cover;background-position:center;">
+  <button class="splash-btn" onclick="enterGame()">PLAY</button>
+</div>
+
+<!-- HOME MENU -->
+<div id="s-home" class="screen">
+  <div class="logo">ULTIMATE<br>ELEVEN</div>
+  <div class="logo-sub">FOOTBALL STRATEGY · 11 VS 11</div>
+  <div class="menu-cards">
+    <div class="mc on" onclick="showSc('s-ts')"><div class="mc-icon">⚽</div><div class="mc-lbl">FRIENDLY</div></div>
+    <div class="mc off" onclick="cs()"><div class="mc-soon">SOON</div><div class="mc-icon">🏆</div><div class="mc-lbl">TOURNAMENT</div></div>
+    <div class="mc off" onclick="cs()"><div class="mc-soon">SOON</div><div class="mc-icon">📋</div><div class="mc-lbl">LEAGUE</div></div>
+    <div class="mc off" onclick="cs()"><div class="mc-soon">SOON</div><div class="mc-icon">⭐</div><div class="mc-lbl">CAREER</div></div>
+    <div class="mc off" onclick="cs()"><div class="mc-soon">SOON</div><div class="mc-icon">🛠</div><div class="mc-lbl">CREATE TEAM</div></div>
+    <div class="mc off" onclick="cs()"><div class="mc-soon">SOON</div><div class="mc-icon">⚙️</div><div class="mc-lbl">SETTINGS</div></div>
+  </div>
+  <div class="home-hint">SELECT A MODE TO BEGIN</div>
+</div>
+
+<div id="s-ts" class="screen">
+  <div class="ts-hdr"><h2>FRIENDLY — SELECT TEAMS</h2><button class="back-btn" onclick="showSc('s-home')">← MENU</button></div>
+  <div class="ts-body">
+    <div class="ts-col">
+      <div class="ts-col-lbl red">YOUR TEAM — RED</div>
+      <div class="ts-picker">
+        <button class="ts-nav left" onclick="cycleTeam('home',-1)">◀</button>
+        <div class="ts-sel-strip big" id="h-sel-strip">
+          <div class="ts-shield" style="--sc:var(--red)"><div class="ts-shield-flag" id="hflag">?</div></div>
+          <div class="ts-sel-name-lbl" id="hname" style="color:var(--red)">SELECT</div>
+          <div class="ts-sel-hint">HOME · YOU</div>
+          <div class="ts-subhint" id="hsubhint">Use arrows to browse teams</div>
+        </div>
+        <button class="ts-nav right" onclick="cycleTeam('home',1)">▶</button>
+      </div>
+      <div class="ts-grid" id="hrow"></div>
+    </div>
+    <div class="ts-mid">
+      <div class="ts-vs-big">VS</div>
+      <button class="kick-btn" id="kickbtn" onclick="openTeamMenu()">TEAM MENU →</button>
+    </div>
+    <div class="ts-col">
+      <div class="ts-col-lbl blue">OPPONENT — BLUE</div>
+      <div class="ts-picker">
+        <button class="ts-nav left" onclick="cycleTeam('away',-1)">◀</button>
+        <div class="ts-sel-strip big" id="a-sel-strip">
+          <div class="ts-shield"><div class="ts-shield-flag" id="aflag">?</div></div>
+          <div class="ts-sel-name-lbl" id="aname" style="color:var(--blue)">SELECT</div>
+          <div class="ts-sel-hint">AWAY · CPU</div>
+          <div class="ts-subhint" id="asubhint">Same team not allowed</div>
+        </div>
+        <button class="ts-nav right" onclick="cycleTeam('away',1)">▶</button>
+      </div>
+      <div class="ts-grid" id="arow"></div>
+    </div>
+  </div>
+</div>
+
+<div id="s-team" class="screen">
+  <div class="tm-hdr">
+    <h2>DREAM TEAM EDIT</h2>
+    <button class="back-btn" onclick="showSc('s-ts')">← BACK</button>
+  </div>
+  <div class="tm-body v6">
+
+    <!-- LEFT PANEL: team info + selected player info + actions -->
+    <div class="tm-panel tm-side left">
+      <div class="tm-side-top">
+        <div class="tm-crest-wrap"><div class="tm-crest-flag" id="tmFlag">🏳</div></div>
+        <div>
+          <div class="tm-side-kicker">HOME TEAM</div>
+          <div class="tm-side-name" id="teamMenuTitle">TEAM</div>
+          <div class="tm-side-sub" id="teamMenuBadge">FORMATION</div>
+        </div>
+      </div>
+
+      <!-- Formation: single button opens popup -->
+      <div class="tm-section">
+        <button class="tm-formation-btn" id="formationPickerBtn" onclick="openFormationPicker()">
+          <span class="tm-formation-lbl">FORMATION</span>
+          <span class="tm-formation-val" id="formationVal">4-3-3</span>
+          <span class="tm-formation-arrow">▾</span>
+        </button>
+      </div>
+
+      <!-- Selected player info -->
+      <div class="tm-section tm-player-info-section" id="playerInfoSection">
+        <div class="tm-player-face-wrap">
+          <div class="tm-player-face" id="playerFaceImg"></div>
+        </div>
+        <div class="tm-player-details">
+          <div class="tm-player-slot-lbl" id="playerSlotLbl">ST · ATT</div>
+          <div class="tm-player-name-big" id="playerNameBig">Select a player</div>
+          <div class="tm-player-stats-row" id="playerStatsRow"></div>
+        </div>
+      </div>
+
+      <!-- Team actions -->
+      <div class="tm-section stretch">
+        <div class="tm-actions-grid">
+          <button class="tm-action-btn" onclick="autoPickHomeTeam()">AUTO PICK</button>
+          <button class="tm-action-btn" onclick="resetHomeTeamMenu()">RESET</button>
+          <button class="tm-action-btn alt" onclick="showSc('s-ts')">BACK</button>
+          <button class="kick-btn rdy" onclick="startGame()" style="width:100%;justify-content:center">KICK OFF →</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- CENTER PANEL: pitch + reserves -->
+    <div class="tm-panel tm-pitch-panel">
+      <div class="tm-pitch-top">
+        <div class="tm-title">FORMATION BOARD</div>
+        <div class="tm-pitch-sub">Tap a player to select · Tap roster to assign</div>
+      </div>
+      <div class="tm-field-wrap v6">
+        <div class="tm-field v6" id="teamPreviewField"></div>
+      </div>
+      <!-- RESERVES ROW -->
+      <div class="tm-reserves-row">
+        <div class="tm-reserves-lbl">RESERVES — tap a pitch player first, then tap a reserve to swap</div>
+        <div class="tm-reserves-slots" id="reserveSlots"></div>
+      </div>
+    </div>
+
+    <!-- RIGHT PANEL: removed - assignment via reserves row below pitch -->
+
+  </div>
+
+  <!-- FORMATION POPUP -->
+  <div class="tm-formation-popup" id="formationPopup" style="display:none" onclick="closeFormationPicker()">
+    <div class="tm-formation-modal" onclick="event.stopPropagation()">
+      <div class="tm-formation-modal-title">CHOOSE FORMATION</div>
+      <div class="tm-formation-grid" id="formationGrid"></div>
+    </div>
+  </div>
+</div>
+
+<div id="s-match" class="screen">
+  <div class="mhud">
+    <!-- HOME team (left): flag · name · score -->
+    <div class="hteam home">
+      <div class="hflag-circle" id="h-flag-hud">🏳</div>
+      <div class="htn" id="htn">HOME</div>
+      <div class="hsc sh" id="sc-h">0</div>
+    </div>
+    <!-- CENTER -->
+    <div class="hmid">
+      <div class="hclock">
+        <div class="htime" id="htime">45:00</div>
+      </div>
+      <div class="hhalf" id="hhalf">FIRST HALF</div>
+      <div class="posstrip"><div class="posstrip-h" id="posstrip-h" style="width:50%"></div><div class="posstrip-a"></div></div>
+    </div>
+    <!-- AWAY team (right): score · name · flag (row-reverse) -->
+    <div class="hteam away">
+      <div class="hflag-circle" id="a-flag-hud">🏳</div>
+      <div class="htn" id="atn">AWAY</div>
+      <div class="hsc sa" id="sc-a">0</div>
+    </div>
+  </div>
+  <div class="mviews">
+    <canvas id="C"></canvas>
+    <div id="possbar"><div class="pdot" id="pdot"></div><div class="pname" id="pname">POSSESSION</div></div>
+    <div id="passhint">🖱 CLICK TEAMMATE TO PASS</div>
+    <div id="pass-banner">PASS MODE — CLICK A PLAYER</div>
+    <button class="shot-btn" id="fieldShotBtn" onclick="manualShot()">SHOT</button>
+    <button class="shot-btn press-btn" id="pressBtn" onclick="togglePress()" style="display:none">PRESS</button>
+    <div id="looming-alert"></div>
+    <div id="duel-ov">
+      <div class="da-bg"></div>
+      <div class="dvs" id="dvs">VS</div>
+      <!-- Two player panels -->
+      <div class="dpwrap">
+        <!-- Ball floats between cards at dpwrap level -->
+        <div class="dp-ball show" id="dp-ball">⚽</div>
+
+        <!-- ATTACKER (left) -->
+        <div class="dp-card-wrap atk">
+          <div class="dp-role" id="dpa-role">ATTACKER</div>
+          <div class="dpav" id="dpa-av"></div>
+          <div class="dpc" id="dpa-c">
+            <div class="dpr" id="dpa-r">SR</div>
+            <div class="dpc-info">
+              <div class="dpnm" id="dpa-nm">—</div>
+              <div class="dpps" id="dpa-ps">—</div>
+              <div class="dp-energy-wrap">
+                <div class="dp-energy-lbl">ENERGY</div>
+                <div class="dp-energy-bar"><div class="dp-energy-fill" id="dpa-ef" style="width:100%"></div></div>
+                <div class="dp-energy-val" id="dpa-ev">100</div>
+              </div>
+            </div>
+          </div>
+          <div class="dp-stats" id="dpa-st"></div>
+        </div>
+
+        <!-- DEFENDER (right) -->
+        <div class="dp-card-wrap">
+          <div class="dp-role" id="dpd-role">DEFENDER</div>
+          <div class="dpav" id="dpd-av"></div>
+          <div class="dpc" id="dpd-c">
+            <div class="dpr" id="dpd-r">SR</div>
+            <div class="dpc-info">
+              <div class="dpnm" id="dpd-nm">—</div>
+              <div class="dpps" id="dpd-ps">—</div>
+              <div class="dp-energy-wrap">
+                <div class="dp-energy-lbl">ENERGY</div>
+                <div class="dp-energy-bar"><div class="dp-energy-fill" id="dpd-ef" style="width:100%"></div></div>
+                <div class="dp-energy-val" id="dpd-ev">100</div>
+              </div>
+            </div>
+          </div>
+          <div class="dp-stats" id="dpd-st"></div>
+        </div>
+      </div>
+      <div class="duelbar">
+        <div class="dueltop">
+          <div class="duelzone" id="dzone">MIDFIELD</div>
+          <div class="dtw"><div class="dtr"><svg width="36" height="36" viewBox="0 0 36 36"><circle cx="18" cy="18" r="15" fill="none" stroke="rgba(255,255,255,.08)" stroke-width="3"/><circle id="dta" cx="18" cy="18" r="15" fill="none" stroke="#f0c040" stroke-width="3" stroke-dasharray="94.2" stroke-dashoffset="0" stroke-linecap="round"/></svg><div class="dtn" id="dtn">30</div></div>
+          <div class="di" id="di">CHOOSE</div></div>
+        </div>
+        <!-- Single flat row: label · btn · btn · btn · GO -->
+        <div class="duel-row">
+          <div class="dplbl" id="albl">ATTACK</div>
+          <div id="abtns" class="btn-group"></div>
+          <div class="dplbl" id="dlbl" style="margin-left:12px">DEFEND</div>
+          <div id="dbtns" class="btn-group"></div>
+          <button class="dcfm" id="dcfm" onclick="confirmDuel()">GO</button>
+        </div>
+      </div>
+      <div id="duel-res"><div class="rbadge" id="rbadge"></div><div class="rdet" id="rdet"></div><div class="ract" id="ract"></div></div>
+    </div>
+  </div>
+  <div class="mcomm"><div class="cdot"></div><span id="comm">Match underway.</span></div>
+</div>
+
+<div id="s-half" class="screen">
+  <div class="bk-topbar"><div class="bkt">HALF TIME</div></div>
+  <div class="bk-score-panel">
+    <div class="bk-team home">
+      <div class="bk-flag" id="hht-flag">🏳</div>
+      <div class="bk-tname" id="hht">HOME</div>
+    </div>
+    <div class="bk-sc-wrap">
+      <div class="bksc">
+        <div class="bkn bh" id="hth">0</div>
+        <div class="bkd">–</div>
+        <div class="bkn ba" id="ata">0</div>
+      </div>
+      <div class="bk-period">45 MINUTES</div>
+    </div>
+    <div class="bk-team away">
+      <div class="bk-flag" id="aht-flag">🏳</div>
+      <div class="bk-tname" id="aht">AWAY</div>
+    </div>
+  </div>
+  <div class="bksts">
+    <div class="bs"><div class="bs-v" id="htd">0</div><div class="bs-l">DUELS</div></div>
+    <div class="bs"><div class="bs-v" id="htp">50%</div><div class="bs-l">POSSESSION</div></div>
+    <div class="bs"><div class="bs-v" id="hts">0</div><div class="bs-l">SHOTS</div></div>
+  </div>
+  <button class="bkbtn" onclick="secondHalf()">SECOND HALF →</button>
+</div>
+
+<div id="s-end" class="screen">
+  <div class="wintag" id="wtag">FULL TIME</div>
+  <div class="bk-topbar"><div class="bkt">FINAL SCORE</div></div>
+  <div class="bk-score-panel">
+    <div class="bk-team home">
+      <div class="bk-flag" id="hft-flag">🏳</div>
+      <div class="bk-tname" id="hft">HOME</div>
+    </div>
+    <div class="bk-sc-wrap">
+      <div class="bksc">
+        <div class="bkn bh" id="fth">0</div>
+        <div class="bkd">–</div>
+        <div class="bkn ba" id="fta">0</div>
+      </div>
+      <div class="bk-period">FULL TIME · 90 MIN</div>
+    </div>
+    <div class="bk-team away">
+      <div class="bk-flag" id="aft-flag">🏳</div>
+      <div class="bk-tname" id="aft">AWAY</div>
+    </div>
+  </div>
+  <div class="bksts">
+    <div class="bs"><div class="bs-v" id="ftd">0</div><div class="bs-l">DUELS</div></div>
+    <div class="bs"><div class="bs-v" id="fts">0</div><div class="bs-l">SHOTS</div></div>
+  </div>
+  <div class="end-btns">
+    <button class="bkbtn" onclick="startGame()">REMATCH</button>
+    <button class="bkbtn" onclick="showSc('s-ts')">CHANGE TEAMS</button>
+    <button class="bkbtn" onclick="showSc('s-home')">MENU</button>
+  </div>
+</div>
+
+<div class="gfl" id="gfl"><div class="gfl-bg"></div><div class="gtxt">GOAL!</div><div class="gscr" id="gscr"></div></div>
+
+<!-- REFEREE POPUP — viewport level, z-index 200 -->
+<div id="referee-popup">
+  <div class="ref-img"></div>
+  <div class="ref-msg" id="ref-msg">KICK OFF</div>
+</div>
+
+<!-- SPECIAL MOVE CUTSCENE — viewport level, z-index 150 -->
+<div id="special-cutscene">
+  <div class="sc-bg"></div>
+  <div class="sc-lines"></div>
+  <div class="sc-face" id="sc-face"></div>
+</div>
+
+</div><!-- /viewport -->
+<script src="game.js"></script>
+</body>
+</html>
