@@ -29,17 +29,66 @@
 
 <!-- HOME MENU -->
 <div id="s-home" class="screen">
-  <div class="logo">ULTIMATE<br>ELEVEN</div>
-  <div class="logo-sub">FOOTBALL STRATEGY · 11 VS 11</div>
-  <div class="menu-cards">
-    <div class="mc on" onclick="showSc('s-ts')"><div class="mc-icon">⚽</div><div class="mc-lbl">FRIENDLY</div></div>
-    <div class="mc off" onclick="cs()"><div class="mc-soon">SOON</div><div class="mc-icon">🏆</div><div class="mc-lbl">TOURNAMENT</div></div>
-    <div class="mc off" onclick="cs()"><div class="mc-soon">SOON</div><div class="mc-icon">📋</div><div class="mc-lbl">LEAGUE</div></div>
-    <div class="mc off" onclick="cs()"><div class="mc-soon">SOON</div><div class="mc-icon">⭐</div><div class="mc-lbl">CAREER</div></div>
-    <div class="mc off" onclick="cs()"><div class="mc-soon">SOON</div><div class="mc-icon">🛠</div><div class="mc-lbl">CREATE TEAM</div></div>
-    <div class="mc off" onclick="cs()"><div class="mc-soon">SOON</div><div class="mc-icon">⚙️</div><div class="mc-lbl">SETTINGS</div></div>
+
+  <!-- Background stays fixed — mainmenu.png -->
+
+  <!-- Left: changing player/scene image -->
+  <div class="hm-visual">
+    <div class="hm-img" id="hm-img-friendly"    style="background-image:url('assets/menu/friendly.png')"></div>
+    <div class="hm-img" id="hm-img-tournament"  style="background-image:url('assets/menu/tournament.png')"></div>
+    <div class="hm-img" id="hm-img-league"      style="background-image:url('assets/menu/league.png')"></div>
+    <div class="hm-img" id="hm-img-career"      style="background-image:url('assets/menu/career.png')"></div>
+    <div class="hm-img" id="hm-img-create"      style="background-image:url('assets/menu/create.png')"></div>
+    <div class="hm-img" id="hm-img-settings"    style="background-image:url('assets/menu/settings.png')"></div>
+    <div class="hm-vignette"></div>
   </div>
-  <div class="home-hint">SELECT A MODE TO BEGIN</div>
+
+  <!-- Right: logo + ladder -->
+  <div class="hm-right">
+    <div class="hm-logo">
+      <div class="hm-logo-title">ULTIMATE<br>ELEVEN</div>
+      <div class="hm-logo-sub">FOOTBALL STRATEGY · 11 VS 11</div>
+    </div>
+
+    <nav class="hm-ladder">
+      <button class="hm-item active" data-img="friendly"   onclick="showSc('s-ts')"  onmouseenter="hmHover('friendly')">
+        <span class="hm-item-num">01</span>
+        <span class="hm-item-lbl">FRIENDLY</span>
+        <span class="hm-item-arrow">→</span>
+      </button>
+      <button class="hm-item locked" data-img="tournament" onclick="cs()"            onmouseenter="hmHover('tournament')">
+        <span class="hm-item-num">02</span>
+        <span class="hm-item-lbl">TOURNAMENT</span>
+        <span class="hm-item-soon">SOON</span>
+      </button>
+      <button class="hm-item locked" data-img="league"     onclick="cs()"            onmouseenter="hmHover('league')">
+        <span class="hm-item-num">03</span>
+        <span class="hm-item-lbl">LEAGUE</span>
+        <span class="hm-item-soon">SOON</span>
+      </button>
+      <button class="hm-item locked" data-img="career"     onclick="cs()"            onmouseenter="hmHover('career')">
+        <span class="hm-item-num">04</span>
+        <span class="hm-item-lbl">CAREER</span>
+        <span class="hm-item-soon">SOON</span>
+      </button>
+      <button class="hm-item locked" data-img="create"     onclick="cs()"            onmouseenter="hmHover('create')">
+        <span class="hm-item-num">05</span>
+        <span class="hm-item-lbl">CREATE TEAM</span>
+        <span class="hm-item-soon">SOON</span>
+      </button>
+      <button class="hm-item locked" data-img="settings"   onclick="cs()"            onmouseenter="hmHover('settings')">
+        <span class="hm-item-num">06</span>
+        <span class="hm-item-lbl">SETTINGS</span>
+        <span class="hm-item-soon">SOON</span>
+      </button>
+    </nav>
+  </div>
+
+  <!-- Background music -->
+  <audio id="bgMusic" loop>
+    <source src="assets/audio/menu.mp3" type="audio/mpeg">
+  </audio>
+
 </div>
 
 <div id="s-ts" class="screen">
@@ -50,10 +99,12 @@
       <div class="ts-picker">
         <button class="ts-nav left" onclick="cycleTeam('home',-1)">◀</button>
         <div class="ts-sel-strip big" id="h-sel-strip">
-          <div class="ts-shield" style="--sc:var(--red)"><div class="ts-shield-flag" id="hflag">?</div></div>
+          <div class="ts-shield" style="--sc:var(--red)">
+            <div class="ts-shield-flag" id="hflag">?</div>
+          </div>
           <div class="ts-sel-name-lbl" id="hname" style="color:var(--red)">SELECT</div>
           <div class="ts-sel-hint">HOME · YOU</div>
-          <div class="ts-subhint" id="hsubhint">Use arrows to browse teams</div>
+          <div class="ts-subhint" id="hsubhint"></div>
         </div>
         <button class="ts-nav right" onclick="cycleTeam('home',1)">▶</button>
       </div>
@@ -68,10 +119,12 @@
       <div class="ts-picker">
         <button class="ts-nav left" onclick="cycleTeam('away',-1)">◀</button>
         <div class="ts-sel-strip big" id="a-sel-strip">
-          <div class="ts-shield"><div class="ts-shield-flag" id="aflag">?</div></div>
+          <div class="ts-shield">
+            <div class="ts-shield-flag" id="aflag">?</div>
+          </div>
           <div class="ts-sel-name-lbl" id="aname" style="color:var(--blue)">SELECT</div>
           <div class="ts-sel-hint">AWAY · CPU</div>
-          <div class="ts-subhint" id="asubhint">Same team not allowed</div>
+          <div class="ts-subhint" id="asubhint"></div>
         </div>
         <button class="ts-nav right" onclick="cycleTeam('away',1)">▶</button>
       </div>
@@ -331,6 +384,11 @@
   <div class="sc-lines"></div>
   <div class="sc-face" id="sc-face"></div>
 </div>
+
+<!-- MATCH MUSIC — 3 tracks, one plays randomly per match -->
+<audio id="matchMusic1" loop><source src="assets/audio/match1.mp3" type="audio/mpeg"></audio>
+<audio id="matchMusic2" loop><source src="assets/audio/match2.mp3" type="audio/mpeg"></audio>
+<audio id="matchMusic3" loop><source src="assets/audio/match3.mp3" type="audio/mpeg"></audio>
 
 </div><!-- /viewport -->
 <script src="game.js"></script>

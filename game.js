@@ -222,15 +222,15 @@ const T={
     {id:2611,name:'Hamdallah',pos:'RW',spd:80,pwr:84,tec:82,def:54,rar:2,jersey:10},
   ]},
   japan:{name:'Japan',flag:'🇯🇵',p:[
-    {id:201,name:'W.Wakabayashi',pos:'GK',spd:68,pwr:72,tec:74,def:92,rar:2,jersey:1,sav:92,ref:86},
+    {id:201,name:'G.Wakabayashi',pos:'GK',spd:68,pwr:72,tec:74,def:92,rar:2,jersey:1,sav:92,ref:86},
     {id:202,name:'S.Akai',pos:'LB',spd:74,pwr:70,tec:68,def:78,rar:1,jersey:23},
     {id:203,name:'R.Ishizaki',pos:'CB1',spd:72,pwr:74,tec:70,def:80,rar:2,jersey:4},
     {id:204,name:'J.Misugi',pos:'CB2',spd:70,pwr:68,tec:80,def:76,rar:2,jersey:6},
     {id:205,name:'M.Soda',pos:'RB',spd:76,pwr:68,tec:72,def:74,rar:1,jersey:7},
-    {id:206,name:'T.Matsuyama',pos:'CM1',spd:66,pwr:80,tec:66,def:82,rar:2,jersey:12},
-    {id:207,name:'K.Aoi',pos:'CM2',spd:78,pwr:72,tec:82,def:68,rar:2,jersey:20},
+    {id:206,name:'H.Matsuyama',pos:'CM1',spd:66,pwr:80,tec:66,def:82,rar:2,jersey:12},
+    {id:207,name:'S.Aoi',pos:'CM2',spd:78,pwr:72,tec:82,def:68,rar:2,jersey:20},
     {id:208,name:'T.Misaki',pos:'CM3',spd:84,pwr:68,tec:90,def:66,rar:2,jersey:11},
-    {id:209,name:'T.Nitta',pos:'LW',spd:82,pwr:76,tec:80,def:54,rar:1,jersey:18},
+    {id:209,name:'S.Nitta',pos:'LW',spd:82,pwr:76,tec:80,def:54,rar:1,jersey:18},
     {id:210,name:'T.Ozora',pos:'CM2',spd:86,pwr:82,tec:92,def:54,rar:2,jersey:10},
     {id:211,name:'K.Hyuga',pos:'ST',spd:84,pwr:90,tec:82,def:52,rar:2,jersey:9},
     // Reserves
@@ -239,23 +239,25 @@ const T={
     {id:214,name:'M.Tachibana',pos:'LB',spd:78,pwr:66,tec:74,def:72,rar:1,jersey:2},
     {id:215,name:'K.Tachibana',pos:'CB1',spd:74,pwr:70,tec:72,def:74,rar:1,jersey:3},
     {id:216,name:'S.Sawada',pos:'CM1',spd:74,pwr:72,tec:76,def:64,rar:1,jersey:15},
-    {id:217,name:'R.Hino',pos:'LW',spd:80,pwr:68,tec:74,def:58,rar:1,jersey:19},
+    {id:217,name:'Y.Isagi',pos:'LW',spd:86,pwr:76,tec:82,def:56,rar:2,jersey:19},
   ],reserves:[212,213,214,215,216,217]},
-  italy:{name:'Italy',flag:'🇮🇹',p:[
-    {id:301,name:'G.Buffon',pos:'GK',spd:66,pwr:74,tec:72,def:92,rar:2,jersey:1,sav:90,ref:82},
-    {id:302,name:'S.Gentile',pos:'LB',spd:74,pwr:72,tec:70,def:84,rar:2,jersey:3},
-    {id:303,name:'F.Feo',pos:'CB1',spd:68,pwr:80,tec:66,def:86,rar:1,jersey:5},
+  italy:{name:'Italy',flag:'🇮🇹',formation:'4-1-3-2',p:[
+    {id:301,name:'G.Buffon',   pos:'GK', spd:66,pwr:74,tec:72,def:92,rar:2,jersey:1, sav:90,ref:82},
+    {id:302,name:'S.Gentile',  pos:'LB', spd:74,pwr:72,tec:70,def:84,rar:2,jersey:3},
+    {id:303,name:'F.Feo',      pos:'CB1',spd:68,pwr:80,tec:66,def:86,rar:1,jersey:5},
     {id:304,name:'F.Cannavaro',pos:'CB2',spd:70,pwr:82,tec:72,def:90,rar:2,jersey:4},
-    {id:305,name:'T.Frisina',pos:'CM1',spd:76,pwr:90,tec:84,def:82,rar:2,jersey:6,pas:83,sho:96},
-    {id:306,name:'F.Totti',pos:'CM2',spd:78,pwr:84,tec:90,def:66,rar:2,jersey:10},
-    {id:307,name:'A.Delpiero',pos:'CM3',spd:80,pwr:82,tec:88,def:62,rar:2,jersey:2},
-    {id:312,name:'A.Ferlora',pos:'LB',spd:78,pwr:74,tec:76,def:78,rar:1,jersey:17},
-    {id:313,name:'C.Impero',pos:'CM1',spd:76,pwr:76,tec:80,def:70,rar:1,jersey:18},
-    {id:309,name:'M.Mancuso',pos:'ST',spd:84,pwr:87,tec:86,def:54,rar:1,jersey:9,sho:91},
-    {id:310,name:'E.Vella',pos:'RW',spd:96,pwr:86,tec:80,def:52,rar:1,jersey:11},
-    {id:311,name:'R.Baggio',pos:'LW',spd:84,pwr:80,tec:90,def:50,rar:2,jersey:7},
-    {id:308,name:'A.Pirlo',pos:'CM3',spd:74,pwr:76,tec:92,def:68,rar:2,jersey:8},
-    {id:314,name:'G.Hernandez',pos:'GK',spd:64,pwr:68,tec:66,def:82,rar:1,jersey:24,sav:78,ref:70}]},
+    {id:312,name:'A.Ferlora',  pos:'RB', spd:78,pwr:74,tec:76,def:78,rar:1,jersey:17},
+    {id:305,name:'T.Frisina',  pos:'CM1',spd:76,pwr:90,tec:84,def:82,rar:2,jersey:6, pas:83,sho:96},
+    {id:306,name:'F.Totti',    pos:'CM2',spd:78,pwr:84,tec:90,def:66,rar:2,jersey:10},
+    {id:307,name:'A.Delpiero', pos:'CM3',spd:80,pwr:82,tec:88,def:62,rar:2,jersey:2},
+    {id:311,name:'R.Baggio',   pos:'LW', spd:84,pwr:80,tec:90,def:50,rar:2,jersey:7},
+    {id:309,name:'M.Mancuso',  pos:'ST', spd:84,pwr:87,tec:86,def:54,rar:1,jersey:9, sho:91},
+    {id:310,name:'E.Vella',    pos:'RW', spd:96,pwr:86,tec:80,def:52,rar:1,jersey:11},
+    // Reserves
+    {id:308,name:'A.Pirlo',    pos:'CM3',spd:74,pwr:76,tec:92,def:68,rar:2,jersey:8},
+    {id:313,name:'C.Impero',   pos:'CM1',spd:76,pwr:76,tec:80,def:70,rar:1,jersey:18},
+    {id:314,name:'G.Gino',     pos:'GK', spd:64,pwr:68,tec:66,def:82,rar:1,jersey:24,sav:78,ref:70}],
+  reserves:[308,313,314]},
   argentina:{name:'Argentina',flag:'🇦🇷',p:[
     {id:701,name:'S.Goyco',pos:'GK',spd:66,pwr:72,tec:70,def:88,rar:2,sav:86,ref:80},
     {id:702,name:'J.Zanetti',pos:'LB',spd:82,pwr:72,tec:78,def:80,rar:2},
@@ -303,9 +305,24 @@ const T={
     {id:1008,name:'R.Costa',pos:'CM3',spd:78,pwr:78,tec:92,def:64,rar:2},
     {id:1009,name:'N.Nani',pos:'LW',spd:88,pwr:80,tec:86,def:50,rar:1},
     {id:1010,name:'C.Ronaldo',pos:'ST',spd:90,pwr:94,tec:88,def:52,rar:2},
-    {id:1011,name:'R.Leao',pos:'RW',spd:90,pwr:84,tec:84,def:46,rar:1}]}
+    {id:1011,name:'R.Leao',pos:'RW',spd:90,pwr:84,tec:84,def:46,rar:1}]},
+  allstar:{name:'All Stars',flag:'⭐',p:[
+    {id:101, name:'K.Muller',      pos:'GK', spd:66,pwr:74,tec:72,def:93,rar:3,jersey:1,sav:88,ref:80},
+    {id:102, name:'H.Kaltz',       pos:'RB', spd:78,pwr:74,tec:72,def:80,rar:2,jersey:2},
+    {id:9901,name:'R.Carlos',      pos:'LB', spd:90,pwr:82,tec:82,def:78,rar:3,jersey:3},
+    {id:1202,name:'Puyol',         pos:'CB1',spd:76,pwr:80,tec:72,def:88,rar:3,jersey:5},
+    {id:1203,name:'Pique',         pos:'CB2',spd:72,pwr:84,tec:74,def:90,rar:3,jersey:4},
+    {id:1209,name:'Michael',       pos:'CM1',spd:88,pwr:82,tec:92,def:58,rar:3,jersey:6},
+    {id:711, name:'L.Messi',       pos:'CM2',spd:92,pwr:84,tec:96,def:52,rar:3,jersey:10},
+    {id:9902,name:'Z.Zidane',      pos:'CM3',spd:78,pwr:82,tec:96,def:64,rar:3,jersey:5},
+    {id:1208,name:'Raphael',       pos:'LW', spd:84,pwr:80,tec:88,def:64,rar:2,jersey:11},
+    {id:109, name:'K.H.Schneider', pos:'ST', spd:86,pwr:96,tec:84,def:50,rar:3,jersey:9},
+    {id:1010,name:'C.Ronaldo',     pos:'RW', spd:90,pwr:94,tec:88,def:52,rar:3,jersey:7},
+  ]}
 };
 const TEAM_KEYS=Object.keys(T);
+// All teams available — Japan and All Stars are featured first
+const DEMO_TEAMS=TEAM_KEYS;
 const GRID={
   bands:{buildUp:0.30,advance:0.50,threat:0.70,final:0.85},
   encounterWidth:0.08,
@@ -331,7 +348,14 @@ const ENGINE_CONFIG={
     coverDefenceBonus:0.1,
     blockerDefenceBonus:0.12,
     reboundBandLow:0.92,
-    reboundBandHigh:1.08
+    reboundBandHigh:1.08,
+    // Zone thresholds (progress = 0→1, goal line = 1)
+    zones:{
+      longRange:  0.72,   // < this: long shot territory
+      midRange:   0.82,   // 0.72–0.82: midrange
+      boxEdge:    0.91,   // 0.82–0.91: box edge
+      pointBlank: 0.91,   // > this: point blank
+    }
   },
   stages:{
     buildUp:0.28,
@@ -344,6 +368,11 @@ const PLAYER_ARCHETYPES={
   'T.Ozora':      {passBias:1.30,dribbleBias:1.20,shootBias:1.00,oneTwoBias:1.25,longShotBias:0.95,pressResistance:1.20,wideRunBias:0.90,specialBias:1.05,defensiveAggression:0.90},
   'T.Misaki':     {passBias:1.28,dribbleBias:0.95,shootBias:0.86,oneTwoBias:1.35,longShotBias:0.80,pressResistance:1.10,wideRunBias:0.95,specialBias:0.95,defensiveAggression:0.85},
   'K.Hyuga':      {passBias:0.78,dribbleBias:1.00,shootBias:1.35,oneTwoBias:0.80,longShotBias:1.20,pressResistance:1.08,wideRunBias:0.85,specialBias:1.25,defensiveAggression:1.05},
+  'J.Misugi':     {passBias:1.20,dribbleBias:0.90,shootBias:1.15,oneTwoBias:1.10,longShotBias:1.05,pressResistance:1.15,wideRunBias:0.90,specialBias:1.10,defensiveAggression:0.80},
+  'H.Matsuyama':  {passBias:0.85,dribbleBias:1.05,shootBias:1.20,oneTwoBias:0.88,longShotBias:1.15,pressResistance:1.05,wideRunBias:0.88,specialBias:1.15,defensiveAggression:1.10},
+  'S.Nitta':      {passBias:1.00,dribbleBias:1.10,shootBias:1.15,oneTwoBias:1.00,longShotBias:1.00,pressResistance:1.05,wideRunBias:1.10,specialBias:1.10,defensiveAggression:0.90},
+  'M.Soda':       {passBias:0.90,dribbleBias:1.05,shootBias:1.10,oneTwoBias:0.90,longShotBias:1.08,pressResistance:1.00,wideRunBias:1.05,specialBias:1.05,defensiveAggression:1.05},
+  'S.Aoi':        {passBias:1.15,dribbleBias:1.15,shootBias:1.10,oneTwoBias:1.10,longShotBias:0.95,pressResistance:1.10,wideRunBias:1.05,specialBias:1.10,defensiveAggression:0.88},
   'K.H.Schneider':{passBias:0.82,dribbleBias:1.05,shootBias:1.35,oneTwoBias:0.82,longShotBias:1.20,pressResistance:1.10,wideRunBias:0.92,specialBias:1.18,defensiveAggression:1.02},
   'Natureza':     {passBias:1.00,dribbleBias:1.35,shootBias:1.20,oneTwoBias:1.00,longShotBias:1.08,pressResistance:1.25,wideRunBias:1.08,specialBias:1.15,defensiveAggression:0.92},
   'Rivaul':       {passBias:1.18,dribbleBias:1.10,shootBias:1.08,oneTwoBias:1.12,longShotBias:1.10,pressResistance:1.14,wideRunBias:0.94,specialBias:1.08,defensiveAggression:0.95},
@@ -353,6 +382,8 @@ const PLAYER_ARCHETYPES={
   'F.Totti':      {passBias:1.12,dribbleBias:1.00,shootBias:1.15,oneTwoBias:1.02,longShotBias:1.10,pressResistance:1.04,wideRunBias:0.90,specialBias:1.08,defensiveAggression:0.90},
   'R.Baggio':     {passBias:1.15,dribbleBias:1.15,shootBias:1.05,oneTwoBias:1.10,longShotBias:0.98,pressResistance:1.12,wideRunBias:0.94,specialBias:1.05,defensiveAggression:0.82},
   'L.Messi':      {passBias:1.18,dribbleBias:1.35,shootBias:1.18,oneTwoBias:1.12,longShotBias:1.00,pressResistance:1.26,wideRunBias:0.92,specialBias:1.08,defensiveAggression:0.80},
+  'R.Carlos':     {passBias:1.00,dribbleBias:1.10,shootBias:1.20,oneTwoBias:0.95,longShotBias:1.25,pressResistance:1.15,wideRunBias:1.30,specialBias:1.00,defensiveAggression:1.10},
+  'Z.Zidane':     {passBias:1.25,dribbleBias:1.20,shootBias:1.10,oneTwoBias:1.15,longShotBias:1.05,pressResistance:1.30,wideRunBias:0.88,specialBias:1.05,defensiveAggression:0.85},
   'C.Ronaldo':    {passBias:0.90,dribbleBias:1.05,shootBias:1.34,oneTwoBias:0.88,longShotBias:1.15,pressResistance:1.10,wideRunBias:1.05,specialBias:1.20,defensiveAggression:0.92}
 };
 
@@ -360,9 +391,14 @@ const PLAYER_ARCHETYPES={
 const DEFAULT_BEHAVIOR_PROFILE={passBias:1.0,dribbleBias:1.0,shootBias:1.0,oneTwoBias:1.0,longShotBias:1.0,pressResistance:1.0,wideRunBias:1.0,specialBias:1.0,defensiveAggression:1.0};
 
 const STAR_STAT_OVERRIDES={
-  'T.Ozora':       {dri:95,pas:96,sho:87,def:58,pow:84},
-  'T.Misaki':      {spd:82,dri:91,pas:94,sho:78,def:68,pow:66},
+  'T.Ozora':       {spd:86,dri:95,pas:96,sho:87,def:58,pow:84},
+  'T.Misaki':      {spd:84,dri:91,pas:94,sho:78,def:68,pow:66},
   'K.Hyuga':       {spd:84,dri:83,pas:72,sho:95,def:54,pow:94},
+  'J.Misugi':      {spd:70,dri:82,pas:86,sho:88,def:76,pow:70},
+  'H.Matsuyama':   {spd:66,dri:76,pas:70,sho:86,def:82,pow:82},
+  'S.Nitta':       {spd:82,dri:80,pas:76,sho:84,def:54,pow:78},
+  'M.Soda':        {spd:76,dri:74,pas:72,sho:82,def:74,pow:70},
+  'S.Aoi':         {spd:78,dri:84,pas:80,sho:84,def:68,pow:74},
   'K.H.Schneider': {spd:87,dri:84,pas:76,sho:96,def:52,pow:95},
   'Natureza':      {spd:94,dri:98,pas:90,sho:96,def:52,pow:93},
   'Rivaul':        {spd:84,dri:94,pas:95,sho:90,def:60,pow:86},
@@ -376,9 +412,13 @@ const STAR_STAT_OVERRIDES={
   'E.Vella':       {spd:96,dri:84,pas:74,sho:86,def:52,pow:86},
   'A.Ferlora':     {spd:78,dri:78,pas:76,sho:72,def:78,pow:74},
   'C.Impero':      {spd:76,dri:80,pas:82,sho:74,def:70,pow:76},
-  'G.Hernandez':   {spd:64,dri:62,pas:60,sho:58,def:82,pow:68},
+  'G.Hernandez':   {spd:64,dri:62,pas:60,sho:58,def:82,pow:68}, // Spain
+  'G.Gino':        {spd:64,dri:62,pas:60,sho:58,def:82,pow:68}, // Italy bench GK
+  'Y.Isagi':       {spd:86,dri:84,pas:80,sho:88,def:56,pow:78},
   'L.Messi':       {spd:93,dri:99,pas:94,sho:92,def:54,pow:80},
   'C.Ronaldo':     {spd:92,dri:90,pas:82,sho:97,def:54,pow:96},
+  'R.Carlos':      {spd:90,dri:82,pas:80,sho:84,def:78,pow:86},
+  'Z.Zidane':      {spd:78,dri:94,pas:96,sho:82,def:66,pow:82},
   'J.Riquelme':    {spd:72,dri:89,pas:96,sho:84,def:64,pow:78},
   'P.Aimar':       {spd:84,dri:93,pas:92,sho:82,def:60,pow:76},
   'D.Beckham':     {spd:78,dri:84,pas:97,sho:86,def:66,pow:82},
@@ -467,8 +507,88 @@ function calcOvr(pl){
   else v=(gs(pl,'pwr')*0.35)+(gs(pl,'tec')*0.30)+(gs(pl,'spd')*0.25)+(gs(pl,'def')*0.10);
   return Math.round(v);
 }
-function showSc(id){document.querySelectorAll('.screen').forEach(s=>s.classList.remove('active'));document.getElementById(id).classList.add('active');}
+
+// Set team emblem in any element — img if available, flag emoji as fallback
+function setTeamEmblem(el, teamKey, flagEmoji){
+  if(!el)return;
+  el.style.display='';  // always visible
+  const src='assets/team/'+(teamKey||'').toLowerCase()+'.png';
+  const img=new Image();
+  img.onload=()=>{
+    el.innerHTML='';
+    const i=document.createElement('img');
+    i.src=src;i.alt='';
+    i.style.cssText='width:100%;height:100%;object-fit:contain;display:block;';
+    el.appendChild(i);
+  };
+  img.onerror=()=>{el.innerHTML='';el.textContent=flagEmoji||'🏳';};
+  img.src=src;
+}
+function showSc(id){
+  document.querySelectorAll('.screen').forEach(s=>s.classList.remove('active'));
+  document.getElementById(id).classList.add('active');
+  if(id==='s-home'){hmHover('friendly');returnToMenuMusic();}
+}
 function cs(){say('Coming soon!');}
+
+// Home menu image switcher
+let _hmCurrent='friendly';
+function hmHover(mode){
+  if(_hmCurrent===mode)return;
+  const prev=document.getElementById('hm-img-'+_hmCurrent);
+  const next=document.getElementById('hm-img-'+mode);
+  if(prev)prev.classList.remove('active');
+  if(next)next.classList.add('active');
+  // Update active ladder item
+  document.querySelectorAll('.hm-item').forEach(el=>{
+    el.classList.toggle('active',el.dataset.img===mode);
+  });
+  _hmCurrent=mode;
+}
+
+// Music — menu track + 3 match tracks (random per match)
+let _menuMusicOn=false;
+let _matchMusicEl=null;
+
+function startMusic(){
+  const a=document.getElementById('bgMusic');
+  if(!a)return;
+  a.volume=0.40;
+  a.play().then(()=>{_menuMusicOn=true;}).catch(()=>{});
+}
+function stopMenuMusic(){
+  const a=document.getElementById('bgMusic');
+  if(a){a.pause();a.currentTime=0;}
+  _menuMusicOn=false;
+}
+function startMatchMusic(){
+  stopMenuMusic();
+  stopMatchMusic();
+  const track=Math.floor(Math.random()*3)+1;
+  const a=document.getElementById('matchMusic'+track);
+  if(!a)return;
+  _matchMusicEl=a;
+  a.volume=0.30;
+  a.currentTime=0;
+  a.play().catch(()=>{});
+}
+function stopMatchMusic(){
+  if(_matchMusicEl){_matchMusicEl.pause();_matchMusicEl.currentTime=0;_matchMusicEl=null;}
+  // Stop all just in case
+  [1,2,3].forEach(i=>{const a=document.getElementById('matchMusic'+i);if(a){a.pause();a.currentTime=0;}});
+}
+function returnToMenuMusic(){
+  stopMatchMusic();
+  startMusic();
+}
+function toggleMusic(){
+  // kept for Settings screen future use — no button visible
+  const a=document.getElementById('bgMusic');
+  if(!a)return;
+  if(_menuMusicOn){a.pause();_menuMusicOn=false;}
+  else{a.play().then(()=>{_menuMusicOn=true;}).catch(()=>{});}
+}
+function updateMusicBtn(){}
 function say(t){const e=document.getElementById('comm');if(e)e.textContent=t;}
 function showSpecialCutscene(pl,special,callback){
   const sc=document.getElementById('special-cutscene');
@@ -495,23 +615,40 @@ function showReferee(msg,duration=1200){
 
 let selHome=null,selAway=null,HT=null,AT=null;
 let hSq={},aSq={};
-let homeIdx=0,awayIdx=1;
+// Default: Japan (home) vs All Stars (away)
+const _japanIdx=DEMO_TEAMS.indexOf('japan');
+const _allstarIdx=DEMO_TEAMS.indexOf('allstar');
+let homeIdx=_japanIdx>=0?_japanIdx:0;
+let awayIdx=_allstarIdx>=0?_allstarIdx:1;
+function calcTeamOvr(team){
+  if(!team||!team.p)return 0;
+  const reserveIds=new Set(team.reserves||[]);
+  const starters=team.p.filter(p=>!reserveIds.has(p.id));
+  if(!starters.length)return 0;
+  const total=starters.reduce((sum,pl)=>sum+calcOvr(pl),0);
+  return Math.round(total/starters.length);
+}
 function syncTeamSelections(){
-  if(awayIdx===homeIdx)awayIdx=(awayIdx+1)%TEAM_KEYS.length;
-  selHome=TEAM_KEYS[homeIdx]; selAway=TEAM_KEYS[awayIdx]; HT=T[selHome]; AT=T[selAway];
+  if(awayIdx===homeIdx)awayIdx=(awayIdx+1)%DEMO_TEAMS.length;
+  selHome=DEMO_TEAMS[homeIdx]; selAway=DEMO_TEAMS[awayIdx]; HT=T[selHome]; AT=T[selAway];
   document.getElementById('hflag').textContent=HT.flag; document.getElementById('hname').textContent=HT.name.toUpperCase();
   document.getElementById('aflag').textContent=AT.flag; document.getElementById('aname').textContent=AT.name.toUpperCase();
-  document.getElementById('hsubhint').textContent='Home · you';
-  document.getElementById('asubhint').textContent='Away · CPU';
+  // Team emblems in shields — replace flag content with image
+  setTeamEmblem(document.getElementById('hflag'), selHome, HT.flag);
+  setTeamEmblem(document.getElementById('aflag'), selAway, AT.flag);
+  const hOvr=calcTeamOvr(HT);
+  const aOvr=calcTeamOvr(AT);
+  document.getElementById('hsubhint').textContent='OVR '+hOvr;
+  document.getElementById('asubhint').textContent='OVR '+aOvr;
   document.getElementById('kickbtn').classList.toggle('rdy',!!(selHome&&selAway&&selHome!==selAway));
 }
 function cycleTeam(side,dir){
   if(side==='home'){
-    homeIdx=(homeIdx+dir+TEAM_KEYS.length)%TEAM_KEYS.length;
-    if(homeIdx===awayIdx)homeIdx=(homeIdx+dir+TEAM_KEYS.length)%TEAM_KEYS.length;
+    homeIdx=(homeIdx+dir+DEMO_TEAMS.length)%DEMO_TEAMS.length;
+    if(homeIdx===awayIdx)homeIdx=(homeIdx+dir+DEMO_TEAMS.length)%DEMO_TEAMS.length;
   }else{
-    awayIdx=(awayIdx+dir+TEAM_KEYS.length)%TEAM_KEYS.length;
-    if(awayIdx===homeIdx)awayIdx=(awayIdx+dir+TEAM_KEYS.length)%TEAM_KEYS.length;
+    awayIdx=(awayIdx+dir+DEMO_TEAMS.length)%DEMO_TEAMS.length;
+    if(awayIdx===homeIdx)awayIdx=(awayIdx+dir+DEMO_TEAMS.length)%DEMO_TEAMS.length;
   }
   syncTeamSelections();
 }
@@ -684,10 +821,16 @@ function updateSelectedSlotPanel(){
 
 function openTeamMenu(){
   if(!selHome||!selAway||selHome===selAway)return;
-  // Reset reserves first so initHomeSlots knows which players are reserved
+  // Use team's preferred formation if defined
+  if(HT&&HT.formation&&FORMATIONS[HT.formation]) activeHomeFormation=HT.formation;
+  // Reset reserves
   HOME_RESERVES=[null,null,null,null,null,null];
   if(HT&&HT.reserves&&HT.reserves.length){
-    HT.reserves.forEach((pid,i)=>{ if(i<6) HOME_RESERVES[i]=pid; });
+    const roster=HT.p;
+    const gkReserves=HT.reserves.filter(pid=>{const pl=roster.find(r=>r.id===pid);return pl&&pl.pos==='GK';});
+    const fieldReserves=HT.reserves.filter(pid=>{const pl=roster.find(r=>r.id===pid);return !pl||pl.pos!=='GK';});
+    if(gkReserves.length) HOME_RESERVES[0]=gkReserves[0];
+    fieldReserves.forEach((pid,i)=>{ if(i<5) HOME_RESERVES[i+1]=pid; });
   }
   initHomeSlots(true);
   if(HT) HT.p.forEach(pl=>playerImg(pl));
@@ -706,11 +849,20 @@ function startGame(){
     if(!pl) pl=roster.find(r=>!used.has(r.id));
     if(pl){ used.add(pl.id); hSq[slot]={...pl,spirit:(pl.pos==="GK"?2000:1500),cooldownUntil:0,slot:slot}; }
   });
-  AT.p.forEach(p=>{aSq[p.pos]={...p,spirit:(p.pos==="GK"?2000:1500),cooldownUntil:0,slot:p.pos};});
+  // Build away squad — exclude reserves, avoid overwriting slots
+  const awayReserveIds=new Set(AT.reserves||[]);
+  const awayStarters=AT.p.filter(p=>!awayReserveIds.has(p.id));
+  const awayUsed=new Set();
+  ['GK','LB','CB1','CB2','RB','CM1','CM2','CM3','LW','ST','RW'].forEach(slot=>{
+    let pl=awayStarters.find(p=>!awayUsed.has(p.id)&&(p.pos===slot||(slot==='CB1'&&p.pos==='CB')||(slot==='CB2'&&p.pos==='CB')));
+    if(!pl)pl=awayStarters.find(p=>!awayUsed.has(p.id)&&posFamily(p.pos)===slotFamily(slot));
+    if(!pl)pl=awayStarters.find(p=>!awayUsed.has(p.id));
+    if(pl){awayUsed.add(pl.id);aSq[slot]={...pl,spirit:(pl.pos==='GK'?2000:1500),cooldownUntil:0,slot};}
+  });
   document.getElementById('htn').textContent=HT.name;
   document.getElementById('atn').textContent=AT.name;
-  document.getElementById('h-flag-hud').textContent=HT.flag;
-  document.getElementById('a-flag-hud').textContent=AT.flag;
+  setTeamEmblem(document.getElementById('h-flag-hud'), selHome, HT.flag);
+  setTeamEmblem(document.getElementById('a-flag-hud'), selAway, AT.flag);
   initMatch();
 }
 
@@ -1936,34 +2088,47 @@ function fCard(role,pl,s,displayRole){
 }
 
 const SPECIALS={
-  'Hyuga':{l:'Tiger Shot',i:'🔥',c:20},'Tsubasa':{l:'Drive Shot',i:'⚡',c:20},'Ozora':{l:'Drive Shot',i:'⚡',c:20},
-  'Schneider':{l:'Fire Shot',i:'🔥',c:20},
-  'Deuter':{l:'Death Ball',i:'💀',c:22},'Espadas':{l:'El Tornado',i:'🌪',c:22},
-  'Napoleon':{l:'Cannon Shot',i:'💥',c:22},'Santana':{l:'Overhead',i:'🌀',c:22},
-  'Frisina':{l:'Riser Shot',i:'🚀',c:22},
-  'Natureza':{l:'Atomic Shot',i:'☢️',c:30},
-  'Michael':{l:'Miracle Shot',i:'✨',c:30},
-  'Pierre':{l:'Eiffel Shot',i:'🗼',c:22},
-  'Victorino':{l:'Panther Shot',i:'🐆',c:24},
-  'Hino':{l:'Tornado Shot',i:'🌪',c:24},
-  'Xiao':{l:'Dragon Shot',i:'🐉',c:24},
-  'Levi':{l:'Bullet Shot',i:'💥',c:22},
-  'Mancuso':{l:'Fury Shot',i:'🔴',c:24},
-  'Vella':{l:'Emerald Shot',i:'💚',c:24},
+  // ── JAPAN ─────────────────────────────────────────────────────
+  'Ozora':      {l:'Drive Shot',       i:'⚡',c:400},
+  'Tsubasa':    {l:'Drive Shot',       i:'⚡',c:400},
+  'Hyuga':      {l:'Tiger Shot',       i:'🔥',c:400},
+  'Matsuyama':  {l:'Wild Eagle Shot',  i:'🦅',c:400},
+  'Misugi':     {l:'Sky Rocket Volley',i:'🚀',c:400},
+  'Nitta':      {l:'Super Falcon Shot',i:'🦅',c:400},
+  'Soda':       {l:'Razor Shot',       i:'⚔️',c:400},
+  'Misaki':     {l:'Slider Shot',      i:'🌊',c:400},
+  'Aoi':        {l:'Fantasista Shot',  i:'✨',c:400},
+  // ── EUROPE / WORLD ────────────────────────────────────────────
+  'Schneider':  {l:'Fire Shot',        i:'🔥',c:400},
+  'Deuter':     {l:'Death Ball',       i:'💀',c:400},
+  'Espadas':    {l:'El Tornado',       i:'🌪',c:400},
+  'Napoleon':   {l:'Cannon Shot',      i:'💥',c:400},
+  'Santana':    {l:'Overhead',         i:'🌀',c:400},
+  'Frisina':    {l:'Riser Shot',       i:'🚀',c:400},
+  'Natureza':   {l:'Atomic Shot',      i:'☢️',c:400},
+  'Michael':    {l:'Miracle Shot',     i:'✨',c:400},
+  'Pierre':     {l:'Eiffel Shot',      i:'🗼',c:400},
+  'Victorino':  {l:'Panther Shot',     i:'🐆',c:400},
+  'Hino':       {l:'Tornado Shot',     i:'🌪',c:400},
+  'Xiao':       {l:'Dragon Shot',      i:'🐉',c:400},
+  'Levi':       {l:'Bullet Shot',      i:'💥',c:400},
+  'Mancuso':    {l:'Fury Shot',        i:'🔴',c:400},
+  'Vella':      {l:'Emerald Shot',     i:'💚',c:400},
 };
 function getSpecial(pl){if(!pl)return null;const n=pl.name||'';for(const key of Object.keys(SPECIALS)){if(n.includes(key))return SPECIALS[key];}return null;}
 
 // GK Super Save registry — every GK can attempt one, named per player
 const GK_SUPERS={
-  'Wakashimazu':{l:'God Hand',i:'🤚'},
-  'Muller':{l:'Iron Wall',i:'🧱'},
-  'Buffon':{l:'Colossus',i:'🏛'},
-  'Casillas':{l:'San Iker',i:'🛡'},
-  'Salinas':{l:'El Muro',i:'⚔️'},
-  'Morisaki':{l:'Miracle Hand',i:'✋'},
-  'Genzo':{l:'Genzo Save',i:'🌪'},
-  'Hernandez':{l:'Reflex Save',i:'💫'},
-  'Olsen':{l:'Viking Wall',i:'❄️'},
+  'Wakabayashi': {l:'SSGK',         i:'🌟'},
+  'Wakashimazu': {l:'God Hand',     i:'🤚'},
+  'Muller':      {l:'Iron Wall',    i:'🧱'},
+  'Buffon':      {l:'Colossus',     i:'🏛'},
+  'Casillas':    {l:'San Iker',     i:'🛡'},
+  'Salinas':     {l:'El Muro',      i:'⚔️'},
+  'Morisaki':    {l:'Miracle Hand', i:'✋'},
+  'Hernandez':   {l:'Reflex Save',  i:'💫'},
+  'Gino':        {l:'Gino Save',    i:'🧤'},
+  'Olsen':       {l:'Viking Wall',  i:'❄️'},
 };
 // Fallback for any GK not in registry
 function getGKSuper(pl){
@@ -2016,26 +2181,34 @@ function bldD(def,ds,isShot){
   const el=document.getElementById('dbtns');el.innerHTML=''; const ih=ds==='h'; document.getElementById('dlbl').textContent=ih?'YOUR DEFENCE':'OPPONENT DEFENDS';
   if(!ih){el.innerHTML='';return;}
   const defIsGK=def&&def.pos==='GK';
-  const sp=def?Math.round(def.spirit||2000):2000;
-  const canAffordSuper=sp>=320;
+  const sp=def?Math.round(def.spirit||(defIsGK?2000:1500)):(defIsGK?2000:1500);
+
+  const makeDBtn=(a)=>{
+    const cost=(DEF_ACTIONS[a.id]||{}).cost||0;
+    const ok=!a.locked&&sp>=cost;
+    const btn=document.createElement('button');
+    btn.className='dact'+(a.locked||!ok?' locked':'');
+    const costTxt=cost>0?(ok?'−'+cost+' SP':'⚡ LOW'):'FREE';
+    const statCol=a.id==='supersave'?'var(--gold)':ok?'rgba(255,255,255,.4)':'var(--red)';
+    btn.innerHTML=`<span class="dai">${a.i}</span><span>${a.l}</span><span class="dac" style="color:${statCol};font-size:7px">${a.stat} · ${costTxt}</span>`;
+    if(a.locked||!ok){btn.disabled=true;}
+    else btn.onclick=()=>selD(a,btn);
+    el.appendChild(btn);
+  };
+
   if(isShot&&defIsGK){
     const gkSuper=getGKSuper(def);
-    const acts=[
-      {id:'save',l:'Save',i:'🧤',stat:'SAV'},
-      {id:'punch',l:'Punch',i:'👊',stat:'POW'},
-      {id:'supersave',l:gkSuper.l,i:gkSuper.i,stat:'SAV★',locked:!canAffordSuper},
-    ];
-    acts.forEach(a=>{
-      const btn=document.createElement('button');
-      btn.className='dact'+(a.locked?' locked':'');
-      btn.innerHTML=`<span class="dai">${a.i}</span><span>${a.l}</span><span class="dac" style="color:var(--gold);font-size:7px">${a.stat}</span>`;
-      if(a.locked){btn.title='Not enough stamina';btn.disabled=true;}
-      else btn.onclick=()=>selD(a,btn);
-      el.appendChild(btn);
-    });
+    [
+      {id:'save',     l:'Save',       i:'🧤', stat:'SAV'},
+      {id:'punch',    l:'Punch',      i:'👊', stat:'POW'},
+      {id:'supersave',l:gkSuper.l,   i:gkSuper.i, stat:'SAV★', locked:sp<320},
+    ].forEach(makeDBtn);
   } else {
-    const acts=[{id:'tackle',l:'Tackle',i:'🦵',stat:'DEF'},{id:'intercept',l:'Intercept',i:'✋',stat:'PAS'},{id:'block',l:'Block',i:'🛡',stat:'DEF'}];
-    acts.forEach(a=>{const btn=document.createElement('button');btn.className='dact';btn.innerHTML=`<span class="dai">${a.i}</span><span>${a.l}</span><span class="dac" style="color:var(--dim);font-size:7px">${a.stat}</span>`;btn.onclick=()=>selD(a,btn);el.appendChild(btn);});
+    [
+      {id:'tackle',   l:'Tackle',    i:'🦵', stat:'DEF'},
+      {id:'intercept',l:'Intercept', i:'✋', stat:'PAS'},
+      {id:'block',    l:'Block',     i:'🛡', stat:'DEF'},
+    ].forEach(makeDBtn);
   }
 }
 
@@ -2082,10 +2255,19 @@ function aiAtk(){
     options.push({id:'dribble',w:dribbleW});
   }
 
+  const Z=ENGINE_CONFIG.duel.zones;
   const shotWindow = ENGINE_CONFIG.ai.shotWindowBase - Math.max(0, (bh.longShotBias||1)-1)*0.06;
   if((G.D.isShot||prog>shotWindow)&&canAfford('shoot')){
     let shootW=(G.D.isShot?5.0:0.8)+prog*4.5-pressure*1.2;
-    shootW *= (bh.shootBias||1) * (prog<0.7 ? (bh.longShotBias||1) : 1);
+    shootW *= (bh.shootBias||1);
+    // Zone modifier: heavily discourage long shots unless specialist
+    if(prog < Z.longRange){
+      shootW *= (bh.longShotBias||1) * 0.45; // discourage unless longShotBias > 1
+    } else if(prog < Z.midRange){
+      shootW *= 0.80; // slightly hesitant in midrange
+    } else if(prog >= Z.boxEdge){
+      shootW *= 1.35; // AI likes to shoot at close range
+    }
     options.push({id:'shoot',w:shootW});
   }
   const spec=getSpecial(carrier);
@@ -2093,6 +2275,8 @@ function aiAtk(){
   if(spec&&canAfford('special')&&(G.D.isShot||prog>specialWindow)){
     let specW=(G.D.isShot?6.0:1.6)+prog*5.0-pressure*0.6;
     specW *= (bh.specialBias||1);
+    // Specials are worth using from any range — they're powerful enough
+    if(prog < Z.longRange) specW *= 0.70; // still slightly discouraged
     options.push({id:'special',w:specW});
   }
 
@@ -2229,7 +2413,7 @@ const ATK_ACTIONS={
   dribble:  {base:'dri', phys:'spd', mult:1.12, cost:80 },
   'one-two':{base:'pas', phys:'dri', mult:1.20, cost:60 },
   shoot:    {base:'sho', phys:'pow', mult:1.30, cost:120},
-  special:  {base:'sho', phys:'pow', mult:2.50, cost:300},
+  special:  {base:'sho', phys:'pow', mult:2.50, cost:400},
 };
 const DEF_ACTIONS={
   tackle:    {base:'def', phys:'pow', mult:1.00, cost:60},
@@ -2265,13 +2449,53 @@ function calcAttackPower(carrier,ak,side){
   if(ak==='shoot'||ak==='special'){
     const cp=PP[side][G.ck];
     const prog=cp?progressFor(side,cp):0.5;
-    const centrality=cp?1-Math.abs(cp.y/H-0.5):0.5;
+    const centrality=cp?1-Math.abs(cp.y/H-0.5):0.5; // 0=corner, 1=centre
     const pressure=cp?clamp(1-nearestDefenderDistance(side,cp)/(W*(ENGINE_CONFIG.ai.duelPressureRadius)),0,1):0;
-    // Distance curve: base 0.50 + prog bonus. At gate threshold (0.79): ~1.15. At box edge (0.90): ~1.35. At point-blank (1.0): ~1.58.
-    const distMult = clamp(0.50 + prog*ENGINE_CONFIG.duel.progressShotBonus + centrality*ENGINE_CONFIG.duel.centralShotBonus, 0.50, 1.60);
-    mAction*=distMult;
-    mAction*=(1-pressure*(ENGINE_CONFIG.duel.pressureAttackPenalty)*(2-(bh.pressResistance||1)));
-    if(prog<0.72)mAction*=(bh.longShotBias||1);
+    const Z=ENGINE_CONFIG.duel.zones;
+
+    // ── ZONE-BASED POWER MULTIPLIER ──────────────────────────────────
+    // Each zone has a base power and a centrality sensitivity
+    // Centrality penalty: wide angle shots lose significant power
+    let zoneMult, zoneLabel;
+
+    if(prog < Z.longRange){
+      // LONG RANGE — weak, high variance, specialist territory
+      // prog 0.50 → 0.60mult, prog 0.71 → 0.88mult (before centrality)
+      zoneMult = 0.42 + prog * 0.65;
+      zoneLabel = 'LONG RANGE';
+    } else if(prog < Z.midRange){
+      // MID RANGE — 0.72–0.82, meaningful but not dominant
+      zoneMult = 0.88 + (prog - Z.longRange) * 1.8;
+      zoneLabel = 'MID RANGE';
+    } else if(prog < Z.boxEdge){
+      // BOX EDGE — 0.82–0.91, prime territory, central angle crucial
+      zoneMult = 1.12 + (prog - Z.midRange) * 2.8;
+      zoneLabel = 'BOX EDGE';
+    } else {
+      // POINT BLANK — > 0.91, devastating, close range finishes
+      zoneMult = 1.45 + (prog - Z.boxEdge) * 3.5;
+      zoneLabel = 'POINT BLANK';
+    }
+
+    // Centrality modifier — corner shots punished, central shots rewarded
+    // Long range: centrality matters less (shoot from distance = angle matters less)
+    // Point blank: centrality matters most (side angle at close range = harder finish)
+    const centralityWeight = prog < Z.longRange ? 0.20 : prog < Z.midRange ? 0.32 : prog < Z.boxEdge ? 0.45 : 0.55;
+    const centralityMult = 0.55 + centrality * centralityWeight * 2.0;
+    // Cap: full centrality bonus capped to avoid overpowered centre shots
+    const finalZoneMult = clamp(zoneMult * centralityMult, 0.28, 2.20);
+
+    mAction *= finalZoneMult;
+
+    // Pressure penalty — harder to shoot under pressure at all ranges
+    mAction *= (1 - pressure * ENGINE_CONFIG.duel.pressureAttackPenalty * (2-(bh.pressResistance||1)));
+
+    // Long shot specialist bonus (Hyuga, Schneider etc have longShotBias > 1)
+    if(prog < Z.longRange) mAction *= (bh.longShotBias||1) * 1.15; // extra reward for specialists
+    else if(prog < Z.midRange) mAction *= (bh.longShotBias||1);
+
+    // Store zone label for HUD display
+    G._shotZone = zoneLabel;
   }
   if(ak==='dribble') mAction*=(bh.dribbleBias||1);
   if(ak==='pass'||ak==='one-two') mAction*=(bh.passBias||1);
@@ -2496,7 +2720,7 @@ function afSave(ds){
     document.getElementById('rbadge').style.color=outcome==='goal'?'#f0c040':'#4db8ff';
     document.getElementById('rdet').textContent=outcomeDetail[outcome];
     document.getElementById('rdet').style.color='#cce8ff';
-    document.getElementById('ract').textContent=(isSuper?'⭐ SUPER SAVE — ':'')+'SHOT '+Math.round(shotPow)+' vs GK '+Math.round(gkPow);
+    document.getElementById('ract').textContent=(isSuper?'⭐ SUPER SAVE — ':'')+(G._shotZone?G._shotZone+' · ':'')+' SHOT '+Math.round(shotPow)+' vs GK '+Math.round(gkPow);
     const ro=document.getElementById('duel-res');
     ro.classList.add('show');
     say(outcomeText[outcome]+' — '+outcomeDetail[outcome]);
@@ -2637,7 +2861,25 @@ function updP(){
   document.getElementById('pname').textContent=(t?t.name.toUpperCase():'—')+' POSSESSION'+(c?' · '+c.name:'');
   const shotBtn=document.getElementById('fieldShotBtn');
   const pressBtn=document.getElementById('pressBtn');
-  if(shotBtn)shotBtn.style.display=iH?'flex':'none';
+  if(shotBtn){
+    shotBtn.style.display=iH?'flex':'none';
+    if(iH&&c){
+      const cp=PP.h[G.ck];
+      if(cp){
+        const prog=progressFor('h',cp);
+        const Z=ENGINE_CONFIG.duel.zones;
+        let zone,col;
+        if(prog<Z.longRange){zone='LONG';col='#aaa';}
+        else if(prog<Z.midRange){zone='MID';col='#f0c040';}
+        else if(prog<Z.boxEdge){zone='BOX';col='#ff9020';}
+        else{zone='DEADLY';col='#ff3030';}
+        shotBtn.textContent='SHOT · '+zone;
+        shotBtn.style.background=col==='#aaa'?'rgba(100,100,100,.85)':`rgba(30,10,10,.85)`;
+        shotBtn.style.borderColor=col;
+        shotBtn.style.color=col;
+      } else { shotBtn.textContent='SHOT'; }
+    }
+  }
   if(pressBtn)pressBtn.style.display=iH?'none':'flex';
   // Auto-cancel press the moment we regain the ball
   if(iH&&G.pressing){
@@ -2683,8 +2925,9 @@ function goHalf(){
   document.getElementById('htd').textContent=G.duels;document.getElementById('hts').textContent=G.shots;
   const pp=G.tP>0?Math.round(G.hP/G.tP*100):50;document.getElementById('htp').textContent=pp+'%';
   document.getElementById('hht').textContent=HT?.name||'HOME';document.getElementById('aht').textContent=AT?.name||'AWAY';
-  document.getElementById('hht-flag').textContent=HT?.flag||'🏳';document.getElementById('aht-flag').textContent=AT?.flag||'🏳';
+  setTeamEmblem(document.getElementById('hht-flag'),selHome,HT?.flag||'🏳');setTeamEmblem(document.getElementById('aht-flag'),selAway,AT?.flag||'🏳');
   showSc('s-half');
+  stopMatchMusic();
 }
 function goFull(){
   clearInterval(G.mt);clearInterval(G.di);G.phase='idle';closeDuel();
@@ -2692,11 +2935,12 @@ function goFull(){
   document.getElementById('fth').textContent=G.hG;document.getElementById('fta').textContent=G.aG;
   document.getElementById('ftd').textContent=G.duels;document.getElementById('fts').textContent=G.shots;
   document.getElementById('hft').textContent=HT?.name||'HOME';document.getElementById('aft').textContent=AT?.name||'AWAY';
-  document.getElementById('hft-flag').textContent=HT?.flag||'🏳';document.getElementById('aft-flag').textContent=AT?.flag||'🏳';
+  setTeamEmblem(document.getElementById('hft-flag'),selHome,HT?.flag||'🏳');setTeamEmblem(document.getElementById('aft-flag'),selAway,AT?.flag||'🏳');
   let wt='DRAW';
   if(G.hG>G.aG)wt=(HT?.name||'HOME').toUpperCase()+' WIN 🏆';
   else if(G.aG>G.hG)wt=(AT?.name||'AWAY').toUpperCase()+' WIN 🏆';
   document.getElementById('wtag').textContent=wt;showSc('s-end');
+  returnToMenuMusic();
 }
 function secondHalf(){G.half=2;G.tL=2700;iPos();const q=sq('a');const kk=['CM2','CM1','ST'].find(k=>q[k])||Object.keys(q).find(k=>q[k]);G.poss='a';G.ck=kk;G.tP++;if(PP.a[kk]){PP.a[kk].x=W/2;PP.a[kk].y=H/2;}ball.x=W/2;ball.y=H/2;ball.tx=W/2;ball.ty=H/2;showSc('s-match');updH();updP();startMT();startAnim();say((AT?.name||'Away')+' kick off — 2nd half!');showReferee('2ND HALF');G.kickoffUntil=Date.now()+3000;G.phase='idle';setTimeout(()=>{asnC();G.phase='moving';},1200);}
 
@@ -2705,6 +2949,7 @@ function initMatch(){
   G={half:1,tL:2700,hG:0,aG:0,poss:'h',ck:null,chk:null,mom:50,duels:0,shots:0,hP:0,tP:0,phase:'idle',mt:null,di:null,D:{},pm:false,kickoffUntil:0,pressing:false,goalGen:0};
   preloadSquadImages(); // start loading all player face images
   showSc('s-match');rsz();iPos();
+  startMatchMusic();
   const sk=hSq['CM2']?'CM2':(hSq['CM1']?'CM1':'ST');G.poss='h';G.ck=sk;G.tP++;G.hP++;
   if(PP.h[sk]){PP.h[sk].x=W/2;PP.h[sk].y=H/2;}ball.x=W/2;ball.y=H/2;ball.tx=W/2;ball.ty=H/2;
   asnC();updP();updH();startMT();startAnim();
@@ -2956,7 +3201,7 @@ function buildFormationMenu(){
   titleEl.textContent=HT.name.toUpperCase();
   badgeEl.textContent='FORMATION · '+activeHomeFormation;
   if(formationVal)formationVal.textContent=activeHomeFormation;
-  if(flagEl) flagEl.textContent=HT.flag;
+  if(flagEl) setTeamEmblem(flagEl, selHome, HT.flag);
 
   pf.innerHTML='';
   // Click on empty pitch area deselects current slot
@@ -3094,20 +3339,62 @@ function updateSelectedSlotPanel(){
       statsRow.innerHTML=[['SPD',gs(pl,'spd')],['DRI',gs(pl,'dri')],['PAS',gs(pl,'pas')],['SHO',gs(pl,'sho')],['DEF',gs(pl,'def')],['POW',gs(pl,'pow')]].map(([l,v])=>
         `<div class="tm-pstat"><div class="tm-pstat-v">${v}</div><div class="tm-pstat-l">${l}</div></div>`
       ).join('');
-    } else if(statsRow) statsRow.innerHTML='';
+      // Special skill badge — shown below stats
+      const special=getSpecial(pl);
+      const gkSuper=pl.pos==='GK'?getGKSuper(pl):null;
+      let skillHtml='';
+      if(special){
+        skillHtml=`<div class="tm-skill-badge">
+          <span class="tm-skill-icon">${special.i}</span>
+          <div class="tm-skill-info">
+            <div class="tm-skill-name">${special.l}</div>
+            <div class="tm-skill-type">SPECIAL SHOT</div>
+          </div>
+          <div class="tm-skill-cost">⚡${special.c||20}</div>
+        </div>`;
+      } else if(gkSuper){
+        skillHtml=`<div class="tm-skill-badge gk">
+          <span class="tm-skill-icon">${gkSuper.i}</span>
+          <div class="tm-skill-info">
+            <div class="tm-skill-name">${gkSuper.l}</div>
+            <div class="tm-skill-type">SUPER SAVE</div>
+          </div>
+          <div class="tm-skill-cost">⚡320</div>
+        </div>`;
+      } else {
+        skillHtml=`<div class="tm-skill-none">No special skill</div>`;
+      }
+      // Append skill badge after stats row (use parent)
+      let skillEl=statsRow.parentNode.querySelector('.tm-skill-wrap');
+      if(!skillEl){skillEl=document.createElement('div');skillEl.className='tm-skill-wrap';statsRow.parentNode.appendChild(skillEl);}
+      skillEl.innerHTML=skillHtml;
+    } else if(statsRow){
+      statsRow.innerHTML='';
+      const skillEl=statsRow.parentNode?.querySelector('.tm-skill-wrap');
+      if(skillEl)skillEl.innerHTML='';
+    }
   } else {
     if(slotLbl)slotLbl.textContent='SELECT A SLOT';
     if(nameBig)nameBig.textContent='Tap a player on the pitch';
     if(statsRow)statsRow.innerHTML='';
     if(faceImg){faceImg.style.backgroundImage='none';faceImg.textContent='?';faceImg.classList.add('placeholder');}
+    const skillEl=statsRow?.parentNode?.querySelector('.tm-skill-wrap');
+    if(skillEl)skillEl.innerHTML='';
   }
 
   buildBenchList();
 }
 function enterGame(){
-  // Always navigate to menu first — fullscreen is best-effort only
   showSc('s-home');
-  // Try fullscreen separately — iOS Safari may not support it, that's fine
+  // Init first menu image
+  const firstImg=document.getElementById('hm-img-friendly');
+  if(firstImg)firstImg.classList.add('active');
+  document.querySelectorAll('.hm-item').forEach(el=>{
+    el.classList.toggle('active',el.dataset.img==='friendly');
+  });
+  _hmCurrent='friendly';
+  // Start music (needs user gesture — splash button click qualifies)
+  startMusic();
   try{
     const el=document.documentElement;
     const req=el.requestFullscreen||el.webkitRequestFullscreen||el.mozRequestFullScreen||el.msRequestFullscreen;
