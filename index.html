@@ -160,11 +160,8 @@
         </button>
       </div>
 
-      <!-- Selected player info -->
+      <!-- Selected player info — compact, no portrait -->
       <div class="tm-section tm-player-info-section" id="playerInfoSection">
-        <div class="tm-player-face-wrap">
-          <div class="tm-player-face" id="playerFaceImg"></div>
-        </div>
         <div class="tm-player-details">
           <div class="tm-player-slot-lbl" id="playerSlotLbl">ST · ATT</div>
           <div class="tm-player-name-big" id="playerNameBig">Select a player</div>
@@ -255,17 +252,20 @@
         <div class="dp-card-wrap atk">
           <div class="dp-role" id="dpa-role">ATTACKER</div>
           <div class="dpav" id="dpa-av"></div>
-          <div class="dpc" id="dpa-c">
-            <div class="dpr" id="dpa-r">SR</div>
-            <div class="dpc-info">
-              <div class="dpnm" id="dpa-nm">—</div>
-              <div class="dpps" id="dpa-ps">—</div>
-              <div class="dp-energy-wrap">
-                <div class="dp-energy-lbl">ENERGY</div>
-                <div class="dp-energy-bar"><div class="dp-energy-fill" id="dpa-ef" style="width:100%"></div></div>
-                <div class="dp-energy-val" id="dpa-ev">100</div>
+          <div class="dpc dpa-c" id="dpa-c">
+            <div class="dpc-face">
+              <div class="dpr" id="dpa-r">SR</div>
+              <div class="dpc-info">
+                <div class="dpnm" id="dpa-nm">—</div>
+                <div class="dpps" id="dpa-ps">—</div>
+                <div class="dp-energy-wrap">
+                  <div class="dp-energy-lbl">ENERGY</div>
+                  <div class="dp-energy-bar"><div class="dp-energy-fill" id="dpa-ef" style="width:100%"></div></div>
+                  <div class="dp-energy-val" id="dpa-ev">100</div>
+                </div>
               </div>
             </div>
+            <div class="dpc-extrude"></div>
           </div>
           <div class="dp-stats" id="dpa-st"></div>
         </div>
@@ -274,17 +274,20 @@
         <div class="dp-card-wrap">
           <div class="dp-role" id="dpd-role">DEFENDER</div>
           <div class="dpav" id="dpd-av"></div>
-          <div class="dpc" id="dpd-c">
-            <div class="dpr" id="dpd-r">SR</div>
-            <div class="dpc-info">
-              <div class="dpnm" id="dpd-nm">—</div>
-              <div class="dpps" id="dpd-ps">—</div>
-              <div class="dp-energy-wrap">
-                <div class="dp-energy-lbl">ENERGY</div>
-                <div class="dp-energy-bar"><div class="dp-energy-fill" id="dpd-ef" style="width:100%"></div></div>
-                <div class="dp-energy-val" id="dpd-ev">100</div>
+          <div class="dpc dpd-c" id="dpd-c">
+            <div class="dpc-face">
+              <div class="dpr" id="dpd-r">SR</div>
+              <div class="dpc-info">
+                <div class="dpnm" id="dpd-nm">—</div>
+                <div class="dpps" id="dpd-ps">—</div>
+                <div class="dp-energy-wrap">
+                  <div class="dp-energy-lbl">ENERGY</div>
+                  <div class="dp-energy-bar"><div class="dp-energy-fill" id="dpd-ef" style="width:100%"></div></div>
+                  <div class="dp-energy-val" id="dpd-ev">100</div>
+                </div>
               </div>
             </div>
+            <div class="dpc-extrude"></div>
           </div>
           <div class="dp-stats" id="dpd-st"></div>
         </div>
@@ -292,16 +295,20 @@
       <div class="duelbar">
         <div class="dueltop">
           <div class="duelzone" id="dzone">MIDFIELD</div>
-          <div class="dtw"><div class="dtr"><svg width="36" height="36" viewBox="0 0 36 36"><circle cx="18" cy="18" r="15" fill="none" stroke="rgba(255,255,255,.08)" stroke-width="3"/><circle id="dta" cx="18" cy="18" r="15" fill="none" stroke="#f0c040" stroke-width="3" stroke-dasharray="94.2" stroke-dashoffset="0" stroke-linecap="round"/></svg><div class="dtn" id="dtn">30</div></div>
-          <div class="di" id="di">CHOOSE</div></div>
+          <div class="dtw"><svg viewBox="0 0 54 54"><circle cx="27" cy="27" r="23" fill="none" stroke="rgba(255,255,255,.08)" stroke-width="3.5"/><circle id="dta" cx="27" cy="27" r="23" fill="none" stroke="#f0c040" stroke-width="3.5" stroke-dasharray="144.5" stroke-dashoffset="0" stroke-linecap="round" transform="rotate(-90 27 27)"/></svg><div class="dtn" id="dtn">30</div></div>
+          <div class="di" id="di">CHOOSE</div>
         </div>
-        <!-- Single flat row: label · btn · btn · btn · GO -->
+        <!-- Button row: only YOUR buttons shown, GO always visible -->
         <div class="duel-row">
-          <div class="dplbl" id="albl">ATTACK</div>
-          <div id="abtns" class="btn-group"></div>
-          <div class="dplbl" id="dlbl" style="margin-left:12px">DEFEND</div>
-          <div id="dbtns" class="btn-group"></div>
-          <button class="dcfm" id="dcfm" onclick="confirmDuel()">GO</button>
+          <div id="atk-section" style="display:flex;align-items:center;gap:clamp(4px,.7vw,8px);">
+            <div class="dplbl" id="albl">ATTACK</div>
+            <div id="abtns" class="btn-group"></div>
+          </div>
+          <div id="def-section" style="display:flex;align-items:center;gap:clamp(4px,.7vw,8px);">
+            <div class="dplbl" id="dlbl">DEFEND</div>
+            <div id="dbtns" class="btn-group"></div>
+          </div>
+          <button class="dcfm" id="dcfm" onclick="confirmDuel()"><div class="dcfm-face">GO →</div><div class="dcfm-bot"></div></button>
         </div>
       </div>
       <div id="duel-res"><div class="rbadge" id="rbadge"></div><div class="rdet" id="rdet"></div><div class="ract" id="ract"></div></div>

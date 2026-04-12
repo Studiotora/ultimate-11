@@ -546,7 +546,66 @@ function hmHover(mode){
   _hmCurrent=mode;
 }
 
-// Music — menu track + 3 match tracks (random per match)
+// ══════════════════════════════════════════════════════════
+// IMPACT SYSTEM — screen shake, zoom, floating text
+// ══════════════════════════════════════════════════════════
+function shakeScreen(intensity=5, duration=80){
+  const vp=document.getElementById('viewport')||document.body;
+  const isVP=!!document.getElementById('viewport');
+  let start=null;
+  function step(ts){
+    if(!start)start=ts;
+    const p=(ts-start)/(duration);
+    if(p>=1){vp.style.transform=isVP?'translate(-50%,-50%)':'';return;}
+    const fade=1-p;
+    const dx=(Math.random()*2-1)*intensity*fade;
+    const dy=(Math.random()*2-1)*intensity*fade;
+    vp.style.transform=isVP?`translate(calc(-50% + ${dx}px), calc(-50% + ${dy}px))`:`translate(${dx}px,${dy}px)`;
+    requestAnimationFrame(step);
+  }
+  requestAnimationFrame(step);
+}
+
+function goalZoom(){
+  const vp=document.getElementById('viewport')||document.body;
+  const isVP=!!document.getElementById('viewport');
+  const base=isVP?'translate(-50%,-50%) ':'';
+  vp.style.transition='transform .18s ease-out';
+  vp.style.transform=base+'scale(1.045)';
+  setTimeout(()=>{
+    vp.style.transition='transform .32s ease-in';
+    vp.style.transform=base+'scale(1)';
+    setTimeout(()=>{vp.style.transition='';vp.style.transform=isVP?'translate(-50%,-50%)':'';},320);
+  },220);
+}
+
+function impactText(msg, color='#f0c040', size='clamp(18px,3vw,28px)'){
+  const el=document.createElement('div');
+  el.textContent=msg;
+  el.style.cssText=`
+    position:fixed;left:50%;top:38%;transform:translateX(-50%) scale(0.6);
+    font-family:'Bebas Neue',sans-serif;font-size:${size};
+    color:${color};letter-spacing:.1em;
+    text-shadow:0 0 24px ${color},0 2px 8px rgba(0,0,0,.8);
+    pointer-events:none;z-index:9999;
+    transition:transform .15s cubic-bezier(.2,1.6,.4,1), opacity .4s ease .3s;
+    opacity:1;white-space:nowrap;
+  `;
+  document.body.appendChild(el);
+  requestAnimationFrame(()=>{
+    requestAnimationFrame(()=>{
+      el.style.transform='translateX(-50%) scale(1)';
+    });
+  });
+  setTimeout(()=>{el.style.opacity='0';setTimeout(()=>el.remove(),400);},700);
+}
+
+function btnPop(btn){
+  if(!btn)return;
+  btn.style.transform='scale(0.88)';
+  btn.style.transition='transform .1s';
+  setTimeout(()=>{btn.style.transform='scale(1)';setTimeout(()=>{btn.style.transition='';},100);},100);
+}
 let _menuMusicOn=false;
 let _matchMusicEl=null;
 
@@ -598,6 +657,8 @@ function showSpecialCutscene(pl,special,callback){
   faceEl.innerHTML=lastName?`<img src="assets/cutscene/${lastName}.png" alt="" draggable="false">`:'';
   sc.classList.remove('show');void sc.offsetWidth;sc.classList.add('show');
   say((pl?pl.name.split('.').pop():'')+'— '+(special.l||'Special')+'!');
+  shakeScreen(7,100);
+  impactText('⚡ '+(special.l||'SPECIAL SHOT')+'!','#f0c040','clamp(18px,3vw,26px)');
   setTimeout(()=>{sc.classList.remove('show');if(callback)callback();},2200);
 }
 let _refTimer=null;
@@ -1733,6 +1794,7 @@ function manualShot(){
   const _gkPosM=PP.a&&PP.a['GK']?PP.a['GK']:{x:goalXFor('h'),y:H*.5};
   G.phase='pass_anim'; clearInterval(G.di);
   G._shotTrail=true;
+  shakeScreen(4,60);
   animateBallTo(_cpM.x,_cpM.y,_gkPosM.x,_gkPosM.y,()=>{
     G._shotTrail=false; G.phase='idle'; opDuel(true);
   },45);
@@ -2045,21 +2107,19 @@ function opDuel(isShot, committedAk){
 function fCard(role,pl,s,displayRole){
   const p=role==='a'?'dpa-':'dpd-';
   const tf=s==='h'?'#1258b0':'#b81616',tl=s==='h'?'#2882f0':'#f03030',rcol=rc(pl?.rar||1);
-  // Card border = team colour, subtle team tint background
   const cardEl=document.getElementById(p+'c');
-  cardEl.style.border=`2px solid ${tl}`;
-  cardEl.style.boxShadow=`0 0 28px ${tl}44, 0 8px 40px rgba(0,0,0,.8)`;
-  cardEl.style.background=`linear-gradient(160deg,${tf}28 0%,rgba(4,6,14,.97) 45%)`;
-  // Portrait — no mirroring, images always shown as supplied
+  // CSS handles card colors via .dpa-c/.dpd-c — clear stale inline overrides
+  cardEl.style.border='';cardEl.style.boxShadow='';cardEl.style.background='';
   const avEl=document.getElementById(p+'av');
   const lastName=playerLastName(pl);
   const img=playerImg(pl);
-  // Team flag emblem watermark
-  cardEl.querySelector('.dp-card-emblem')?.remove();
+  // Emblem inside dpc-face
+  const faceEl=cardEl.querySelector('.dpc-face')||cardEl;
+  faceEl.querySelector('.dp-card-emblem')?.remove();
   const emblemEl=document.createElement('div');
   emblemEl.className='dp-card-emblem';
   emblemEl.textContent=s==='h'?(HT?.flag||''):(AT?.flag||'');
-  cardEl.appendChild(emblemEl);
+  faceEl.appendChild(emblemEl);
   avEl.classList.remove('mirrored');
   if(img&&img.complete&&img.naturalWidth>0){
     const _pi=new Image();_pi.src=`assets/profile/${lastName}.png`;
@@ -2143,12 +2203,13 @@ function bldA(carrier,isShot){
   const sp=carrier?Math.round(carrier.spirit||1500):1500;
   const el=document.getElementById('abtns'),ih=G.D.as==='h';
   el.innerHTML='';
-  document.getElementById('albl').textContent=ih?'YOUR ATTACK':'OPPONENT ATTACKS';
-  if(!ih){el.innerHTML='';return;}
-  // If ak already committed (shot won in field duel) — no second choice, just show locked label
+  // Only show ATK section when human is attacking
+  const atkSection=document.getElementById('atk-section');
+  if(atkSection) atkSection.style.display=ih?'':'none';
+  if(!ih){return;}
   if(G.D.ak){
     const lbl=document.createElement('div');
-    lbl.style.cssText='color:var(--red);font-size:11px;font-weight:700;letter-spacing:1px;opacity:.8;align-self:center;';
+    lbl.style.cssText='color:var(--gold);font-size:11px;font-family:Orbitron,sans-serif;font-weight:700;letter-spacing:1px;opacity:.8;align-self:center;border:1px solid rgba(240,192,64,.2);border-radius:6px;padding:7px 12px;';
     lbl.textContent=(G.D.ak==='special'?'⚡ SPECIAL SHOT':'⚽ SHOT')+' — COMMITTED';
     el.appendChild(lbl);
     chkRdy();
@@ -2168,59 +2229,65 @@ function bldA(carrier,isShot){
   acts.forEach(a=>{
     const cost=(ATK_ACTIONS[a.id]||{}).cost||0;
     const ok=sp>=cost;
-    const btn=document.createElement('button');
-    btn.className='dact'+(a.sp||a.ot?' sp':'')+(ok?'':' dis');
     const costTxt=cost>0?(ok?'−'+cost+' SP':'⚡ LOW'):'FREE';
-    btn.innerHTML='<span class="dai">'+a.i+'</span><span>'+a.l+'</span><span class="dac" style="'+((!ok&&cost>0)?'color:var(--red)':'')+'">'+costTxt+'</span>';
-    btn.onclick=()=>selA(a,btn);
+    const btn=document.createElement('button');
+    const typeClass=a.sp||a.ot?'dact-sp':'dact-atk';
+    btn.className='dact3d '+typeClass+(ok?'':' dact-dis');
+    btn.innerHTML='<div class="dact3d-face"><span class="dact3d-i">'+a.i+'</span><span class="dact3d-l">'+a.l+'</span><span class="dact3d-c">'+costTxt+'</span></div><div class="dact3d-bot"></div>';
+    if(ok) btn.onclick=()=>selA(a,btn);
     el.appendChild(btn);
   });
 }
 
 function bldD(def,ds,isShot){
-  const el=document.getElementById('dbtns');el.innerHTML=''; const ih=ds==='h'; document.getElementById('dlbl').textContent=ih?'YOUR DEFENCE':'OPPONENT DEFENDS';
-  if(!ih){el.innerHTML='';return;}
+  const el=document.getElementById('dbtns');el.innerHTML='';
+  const ih=ds==='h';
+  // Only show DEF section when human is defending
+  const defSection=document.getElementById('def-section');
+  if(defSection) defSection.style.display=ih?'':'none';
+  if(!ih){return;}
   const defIsGK=def&&def.pos==='GK';
   const sp=def?Math.round(def.spirit||(defIsGK?2000:1500)):(defIsGK?2000:1500);
 
   const makeDBtn=(a)=>{
     const cost=(DEF_ACTIONS[a.id]||{}).cost||0;
     const ok=!a.locked&&sp>=cost;
+    const costTxt=cost>0?(ok?'\u2212'+cost+' SP':'\u26a1 LOW'):'FREE';
     const btn=document.createElement('button');
-    btn.className='dact'+(a.locked||!ok?' locked':'');
-    const costTxt=cost>0?(ok?'−'+cost+' SP':'⚡ LOW'):'FREE';
-    const statCol=a.id==='supersave'?'var(--gold)':ok?'rgba(255,255,255,.4)':'var(--red)';
-    btn.innerHTML=`<span class="dai">${a.i}</span><span>${a.l}</span><span class="dac" style="color:${statCol};font-size:7px">${a.stat} · ${costTxt}</span>`;
-    if(a.locked||!ok){btn.disabled=true;}
-    else btn.onclick=()=>selD(a,btn);
+    const typeClass=a.id==='supersave'?'dact-ss':'dact-def';
+    btn.className='dact3d '+typeClass+(ok?'':' dact-dis');
+    btn.innerHTML='<div class="dact3d-face"><span class="dact3d-i">'+a.i+'</span><span class="dact3d-l">'+a.l+'</span><span class="dact3d-c">'+costTxt+'</span></div><div class="dact3d-bot"></div>';
+    if(ok) btn.onclick=()=>selD(a,btn);
+    else btn.disabled=true;
     el.appendChild(btn);
   };
 
   if(isShot&&defIsGK){
     const gkSuper=getGKSuper(def);
     [
-      {id:'save',     l:'Save',       i:'🧤', stat:'SAV'},
-      {id:'punch',    l:'Punch',      i:'👊', stat:'POW'},
-      {id:'supersave',l:gkSuper.l,   i:gkSuper.i, stat:'SAV★', locked:sp<320},
+      {id:'save',     l:'Save',     i:'\ud83e\udde4', stat:'SAV'},
+      {id:'punch',    l:'Punch',    i:'\ud83d\udc4a', stat:'POW'},
+      {id:'supersave',l:gkSuper.l, i:gkSuper.i, stat:'SAV\u2605', locked:sp<320},
     ].forEach(makeDBtn);
   } else {
     [
-      {id:'tackle',   l:'Tackle',    i:'🦵', stat:'DEF'},
-      {id:'intercept',l:'Intercept', i:'✋', stat:'PAS'},
-      {id:'block',    l:'Block',     i:'🛡', stat:'DEF'},
+      {id:'tackle',   l:'Tackle',    i:'\ud83e\uddb5', stat:'DEF'},
+      {id:'intercept',l:'Intercept', i:'\u270b', stat:'PAS'},
+      {id:'block',    l:'Block',     i:'\ud83d\udee1', stat:'DEF'},
     ].forEach(makeDBtn);
   }
 }
 
 function selA(a,btn){
-  G.D.ak=a.id;G.D.pk=null; document.querySelectorAll('#abtns .dact').forEach(b=>b.classList.remove('sa')); btn.classList.add('sa');
+  btnPop(btn);
+  G.D.ak=a.id;G.D.pk=null; document.querySelectorAll('#abtns .dact3d').forEach(b=>b.classList.remove('dact-sel')); btn.classList.add('dact-sel');
   if(a.id==='pass'||a.id==='one-two'){
     document.getElementById('duel-ov').classList.remove('show'); G.pm=true; document.getElementById('pass-banner').style.display='block';
     document.getElementById('pass-banner').textContent=a.id==='one-two'?'ONE-TWO — PICK TEAMMATE':'PASS MODE — CLICK A PLAYER';
     document.getElementById('dcfm').classList.remove('rdy');
   } else chkRdy();
 }
-function selD(a,btn){G.D.defA=a.id;document.querySelectorAll('#dbtns .dact').forEach(b=>b.classList.remove('sd'));btn.classList.add('sd');chkRdy();}
+function selD(a,btn){btnPop(btn);G.D.defA=a.id;document.querySelectorAll('#dbtns .dact3d').forEach(b=>b.classList.remove('dact-sel'));btn.classList.add('dact-sel');chkRdy();}
 function chkRdy(){const needsPk=G.D.ak==='pass'||G.D.ak==='one-two';const ao=G.D.as!=='h'||(G.D.ak&&(!needsPk||G.D.pk));const do2=G.D.ds!=='h'||G.D.defA;document.getElementById('dcfm').classList.toggle('rdy',!!(ao&&do2));}
 
 function weightedPick(items){
@@ -2381,7 +2448,7 @@ function startCD(){
   // GK shot duel: human is the attacker, GK (AI) is defender — no human choice needed, resolve quickly
   const isGKDuel = G.D.isShot && G.D.ds==='a' && G.D.def && G.D.def.pos==='GK';
   let s = isGKDuel ? 3 : 30;
-  const arc=document.getElementById('dta'),ne=document.getElementById('dtn'),c2=100.53;
+  const arc=document.getElementById('dta'),ne=document.getElementById('dtn'),c2=144.5;
   arc.style.strokeDashoffset='0';ne.textContent=isGKDuel?'':String(s);ne.classList.remove('urg');
   G.di=setInterval(()=>{
     s--;
@@ -2539,7 +2606,7 @@ function resDuel(){
   G.phase='duel_result';G.pm=false;
   document.getElementById('pass-banner').style.display='none';
   document.getElementById('duel-ov').classList.add('show');
-  document.querySelectorAll('.dact').forEach(b=>b.classList.add('dis'));
+  document.querySelectorAll('.dact3d').forEach(b=>b.classList.add('dact-dis'));
   document.getElementById('dcfm').classList.remove('rdy');
   const {carrier,def,dk,as,ds,isShot,ak,pk,defA}=G.D;
   const atkPow=calcAttackPower(carrier,ak,as);
@@ -2604,6 +2671,33 @@ function resDuel(){
     (al[ak]||ak.toUpperCase())+' '+Math.round(atkPow)+' vs '+(dl[defA]||defA.toUpperCase())+' '+Math.round(defPow);
   const ro=document.getElementById('duel-res');
   ro.classList.add('show');say(badge+(det?' — '+det:''));
+
+  // ── IMPACT FEEDBACK ─────────────────────────────────────
+  if(['shoot','special'].includes(ak)){
+    if(win&&G.D.isShot){
+      // Goal — handled in afGoal with full zoom
+      shakeScreen(8,120);
+    } else if(win){
+      shakeScreen(5,80);
+      impactText('🎯 SHOT ON TARGET!','#f0c040');
+    } else if(defA==='supersave'){
+      shakeScreen(6,100);
+      impactText('⭐ SUPER SAVE!','#44b4ff','clamp(20px,3.5vw,32px)');
+    } else if(defA==='punch'){
+      shakeScreen(4,70);
+      impactText('👊 PUNCHED CLEAR!','#aaa');
+    } else {
+      shakeScreen(3,60);
+      impactText('🧤 SAVED!','#44b4ff');
+    }
+  } else if(ak==='special'&&!['shoot','special'].includes(ak)){
+    // shouldn't happen but guard
+  } else {
+    if(win&&ak==='dribble'){impactText('✨ DRIBBLE!','#f0c040');}
+    else if(win&&ak==='one-two'){impactText('⚡ ONE-TWO!','#f0c040');}
+    else if(!win&&defA==='intercept'){impactText('✋ INTERCEPTED!','#dc2020');}
+    else if(!win&&defA==='tackle'){impactText('🦵 TACKLED!','#dc2020');}
+  }
   const powerDiff=Math.abs(atkPow-defPow);
   if(powerDiff>40){
     const loserKey=win?dk:G.ck;
@@ -2664,6 +2758,9 @@ function afGoal(scorer,s,gen){
   const tn=(s==='h'?HT:AT)?.name||''; document.getElementById('gscr').textContent=(scorer?scorer.name.toUpperCase():'')+' — '+tn;
   const gf=document.getElementById('gfl'); gf.classList.remove('show'); void gf.offsetWidth; gf.classList.add('show'); G_moveTarget=null;G_laneTarget=null;
   showReferee('GOAL!');
+  goalZoom();
+  shakeScreen(12, 200);
+  impactText('⚽ GOAL!!!', '#f0c040', 'clamp(28px,5vw,52px)');
   setTimeout(()=>{
     Object.values(hSq).forEach(p=>{if(p)p.cooldownUntil=0;}); Object.values(aSq).forEach(p=>{if(p)p.cooldownUntil=0;});
     iPos(); const ns=s==='h'?'a':'h',q=sq(ns),kk=['CM2','CM1','ST'].find(k=>q[k])||Object.keys(q).find(k=>q[k]);
@@ -3310,61 +3407,24 @@ function updateSelectedSlotPanel(){
   const slotLbl=document.getElementById('playerSlotLbl');
   const nameBig=document.getElementById('playerNameBig');
   const statsRow=document.getElementById('playerStatsRow');
-  const faceImg=document.getElementById('playerFaceImg');
 
   if(SELECTED_HOME_SLOT){
     if(slotLbl)slotLbl.textContent=displayPosLabel(SELECTED_HOME_SLOT)+' · '+slotFamily(SELECTED_HOME_SLOT);
     if(nameBig)nameBig.textContent=pl?pl.name:'Empty Slot';
-    if(faceImg){
-      if(pl){
-        const img=playerImg(pl);
-        const lastName=playerLastName(pl);
-        if(img&&img.complete&&img.naturalWidth>0){
-          faceImg.style.backgroundImage=`url(assets/players/${lastName}.png)`;
-          faceImg.style.backgroundSize='130%';
-          faceImg.style.backgroundPosition='center 30%';
-          faceImg.classList.remove('placeholder');
-        } else {
-          faceImg.style.backgroundImage='none';
-          faceImg.textContent=pl.name.split('.').pop()[0];
-          faceImg.classList.add('placeholder');
-        }
-      } else {
-        faceImg.style.backgroundImage='none';
-        faceImg.textContent=displayPosLabel(SELECTED_HOME_SLOT);
-        faceImg.classList.add('placeholder');
-      }
-    }
     if(statsRow&&pl){
       statsRow.innerHTML=[['SPD',gs(pl,'spd')],['DRI',gs(pl,'dri')],['PAS',gs(pl,'pas')],['SHO',gs(pl,'sho')],['DEF',gs(pl,'def')],['POW',gs(pl,'pow')]].map(([l,v])=>
         `<div class="tm-pstat"><div class="tm-pstat-v">${v}</div><div class="tm-pstat-l">${l}</div></div>`
       ).join('');
-      // Special skill badge — shown below stats
       const special=getSpecial(pl);
       const gkSuper=pl.pos==='GK'?getGKSuper(pl):null;
       let skillHtml='';
       if(special){
-        skillHtml=`<div class="tm-skill-badge">
-          <span class="tm-skill-icon">${special.i}</span>
-          <div class="tm-skill-info">
-            <div class="tm-skill-name">${special.l}</div>
-            <div class="tm-skill-type">SPECIAL SHOT</div>
-          </div>
-          <div class="tm-skill-cost">⚡${special.c||20}</div>
-        </div>`;
+        skillHtml=`<div class="tm-skill-badge"><span class="tm-skill-icon">${special.i}</span><div class="tm-skill-info"><div class="tm-skill-name">${special.l}</div><div class="tm-skill-type">SPECIAL SHOT</div></div><div class="tm-skill-cost">⚡${special.c||400}</div></div>`;
       } else if(gkSuper){
-        skillHtml=`<div class="tm-skill-badge gk">
-          <span class="tm-skill-icon">${gkSuper.i}</span>
-          <div class="tm-skill-info">
-            <div class="tm-skill-name">${gkSuper.l}</div>
-            <div class="tm-skill-type">SUPER SAVE</div>
-          </div>
-          <div class="tm-skill-cost">⚡320</div>
-        </div>`;
+        skillHtml=`<div class="tm-skill-badge gk"><span class="tm-skill-icon">${gkSuper.i}</span><div class="tm-skill-info"><div class="tm-skill-name">${gkSuper.l}</div><div class="tm-skill-type">SUPER SAVE</div></div><div class="tm-skill-cost">⚡320</div></div>`;
       } else {
         skillHtml=`<div class="tm-skill-none">No special skill</div>`;
       }
-      // Append skill badge after stats row (use parent)
       let skillEl=statsRow.parentNode.querySelector('.tm-skill-wrap');
       if(!skillEl){skillEl=document.createElement('div');skillEl.className='tm-skill-wrap';statsRow.parentNode.appendChild(skillEl);}
       skillEl.innerHTML=skillHtml;
@@ -3377,7 +3437,6 @@ function updateSelectedSlotPanel(){
     if(slotLbl)slotLbl.textContent='SELECT A SLOT';
     if(nameBig)nameBig.textContent='Tap a player on the pitch';
     if(statsRow)statsRow.innerHTML='';
-    if(faceImg){faceImg.style.backgroundImage='none';faceImg.textContent='?';faceImg.classList.add('placeholder');}
     const skillEl=statsRow?.parentNode?.querySelector('.tm-skill-wrap');
     if(skillEl)skillEl.innerHTML='';
   }

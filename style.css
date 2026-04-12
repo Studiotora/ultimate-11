@@ -375,102 +375,38 @@ canvas#C{position:absolute;inset:0;width:100%;height:100%}
 
 /* DUEL */
 /* Duel overlay */
-#duel-ov{position:absolute;inset:0;z-index:20;display:none;flex-direction:column;background:linear-gradient(160deg,rgba(6,12,24,.82) 0%,rgba(4,6,12,.78) 100%),url('assets/wallpaper/duel.png') center/cover no-repeat}
+#duel-ov{position:absolute;inset:0;z-index:20;display:none;flex-direction:column;background:linear-gradient(160deg,rgba(6,12,24,.85) 0%,rgba(4,6,12,.82) 100%),url('assets/wallpaper/duel.png') center/cover no-repeat}
 #duel-ov.show{display:flex}
 .da-bg{position:absolute;inset:0;background:repeating-linear-gradient(-45deg,transparent,transparent 4px,rgba(255,255,255,.006) 4px,rgba(255,255,255,.006) 5px);pointer-events:none;z-index:0}
-.dvs{position:absolute;left:50%;top:35%;transform:translate(-50%,-50%);font-family:'Bebas Neue',sans-serif;font-size:clamp(32px,5vw,60px);color:var(--gold);letter-spacing:.06em;filter:drop-shadow(0 0 24px rgba(240,192,64,.7));opacity:0;pointer-events:none;z-index:5}
+.dvs{position:absolute;left:50%;top:35%;transform:translate(-50%,-50%);font-family:'Bebas Neue',sans-serif;font-size:clamp(32px,5vw,60px);color:rgba(240,192,64,.18);-webkit-text-stroke:1px rgba(240,192,64,.3);letter-spacing:.06em;opacity:0;pointer-events:none;z-index:5}
 .dvs.show{animation:vsA .6s forwards}
-@keyframes vsA{0%{opacity:0;transform:translate(-50%,-50%) scale(.4)}45%{opacity:1;transform:translate(-50%,-50%) scale(1.06)}65%{transform:translate(-50%,-50%) scale(1)}82%{opacity:1}100%{opacity:.15}}
-/* ── DUEL CARDS ──────────────────────────────────────────────────── */
+@keyframes vsA{0%{opacity:0;transform:translate(-50%,-50%) scale(.4)}45%{opacity:1;transform:translate(-50%,-50%) scale(1.06)}65%{transform:translate(-50%,-50%) scale(1)}82%{opacity:1}100%{opacity:1}}
 
-/* Outer row holding both cards + ball */
-.dpwrap{
-  flex:1;display:flex;align-items:stretch;gap:0;
-  position:relative;z-index:3;min-height:0;
-  padding:clamp(8px,1.2vh,14px) clamp(16px,3vw,40px) 0;
-}
-
-/* Each half — positioning context for portrait + card */
-.dp-card-wrap{
-  flex:1;display:flex;flex-direction:column;align-items:center;justify-content:flex-end;
-  padding:0 clamp(6px,1vw,14px);gap:0;position:relative;
-}
+/* ── DUEL CARDS ── */
+.dpwrap{flex:1;display:flex;align-items:stretch;gap:0;position:relative;z-index:3;min-height:0;padding:clamp(8px,1.2vh,14px) clamp(16px,3vw,40px) 0;}
+.dp-card-wrap{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:flex-end;padding:0 clamp(6px,1vw,14px);gap:0;position:relative;}
 .dp-card-wrap.atk{border-right:1px solid rgba(255,255,255,.05)}
+.dp-role{font-family:'Orbitron',sans-serif;font-size:clamp(7px,.85vw,9px);letter-spacing:.24em;color:var(--dim);margin-bottom:6px;text-align:center;flex-shrink:0;position:relative;z-index:6;}
 
-/* Role label above */
-.dp-role{
-  font-family:'Orbitron',sans-serif;font-size:clamp(7px,.85vw,9px);
-  letter-spacing:.24em;color:var(--dim);
-  margin-bottom:6px;text-align:center;flex-shrink:0;position:relative;z-index:6;
-}
+/* Card — 3D tilt */
+.dpc{width:clamp(160px,24vw,280px);flex:none;border-radius:8px 8px 4px 4px;border:2px solid;overflow:visible;position:relative;box-shadow:0 8px 40px rgba(0,0,0,.8);z-index:2;transform:perspective(600px) rotateX(7deg);transform-origin:bottom center;transition:transform .3s;}
+.dpc:hover{transform:perspective(600px) rotateX(4deg) translateY(-3px);}
+/* card face */
+.dpc-face{border-radius:8px 8px 0 0;overflow:hidden;display:flex;flex-direction:column;position:relative;}
+/* extrude bottom edge */
+.dpc-extrude{height:7px;border-radius:0 0 5px 5px;}
+.dpa-c{border-color:rgba(40,120,220,.6);box-shadow:0 -4px 0 0 rgba(30,114,220,.5),0 0 32px rgba(30,114,220,.2),inset 0 1px 0 rgba(80,160,255,.15);}
+.dpa-c .dpc-face{background:linear-gradient(135deg,rgba(14,40,130,.35) 0%,rgba(4,6,14,.97) 50%);}
+.dpa-c .dpc-extrude{background:linear-gradient(180deg,rgba(10,40,110,.9),rgba(6,22,60,.7));box-shadow:0 5px 16px rgba(0,0,0,.6);}
+.dpd-c{border-color:rgba(220,60,60,.6);box-shadow:0 -4px 0 0 rgba(220,60,60,.5),0 0 32px rgba(220,32,32,.2),inset 0 1px 0 rgba(255,120,120,.15);}
+.dpd-c .dpc-face{background:linear-gradient(135deg,rgba(160,20,20,.35) 0%,rgba(4,6,14,.97) 50%);}
+.dpd-c .dpc-extrude{background:linear-gradient(180deg,rgba(140,20,20,.9),rgba(80,10,10,.7));box-shadow:0 5px 16px rgba(0,0,0,.6);}
 
-/* THE CARD — sits at bottom of wrap; portrait is a sibling above it */
-.dpc{
-  width:clamp(160px,24vw,280px);
-  flex:none;
-  border-radius:8px;
-  border:2px solid rgba(255,255,255,.12);
-  display:flex;flex-direction:column;
-  overflow:hidden;
-  position:relative;
-  box-shadow:0 8px 40px rgba(0,0,0,.8);
-  z-index:2;
-}
-/* diagonal texture */
-.dpc::before{
-  content:'';position:absolute;inset:0;
-  background:repeating-linear-gradient(-45deg,transparent,transparent 5px,rgba(255,255,255,.018) 5px,rgba(255,255,255,.018) 6px);
-  pointer-events:none;z-index:0;
-}
-/* Team emblem watermark */
-.dp-card-emblem{
-  position:absolute;top:50%;left:50%;
-  transform:translate(-50%,-50%);
-  font-size:clamp(80px,14vw,140px);
-  opacity:.07;pointer-events:none;
-  z-index:1;line-height:1;filter:blur(3px);
-}
-
-/* Rarity badge */
-.dpr{
-  position:absolute;top:7px;left:7px;
-  font-family:'Bebas Neue',sans-serif;font-size:8px;
-  padding:1px 5px;border-radius:2px;z-index:4;
-}
-
-/* PORTRAIT — absolute sibling above .dpc, anchored to bottom of wrap */
-.dpav{
-  position:absolute;
-  bottom:0;
-  left:50%;
-  transform:translateX(-50%);
-  width:80%;
-  height:95%;
-  background-size:contain;
-  background-position:center bottom;
-  background-repeat:no-repeat;
-  z-index:5;
-  pointer-events:none;
-  display:flex;align-items:center;justify-content:center;
-  font-family:'Bebas Neue',sans-serif;
-  font-size:clamp(60px,10vw,120px);
-  color:rgba(255,255,255,.07);
-  -webkit-mask-image:linear-gradient(to bottom,black 55%,transparent 92%);
-  mask-image:linear-gradient(to bottom,black 55%,transparent 92%);
-}
-.dpav.mirrored{ transform:translateX(-50%); /* no flip */ }
-
-/* INFO PANEL — bottom portion of card */
-.dpc-info{
-  flex-shrink:0;
-  background:linear-gradient(0deg,rgba(3,5,12,1) 0%,rgba(3,5,12,.96) 100%);
-  border-top:1px solid rgba(255,255,255,.08);
-  display:flex;flex-direction:column;align-items:center;
-  gap:clamp(2px,.3vh,4px);
-  padding:clamp(6px,.9vh,10px) clamp(8px,1.2vw,12px) clamp(5px,.7vh,8px);
-  position:relative;z-index:2;
-}
-
+.dp-card-emblem{position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);font-size:clamp(80px,14vw,140px);opacity:.07;pointer-events:none;z-index:1;line-height:1;filter:blur(3px);}
+.dpr{position:absolute;top:7px;left:7px;font-family:'Bebas Neue',sans-serif;font-size:8px;padding:1px 5px;border-radius:2px;z-index:4;}
+.dpav{position:absolute;bottom:0;left:50%;transform:translateX(-50%);width:80%;height:95%;background-size:contain;background-position:center bottom;background-repeat:no-repeat;z-index:5;pointer-events:none;display:flex;align-items:center;justify-content:center;font-family:'Bebas Neue',sans-serif;font-size:clamp(60px,10vw,120px);color:rgba(255,255,255,.07);-webkit-mask-image:linear-gradient(to bottom,black 55%,transparent 92%);mask-image:linear-gradient(to bottom,black 55%,transparent 92%);}
+.dpav.mirrored{transform:translateX(-50%);}
+.dpc-info{flex-shrink:0;background:linear-gradient(0deg,rgba(3,5,12,1) 0%,rgba(3,5,12,.96) 100%);border-top:1px solid rgba(255,255,255,.08);display:flex;flex-direction:column;align-items:center;gap:clamp(2px,.3vh,4px);padding:clamp(6px,.9vh,10px) clamp(8px,1.2vw,12px) clamp(5px,.7vh,8px);position:relative;z-index:2;}
 .dpnm{font-family:'Bebas Neue',sans-serif;font-size:clamp(15px,2.4vw,24px);text-align:center;line-height:1;color:#fff;font-weight:700;letter-spacing:.06em}
 .dpps{font-family:'Orbitron',sans-serif;font-size:clamp(7px,.85vw,9px);letter-spacing:.2em}
 .dp-energy-wrap{width:92%;display:flex;flex-direction:column;align-items:center;gap:2px}
@@ -479,69 +415,104 @@ canvas#C{position:absolute;inset:0;width:100%;height:100%}
 .dp-energy-fill{height:100%;border-radius:4px;transition:width .4s,background .4s}
 .dp-energy-val{font-family:'Orbitron',sans-serif;font-size:clamp(8px,1.1vw,12px);font-weight:700;letter-spacing:.1em}
 
-/* Stats row — lives OUTSIDE the card, below it */
-.dp-stats{
-  display:flex;gap:clamp(2px,.4vw,5px);justify-content:center;
-  width:clamp(160px,24vw,280px);
-  padding:clamp(4px,.5vh,6px) 0 0;
-  flex-shrink:0;
-}
-.dst{text-align:center;background:rgba(255,255,255,.05);border-radius:4px;padding:clamp(3px,.4vh,5px) 0;border:1px solid rgba(255,255,255,.06);flex:1}
-.dst-v{font-family:'Orbitron',sans-serif;font-size:clamp(9px,1.3vw,14px);font-weight:700}
-.dst-l{font-size:clamp(5px,.55vw,6px);font-family:'Orbitron',sans-serif;letter-spacing:.1em;color:var(--dim)}
+/* Stats strip — 3D tilt down */
+.dp-stats{display:grid;grid-template-columns:repeat(6,1fr);width:clamp(160px,24vw,280px);border:1.5px solid;border-top:none;border-radius:0 0 6px 6px;overflow:hidden;transform:perspective(400px) rotateX(-3deg);transform-origin:top center;}
+#dpa-st{border-color:rgba(40,120,220,.3);}
+#dpd-st{border-color:rgba(220,60,60,.3);}
+.dst{text-align:center;background:rgba(3,5,10,.92);padding:clamp(4px,.6vh,7px) 3px;border-right:1px solid rgba(255,255,255,.04);display:flex;flex-direction:column;align-items:center;gap:1px;}
+.dst:last-child{border-right:none}
+.dst-v{font-family:'Orbitron',sans-serif;font-size:clamp(10px,1.3vw,15px);font-weight:700;}
+#dpa-st .dst-v{color:#5090e0;}
+#dpd-st .dst-v{color:#e07070;}
+.dst-l{font-size:clamp(5px,.62vw,7px);font-family:'Orbitron',sans-serif;letter-spacing:.12em;color:var(--dim);}
 
-/* Ball — floats between the two cards at portrait level, NOT inside either card */
-.dp-ball{
-  position:absolute;left:50%;top:72%;
-  transform:translate(-50%,-50%);
-  width:clamp(40px,6vw,70px);
-  height:clamp(40px,6vw,70px);
-  background:url('assets/pitch/ball.png') center/contain no-repeat;
-  font-size:0;
-  filter:drop-shadow(0 0 18px rgba(255,215,60,.9)) drop-shadow(0 0 40px rgba(255,215,60,.4));
-  display:none;z-index:20;pointer-events:none;
-  transition:left .35s cubic-bezier(.34,1.56,.64,1);
-}
-/* Ball at the inner edge of the carrier's card */
-.dp-ball.ball-left{ left:38%; }
-.dp-ball.ball-right{ left:62%; }
+/* Ball */
+.dp-ball{position:absolute;left:50%;top:72%;transform:translate(-50%,-50%);width:clamp(40px,6vw,70px);height:clamp(40px,6vw,70px);background:url('assets/pitch/ball.png') center/contain no-repeat;font-size:0;filter:drop-shadow(0 0 18px rgba(255,215,60,.9)) drop-shadow(0 0 40px rgba(255,215,60,.4));display:none;z-index:20;pointer-events:none;transition:left .35s cubic-bezier(.34,1.56,.64,1);}
+.dp-ball.ball-left{left:38%}.dp-ball.ball-right{left:62%}
 .dp-ball.show{display:block;animation:ballPulse 1.2s ease-in-out infinite alternate}
 @keyframes ballPulse{from{transform:translate(-50%,-50%) scale(1)}to{transform:translate(-50%,-50%) scale(1.18)}}
-/* Action bar — broadcast navy */
-.duelbar{flex-shrink:0;background:linear-gradient(0deg,#040810 0%,#07101e 100%);border-top:2px solid #1a3060;padding:clamp(5px,.8vh,8px) clamp(8px,1.4vw,14px);z-index:10;position:relative}
-.dueltop{display:flex;align-items:center;justify-content:space-between;margin-bottom:clamp(4px,.6vh,6px)}
-.duelzone{font-family:'Bebas Neue',sans-serif;font-size:clamp(13px,1.8vw,17px);letter-spacing:.1em;color:var(--gold)}
-.dtw{display:flex;align-items:center;gap:6px}
-.dtr{position:relative;width:34px;height:34px;flex-shrink:0}
-.dtr svg{transform:rotate(-90deg)}
-.dtn{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;font-family:'Orbitron',sans-serif;font-size:11px;font-weight:700;color:var(--gold)}
+
+/* ── ACTION BAR — 3D tray ── */
+.duelbar{flex-shrink:0;background:rgba(3,4,9,.99);border-top:2px solid rgba(240,192,64,.2);padding:clamp(8px,1.4vh,13px) clamp(10px,1.8vw,22px);z-index:10;position:relative;box-shadow:0 -8px 40px rgba(0,0,0,.8),inset 0 1px 0 rgba(255,255,255,.03);}
+.duelbar::before{content:'';position:absolute;top:0;left:0;right:0;height:2px;background:linear-gradient(90deg,transparent,rgba(240,192,64,.5) 20%,rgba(240,192,64,.5) 80%,transparent);}
+.dueltop{display:flex;align-items:center;gap:clamp(6px,1.2vw,14px);margin-bottom:clamp(5px,.8vh,8px);}
+.duelzone{font-family:'Orbitron',sans-serif;font-size:clamp(8px,.95vw,11px);letter-spacing:.22em;color:var(--gold);padding:3px 10px;border:1px solid rgba(240,192,64,.22);border-radius:3px;background:rgba(240,192,64,.06);flex-shrink:0;}
+.dtw{position:relative;width:clamp(38px,4.8vw,54px);height:clamp(38px,4.8vw,54px);flex-shrink:0;}
+.dtw svg{width:100%;height:100%;}
+.dtr{display:contents;}
+.dtn{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;font-family:'Orbitron',sans-serif;font-size:clamp(10px,1.3vw,14px);font-weight:900;color:var(--gold);}
 .dtn.urg{color:var(--red);animation:urgP .5s infinite alternate}
 @keyframes urgP{from{opacity:1}to{opacity:.3}}
-.di{font-family:'Orbitron',sans-serif;font-size:clamp(7px,.85vw,9px);letter-spacing:.18em;color:var(--dim)}
-/* Single flat row — everything side by side */
-.duel-row{display:flex;align-items:center;gap:clamp(4px,.7vw,8px);flex-wrap:nowrap;overflow-x:auto;-webkit-overflow-scrolling:touch}
+.di{font-family:'Orbitron',sans-serif;font-size:clamp(7px,.82vw,9px);letter-spacing:.2em;color:var(--dim);flex:1;}
+.duel-row{display:flex;align-items:center;gap:clamp(4px,.7vw,8px);flex-wrap:nowrap;overflow-x:auto;-webkit-overflow-scrolling:touch;}
 .duel-row::-webkit-scrollbar{display:none}
-.dplbl{font-size:clamp(6px,.75vw,8px);font-family:'Orbitron',sans-serif;letter-spacing:.18em;color:var(--dim);white-space:nowrap;flex-shrink:0}
-.btn-group{display:flex;gap:clamp(4px,.6vw,7px);flex-shrink:0}
-/* Compact inline buttons */
-.dact{padding:clamp(7px,1.1vh,10px) clamp(9px,1.4vw,14px);background:rgba(10,20,40,.8);border:1.5px solid rgba(30,114,220,.3);color:var(--w);font-family:'Rajdhani',sans-serif;font-weight:700;font-size:clamp(12px,1.7vw,15px);cursor:pointer;border-radius:6px;transition:.12s;display:flex;align-items:center;gap:5px;white-space:nowrap;flex-shrink:0}
-.dact:hover{border-color:var(--gold);background:rgba(40,70,10,.5);color:var(--gold)}
-.dact.sa{border-color:var(--gold);background:rgba(40,70,10,.65);color:var(--gold)}
-.dact.sd{border-color:var(--bl);background:rgba(10,30,90,.65);color:var(--bl)}
-.dact.sp{border-color:rgba(68,200,255,.4);color:var(--sp)}
-.dact.dis{opacity:.2;pointer-events:none}
-.dai{font-size:clamp(13px,1.8vw,17px);line-height:1;flex-shrink:0}
-.dac{font-size:6px;font-family:'Orbitron',sans-serif;color:var(--sp);opacity:.7;margin-left:2px}
-/* GO — small, pushed to right */
-.dcfm{padding:clamp(7px,1.1vh,10px) clamp(16px,2.2vw,26px);background:var(--gold);border:none;color:#06080e;font-family:'Bebas Neue',sans-serif;font-size:clamp(13px,1.7vw,17px);letter-spacing:.1em;cursor:pointer;border-radius:5px;transition:.15s;opacity:.3;pointer-events:none;flex-shrink:0;margin-left:auto}
-.dcfm.rdy{opacity:1;pointer-events:all}.dcfm.rdy:hover{background:#fff;box-shadow:0 0 14px rgba(240,192,64,.5)}
+.dplbl{font-size:clamp(6px,.72vw,8px);font-family:'Orbitron',sans-serif;letter-spacing:.2em;color:var(--dim);white-space:nowrap;flex-shrink:0;}
+.btn-group{display:flex;gap:clamp(4px,.7vw,8px);flex-shrink:0;}
+
+/* ── 3D BUTTONS ── */
+.dact3d{position:relative;border:none;background:none;padding:0;cursor:pointer;flex-shrink:0;transition:filter .12s;}
+.dact3d-face{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px;padding:clamp(7px,1.1vh,10px) clamp(9px,1.3vw,15px);border-radius:6px 6px 3px 3px;border:1.5px solid;position:relative;z-index:2;transition:background .12s,border-color .12s;background:linear-gradient(180deg,rgba(255,255,255,.07) 0%,transparent 40%),rgba(8,12,22,.95);}
+.dact3d-bot{position:absolute;bottom:0;left:0;right:0;height:5px;border-radius:0 0 5px 5px;transform:translateY(4px);z-index:1;transition:transform .1s,height .1s;}
+.dact3d:active .dact3d-face{transform:translateY(3px);}
+.dact3d:active .dact3d-bot{height:2px;transform:translateY(1px);}
+.dact3d-i{font-size:clamp(13px,1.6vw,18px);line-height:1;}
+.dact3d-l{font-family:'Bebas Neue',sans-serif;font-size:clamp(12px,1.5vw,17px);letter-spacing:.1em;line-height:1;color:#fff;}
+.dact3d-c{font-family:'Orbitron',sans-serif;font-size:clamp(5px,.6vw,7px);letter-spacing:.12em;color:var(--dim);}
+
+/* ATK = blue */
+.dact-atk .dact3d-face{border-color:rgba(30,90,200,.4);box-shadow:inset 0 1px 0 rgba(80,160,255,.12);}
+.dact-atk .dact3d-bot{background:rgba(10,30,100,.9);box-shadow:0 2px 8px rgba(0,0,0,.5);}
+.dact-atk:hover .dact3d-face{border-color:rgba(40,120,220,.8);background:linear-gradient(180deg,rgba(255,255,255,.09) 0%,transparent 40%),rgba(8,20,70,.9);}
+.dact-atk.dact-sel .dact3d-face{border-color:var(--blue);background:linear-gradient(180deg,rgba(60,140,255,.14) 0%,rgba(6,16,60,.95) 100%);box-shadow:0 0 16px rgba(30,114,220,.5),inset 0 1px 0 rgba(80,160,255,.2);}
+.dact-atk.dact-sel .dact3d-bot{background:var(--blue);box-shadow:0 0 10px rgba(30,114,220,.6);}
+
+/* DEF = red */
+.dact-def .dact3d-face{border-color:rgba(200,50,50,.4);box-shadow:inset 0 1px 0 rgba(255,100,100,.1);}
+.dact-def .dact3d-bot{background:rgba(120,20,20,.9);box-shadow:0 2px 8px rgba(0,0,0,.5);}
+.dact-def:hover .dact3d-face{border-color:rgba(220,50,50,.8);background:linear-gradient(180deg,rgba(255,255,255,.09) 0%,transparent 40%),rgba(80,12,12,.9);}
+.dact-def.dact-sel .dact3d-face{border-color:var(--red);background:linear-gradient(180deg,rgba(255,80,80,.14) 0%,rgba(60,8,8,.95) 100%);box-shadow:0 0 16px rgba(220,32,32,.5),inset 0 1px 0 rgba(255,100,100,.2);}
+.dact-def.dact-sel .dact3d-bot{background:var(--red);box-shadow:0 0 10px rgba(220,32,32,.6);}
+
+/* SPECIAL = gold */
+.dact-sp .dact3d-face{border-color:rgba(220,160,20,.4);}
+.dact-sp .dact3d-l{color:var(--gold);}
+.dact-sp .dact3d-bot{background:rgba(100,60,0,.9);}
+.dact-sp:hover .dact3d-face{border-color:rgba(240,192,64,.7);background:linear-gradient(180deg,rgba(255,255,255,.09) 0%,transparent 40%),rgba(60,30,0,.9);}
+.dact-sp.dact-sel .dact3d-face{border-color:var(--gold);background:linear-gradient(180deg,rgba(255,200,40,.18) 0%,rgba(50,24,0,.95) 100%);box-shadow:0 0 20px rgba(240,192,64,.6),inset 0 1px 0 rgba(255,210,60,.2);}
+.dact-sp.dact-sel .dact3d-bot{background:var(--gold);box-shadow:0 0 14px rgba(240,192,64,.7);}
+.dact-sp.dact-sel .dact3d-l{color:#fff;}
+
+/* SUPER SAVE = cyan */
+.dact-ss .dact3d-face{border-color:rgba(44,160,220,.4);}
+.dact-ss .dact3d-l{color:var(--sp);}
+.dact-ss .dact3d-bot{background:rgba(0,60,100,.9);}
+.dact-ss:hover .dact3d-face{border-color:rgba(68,200,255,.7);background:linear-gradient(180deg,rgba(255,255,255,.09) 0%,transparent 40%),rgba(0,30,60,.9);}
+.dact-ss.dact-sel .dact3d-face{border-color:var(--sp);background:linear-gradient(180deg,rgba(68,200,255,.18) 0%,rgba(0,24,50,.95) 100%);box-shadow:0 0 20px rgba(68,200,255,.5),inset 0 1px 0 rgba(68,200,255,.2);}
+.dact-ss.dact-sel .dact3d-bot{background:var(--sp);box-shadow:0 0 14px rgba(68,200,255,.6);}
+.dact-ss.dact-sel .dact3d-l{color:#fff;}
+
+/* disabled */
+.dact-dis{opacity:.22;pointer-events:none;}
+
+/* GO button — 3D extruded */
+.dcfm{position:relative;border:none;background:none;padding:0;cursor:default;pointer-events:none;opacity:.3;flex-shrink:0;margin-left:auto;transition:opacity .2s,filter .18s;}
+.dcfm-face{padding:clamp(8px,1.3vh,12px) clamp(18px,2.8vw,36px);border-radius:7px 7px 3px 3px;font-family:'Bebas Neue',sans-serif;font-size:clamp(14px,1.9vw,22px);letter-spacing:.2em;color:rgba(255,255,255,.2);background:rgba(40,40,40,.6);border:1.5px solid rgba(255,255,255,.1);position:relative;z-index:2;transition:background .18s,color .18s;}
+.dcfm-bot{position:absolute;bottom:0;left:2px;right:2px;height:5px;border-radius:0 0 5px 5px;background:#333;transform:translateY(4px);z-index:1;transition:background .18s,box-shadow .18s;}
+.dcfm.rdy{opacity:1;pointer-events:all;cursor:pointer;animation:goReady3d 2s ease-in-out infinite;}
+.dcfm.rdy .dcfm-face{background:linear-gradient(180deg,rgba(255,255,255,.18) 0%,rgba(255,210,40,.1) 40%),var(--gold);border-color:var(--gold);color:#04060c;box-shadow:0 0 0 1px rgba(240,192,64,.3),inset 0 1px 0 rgba(255,255,200,.3);}
+.dcfm.rdy .dcfm-bot{background:var(--gold2);box-shadow:0 0 18px rgba(240,192,64,.5);}
+.dcfm.rdy:hover{filter:brightness(1.08) drop-shadow(0 0 12px rgba(240,192,64,.5));transform:translateY(-1px);}
+.dcfm.rdy:active .dcfm-face{transform:translateY(3px);}
+.dcfm.rdy:active .dcfm-bot{height:2px;transform:translateY(1px);}
+@keyframes goReady3d{0%,100%{filter:drop-shadow(0 0 6px rgba(240,192,64,.25));}50%{filter:drop-shadow(0 0 20px rgba(240,192,64,.65));}}
+
+/* result overlay */
 #duel-res{position:absolute;inset:0;z-index:35;display:none;align-items:center;justify-content:center;flex-direction:column;background:rgba(4,6,12,.82)}
 #duel-res.show{display:flex;animation:rFI .25s}
 @keyframes rFI{from{opacity:0}to{opacity:1}}
 .rbadge{font-family:'Bebas Neue',sans-serif;font-size:clamp(44px,9vw,100px);letter-spacing:.06em;line-height:1;filter:drop-shadow(0 0 36px currentColor)}
 .rdet{font-family:'Orbitron',sans-serif;font-size:11px;letter-spacing:.28em;margin-top:9px;opacity:.85}
 .ract{font-family:'Rajdhani',sans-serif;font-size:13px;color:var(--dim);margin-top:7px;letter-spacing:.1em}
-
 /* GOAL */
 .gfl{position:absolute;inset:0;z-index:80;pointer-events:none;opacity:0;display:flex;flex-direction:column;align-items:center;justify-content:center}
 .gfl.show{animation:gfA 2.4s forwards}
@@ -727,14 +698,11 @@ canvas#C{position:absolute;inset:0;width:100%;height:100%}
 .tm-fopt:hover,.tm-fopt.active{border-color:var(--gold);color:var(--gold);background:rgba(240,192,64,.08)}
 
 /* ── PLAYER INFO PANEL ───────────────────────────────────────────── */
-.tm-player-info-section{display:flex;gap:10px;align-items:flex-start}
-.tm-player-face-wrap{flex-shrink:0;width:90px}
-.tm-player-face{width:90px;height:110px;border-radius:10px;background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.1);background-size:120%;background-position:center 25%;background-repeat:no-repeat;display:flex;align-items:center;justify-content:center;font-family:'Bebas Neue',sans-serif;font-size:28px;color:rgba(255,255,255,.3)}
-.tm-player-face.placeholder{background-image:none!important;background:rgba(255,255,255,.06)}
-.tm-player-details{flex:1;min-width:0;display:flex;flex-direction:column;gap:4px;padding-top:4px}
+.tm-player-info-section{display:flex;gap:8px;align-items:flex-start}
+.tm-player-details{flex:1;min-width:0;display:flex;flex-direction:column;gap:3px}
 .tm-player-slot-lbl{font-family:'Orbitron',sans-serif;font-size:8px;letter-spacing:.2em;color:var(--dim)}
-.tm-player-name-big{font-family:'Bebas Neue',sans-serif;font-size:20px;letter-spacing:.06em;color:#fff;line-height:1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.tm-player-stats-row{display:flex;gap:5px;margin-top:4px}
+.tm-player-name-big{font-family:'Bebas Neue',sans-serif;font-size:22px;letter-spacing:.06em;color:#fff;line-height:1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.tm-player-stats-row{display:flex;gap:4px;flex-wrap:wrap;margin-top:3px}
 .tm-pstat{text-align:center;background:rgba(255,255,255,.05);border-radius:5px;padding:3px 6px;border:1px solid rgba(255,255,255,.06);flex:1}
 .tm-pstat-v{font-family:'Orbitron',sans-serif;font-size:11px;font-weight:700;color:var(--gold)}
 .tm-pstat-l{font-size:6px;font-family:'Orbitron',sans-serif;letter-spacing:.1em;color:var(--dim)}
@@ -835,48 +803,58 @@ canvas#C{position:absolute;inset:0;width:100%;height:100%}
 
 @media (max-width: 1180px) {
   /* 2-column: left panel + pitch */
-  #s-team .tm-body.v6{ grid-template-columns:minmax(160px,.55fr) minmax(0,1.45fr); gap:5px; padding:5px; }
-  #s-team .tm-side.left{ gap:5px; }
-  #s-team .tm-side.left > .tm-side-top{ padding:5px 7px; }
-  #s-team .tm-side-name{ font-size:18px; }
+  #s-team .tm-body.v6{ grid-template-columns:minmax(150px,.48fr) minmax(0,1.52fr); gap:5px; padding:5px; }
+  #s-team .tm-side.left{ gap:4px; overflow:hidden; }
+  #s-team .tm-side.left > .tm-side-top{ padding:4px 6px; }
+  #s-team .tm-side-name{ font-size:16px; }
   #s-team .tm-side-kicker{ font-size:7px; }
   #s-team .tm-side-sub{ font-size:8px; }
-  #s-team .tm-crest-wrap{ width:34px; height:42px; }
-  #s-team .tm-crest-flag{ font-size:18px; }
+  #s-team .tm-crest-wrap{ width:30px; height:38px; }
+  #s-team .tm-crest-flag{ font-size:16px; }
 
-  /* Formation button: compact single line */
-  #s-team .tm-formation-btn{ padding:6px 10px; }
+  /* Formation button: compact */
+  #s-team .tm-formation-btn{ padding:5px 8px; }
   #s-team .tm-formation-lbl{ display:none; }
-  #s-team .tm-formation-val{ font-size:16px; text-align:left; }
+  #s-team .tm-formation-val{ font-size:14px; text-align:left; }
 
-  /* Pitch panel: hide verbose title/subtitle */
+  /* Pitch panel */
   #s-team .tm-pitch-top{ display:none; }
   #s-team .tm-field-wrap.v6{ padding:2px; }
   #s-team .tm-field.v6{ width:100%; }
 
-  /* Player cards: smaller */
+  /* Player cards */
   #s-team .tm-card.v6{ width:48px; height:60px; }
   #s-team .tm-card-jersey{ font-size:7px; padding:1px 2px; }
   #s-team .tm-card-name{ font-size:7px; }
 
-  /* Player info panel */
-  #s-team .tm-player-face{ width:70px; height:85px; font-size:22px; }
-  #s-team .tm-player-face-wrap{ width:70px; }
-  #s-team .tm-player-name-big{ font-size:14px; }
-  #s-team .tm-player-slot-lbl{ font-size:7px; }
-  #s-team .tm-pstat-v{ font-size:10px; }
+  /* Player info — compact, no portrait */
+  #s-team .tm-player-info-section{ padding:5px 7px; }
+  #s-team .tm-player-name-big{ font-size:13px; }
+  #s-team .tm-player-slot-lbl{ font-size:6px; }
+  #s-team .tm-pstat{ padding:2px 3px; }
+  #s-team .tm-pstat-v{ font-size:9px; }
   #s-team .tm-pstat-l{ font-size:5px; }
+  #s-team .tm-skill-badge{ padding:4px 6px; gap:5px; }
+  #s-team .tm-skill-icon{ font-size:14px; }
+  #s-team .tm-skill-name{ font-size:10px; }
+  #s-team .tm-skill-type{ font-size:5px; }
+  #s-team .tm-skill-cost{ font-size:7px; }
+  #s-team .tm-skill-none{ font-size:6px; padding:3px 0; }
 
-  /* Reserves row: tighter */
-  #s-team .tm-reserves-lbl{ font-size:6px; margin-bottom:3px; }
-  #s-team .tm-res-slot{ width:44px; height:52px; }
-  #s-team .tm-res-name{ font-size:7px; }
+  /* Reserves */
+  #s-team .tm-reserves-lbl{ font-size:6px; margin-bottom:2px; }
+  #s-team .tm-res-slot{ width:42px; height:50px; }
+  #s-team .tm-res-name{ font-size:6px; }
 
-  /* Sections */
-  #s-team .tm-section{ padding:7px; }
-  #s-team .tm-title{ font-size:12px; margin-bottom:5px; }
-  #s-team .tm-actions-grid{ gap:4px; }
-  #s-team .tm-action-btn,#s-team .kick-btn.rdy{ padding:5px 3px; font-size:10px; min-height:28px; }
+  /* Sections tighter */
+  #s-team .tm-section{ padding:6px; }
+  #s-team .tm-title{ font-size:11px; margin-bottom:4px; }
+
+  /* Actions — always visible at bottom, no margin-top:auto pushing them off */
+  #s-team .tm-section.stretch{ margin-top:0; }
+  #s-team .tm-actions-grid{ gap:3px; }
+  #s-team .tm-action-btn{ padding:4px 3px; font-size:9px; min-height:26px; }
+  #s-team .kick-btn.rdy{ padding:5px 3px; font-size:10px; min-height:28px; width:100%; justify-content:center; }
 }
 
 @media (max-width: 600px) {
@@ -939,10 +917,10 @@ canvas#C{position:absolute;inset:0;width:100%;height:100%}
   /* Action row: buttons left, GO pinned far right */
   .duel-row { flex-wrap: nowrap; gap: 4px; overflow: visible; justify-content: flex-start; }
   #abtns, #dbtns { gap: 4px; }
-  .dact { padding: 7px 9px; font-size: 12px; min-height: 38px; white-space: nowrap; }
+  .dact3d .dact3d-face { padding: 6px 8px; } .dact3d-l { font-size: 11px; } .dact3d-c { display:none; }
   .dai { font-size: 13px; }
   .dac { display: none; }
-  .dcfm { padding: 7px 14px; font-size: 14px; min-height: 38px; margin-left: auto; }
+  .dcfm-face { padding: 7px 12px; font-size: 13px; }
 }
 
 @media (max-width: 760px) {
@@ -966,15 +944,15 @@ html,body{overscroll-behavior:none;}
   .shot-btn{width:52px;height:52px;bottom:24px;right:10px;font-size:12px;}
   .press-btn{width:52px;height:52px;bottom:86px;right:10px;font-size:12px;}
   .dpc{width:clamp(120px,20vw,200px);}
-  .dact{padding:8px 10px;font-size:clamp(11px,2vw,14px);min-height:38px;}
-  .dcfm{padding:8px 14px;min-height:38px;}
+  .dact3d .dact3d-face{padding:7px 9px;} .dact3d-l{font-size:clamp(10px,1.8vw,13px);}
+  .dcfm-face{padding:8px 12px;}
 }
 @media(max-width:600px){
-  .dact{padding:7px 8px;font-size:11px;}
+  .dact3d .dact3d-face{padding:6px 7px;} .dact3d-l{font-size:10px;}
   .shot-btn,.press-btn{width:50px;height:50px;font-size:11px;}
 }
 @media(hover:none){
-  .dact:hover{border-color:rgba(30,114,220,.3);background:rgba(10,20,40,.8);color:var(--w);}
-  .dcfm.rdy:hover{background:var(--gold);box-shadow:none;}
+  .dact3d:hover .dact3d-face{border-color:rgba(30,114,220,.3);}
+  .dcfm.rdy:hover .dcfm-face{background:var(--gold);}
   .mc.on:hover{transform:none;}
 }
