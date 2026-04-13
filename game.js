@@ -527,7 +527,8 @@ function setTeamEmblem(el, teamKey, flagEmoji){
 function showSc(id){
   document.querySelectorAll('.screen').forEach(s=>s.classList.remove('active'));
   document.getElementById(id).classList.add('active');
-  if(id==='s-home'){hmHover('friendly');returnToMenuMusic();}
+  if(id==='s-home'){hmHover('friendly');returnToMenuMusic();if(CAR&&!CAR.active)CAR={active:false,myClub:null,season:1,d1:[...CR_D1],d2:[...CR_D2],d1Fix:[],d2Fix:[],d1Tab:{},d2Tab:{},matchday:0,myResults:[],pendingMatch:null};}
+  if(id==='s-career-clubs'){crBuildClubList();}
 }
 function cs(){say('Coming soon!');}
 
@@ -3029,6 +3030,34 @@ function goHalf(){
 function goFull(){
   clearInterval(G.mt);clearInterval(G.di);G.phase='idle';closeDuel();
   document.getElementById('passhint').style.display='none';
+  stopMatchMusic();
+
+  // CAREER MODE: apply result and return to hub
+  if(CAR.active&&CAR.pendingMatch){
+    const pm=CAR.pendingMatch;
+    const hg=G.hG,ag=G.aG;
+    crApply(crMyTable(),pm.home,pm.away,hg,ag);
+    const r={md:pm.md,home:pm.home,away:pm.away,hg,ag,isHome:pm.isHome};
+    CAR.myResults.push(r);
+    // Sim rest of matchday CPU vs CPU
+    const fix=crMyFix();
+    if(pm.md<fix.length){
+      fix[pm.md].forEach(m=>{
+        if(m.home===CAR.myClub||m.away===CAR.myClub)return;
+        const{hg:ch,ag:ca}=crSimMatch(m.home,m.away);
+        crApply(crMyTable(),m.home,m.away,ch,ca);
+      });
+    }
+    crSimOtherDiv();
+    CAR.matchday++;
+    crSave();
+    CAR.pendingMatch=null;
+    crShowResult(r);
+    returnToMenuMusic();
+    return;
+  }
+
+  // FRIENDLY: normal end screen
   document.getElementById('fth').textContent=G.hG;document.getElementById('fta').textContent=G.aG;
   document.getElementById('ftd').textContent=G.duels;document.getElementById('fts').textContent=G.shots;
   document.getElementById('hft').textContent=HT?.name||'HOME';document.getElementById('aft').textContent=AT?.name||'AWAY';
@@ -3489,3 +3518,606 @@ window.addEventListener('orientationchange',()=>setTimeout(()=>{rsz();checkOrien
 if(window.visualViewport){
   window.visualViewport.addEventListener('resize',()=>{rsz();checkOrientation();});
 }
+
+// ═══════════════════════════════════════════════════════════════
+// CAREER MODE ENGINE
+// ═══════════════════════════════════════════════════════════════
+
+const CR_CLUBS = {
+  nankatsu:  {name:'Nankatsu SC',     div:1,ovr:87,emoji:'🔵',star:'T.Ozora',    special:'Drive Shot',  starKey:'Ozora'},
+  toho:      {name:'Toho Academy',    div:1,ovr:85,emoji:'🔴',star:'K.Hyuga',    special:'Tiger Shot',  starKey:'Hyuga'},
+  meiwa:     {name:'Meiwa FC',        div:1,ovr:83,emoji:'🟣',star:'J.Misugi',   special:'Sky Rocket',  starKey:'Misugi'},
+  hamburg:   {name:'SV Hamburg',      div:1,ovr:84,emoji:'⚪',star:'K.H.Schneider',special:'Fire Shot', starKey:'Schneider'},
+  barcelona: {name:'FC Barcelona',    div:1,ovr:88,emoji:'🔴',star:'Michael',    special:'Miracle Shot',starKey:'Michael'},
+  santos:    {name:'Santos FC',       div:1,ovr:86,emoji:'⚫',star:'Natureza',   special:'Atomic Shot', starKey:'Natureza'},
+  juventus:  {name:'Juventus',        div:1,ovr:82,emoji:'⚫',star:'R.Baggio',   special:null,          starKey:'Baggio'},
+  psg:       {name:'Paris SG',        div:1,ovr:81,emoji:'🔵',star:'Pierre',     special:'Eiffel Shot', starKey:'Pierre'},
+  ajax:      {name:'Ajax',            div:1,ovr:80,emoji:'🔴',star:'A.Robben',   special:null,          starKey:'Robben'},
+  madrid:    {name:'Real Madrid',     div:1,ovr:89,emoji:'⚪',star:'C.Ronaldo',  special:null,          starKey:'Ronaldo'},
+  furano:    {name:'Furano FC',       div:2,ovr:74,emoji:'🟢',star:'S.Nitta',    special:'Super Falcon',starKey:'Nitta'},
+  musashi:   {name:'Musashi FC',      div:2,ovr:72,emoji:'🟡',star:'S.Aoi',      special:'Fantasista',  starKey:'Aoi'},
+  newteam:   {name:'New Team United', div:2,ovr:76,emoji:'🟠',star:'T.Misaki',   special:'Slider Shot', starKey:'Misaki'},
+  vienna:    {name:'Vienna AC',       div:2,ovr:71,emoji:'🔴',star:'Sabitzer',   special:null,          starKey:'Sabitzer'},
+  fiorentina:{name:'Fiorentina',      div:2,ovr:75,emoji:'🟣',star:'F.Totti',    special:null,          starKey:'Totti'},
+  deportivo: {name:'Deportivo FC',    div:2,ovr:73,emoji:'🔵',star:'Victorino',  special:'Panther Shot',starKey:'Victorino'},
+  alhilal:   {name:'Al-Hilal SC',     div:2,ovr:70,emoji:'🟢',star:'Xiao',       special:'Dragon Shot', starKey:'Xiao'},
+  celtic:    {name:'Celtic FC',       div:2,ovr:69,emoji:'🟢',star:'McGinn',     special:null,          starKey:'McGinn'},
+};
+
+const CR_D1 = Object.keys(CR_CLUBS).filter(k=>CR_CLUBS[k].div===1);
+const CR_D2 = Object.keys(CR_CLUBS).filter(k=>CR_CLUBS[k].div===2);
+
+// Generic name pools by region
+const CR_NAMES = {
+  nankatsu:['K.Wakaba','R.Ishizaki','M.Soda','S.Akai','T.Tachibana','K.Jito','H.Nishio','Y.Kanda','D.Fuwa','T.Saito'],
+  toho:    ['H.Nitta','K.Urabe','R.Sawada','T.Kanda','S.Himuro','D.Igawa','M.Oda','K.Fujii','T.Inoue','R.Yabe'],
+  meiwa:   ['S.Taki','M.Ando','T.Kuroda','H.Miyata','K.Yamamoto','R.Ogawa','J.Kato','S.Mori','T.Ueda','K.Naito'],
+  hamburg: ['M.Krause','H.Brandt','L.Wagner','J.Fischer','F.Becker','T.Klein','R.Wolf','C.Weber','P.Schäfer','K.Jung'],
+  barcelona:['J.Garcia','M.Lopez','A.Martinez','D.Sanchez','P.Romero','C.Torres','F.Navarro','R.Vega','L.Ruiz','S.Mora'],
+  santos:  ['A.Silva','M.Costa','R.Santos','L.Oliveira','D.Souza','P.Lima','C.Pereira','T.Alves','J.Ferreira','R.Gomes'],
+  juventus:['M.Rossi','L.Ferrari','A.Esposito','G.Bianchi','F.Romano','D.Marino','R.Greco','C.Ricci','P.Conti','T.Moro'],
+  psg:     ['L.Dupont','M.Bernard','A.Moreau','J.Petit','T.Robert','C.Simon','R.Laurent','P.Michel','F.Leroy','D.Roux'],
+  ajax:    ['J.DeJong','L.Bakker','M.Visser','R.Smit','T.Meijer','A.DeVries','P.Janssen','C.Peters','F.Bos','H.Mulder'],
+  madrid:  ['C.Romero','A.Herrera','D.Castillo','M.Blanco','R.Iglesias','P.Delgado','F.Serrano','J.Reyes','T.Vargas','L.Ortega'],
+  furano:  ['H.Kitami','T.Goto','S.Nakamura','K.Abe','R.Matsui','J.Okada','M.Hayashi','D.Kimura','T.Suzuki','K.Iida'],
+  musashi: ['Y.Tsuboi','R.Hamada','S.Kojima','T.Kondo','K.Hara','M.Fujita','D.Nishida','T.Sakamoto','H.Ogura','K.Maeda'],
+  newteam: ['S.Aoyama','T.Shiga','K.Tanaka','R.Ito','M.Watanabe','H.Yamada','D.Kobayashi','T.Sato','K.Nakamura','R.Abe'],
+  vienna:  ['K.Hofer','L.Gruber','M.Huber','T.Mayr','F.Steiner','R.Wagner','C.Müller','P.Bauer','H.Schwarz','J.Pichler'],
+  fiorentina:['M.Conti','L.Gallo','A.Serra','G.Riva','F.Longo','D.Farina','R.Palma','C.Amato','P.Villa','T.Bruno'],
+  deportivo:['J.Vidal','M.Reyes','A.Soto','R.Pena','L.Fuentes','D.Medina','C.Rojas','P.Morales','F.Valdez','T.Rios'],
+  alhilal: ['K.Al-Rashid','M.Al-Hassan','A.Al-Farsi','D.Al-Sayed','T.Al-Mansouri','R.Khalid','S.Omar','P.Ibrahim','F.Yousef','H.Nasser'],
+  celtic:  ['A.Morrison','J.Campbell','R.MacDonald','T.Fraser','C.Stewart','M.Murray','P.Hamilton','F.Sinclair','D.Ross','H.Reid'],
+};
+
+// Morale factor — decays over a season, affects match OVR used in simulation
+function crMoraleMult(clubKey){
+  const t=crMyTable()[clubKey];if(!t)return 1.0;
+  const played=crPlayed(t);
+  // Heavy schedule fatigue: slight decay after 20+ matches
+  const fatigue=played>20?1.0-((played-20)*0.003):1.0;
+  // Form boost/penalty: last 5 results
+  const form=t.form||[];
+  const formScore=form.reduce((s,r)=>s+(r==='W'?0.01:r==='L'?-0.01:0),0);
+  return Math.max(0.88,Math.min(1.08,fatigue+formScore));
+}
+
+// Build a squad for a club key (11 players, star at ST)
+function crBuildSquad(clubKey){
+  const club=CR_CLUBS[clubKey];
+  const tier=club.div;
+  const baseOvr=tier===1?72:60;
+  const ovrRange=tier===1?14:12;
+  const names=[...(CR_NAMES[clubKey]||CR_NAMES.madrid)];
+  const positions=['GK','LB','CB','CB','RB','CM','CM','CM','LW','ST','RW'];
+  return positions.map((pos,i)=>{
+    const isStar=(pos==='ST');
+    if(isStar){
+      return {
+        id:9000+i,name:club.star,pos:'ST',
+        spd:85,pwr:88,tec:88,def:52,rar:2,
+        sav:pos==='GK'?88:undefined,
+        ref:pos==='GK'?82:undefined,
+        spirit:1500,cooldownUntil:0,slot:pos,
+      };
+    }
+    const ovr=Math.max(50,baseOvr+Math.floor(Math.random()*ovrRange)-(isStar?0:0));
+    const nm=names[i]||('P.'+i);
+    const isGK=pos==='GK';
+    return {
+      id:9000+i,name:nm,pos,
+      spd:ovr-Math.floor(Math.random()*10),
+      pwr:ovr-Math.floor(Math.random()*10),
+      tec:ovr-Math.floor(Math.random()*10),
+      def:isGK?ovr:ovr-Math.floor(Math.random()*14),
+      rar:1,
+      sav:isGK?ovr+6:undefined,
+      ref:isGK?ovr+2:undefined,
+      spirit:isGK?2000:1500,cooldownUntil:0,slot:pos,
+    };
+  });
+}
+
+// Season fixture generator (round robin, home+away)
+function crMakeFixtures(teams){
+  const ts=[...teams];
+  if(ts.length%2!==0)ts.push('BYE');
+  const half=ts.length/2,rds=ts.length-1,rounds=[];
+  let list=[...ts];
+  for(let r=0;r<rds;r++){
+    const rd=[];
+    for(let i=0;i<half;i++){
+      const h=list[i],a=list[list.length-1-i];
+      if(h!=='BYE'&&a!=='BYE')rd.push({home:h,away:a});
+    }
+    rounds.push(rd);
+    list=[list[0],...list.slice(2),list[1]];
+  }
+  const leg1=[...rounds];
+  leg1.forEach(rd=>rounds.push(rd.map(m=>({home:m.away,away:m.home}))));
+  return rounds;
+}
+
+function crSimMatch(homeKey,awayKey){
+  const h=CR_CLUBS[homeKey],a=CR_CLUBS[awayKey];
+  const hm=crMoraleMult(homeKey),am=crMoraleMult(awayKey);
+  const diff=Math.round(h.ovr*hm+3-a.ovr*am);
+  const hxg=Math.max(0,1.2+(diff/20)+(Math.random()-.3)*.8);
+  const axg=Math.max(0,1.2-(diff/20)+(Math.random()-.3)*.8);
+  return{hg:Math.round(hxg+Math.random()*.6),ag:Math.round(axg+Math.random()*.6)};
+}
+
+function crInitTable(keys){return Object.fromEntries(keys.map(k=>[k,{w:0,d:0,l:0,gf:0,ga:0,form:[]}]));}
+function crApply(table,home,away,hg,ag){
+  if(!table[home]||!table[away])return;
+  table[home].gf+=hg;table[home].ga+=ag;
+  table[away].gf+=ag;table[away].ga+=hg;
+  if(hg>ag){table[home].w++;table[away].l++;table[home].form.push('W');table[away].form.push('L');}
+  else if(hg<ag){table[away].w++;table[home].l++;table[away].form.push('W');table[home].form.push('L');}
+  else{table[home].d++;table[away].d++;table[home].form.push('D');table[away].form.push('D');}
+  if(table[home].form.length>5)table[home].form.shift();
+  if(table[away].form.length>5)table[away].form.shift();
+}
+function crPts(t){return t.w*3+t.d;}
+function crGD(t){return t.gf-t.ga;}
+function crPlayed(t){return t.w+t.d+t.l;}
+function crSort(table,keys){
+  return[...keys].sort((a,b)=>{
+    const ta=table[a],tb=table[b];
+    if(crPts(tb)!==crPts(ta))return crPts(tb)-crPts(ta);
+    if(crGD(tb)!==crGD(ta))return crGD(tb)-crGD(ta);
+    return tb.gf-ta.gf;
+  });
+}
+
+// ── CAREER STATE ──
+let CAR={
+  active:false,myClub:null,season:1,
+  d1:[...CR_D1],d2:[...CR_D2],
+  d1Fix:[],d2Fix:[],d1Tab:{},d2Tab:{},
+  matchday:0,myResults:[],
+  pendingMatch:null, // {home,away,isHome,md}
+};
+
+function crMyDiv(){return CR_CLUBS[CAR.myClub]?.div||1;}
+function crMyTable(){return crMyDiv()===1?CAR.d1Tab:CAR.d2Tab;}
+function crMyFix(){return crMyDiv()===1?CAR.d1Fix:CAR.d2Fix;}
+function crMyTeams(){return crMyDiv()===1?CAR.d1:CAR.d2;}
+
+// ── CLUB SELECT UI ──
+
+// ── CAREER SAVE / LOAD ─────────────────────────────────
+const CR_SAVE_KEY='ult11_career_v1';
+
+function crSave(){
+  if(!CAR.active)return;
+  const data={
+    myClub:CAR.myClub,season:CAR.season,
+    matchday:CAR.matchday,
+    myResults:CAR.myResults,
+    // Save table as plain objects
+    d1Tab:CAR.d1Tab,d2Tab:CAR.d2Tab,
+    // Save division membership from CR_CLUBS
+    divs:Object.fromEntries(Object.keys(CR_CLUBS).map(k=>[k,CR_CLUBS[k].div])),
+    // Save OVR changes
+    ovrs:Object.fromEntries(Object.keys(CR_CLUBS).map(k=>[k,CR_CLUBS[k].ovr])),
+    d1:CAR.d1,d2:CAR.d2,
+  };
+  try{localStorage.setItem(CR_SAVE_KEY,JSON.stringify(data));}catch(e){}
+}
+
+function crLoad(){
+  try{
+    const raw=localStorage.getItem(CR_SAVE_KEY);
+    if(!raw)return false;
+    const data=JSON.parse(raw);
+    CAR.myClub=data.myClub;CAR.season=data.season;
+    CAR.matchday=data.matchday;CAR.myResults=data.myResults||[];
+    CAR.d1Tab=data.d1Tab||{};CAR.d2Tab=data.d2Tab||{};
+    CAR.d1=data.d1||[...CR_D1];CAR.d2=data.d2||[...CR_D2];
+    CAR.active=true;CAR.pendingMatch=null;
+    // Restore division + OVR
+    if(data.divs)Object.entries(data.divs).forEach(([k,v])=>{if(CR_CLUBS[k])CR_CLUBS[k].div=v;});
+    if(data.ovrs)Object.entries(data.ovrs).forEach(([k,v])=>{if(CR_CLUBS[k])CR_CLUBS[k].ovr=v;});
+    // Rebuild fixtures for current season (can't serialise easily)
+    CAR.d1Fix=crMakeFixtures([...CAR.d1]);
+    CAR.d2Fix=crMakeFixtures([...CAR.d2]);
+    return true;
+  }catch(e){return false;}
+}
+
+function crDeleteSave(){
+  try{localStorage.removeItem(CR_SAVE_KEY);}catch(e){}
+  CAR.active=false;CAR.myClub=null;
+}
+
+function crHasSave(){
+  try{return!!localStorage.getItem(CR_SAVE_KEY);}catch(e){return false;}
+}
+
+function crBuildClubList(){
+  const el=document.getElementById('cr-clubs-list');if(!el)return;
+  el.innerHTML='';
+  // Continue button if save exists
+  if(crHasSave()){
+    const cont=document.createElement('div');
+    cont.style.cssText='display:flex;gap:8px;padding:12px 0;';
+    const contBtn=document.createElement('button');
+    contBtn.style.cssText='flex:1;padding:14px;background:linear-gradient(135deg,rgba(240,192,64,.15),rgba(240,192,64,.05));border:1.5px solid rgba(240,192,64,.4);border-radius:10px;color:var(--gold);font-family:Bebas Neue,sans-serif;font-size:clamp(15px,2vw,20px);letter-spacing:.12em;cursor:pointer;display:flex;flex-direction:column;align-items:center;gap:3px;';
+    contBtn.innerHTML='▶ CONTINUE CAREER<span style="font-family:Orbitron,sans-serif;font-size:7px;letter-spacing:.2em;opacity:.6">LOAD SAVED GAME</span>';
+    contBtn.onclick=()=>{if(crLoad()){showSc('s-career-hub');crRenderHub();}};
+    const delBtn=document.createElement('button');
+    delBtn.style.cssText='padding:14px 16px;background:rgba(220,32,32,.06);border:1px solid rgba(220,32,32,.2);border-radius:10px;color:rgba(220,32,32,.6);font-family:Orbitron,sans-serif;font-size:7px;letter-spacing:.18em;cursor:pointer;';
+    delBtn.textContent='NEW GAME';
+    delBtn.onclick=()=>{if(confirm('Delete saved career and start new?')){crDeleteSave();crBuildClubList();}};
+    cont.appendChild(contBtn);cont.appendChild(delBtn);
+    el.appendChild(cont);
+    const divLine=document.createElement('div');divLine.style.cssText='border-top:1px solid rgba(255,255,255,.06);margin-bottom:8px;';
+    el.appendChild(divLine);
+  }
+  [[1,'DIVISION 1 — ELITE','d1'],[2,'DIVISION 2 — CHALLENGERS','d2']].forEach(([div,label,cls])=>{
+    const hdr=document.createElement('div');hdr.className='cr-div-hdr';
+    hdr.innerHTML='<div class="cr-div-badge '+cls+'">'+cls.toUpperCase()+'</div><div class="cr-div-line"></div><div class="cr-div-label">'+label+'</div>';
+    el.appendChild(hdr);
+    Object.entries(CR_CLUBS).filter(([,c])=>c.div===div).forEach(([key,club])=>{
+      const card=document.createElement('div');
+      card.className='cr-club-card '+(div===1?'d1c':'d2c');
+      card.innerHTML='<div class="cr-club-emblem">'+club.emoji+'</div>'
+        +'<div class="cr-club-info"><div class="cr-club-name">'+club.name+'</div>'
+        +'<div class="cr-club-meta">DIVISION '+div+' · OVR '+club.ovr+'</div>'
+        +(club.star?'<div class="cr-club-star">⭐ '+club.star+(club.special?' · '+club.special:'')+'</div>':'')
+        +'</div><div class="cr-club-ovr"><span class="cr-ovr-v">'+club.ovr+'</span><span class="cr-ovr-l">OVR</span></div>';
+      card.onclick=()=>crStart(key);
+      el.appendChild(card);
+    });
+  });
+}
+
+function crStart(clubKey){
+  CAR.myClub=clubKey;CAR.season=1;CAR.active=true;
+  // Sync division membership from CR_CLUBS
+  CAR.d1=Object.keys(CR_CLUBS).filter(k=>CR_CLUBS[k].div===1);
+  CAR.d2=Object.keys(CR_CLUBS).filter(k=>CR_CLUBS[k].div===2);
+  crInitSeason();
+  showSc('s-career-hub');
+  crRenderHub();
+}
+
+function crInitSeason(){
+  CAR.d1Fix=crMakeFixtures([...CAR.d1]);
+  CAR.d2Fix=crMakeFixtures([...CAR.d2]);
+  CAR.d1Tab=crInitTable(CAR.d1);
+  CAR.d2Tab=crInitTable(CAR.d2);
+  CAR.matchday=0;CAR.myResults=[];CAR.pendingMatch=null;
+}
+
+// ── HUB RENDER ──
+function crRenderHub(){
+  const club=CR_CLUBS[CAR.myClub];if(!club)return;
+  document.getElementById('cr-emblem').textContent=club.emoji;
+  document.getElementById('cr-clubname').textContent=club.name;
+  document.getElementById('cr-divlbl').textContent='DIVISION '+crMyDiv()+(club.star?' · STAR: '+club.star:'');
+  document.getElementById('cr-season').textContent='SEASON '+CAR.season;
+  const tot=crMyFix().length;
+  document.getElementById('cr-md').textContent='MATCHDAY '+(CAR.matchday+1)+' / '+tot;
+  crRenderTable();
+  crRenderFixture();
+  crRenderRecent();
+  crRenderStats();
+}
+
+function crRenderTable(){
+  const div=crMyDiv(),teams=crMyTeams(),table=crMyTable();
+  const sorted=crSort(table,teams);
+  document.getElementById('cr-table-div').textContent='DIV '+div;
+  const el=document.getElementById('cr-table-body');if(!el)return;
+  el.innerHTML='';
+  const hdr=document.createElement('div');hdr.className='cr-table-row cr-hdr';
+  hdr.innerHTML='<div>#</div><div>CLUB</div><div style="text-align:center">P</div><div style="text-align:center">W</div><div style="text-align:center">D</div><div style="text-align:center">L</div><div style="text-align:center">GD</div><div style="text-align:center">PTS</div>';
+  el.appendChild(hdr);
+  sorted.forEach((key,i)=>{
+    const t=table[key],club=CR_CLUBS[key],isMe=key===CAR.myClub;
+    // relegation line
+    if(div===1&&i===sorted.length-2){const ln=document.createElement('div');ln.className='cr-table-row';ln.innerHTML='<div class="cr-releg-line" style="grid-column:1/-1;border-top:1px solid rgba(220,32,32,.3);margin:2px 0;"></div>';el.appendChild(ln);}
+    if(div===2&&i===2){const ln=document.createElement('div');ln.innerHTML='<div class="cr-promo-line" style="border-top:1px solid rgba(68,200,255,.3);margin:2px 0;"></div>';el.appendChild(ln);}
+    const row=document.createElement('div');row.className='cr-table-row'+(isMe?' cr-me':'');
+    const gdStr=(crGD(t)>0?'+':'')+crGD(t);
+    row.innerHTML='<div class="cr-t-pos">'+(i+1)+'</div>'
+      +'<div class="cr-t-name">'+(isMe?'▶ ':'')+club.name+'</div>'
+      +'<div class="cr-t-num">'+crPlayed(t)+'</div>'
+      +'<div class="cr-t-num">'+t.w+'</div>'
+      +'<div class="cr-t-num">'+t.d+'</div>'
+      +'<div class="cr-t-num">'+t.l+'</div>'
+      +'<div class="cr-t-num" style="color:'+(crGD(t)>=0?'var(--green)':'var(--red)')+'">'+gdStr+'</div>'
+      +'<div class="cr-t-pts">'+crPts(t)+'</div>';
+    el.appendChild(row);
+    if(isMe){
+      const pos=i+1;
+      document.getElementById('cr-position').textContent=pos+(['ST','ND','RD'][pos-1]||'TH');
+      document.getElementById('cr-pts-line').textContent=crPts(t)+' PTS · '+crPlayed(t)+' PLAYED · GD '+(crGD(t)>0?'+':'')+crGD(t);
+    }
+  });
+}
+
+function crRenderFixture(){
+  const fix=crMyFix();
+  const el=document.getElementById('cr-fixture-area');if(!el)return;
+  document.getElementById('cr-fix-md').textContent='MD'+(CAR.matchday+1);
+  if(CAR.matchday>=fix.length){el.innerHTML='<div style="padding:16px;text-align:center;font-family:Orbitron,sans-serif;font-size:8px;letter-spacing:.2em;color:var(--dim)">SEASON COMPLETE</div>';return;}
+  const rd=fix[CAR.matchday];
+  const myMatch=rd.find(m=>m.home===CAR.myClub||m.away===CAR.myClub);
+  if(!myMatch){el.innerHTML='<div style="padding:12px;text-align:center;font-family:Orbitron,sans-serif;font-size:8px;letter-spacing:.2em;color:var(--dim)">BYE WEEK</div>';return;}
+  const hc=CR_CLUBS[myMatch.home],ac=CR_CLUBS[myMatch.away],isHome=myMatch.home===CAR.myClub;
+  el.innerHTML='<div class="cr-fix-inner"><div class="cr-fix-label">'+(isHome?'HOME':'AWAY')+' · '+hc.name+' vs '+ac.name+'</div>'
+    +'<div class="cr-fix-teams">'
+    +'<div class="cr-fix-team"><div class="cr-fix-emoji">'+hc.emoji+'</div><div class="cr-fix-name">'+hc.name+'</div><div class="cr-fix-ovr">OVR '+hc.ovr+'</div></div>'
+    +'<div class="cr-fix-vs">VS</div>'
+    +'<div class="cr-fix-team"><div class="cr-fix-emoji">'+ac.emoji+'</div><div class="cr-fix-name">'+ac.name+'</div><div class="cr-fix-ovr">OVR '+ac.ovr+'</div></div>'
+    +'</div></div>';
+}
+
+function crRenderRecent(){
+  const el=document.getElementById('cr-results-body');if(!el)return;
+  el.innerHTML='';
+  const recent=[...CAR.myResults].reverse().slice(0,5);
+  if(!recent.length){el.innerHTML='<div style="font-family:Orbitron,sans-serif;font-size:7px;letter-spacing:.15em;color:var(--dim);padding:4px 0">No matches yet</div>';return;}
+  recent.forEach(r=>{
+    const outcome=r.hg>r.ag?(r.isHome?'win':'loss'):r.hg<r.ag?(r.isHome?'loss':'win'):'draw';
+    const row=document.createElement('div');row.className='cr-result-row';
+    row.innerHTML='<div class="cr-res-md-lbl">MD'+(r.md+1)+'</div>'
+      +'<div class="cr-res-home-t">'+CR_CLUBS[r.home].name+'</div>'
+      +'<div class="cr-res-sc '+outcome+'">'+r.hg+'–'+r.ag+'</div>'
+      +'<div class="cr-res-away-t">'+CR_CLUBS[r.away].name+'</div>';
+    el.appendChild(row);
+  });
+}
+
+function crRenderStats(){
+  const el=document.getElementById('cr-stats-body');if(!el)return;
+  const t=crMyTable()[CAR.myClub]||{w:0,d:0,l:0,gf:0,ga:0,form:[]};
+  const morale=crMoraleMult(CAR.myClub);
+  const moraleLabel=morale>=1.05?'🔥 PEAK':morale>=1.0?'✅ GOOD':morale>=0.95?'😐 TIRED':'😓 FATIGUE';
+  const moraleCol=morale>=1.0?'var(--green)':morale>=0.95?'var(--gold)':'var(--red)';
+  const club=CR_CLUBS[CAR.myClub];
+  const g=(l,v,col)=>'<div style="background:rgba(255,255,255,.03);border:1px solid rgba(255,255,255,.05);border-radius:6px;padding:6px 8px">'
+    +'<div style="font-family:Orbitron,sans-serif;font-size:6px;letter-spacing:.15em;color:var(--dim)">'+l+'</div>'
+    +'<div style="font-family:Bebas Neue,sans-serif;font-size:clamp(18px,2.5vw,26px);color:'+(col||'var(--w)')+'">'+v+'</div></div>';
+  const form=t.form||[];
+  const formHtml=form.length?form.map(r=>'<span style="display:inline-block;width:10px;height:10px;border-radius:50%;margin-right:3px;background:'+(r==='W'?'var(--green)':r==='L'?'var(--red)':'var(--gold)')+'"></span>').join(''):'—';
+  el.innerHTML='<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">'
+    +g('PLAYED',crPlayed(t))+g('POINTS',crPts(t))
+    +g('WINS',t.w)+g('DRAWS',t.d)
+    +g('LOSSES',t.l)+g('GOALS FOR',t.gf)
+    +g('AGAINST',t.ga)+g('GOAL DIFF',(crGD(t)>0?'+':'')+crGD(t))
+    +'</div>'
+    +'<div style="margin-top:8px;background:rgba(255,255,255,.03);border:1px solid rgba(255,255,255,.05);border-radius:6px;padding:7px 10px;display:flex;align-items:center;justify-content:space-between">'
+    +'<div><div style="font-family:Orbitron,sans-serif;font-size:6px;letter-spacing:.15em;color:var(--dim)">FORM</div>'
+    +'<div style="margin-top:4px">'+formHtml+'</div></div>'
+    +'<div style="text-align:right"><div style="font-family:Orbitron,sans-serif;font-size:6px;letter-spacing:.15em;color:var(--dim)">SQUAD STATUS</div>'
+    +'<div style="font-family:Bebas Neue,sans-serif;font-size:clamp(13px,1.7vw,17px);color:'+moraleCol+'">'+moraleLabel+'</div></div>'
+    +'</div>'
+    +'<div style="margin-top:8px;display:flex;gap:6px;">'
+    +'<div style="flex:1;background:rgba(255,255,255,.03);border:1px solid rgba(255,255,255,.05);border-radius:6px;padding:6px 8px;text-align:center">'
+    +'<div style="font-family:Orbitron,sans-serif;font-size:6px;letter-spacing:.15em;color:var(--dim)">CLUB OVR</div>'
+    +'<div style="font-family:Bebas Neue,sans-serif;font-size:clamp(18px,2.5vw,26px);color:var(--gold)">'+club.ovr+'</div></div>'
+    +'<div style="flex:1;background:rgba(255,255,255,.03);border:1px solid rgba(255,255,255,.05);border-radius:6px;padding:6px 8px;text-align:center">'
+    +'<div style="font-family:Orbitron,sans-serif;font-size:6px;letter-spacing:.15em;color:var(--dim)">SEASON</div>'
+    +'<div style="font-family:Bebas Neue,sans-serif;font-size:clamp(18px,2.5vw,26px)">'+CAR.season+'</div></div>'
+    +'</div>';
+}
+
+// ── SIMULATE / PLAY ACTIONS ──
+function crSimAll(){
+  const fix=crMyFix();
+  if(CAR.matchday>=fix.length){crEndSeason();return;}
+  const rd=fix[CAR.matchday];
+  const table=crMyTable();
+  let myR=null;
+  rd.forEach(m=>{
+    const {hg,ag}=crSimMatch(m.home,m.away);
+    crApply(table,m.home,m.away,hg,ag);
+    if(m.home===CAR.myClub||m.away===CAR.myClub){
+      const isHome=m.home===CAR.myClub;
+      const r={md:CAR.matchday,home:m.home,away:m.away,hg,ag,isHome};
+      CAR.myResults.push(r);myR=r;
+    }
+  });
+  crSimOtherDiv();
+  CAR.matchday++;
+  crSave();
+  if(myR)crShowResult(myR);
+  else{crRenderHub();if(CAR.matchday>=fix.length)setTimeout(crEndSeason,400);}
+}
+
+function crSimNext(){crSimAll();}// same for now
+
+function crSimOtherDiv(){
+  const oFix=crMyDiv()===1?CAR.d2Fix:CAR.d1Fix;
+  const oTab=crMyDiv()===1?CAR.d2Tab:CAR.d1Tab;
+  const md=CAR.matchday;
+  if(md<oFix.length)oFix[md].forEach(m=>{const{hg,ag}=crSimMatch(m.home,m.away);crApply(oTab,m.home,m.away,hg,ag);});
+}
+
+function crPlay(){
+  // Load club squad into the match engine, then kick off
+  const fix=crMyFix();
+  if(CAR.matchday>=fix.length){crEndSeason();return;}
+  const rd=fix[CAR.matchday];
+  const myMatch=rd.find(m=>m.home===CAR.myClub||m.away===CAR.myClub);
+  if(!myMatch){crSimAll();return;}
+  const isHome=myMatch.home===CAR.myClub;
+  const oppKey=isHome?myMatch.away:myMatch.home;
+  CAR.pendingMatch={home:myMatch.home,away:myMatch.away,isHome,md:CAR.matchday,oppKey};
+
+  // Build squads for this match
+  crLoadMatchSquads(CAR.myClub,oppKey,isHome);
+}
+
+function crLoadMatchSquads(myKey,oppKey,myIsHome){
+  const myClub=CR_CLUBS[myKey],oppClub=CR_CLUBS[oppKey];
+  const mySquad=crBuildSquad(myKey);
+  const oppSquad=crBuildSquad(oppKey);
+
+  // Slot assignments
+  const SLOTS=['GK','LB','CB1','CB2','RB','CM1','CM2','CM3','LW','ST','RW'];
+  const posList=['GK','LB','CB','CB','RB','CM','CM','CM','LW','ST','RW'];
+
+  hSq={};aSq={};
+  if(myIsHome){
+    // my club = home
+    SLOTS.forEach((slot,i)=>{
+      const pl={...mySquad[i],slot,id:9000+i,spirit:mySquad[i].pos==='GK'?2000:1500,cooldownUntil:0};
+      hSq[slot]=pl;
+    });
+    SLOTS.forEach((slot,i)=>{
+      const pl={...oppSquad[i],slot,id:8000+i,spirit:oppSquad[i].pos==='GK'?2000:1500,cooldownUntil:0};
+      aSq[slot]=pl;
+    });
+    selHome=myKey;selAway=oppKey;
+    HT={name:myClub.name,flag:myClub.emoji,p:mySquad};
+    AT={name:oppClub.name,flag:oppClub.emoji,p:oppSquad};
+  } else {
+    // my club = away
+    SLOTS.forEach((slot,i)=>{
+      const pl={...oppSquad[i],slot,id:8000+i,spirit:oppSquad[i].pos==='GK'?2000:1500,cooldownUntil:0};
+      hSq[slot]=pl;
+    });
+    SLOTS.forEach((slot,i)=>{
+      const pl={...mySquad[i],slot,id:9000+i,spirit:mySquad[i].pos==='GK'?2000:1500,cooldownUntil:0};
+      aSq[slot]=pl;
+    });
+    selHome=oppKey;selAway=myKey;
+    HT={name:oppClub.name,flag:oppClub.emoji,p:oppSquad};
+    AT={name:myClub.name,flag:myClub.emoji,p:mySquad};
+  }
+
+  // Update HUD names/emblems
+  document.getElementById('htn').textContent=HT.name;
+  document.getElementById('atn').textContent=AT.name;
+  setTeamEmblem(document.getElementById('h-flag-hud'),selHome,HT.flag);
+  setTeamEmblem(document.getElementById('a-flag-hud'),selAway,AT.flag);
+
+  initMatch();
+}
+
+// ── RESULT POPUP ──
+function crShowResult(r){
+  const isHome=r.isHome;
+  const myG=isHome?r.hg:r.ag,oppG=isHome?r.ag:r.hg;
+  const outcome=myG>oppG?'win':myG<oppG?'loss':'draw';
+  const oppKey=isHome?r.away:r.home;
+  const pos=crSort(crMyTable(),crMyTeams()).indexOf(CAR.myClub)+1;
+
+  document.getElementById('cr-res-md').textContent='MATCHDAY '+(r.md+1)+' · SEASON '+CAR.season;
+  document.getElementById('cr-res-home').textContent=CR_CLUBS[r.home].name;
+  document.getElementById('cr-res-away').textContent=CR_CLUBS[r.away].name;
+  document.getElementById('cr-res-score').textContent=r.hg+'–'+r.ag;
+  document.getElementById('cr-res-score').style.color=outcome==='win'?'var(--green)':outcome==='loss'?'var(--red)':'var(--gold)';
+  const out=document.getElementById('cr-res-outcome');
+  out.textContent=outcome==='win'?'VICTORY!':outcome==='loss'?'DEFEAT':'DRAW';
+  out.className='cr-res-outcome '+outcome;
+  const box=document.getElementById('cr-res-box');
+  box.style.borderColor=outcome==='win'?'rgba(32,200,120,.5)':outcome==='loss'?'rgba(220,32,32,.4)':'rgba(240,192,64,.4)';
+  document.getElementById('cr-res-detail').textContent=(isHome?'HOME':'AWAY')+' · VS '+CR_CLUBS[oppKey].name.toUpperCase()+' · POSITION: '+pos+(['ST','ND','RD'][pos-1]||'TH');
+  showSc('s-career-result');
+}
+
+function crCloseResult(){
+  showSc('s-career-hub');
+  crRenderHub();
+  if(CAR.matchday>=crMyFix().length)setTimeout(crEndSeason,500);
+}
+
+// ── SEASON END ──
+function crEndSeason(){
+  const d1s=crSort(CAR.d1Tab,CAR.d1),d2s=crSort(CAR.d2Tab,CAR.d2);
+  const relegated=[d1s[d1s.length-2],d1s[d1s.length-1]];
+  const promoted=[d2s[0],d2s[1]];
+  const myPos=(crMyDiv()===1?d1s:d2s).indexOf(CAR.myClub)+1;
+  const isPromoted=promoted.includes(CAR.myClub);
+  const isRelegated=relegated.includes(CAR.myClub);
+  const isChampion=(crMyDiv()===1&&d1s[0]===CAR.myClub)||(crMyDiv()===2&&d2s[0]===CAR.myClub);
+  const club=CR_CLUBS[CAR.myClub];
+
+  document.getElementById('cr-se-title').textContent=isChampion?'CHAMPIONS!':'SEASON COMPLETE';
+  document.getElementById('cr-se-sub').textContent=club.name+' · SEASON '+CAR.season+' FINAL STANDINGS';
+
+  const body=document.getElementById('cr-season-body');body.innerHTML='';
+
+  // Hero card
+  const hero=document.createElement('div');hero.className='cr-season-hero';
+  const col=isChampion?'var(--gold)':isPromoted?'var(--sp)':isRelegated?'var(--red)':'var(--w)';
+  hero.innerHTML='<div class="cr-trophy">'+(isChampion?'🏆':isPromoted?'⬆️':isRelegated?'⬇️':'📋')+'</div>'
+    +'<div class="cr-season-headline" style="color:'+col+'">'+(isChampion?'CHAMPIONS!':isPromoted?'PROMOTED!':isRelegated?'RELEGATED':'SEASON DONE')+'</div>'
+    +'<div class="cr-season-sub">'+club.name+' · DIVISION '+crMyDiv()+' · POSITION '+myPos+(['ST','ND','RD'][myPos-1]||'TH')+'</div>';
+  body.appendChild(hero);
+
+  // Season stats
+  const t=crMyTable()[CAR.myClub]||{w:0,d:0,l:0,gf:0,ga:0};
+  const statsEl=document.createElement('div');statsEl.className='cr-panel';
+  const g=(l,v)=>'<div style="background:rgba(255,255,255,.03);border-radius:6px;padding:8px 4px;border:1px solid rgba(255,255,255,.05);text-align:center">'
+    +'<div style="font-family:Orbitron,sans-serif;font-size:5px;letter-spacing:.14em;color:var(--dim)">'+l+'</div>'
+    +'<div style="font-family:Bebas Neue,sans-serif;font-size:clamp(18px,2.5vw,26px)">'+v+'</div></div>';
+  statsEl.innerHTML='<div class="cr-panel-hdr">YOUR SEASON</div>'
+    +'<div class="cr-panel-body"><div style="display:grid;grid-template-columns:repeat(4,1fr);gap:8px">'
+    +g('PLAYED',crPlayed(t))+g('WINS',t.w)+g('DRAWN',t.d)+g('LOST',t.l)
+    +g('FOR',t.gf)+g('AGAINST',t.ga)+g('GD',(crGD(t)>0?'+':'')+crGD(t))+g('POINTS',crPts(t))
+    +'</div></div>';
+  body.appendChild(statsEl);
+
+  // Movement
+  const mv=document.createElement('div');
+  mv.className='cr-move-card '+(isPromoted?'promo':isRelegated?'releg':'stay');
+  mv.innerHTML='<div class="cr-mv-icon">'+(isPromoted?'⬆️':isRelegated?'⬇️':'📍')+'</div>'
+    +'<div class="cr-mv-info"><div class="cr-mv-label '+(isPromoted?'promo':isRelegated?'releg':'stay')+'">'
+    +(isPromoted?'PROMOTED TO DIVISION 1':isRelegated?'RELEGATED TO DIVISION 2':'STAYING IN DIVISION '+crMyDiv())+'</div>'
+    +'<div class="cr-mv-detail">'+club.name+(isPromoted?' move up to the elite!':isRelegated?' drop to the second tier.':isChampion?' — Champions!':myPos<=3?' — Strong season.':' — Room to improve.')+'</div></div>';
+  body.appendChild(mv);
+
+  // Apply promotion/relegation + OVR growth
+  relegated.forEach(k=>{if(CR_CLUBS[k])CR_CLUBS[k].div=2;});
+  promoted.forEach(k=>{if(CR_CLUBS[k])CR_CLUBS[k].div=1;});
+  if(isPromoted)CR_CLUBS[CAR.myClub].div=1;
+  if(isRelegated)CR_CLUBS[CAR.myClub].div=2;
+  // OVR progression — winners improve, bottom teams stagnate
+  Object.keys(CR_CLUBS).forEach(k=>{
+    const club=CR_CLUBS[k];
+    const isD1Champ=d1s[0]===k;
+    const isD2Champ=d2s[0]===k;
+    const isRel=relegated.includes(k);
+    const isProm=promoted.includes(k);
+    let delta=0;
+    if(isD1Champ) delta=2;
+    else if(isD2Champ) delta=2;
+    else if(isProm) delta=1;
+    else if(isRel) delta=-1;
+    else delta=Math.random()>.6?1:0;
+    club.ovr=Math.max(60,Math.min(95,club.ovr+delta));
+  });
+
+  // Movements summary panel
+  const mvEl=document.createElement('div');mvEl.className='cr-panel';
+  mvEl.innerHTML='<div class="cr-panel-hdr">LEAGUE MOVEMENTS</div>'
+    +'<div class="cr-panel-body" style="display:flex;flex-direction:column;gap:6px">'
+    +'<div style="font-family:Orbitron,sans-serif;font-size:6px;letter-spacing:.16em;color:var(--sp);margin-bottom:2px">PROMOTED ↑</div>'
+    +promoted.map(k=>'<div style="display:flex;align-items:center;gap:8px;padding:4px 0;border-bottom:1px solid rgba(255,255,255,.04)"><span>'+CR_CLUBS[k].emoji+'</span><span style="font-family:Rajdhani,sans-serif;font-weight:700">'+CR_CLUBS[k].name+'</span><span style="margin-left:auto;font-family:Orbitron,sans-serif;font-size:7px;color:var(--sp)">→ D1</span></div>').join('')
+    +'<div style="font-family:Orbitron,sans-serif;font-size:6px;letter-spacing:.16em;color:var(--red);margin-top:6px;margin-bottom:2px">RELEGATED ↓</div>'
+    +relegated.map(k=>'<div style="display:flex;align-items:center;gap:8px;padding:4px 0;border-bottom:1px solid rgba(255,255,255,.04)"><span>'+CR_CLUBS[k].emoji+'</span><span style="font-family:Rajdhani,sans-serif;font-weight:700">'+CR_CLUBS[k].name+'</span><span style="margin-left:auto;font-family:Orbitron,sans-serif;font-size:7px;color:var(--red)">→ D2</span></div>').join('')
+    +'</div>';
+  body.appendChild(mvEl);
+
+  // Next season button
+  const btn=document.createElement('button');btn.className='cr-next-season';
+  btn.textContent='▶ BEGIN SEASON '+(CAR.season+1);
+  btn.onclick=()=>{
+    CAR.season++;
+    CAR.d1=Object.keys(CR_CLUBS).filter(k=>CR_CLUBS[k].div===1);
+    CAR.d2=Object.keys(CR_CLUBS).filter(k=>CR_CLUBS[k].div===2);
+    crInitSeason();
+    showSc('s-career-hub');
+    crRenderHub();
+  };
+  body.appendChild(btn);
+
+  showSc('s-career-season');
+}
+
