@@ -3588,31 +3588,30 @@ function crBuildSquad(clubKey){
   const baseOvr=tier===1?72:60;
   const ovrRange=tier===1?14:12;
   const names=[...(CR_NAMES[clubKey]||CR_NAMES.madrid)];
-  const positions=['GK','LB','CB','CB','RB','CM','CM','CM','LW','ST','RW'];
-  return positions.map((pos,i)=>{
-    const isStar=(pos==='ST');
-    if(isStar){
-      return {
-        id:9000+i,name:club.star,pos:'ST',
-        spd:85,pwr:88,tec:88,def:52,rar:2,
-        sav:pos==='GK'?88:undefined,
-        ref:pos==='GK'?82:undefined,
-        spirit:1500,cooldownUntil:0,slot:pos,
-      };
-    }
-    const ovr=Math.max(50,baseOvr+Math.floor(Math.random()*ovrRange)-(isStar?0:0));
-    const nm=names[i]||('P.'+i);
-    const isGK=pos==='GK';
+  // Slots match the game engine exactly
+  const SLOTS=['GK','LB','CB1','CB2','RB','CM1','CM2','CM3','LW','ST','RW'];
+  const POS  =['GK','LB','CB1','CB2','RB','CM1','CM2','CM3','LW','ST', 'RW'];
+  // Use club hash for unique base ID so home/away squads never collide
+  const clubHash=clubKey.split('').reduce((a,c)=>a+c.charCodeAt(0),0);
+  const idBase=(clubHash*100)%90000+1000;
+  return SLOTS.map((slot,i)=>{
+    const pos=POS[i];
+    const isStar=(slot==='ST');
+    const isGK=(slot==='GK');
+    const ovr=Math.max(50,baseOvr+Math.floor(Math.random()*ovrRange));
+    const statBase=isStar?(tier===1?85:76):ovr;
+    const nm=isStar?club.star:(names[i]||('P.'+i));
     return {
-      id:9000+i,name:nm,pos,
-      spd:ovr-Math.floor(Math.random()*10),
-      pwr:ovr-Math.floor(Math.random()*10),
-      tec:ovr-Math.floor(Math.random()*10),
-      def:isGK?ovr:ovr-Math.floor(Math.random()*14),
-      rar:1,
-      sav:isGK?ovr+6:undefined,
-      ref:isGK?ovr+2:undefined,
-      spirit:isGK?2000:1500,cooldownUntil:0,slot:pos,
+      id:idBase+i,
+      name:nm,pos,slot,rar:isStar?2:1,
+      spd:statBase-Math.floor(Math.random()*8),
+      pwr:statBase-Math.floor(Math.random()*8),
+      tec:statBase-Math.floor(Math.random()*8),
+      def:isGK?statBase:(isStar?52:statBase-Math.floor(Math.random()*14)),
+      sav:isGK?statBase+6:undefined,
+      ref:isGK?statBase+2:undefined,
+      spirit:isGK?2000:1500,
+      cooldownUntil:0,
     };
   });
 }
@@ -3675,7 +3674,13 @@ let CAR={
   d1:[...CR_D1],d2:[...CR_D2],
   d1Fix:[],d2Fix:[],d1Tab:{},d2Tab:{},
   matchday:0,myResults:[],
-  pendingMatch:null, // {home,away,isHome,md}
+  pendingMatch:null,
+  // Career progression
+  budget:2000000,       // transfer budget in credits
+  reputation:1,         // 1=unknown, 2=decent, 3=respected, 4=elite, 5=legend
+  trophies:[],          // ['D2 Champion S1', 'D1 Champion S3']
+  // Squad — persisted star players with age/ovr
+  squad:null,           // built on first crStart, evolves each season
 };
 
 function crMyDiv(){return CR_CLUBS[CAR.myClub]?.div||1;}
@@ -3733,6 +3738,281 @@ function crDeleteSave(){
 function crHasSave(){
   try{return!!localStorage.getItem(CR_SAVE_KEY);}catch(e){return false;}
 }
+
+
+// ═══════════════════════════════════════════════════════════════
+// CAREER — AGING, REPUTATION & TRANSFER WINDOW
+// ═══════════════════════════════════════════════════════════════
+
+// Age ranges per position tier (for generated players)
+// Stars start at 22, generic players 18-32
+function crInitSquad(clubKey){
+  const squad = crBuildSquad(clubKey);
+  // Add age to each player
+  return squad.map((pl,i)=>({
+    ...pl,
+    age: pl.name === CR_CLUBS[clubKey].star ? 22 : 18 + Math.floor(Math.random()*14),
+    peakOvr: crCalcOvr(pl) + (pl.name === CR_CLUBS[clubKey].star ? 10 : Math.floor(Math.random()*8)),
+    contract: 2 + Math.floor(Math.random()*3), // seasons remaining
+  }));
+}
+
+function crCalcOvr(pl){
+  if(!pl) return 60;
+  const s=pl.spd||70, p=pl.pwr||70, t=pl.tec||70, d=pl.def||70;
+  if(pl.pos==='GK') return Math.round(((pl.sav||d)*0.45)+(p*0.2)+(d*0.2)+((pl.ref||p)*0.15));
+  if(pl.pos==='CB1'||pl.pos==='CB2') return Math.round((d*0.45)+(p*0.3)+(s*0.15)+(t*0.1));
+  if(pl.pos==='LB'||pl.pos==='RB') return Math.round((d*0.35)+(s*0.25)+(p*0.2)+(t*0.2));
+  if(pl.pos==='CM1'||pl.pos==='CM2'||pl.pos==='CM3') return Math.round((t*0.35)+(s*0.25)+(p*0.2)+(d*0.2));
+  return Math.round((p*0.35)+(t*0.3)+(s*0.25)+(d*0.1));
+}
+
+// Aging — runs each season end before transfer window
+function crAgeSeason(squad){
+  return squad.map(pl=>{
+    const newAge = pl.age + 1;
+    const ovr = crCalcOvr(pl);
+    let delta = 0;
+    // Growth phase: 18-24 → improve
+    if(newAge <= 24) delta = Math.random() > 0.3 ? 1 : 0;
+    // Peak: 24-29 → stable ±0
+    else if(newAge <= 29) delta = Math.random() > 0.7 ? -1 : 0;
+    // Decline: 30+ → deteriorate
+    else if(newAge <= 33) delta = Math.random() > 0.4 ? -1 : 0;
+    else delta = -2; // 34+ rapid decline
+
+    // Apply delta to all stats proportionally
+    const scale = ovr > 0 ? (ovr + delta) / ovr : 1;
+    return {
+      ...pl,
+      age: newAge,
+      contract: pl.contract - 1,
+      spd: Math.max(50, Math.round((pl.spd||70)*scale)),
+      pwr: Math.max(50, Math.round((pl.pwr||70)*scale)),
+      tec: Math.max(50, Math.round((pl.tec||70)*scale)),
+      def: Math.max(45, Math.round((pl.def||65)*scale)),
+      sav: pl.sav ? Math.max(50, Math.round(pl.sav*scale)) : undefined,
+      ref: pl.ref ? Math.max(50, Math.round(pl.ref*scale)) : undefined,
+    };
+  });
+}
+
+// ── REPUTATION ───────────────────────────────────────────────
+const CR_REP_LABELS=['UNKNOWN','PROMISING','RESPECTED','ESTABLISHED','ELITE','LEGENDARY'];
+const CR_REP_BUDGET=[500000,1000000,2000000,4000000,8000000,15000000];
+
+function crUpdateReputation(pos, div, isChampion){
+  let gain = 0;
+  if(isChampion && div===1) gain=2;
+  else if(isChampion && div===2) gain=1;
+  else if(pos<=3 && div===1) gain=1;
+  else if(pos<=2 && div===2) gain=1;
+  else if(pos>=9 && div===1) gain=-1; // near relegation
+  CAR.reputation = Math.max(1, Math.min(5, (CAR.reputation||1) + gain));
+  // Budget grows with reputation
+  const bonusBudget = CR_REP_BUDGET[CAR.reputation] || 1000000;
+  CAR.budget = Math.round((CAR.budget||500000) + bonusBudget * 0.5);
+}
+
+// ── TRANSFER MARKET ─────────────────────────────────────────
+// Generate transfer market — players available for purchase
+function crGenerateMarket(){
+  const market = [];
+  const tierBase = CAR.reputation >= 3 ? 75 : 60;
+
+  // 8 available players of varying quality
+  const positions = ['GK','CB1','CB2','LB','RB','CM1','CM2','LW','ST','RW'];
+  const allNames = [
+    'A.Diallo','M.Kovac','L.Brennan','R.Yamamoto','C.Bouchard',
+    'T.Eriksen','J.Okafor','M.Lindqvist','A.Popescu','R.Castillo',
+    'D.Mensah','K.Andersen','L.Ferreira','T.Nakagawa','C.Dembele',
+    'R.Johansson','A.Petrov','M.Oduya','L.Beaumont','T.Schreiber'
+  ];
+  const shuffled = [...allNames].sort(()=>Math.random()-.5);
+
+  for(let i=0;i<8;i++){
+    const pos = positions[Math.floor(Math.random()*positions.length)];
+    const isGK = pos==='GK';
+    const ovr = tierBase + Math.floor(Math.random()*20);
+    const age = 19 + Math.floor(Math.random()*12);
+    const price = Math.round((ovr - 60) * 80000 + (30-age)*15000 + Math.random()*100000);
+    const clubHash = shuffled[i].split('').reduce((a,ch)=>a+ch.charCodeAt(0),0);
+    market.push({
+      id: 7000+i+clubHash,
+      name: shuffled[i],
+      pos, age,
+      spd: ovr - Math.floor(Math.random()*10),
+      pwr: ovr - Math.floor(Math.random()*10),
+      tec: ovr - Math.floor(Math.random()*10),
+      def: isGK ? ovr : ovr - Math.floor(Math.random()*14),
+      sav: isGK ? ovr+6 : undefined,
+      ref: isGK ? ovr+2 : undefined,
+      rar: ovr>=80?2:1,
+      price, slot:pos,
+      contract: 2+Math.floor(Math.random()*3),
+      peakOvr: ovr+5,
+    });
+  }
+
+  // Also add 2 star players from other clubs (expensive)
+  const otherStars = Object.entries(CR_CLUBS)
+    .filter(([k])=>k!==CAR.myClub)
+    .sort(()=>Math.random()-.5)
+    .slice(0,2);
+  otherStars.forEach(([key,club],i)=>{
+    const ovr = club.ovr + 3;
+    market.push({
+      id: 6000+i,
+      name: club.star,
+      pos:'ST', age: 24+i,
+      spd:88,pwr:90,tec:88,def:52,rar:2,
+      special: club.special,
+      price: Math.round((ovr-60)*150000 + 500000),
+      slot:'ST',
+      contract:3,
+      peakOvr: ovr+8,
+    });
+  });
+
+  return market;
+}
+
+// ── TRANSFER WINDOW UI ──────────────────────────────────────
+let _crMarket = [];
+
+function crOpenTransferWindow(){
+  _crMarket = crGenerateMarket();
+  crRenderTransferWindow();
+  showSc('s-career-transfer');
+}
+
+function crRenderTransferWindow(){
+  const el=document.getElementById('cr-transfer-body');
+  if(!el)return;
+  el.innerHTML='';
+  const club=CR_CLUBS[CAR.myClub];
+  const rep=CR_REP_LABELS[CAR.reputation]||'UNKNOWN';
+  const budget=CAR.budget||0;
+
+  // Budget + rep header
+  const hdr=document.createElement('div');hdr.className='cr-panel';
+  hdr.innerHTML='<div class="cr-panel-hdr">TRANSFER WINDOW · SEASON '+(CAR.season+1)+'</div>'
+    +'<div class="cr-panel-body" style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px">'
+    +crTStat('BUDGET','$'+crFmtMoney(budget),'var(--green)')
+    +crTStat('REPUTATION',rep,'var(--gold)')
+    +crTStat('SQUAD SIZE',(CAR.squad||[]).length+' players','var(--w)')
+    +'</div>';
+  el.appendChild(hdr);
+
+  // Current squad — with sell option
+  const squadEl=document.createElement('div');squadEl.className='cr-panel';
+  squadEl.innerHTML='<div class="cr-panel-hdr">YOUR SQUAD <span>CLICK TO RELEASE</span></div>'
+    +'<div class="cr-panel-body" id="cr-squad-list" style="padding:4px;display:flex;flex-direction:column;gap:4px"></div>';
+  el.appendChild(squadEl);
+  crRenderSquadList();
+
+  // Available players
+  const mktEl=document.createElement('div');mktEl.className='cr-panel';
+  mktEl.innerHTML='<div class="cr-panel-hdr">TRANSFER MARKET <span>'+_crMarket.length+' AVAILABLE</span></div>'
+    +'<div class="cr-panel-body" id="cr-market-list" style="padding:4px;display:flex;flex-direction:column;gap:4px"></div>';
+  el.appendChild(mktEl);
+  crRenderMarketList();
+
+  // Continue button
+  const cont=document.createElement('button');cont.className='cr-next-season';
+  cont.textContent='▶ BEGIN SEASON '+(CAR.season+1);
+  cont.onclick=crBeginNewSeason;
+  el.appendChild(cont);
+}
+
+function crTStat(l,v,col){
+  return '<div style="background:rgba(255,255,255,.03);border:1px solid rgba(255,255,255,.05);border-radius:6px;padding:8px">'
+    +'<div style="font-family:Orbitron,sans-serif;font-size:6px;letter-spacing:.15em;color:var(--dim)">'+l+'</div>'
+    +'<div style="font-family:Bebas Neue,sans-serif;font-size:clamp(14px,1.8vw,20px);color:'+(col||'var(--w)')+'">'+v+'</div></div>';
+}
+
+function crFmtMoney(n){
+  if(n>=1000000) return (n/1000000).toFixed(1)+'M';
+  if(n>=1000) return (n/1000).toFixed(0)+'K';
+  return n.toString();
+}
+
+function crRenderSquadList(){
+  const el=document.getElementById('cr-squad-list');if(!el)return;
+  el.innerHTML='';
+  const squad=CAR.squad||[];
+  squad.forEach((pl,i)=>{
+    const ovr=crCalcOvr(pl);
+    const sellVal=Math.round((ovr-60)*50000+Math.max(0,28-pl.age)*10000);
+    const isExpiring=pl.contract<=0;
+    const row=document.createElement('div');
+    row.style.cssText='display:flex;align-items:center;gap:8px;padding:6px 8px;background:rgba(255,255,255,.03);border-radius:6px;border:1px solid rgba(255,255,255,'+(isExpiring?'.25':'.05')+');';
+    row.innerHTML='<div style="font-size:10px;color:var(--dim);width:28px;text-align:center">'+pl.pos+'</div>'
+      +'<div style="flex:1;min-width:0"><div style="font-family:Rajdhani,sans-serif;font-weight:700;font-size:clamp(11px,1.4vw,14px)">'+(pl.special?'⚡ ':'')+pl.name+'</div>'
+      +'<div style="font-family:Orbitron,sans-serif;font-size:6px;letter-spacing:.12em;color:var(--dim)">AGE '+pl.age+(isExpiring?' · CONTRACT EXPIRED':' · '+pl.contract+'Y LEFT')+'</div></div>'
+      +'<div style="font-family:Orbitron,sans-serif;font-size:clamp(11px,1.3vw,14px);font-weight:700;color:'+(ovr>=80?'var(--gold)':'var(--w)')+'">'+ovr+'</div>'
+      +'<button onclick="crSellPlayer('+i+')" style="padding:4px 8px;background:rgba(220,32,32,.1);border:1px solid rgba(220,32,32,.3);border-radius:4px;color:var(--red);font-family:Orbitron,sans-serif;font-size:7px;letter-spacing:.12em;cursor:pointer">RELEASE<br><span style=\'color:var(--green)\'>${{sellVal}}</span></button>'.replace('{{sellVal}}',crFmtMoney(sellVal));
+    el.appendChild(row);
+  });
+}
+
+function crRenderMarketList(){
+  const el=document.getElementById('cr-market-list');if(!el)return;
+  el.innerHTML='';
+  _crMarket.forEach((pl,i)=>{
+    const ovr=crCalcOvr(pl);
+    const canAfford=(CAR.budget||0)>=pl.price;
+    const row=document.createElement('div');
+    row.style.cssText='display:flex;align-items:center;gap:8px;padding:6px 8px;background:rgba(255,255,255,.03);border-radius:6px;border:1px solid rgba(255,255,255,'+(canAfford?'.08':'.03')+');opacity:'+(canAfford?'1':'.5')+';';
+    row.innerHTML='<div style="font-size:10px;color:var(--dim);width:28px;text-align:center">'+pl.pos+'</div>'
+      +'<div style="flex:1;min-width:0"><div style="font-family:Rajdhani,sans-serif;font-weight:700;font-size:clamp(11px,1.4vw,14px)">'+(pl.special?'⚡ ':'')+pl.name+'</div>'
+      +'<div style="font-family:Orbitron,sans-serif;font-size:6px;letter-spacing:.12em;color:var(--dim)">AGE '+pl.age+' · '+pl.contract+'Y</div></div>'
+      +'<div style="font-family:Orbitron,sans-serif;font-size:clamp(11px,1.3vw,14px);font-weight:700;color:'+(ovr>=80?'var(--gold)':'var(--w)')+'">'+ovr+'</div>'
+      +'<button '+(canAfford?'onclick="crBuyPlayer('+i+')"':'disabled')
+      +' style="padding:4px 8px;background:'+(canAfford?'rgba(32,200,120,.1)':'rgba(255,255,255,.03)')+';border:1px solid '+(canAfford?'rgba(32,200,120,.3)':'rgba(255,255,255,.08)')+';border-radius:4px;color:'+(canAfford?'var(--green)':'var(--dim)')+';font-family:Orbitron,sans-serif;font-size:7px;letter-spacing:.12em;cursor:'+(canAfford?'pointer':'default')+'">BUY<br>$'+crFmtMoney(pl.price)+'</button>';
+    el.appendChild(row);
+  });
+}
+
+function crBuyPlayer(marketIdx){
+  const pl=_crMarket[marketIdx];
+  if(!pl||(CAR.budget||0)<pl.price)return;
+  CAR.budget-=pl.price;
+  if(!CAR.squad) CAR.squad=[];
+  CAR.squad.push({...pl,contract:pl.contract||2});
+  _crMarket.splice(marketIdx,1);
+  crSave();
+  crRenderTransferWindow();
+}
+
+function crSellPlayer(squadIdx){
+  const pl=(CAR.squad||[])[squadIdx];
+  if(!pl)return;
+  const ovr=crCalcOvr(pl);
+  const sellVal=Math.round((ovr-60)*50000+Math.max(0,28-pl.age)*10000);
+  CAR.budget=(CAR.budget||0)+sellVal;
+  CAR.squad.splice(squadIdx,1);
+  crSave();
+  crRenderSquadList();
+  crRenderMarketList();
+  document.querySelector('#cr-transfer-body .cr-panel-body').innerHTML=
+    crTStat('BUDGET','$'+crFmtMoney(CAR.budget),'var(--green)')
+    +crTStat('REPUTATION',CR_REP_LABELS[CAR.reputation]||'UNKNOWN','var(--gold)')
+    +crTStat('SQUAD SIZE',(CAR.squad||[]).length+' players','var(--w)');
+}
+
+function crBeginNewSeason(){
+  CAR.season++;
+  CAR.d1=Object.keys(CR_CLUBS).filter(k=>CR_CLUBS[k].div===1);
+  CAR.d2=Object.keys(CR_CLUBS).filter(k=>CR_CLUBS[k].div===2);
+  // Age the squad
+  if(CAR.squad) CAR.squad=crAgeSeason(CAR.squad);
+  crInitSeason();
+  crSave();
+  showSc('s-career-hub');
+  crRenderHub();
+}
+
 
 function crBuildClubList(){
   const el=document.getElementById('cr-clubs-list');if(!el)return;
@@ -3957,40 +4237,29 @@ function crLoadMatchSquads(myKey,oppKey,myIsHome){
   const mySquad=crBuildSquad(myKey);
   const oppSquad=crBuildSquad(oppKey);
 
-  // Slot assignments
-  const SLOTS=['GK','LB','CB1','CB2','RB','CM1','CM2','CM3','LW','ST','RW'];
-  const posList=['GK','LB','CB','CB','RB','CM','CM','CM','LW','ST','RW'];
+  // Build squad objects keyed by slot — players already have correct slot/pos from crBuildSquad
+  function buildSq(squad){
+    const sq={};
+    squad.forEach(pl=>{ sq[pl.slot]={...pl}; });
+    return sq;
+  }
 
   hSq={};aSq={};
   if(myIsHome){
-    // my club = home
-    SLOTS.forEach((slot,i)=>{
-      const pl={...mySquad[i],slot,id:9000+i,spirit:mySquad[i].pos==='GK'?2000:1500,cooldownUntil:0};
-      hSq[slot]=pl;
-    });
-    SLOTS.forEach((slot,i)=>{
-      const pl={...oppSquad[i],slot,id:8000+i,spirit:oppSquad[i].pos==='GK'?2000:1500,cooldownUntil:0};
-      aSq[slot]=pl;
-    });
+    hSq=buildSq(mySquad);
+    aSq=buildSq(oppSquad);
     selHome=myKey;selAway=oppKey;
     HT={name:myClub.name,flag:myClub.emoji,p:mySquad};
     AT={name:oppClub.name,flag:oppClub.emoji,p:oppSquad};
   } else {
-    // my club = away
-    SLOTS.forEach((slot,i)=>{
-      const pl={...oppSquad[i],slot,id:8000+i,spirit:oppSquad[i].pos==='GK'?2000:1500,cooldownUntil:0};
-      hSq[slot]=pl;
-    });
-    SLOTS.forEach((slot,i)=>{
-      const pl={...mySquad[i],slot,id:9000+i,spirit:mySquad[i].pos==='GK'?2000:1500,cooldownUntil:0};
-      aSq[slot]=pl;
-    });
+    hSq=buildSq(oppSquad);
+    aSq=buildSq(mySquad);
     selHome=oppKey;selAway=myKey;
     HT={name:oppClub.name,flag:oppClub.emoji,p:oppSquad};
     AT={name:myClub.name,flag:myClub.emoji,p:mySquad};
   }
 
-  // Update HUD names/emblems
+  // Update HUD
   document.getElementById('htn').textContent=HT.name;
   document.getElementById('atn').textContent=AT.name;
   setTeamEmblem(document.getElementById('h-flag-hud'),selHome,HT.flag);
@@ -4105,19 +4374,43 @@ function crEndSeason(){
     +'</div>';
   body.appendChild(mvEl);
 
-  // Next season button
+  // Update reputation based on finish
+  crUpdateReputation(myPos, crMyDiv(), isChampion);
+
+  // Add trophy if champion
+  if(isChampion){
+    const trophyName=(crMyDiv()===1?'D1':'D2')+' Champion S'+CAR.season;
+    if(!CAR.trophies)CAR.trophies=[];
+    CAR.trophies.push(trophyName);
+  }
+
+  // Init squad if first season
+  if(!CAR.squad){
+    CAR.squad=crInitSquad(CAR.myClub);
+  }
+
+  // Budget earned from prize money based on position
+  const prizeMoney=[500000,350000,250000,150000,100000,80000,60000,50000,40000,30000];
+  const prize=prizeMoney[Math.min(myPos-1,prizeMoney.length-1)]||30000;
+  CAR.budget=(CAR.budget||500000)+prize;
+
+  // Transfer window button instead of direct next season
   const btn=document.createElement('button');btn.className='cr-next-season';
-  btn.textContent='▶ BEGIN SEASON '+(CAR.season+1);
-  btn.onclick=()=>{
-    CAR.season++;
-    CAR.d1=Object.keys(CR_CLUBS).filter(k=>CR_CLUBS[k].div===1);
-    CAR.d2=Object.keys(CR_CLUBS).filter(k=>CR_CLUBS[k].div===2);
-    crInitSeason();
-    showSc('s-career-hub');
-    crRenderHub();
-  };
+  btn.textContent='🔄 TRANSFER WINDOW →';
+  btn.onclick=()=>crOpenTransferWindow();
   body.appendChild(btn);
 
+  // Rep display
+  const repEl=document.createElement('div');repEl.className='cr-panel';
+  repEl.innerHTML='<div class="cr-panel-hdr">YOUR CAREER</div>'
+    +'<div class="cr-panel-body" style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px">'
+    +('<div style="background:rgba(255,255,255,.03);border:1px solid rgba(255,255,255,.05);border-radius:6px;padding:8px"><div style="font-family:Orbitron,sans-serif;font-size:6px;letter-spacing:.15em;color:var(--dim)">REPUTATION</div><div style="font-family:Bebas Neue,sans-serif;font-size:clamp(14px,1.8vw,20px);color:var(--gold)">'+(CR_REP_LABELS[CAR.reputation]||'UNKNOWN')+'</div></div>')
+    +('<div style="background:rgba(255,255,255,.03);border:1px solid rgba(255,255,255,.05);border-radius:6px;padding:8px"><div style="font-family:Orbitron,sans-serif;font-size:6px;letter-spacing:.15em;color:var(--dim)">PRIZE MONEY</div><div style="font-family:Bebas Neue,sans-serif;font-size:clamp(14px,1.8vw,20px);color:var(--green)">+$'+crFmtMoney(prize)+'</div></div>')
+    +('<div style="background:rgba(255,255,255,.03);border:1px solid rgba(255,255,255,.05);border-radius:6px;padding:8px"><div style="font-family:Orbitron,sans-serif;font-size:6px;letter-spacing:.15em;color:var(--dim)">TROPHIES</div><div style="font-family:Bebas Neue,sans-serif;font-size:clamp(14px,1.8vw,20px);color:var(--sp)">'+(CAR.trophies||[]).length+'</div></div>')
+    +'</div>';
+  body.insertBefore(repEl, btn);
+
+  crSave();
   showSc('s-career-season');
 }
 
