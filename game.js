@@ -2206,85 +2206,87 @@ function bldA(carrier,isShot){
   const sp=carrier?Math.round(carrier.spirit||1500):1500;
   const el=document.getElementById('abtns'),ih=G.D.as==='h';
   el.innerHTML='';
-  document.getElementById('albl').textContent=ih?'YOUR ATTACK':'OPPONENT ATTACKS';
-  if(!ih){el.innerHTML='';return;}
-  // If ak already committed (shot won in field duel) — no second choice, just show locked label
+  const atkSection=document.getElementById('atk-section');
+  if(atkSection)atkSection.style.display=ih?'':'none';
+  if(!ih)return;
   if(G.D.ak){
     const lbl=document.createElement('div');
-    lbl.style.cssText='color:var(--red);font-size:11px;font-weight:700;letter-spacing:1px;opacity:.8;align-self:center;';
+    lbl.style.cssText='color:var(--gold);font-size:11px;font-family:Orbitron,sans-serif;font-weight:700;letter-spacing:1px;opacity:.8;align-self:center;border:1px solid rgba(240,192,64,.2);border-radius:6px;padding:7px 12px;';
     lbl.textContent=(G.D.ak==='special'?'⚡ SPECIAL SHOT':'⚽ SHOT')+' — COMMITTED';
-    el.appendChild(lbl);
-    chkRdy();
-    return;
+    el.appendChild(lbl);chkRdy();return;
   }
   let acts;
   if(isShot){
-    acts=[{id:'shoot',l:'Shoot',i:'⚽',stat:'SHO'}];
+    acts=[{id:'shoot',l:'Shoot',i:'⚽'}];
     const spec=getSpecial(carrier);
-    if(spec)acts.push({id:'special',l:spec.l,i:spec.i,stat:'SHO',sp:true});
+    if(spec)acts.push({id:'special',l:spec.l,i:spec.i,sp:true});
   }else{
-    acts=[{id:'pass',l:'Pass',i:'↑',stat:'PAS'},{id:'dribble',l:'Dribble',i:'▶',stat:'DRI'}];
+    acts=[{id:'pass',l:'Pass',i:'↑'},{id:'dribble',l:'Dribble',i:'▶'}];
     const cp=PP[G.D.as][G.ck],prog=cp?progressFor(G.D.as,cp):0;
-    if(prog>.50)acts.push({id:'shoot',l:'Shoot',i:'⚽',stat:'SHO'});
-    if(bestTeammateFor(G.D.as,G.ck,'one-two'))acts.push({id:'one-two',l:'1-2',i:'↑↑',stat:'PAS',ot:true});
+    if(prog>.50)acts.push({id:'shoot',l:'Shoot',i:'⚽'});
+    if(bestTeammateFor(G.D.as,G.ck,'one-two'))acts.push({id:'one-two',l:'1-2',i:'↑↑',ot:true});
   }
   acts.forEach(a=>{
     const cost=(ATK_ACTIONS[a.id]||{}).cost||0;
     const ok=sp>=cost;
-    const btn=document.createElement('button');
-    btn.className='dact'+(a.sp||a.ot?' sp':'')+(ok?'':' dis');
     const costTxt=cost>0?(ok?'−'+cost+' SP':'⚡ LOW'):'FREE';
-    btn.innerHTML='<span class="dai">'+a.i+'</span><span>'+a.l+'</span><span class="dac" style="'+((!ok&&cost>0)?'color:var(--red)':'')+'">'+costTxt+'</span>';
-    btn.onclick=()=>selA(a,btn);
+    const btn=document.createElement('button');
+    const tc=a.sp||a.ot?'dact-sp':'dact-atk';
+    btn.className='dact3d '+tc+(ok?'':' dact-dis');
+    btn.innerHTML='<div class="dact3d-face"><span class="dact3d-i">'+a.i+'</span><span class="dact3d-l">'+a.l+'</span><span class="dact3d-c">'+costTxt+'</span></div><div class="dact3d-bot"></div>';
+    if(ok)btn.onclick=()=>selA(a,btn);
     el.appendChild(btn);
   });
 }
 
 function bldD(def,ds,isShot){
-  const el=document.getElementById('dbtns');el.innerHTML=''; const ih=ds==='h'; document.getElementById('dlbl').textContent=ih?'YOUR DEFENCE':'OPPONENT DEFENDS';
-  if(!ih){el.innerHTML='';return;}
+  const el=document.getElementById('dbtns');el.innerHTML='';
+  const ih=ds==='h';
+  const defSection=document.getElementById('def-section');
+  if(defSection)defSection.style.display=ih?'':'none';
+  if(!ih)return;
   const defIsGK=def&&def.pos==='GK';
   const sp=def?Math.round(def.spirit||(defIsGK?2000:1500)):(defIsGK?2000:1500);
 
   const makeDBtn=(a)=>{
     const cost=(DEF_ACTIONS[a.id]||{}).cost||0;
     const ok=!a.locked&&sp>=cost;
-    const btn=document.createElement('button');
-    btn.className='dact'+(a.locked||!ok?' locked':'');
     const costTxt=cost>0?(ok?'−'+cost+' SP':'⚡ LOW'):'FREE';
-    const statCol=a.id==='supersave'?'var(--gold)':ok?'rgba(255,255,255,.4)':'var(--red)';
-    btn.innerHTML=`<span class="dai">${a.i}</span><span>${a.l}</span><span class="dac" style="color:${statCol};font-size:7px">${a.stat} · ${costTxt}</span>`;
-    if(a.locked||!ok){btn.disabled=true;}
-    else btn.onclick=()=>selD(a,btn);
+    const btn=document.createElement('button');
+    const tc=a.id==='supersave'?'dact-ss':'dact-def';
+    btn.className='dact3d '+tc+(ok?'':' dact-dis');
+    btn.innerHTML='<div class="dact3d-face"><span class="dact3d-i">'+a.i+'</span><span class="dact3d-l">'+a.l+'</span><span class="dact3d-c">'+costTxt+'</span></div><div class="dact3d-bot"></div>';
+    if(ok)btn.onclick=()=>selD(a,btn);
+    else btn.disabled=true;
     el.appendChild(btn);
   };
 
   if(isShot&&defIsGK){
     const gkSuper=getGKSuper(def);
     [
-      {id:'save',     l:'Save',       i:'🧤', stat:'SAV'},
-      {id:'punch',    l:'Punch',      i:'👊', stat:'POW'},
-      {id:'supersave',l:gkSuper.l,   i:gkSuper.i, stat:'SAV★', locked:sp<320},
+      {id:'save',     l:'Save',  i:'🧤',stat:'SAV'},
+      {id:'punch',    l:'Punch', i:'👊',stat:'POW'},
+      {id:'supersave',l:gkSuper.l,i:gkSuper.i,stat:'SAV★',locked:sp<320},
     ].forEach(makeDBtn);
   } else {
     [
-      {id:'tackle',   l:'Tackle',    i:'🦵', stat:'DEF'},
-      {id:'intercept',l:'Intercept', i:'✋', stat:'PAS'},
-      {id:'block',    l:'Block',     i:'🛡', stat:'DEF'},
+      {id:'tackle',   l:'Tackle',    i:'🦵',stat:'DEF'},
+      {id:'intercept',l:'Intercept', i:'✋',stat:'PAS'},
+      {id:'block',    l:'Block',     i:'🛡',stat:'DEF'},
     ].forEach(makeDBtn);
   }
 }
 
 function selA(a,btn){
   btnPop(btn);
-  G.D.ak=a.id;G.D.pk=null; document.querySelectorAll('#abtns .dact').forEach(b=>b.classList.remove('sa')); btn.classList.add('sa');
+  G.D.ak=a.id;G.D.pk=null; document.querySelectorAll('#abtns .dact3d').forEach(b=>b.classList.remove('dact-sel')); btn.classList.add('dact-sel');
   if(a.id==='pass'||a.id==='one-two'){
     document.getElementById('duel-ov').classList.remove('show'); G.pm=true; document.getElementById('pass-banner').style.display='block';
     document.getElementById('pass-banner').textContent=a.id==='one-two'?'ONE-TWO — PICK TEAMMATE':'PASS MODE — CLICK A PLAYER';
     document.getElementById('dcfm').classList.remove('rdy');
   } else chkRdy();
 }
-function selD(a,btn){btnPop(btn);G.D.defA=a.id;document.querySelectorAll('#dbtns .dact').forEach(b=>b.classList.remove('sd'));btn.classList.add('sd');chkRdy();}
+function selD(a,btn){btnPop(btn);G.D.defA=a.id;document.querySelectorAll('#dbtns .dact3d').forEach(b=>b.classList.remove('dact-sel'));btn.classList.add('dact-sel');chkRdy();}
 function chkRdy(){const needsPk=G.D.ak==='pass'||G.D.ak==='one-two';const ao=G.D.as!=='h'||(G.D.ak&&(!needsPk||G.D.pk));const do2=G.D.ds!=='h'||G.D.defA;document.getElementById('dcfm').classList.toggle('rdy',!!(ao&&do2));}
 
 function weightedPick(items){
@@ -2603,7 +2605,7 @@ function resDuel(){
   G.phase='duel_result';G.pm=false;
   document.getElementById('pass-banner').style.display='none';
   document.getElementById('duel-ov').classList.add('show');
-  document.querySelectorAll('.dact').forEach(b=>b.classList.add('dis'));
+  document.querySelectorAll('.dact3d').forEach(b=>b.classList.add('dact-dis'));
   document.getElementById('dcfm').classList.remove('rdy');
   const {carrier,def,dk,as,ds,isShot,ak,pk,defA}=G.D;
   const atkPow=calcAttackPower(carrier,ak,as);
