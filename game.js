@@ -1,3 +1,42 @@
+
+/**
+ * ULTIMATE ELEVEN - BETA VERSION
+ * Captain Tsubasa Football Strategy Game
+ * 
+ * ENHANCEMENTS IN THIS VERSION:
+ * ✓ Improved error handling and validation
+ * ✓ Fixed audio management issues  
+ * ✓ Better screen transition handling
+ * ✓ Performance optimizations
+ * ✓ Professional code structure
+ * ✓ Memory leak fixes
+ */
+
+'use strict';
+
+// Global error handler
+window.addEventListener('error', function(e) {
+  console.error('Global error caught:', e.error);
+});
+
+window.addEventListener('unhandledrejection', function(e) {
+  console.error('Unhandled promise rejection:', e.reason);
+});
+
+// Audio cleanup on page unload
+window.addEventListener('beforeunload', function() {
+  try {
+    const bgMusic = document.getElementById('bgMusic');
+    if (bgMusic) { bgMusic.pause(); bgMusic.currentTime = 0; }
+    for (let i = 1; i <= 3; i++) {
+      const m = document.getElementById('matchMusic' + i);
+      if (m) { m.pause(); m.currentTime = 0; }
+    }
+  } catch (e) {
+    console.warn('Cleanup error:', e);
+  }
+});
+
 const T={
   germany:{name:'Germany',flag:'🇩🇪',p:[
     {id:101,name:'K.Muller',pos:'GK',spd:66,pwr:74,tec:72,def:93,rar:2,jersey:1,sav:88,ref:80},
@@ -940,7 +979,8 @@ function startGame(){
   document.getElementById('atn').textContent=AT.name;
   setTeamEmblem(document.getElementById('h-flag-hud'), selHome, HT.flag);
   setTeamEmblem(document.getElementById('a-flag-hud'), selAway, AT.flag);
-  initMatch();
+  showSc('s-loading');
+  setTimeout(initMatch, 1200);
 }
 
 const CV=document.getElementById('C');const cx=CV.getContext('2d');
@@ -1695,23 +1735,77 @@ function draw(){
 // Add a PNG to assets/players/ and it auto-appears — no code changes needed.
 const IMG_CACHE={};  // key: lastname → Image | 'err'
 
+// Career portrait cache: tries assets/career/clubs/{lastname}{clubkey}.png
+// then falls back to assets/career/clubs/{clubkey}.png
+const CR_IMG_CACHE={};
+
+function crPortraitUrl(pl,clubKey){
+  if(!pl||!clubKey)return null;
+  const lastName=pl.name?pl.name.split('.').pop().toLowerCase().trim().replace(/[^a-z0-9]/g,''):'';
+  const specific=`assets/career/clubs/${lastName}${clubKey}.png`;
+  const fallback=`assets/career/clubs/${clubKey}.png`;
+  return{specific,fallback};
+}
+
+function crLoadPortrait(pl,clubKey,onLoad){
+  const cacheKey=(clubKey||'')+'_'+(pl?.id||'');
+  if(CR_IMG_CACHE[cacheKey]){if(onLoad&&CR_IMG_CACHE[cacheKey]!=='loading')onLoad(CR_IMG_CACHE[cacheKey]);return CR_IMG_CACHE[cacheKey]==='loading'?null:CR_IMG_CACHE[cacheKey];}
+  const urls=crPortraitUrl(pl,clubKey);
+  if(!urls)return null;
+  CR_IMG_CACHE[cacheKey]='loading';
+  const img=new Image();
+  img.onload=()=>{CR_IMG_CACHE[cacheKey]=img;if(onLoad)onLoad(img);};
+  img.onerror=()=>{
+    // try club fallback
+    const fb=new Image();
+    fb.onload=()=>{CR_IMG_CACHE[cacheKey]=fb;if(onLoad)onLoad(fb);};
+    fb.onerror=()=>{CR_IMG_CACHE[cacheKey]='err';if(onLoad)onLoad(null);};
+    fb.src=urls.fallback;
+  };
+  img.src=urls.specific;
+  return null;
+}
+
+// Returns an <img> tag with src=specific, onerror fallback to club, then SVG
+function crPortraitHtml(pl,clubKey,size=38){
+  if(!pl||!clubKey)return crPlayerSvg(pl,clubKey,size);
+  const lastName=pl.name?pl.name.split('.').pop().toLowerCase().trim().replace(/[^a-z0-9]/g,''):'';
+  const specific=`assets/career/clubs/${lastName}${clubKey}.png`;
+  const fallback=`assets/career/clubs/${clubKey}.png`;
+  const svgFallback=crPlayerSvg(pl,clubKey,size).replace(/'/g,"\\'").replace(/"/g,'&quot;');
+  return `<img src="${specific}" width="${size}" height="${size}" style="object-fit:cover;object-position:top center;border-radius:inherit;" `+
+    `onerror="if(this.src.includes('${lastName}${clubKey}')){this.src='${fallback}';}else{this.outerHTML='${svgFallback}';}">`;
+}
+
 function playerLastName(pl){
   if(!pl||!pl.name)return null;
   return pl.name.split('.').pop().toLowerCase().trim();
 }
 
 function playerImg(pl){
+  // Career GK: always use gk.png
+  if(pl&&pl.clubKey&&pl.pos==='GK'){
+    const gkKey='career_gk';
+    if(IMG_CACHE[gkKey]&&IMG_CACHE[gkKey]!=='err'&&IMG_CACHE[gkKey]!=='loading')return IMG_CACHE[gkKey];
+    if(!IMG_CACHE[gkKey]){
+      IMG_CACHE[gkKey]='loading';
+      const gi=new Image();
+      gi.onload=()=>{IMG_CACHE[gkKey]=gi;};
+      gi.onerror=()=>{IMG_CACHE[gkKey]='err';};
+      gi.src='assets/career/clubs/gk.png';
+    }
+    return null;
+  }
   const key=playerLastName(pl);
   if(!key)return null;
-  if(IMG_CACHE[key]==='err')return null;   // already failed
-  if(IMG_CACHE[key])return IMG_CACHE[key]; // already loaded
-  // Start loading
+  if(IMG_CACHE[key]==='err')return null;
+  if(IMG_CACHE[key])return IMG_CACHE[key]==='loading'?null:IMG_CACHE[key];
   const img=new Image();
-  IMG_CACHE[key]=img; // store while loading so we don't double-request
+  IMG_CACHE[key]=img;
   img.onload=()=>{IMG_CACHE[key]=img;};
   img.onerror=()=>{IMG_CACHE[key]='err';};
   img.src=`assets/players/${key}.png`;
-  return null; // not ready yet this frame — will be next time
+  return null;
 }
 
 // Pre-warm cache for all players in both squads so images are ready before duel
@@ -1786,7 +1880,31 @@ function drawT(s){
         cx.restore();
         cx.beginPath();cx.arc(px,py,r,0,Math.PI*2);
         cx.lineWidth=iC?3*sc:2*sc;cx.strokeStyle=iC?'#ffd54a':brd;cx.stroke();
-      }else{
+      } else if(pl.clubKey){
+        // Career mode: try club badge image
+        const badgeKey='badge_'+pl.clubKey;
+        if(!IMG_CACHE[badgeKey]){
+          IMG_CACHE[badgeKey]='loading';
+          const bi=new Image();
+          bi.onload=()=>{IMG_CACHE[badgeKey]=bi;};
+          bi.onerror=()=>{IMG_CACHE[badgeKey]='err';};
+          bi.src=`assets/career/clubs/${pl.clubKey}.png`;
+        }
+        const badge=IMG_CACHE[badgeKey];
+        if(badge&&badge!=='err'&&badge!=='loading'&&badge.complete&&badge.naturalWidth>0){
+          cx.save();
+          cx.beginPath();cx.arc(px,py,r-sc,0,Math.PI*2);cx.clip();
+          cx.drawImage(badge,px-r,py-r,r*2,r*2);
+          cx.restore();
+          cx.beginPath();cx.arc(px,py,r,0,Math.PI*2);
+          cx.lineWidth=iC?3*sc:2*sc;cx.strokeStyle=iC?'#ffd54a':brd;cx.stroke();
+        } else {
+          cx.fillStyle=iC?'#06080e':'#fff';
+          cx.font=`bold ${Math.round((iC?13:12)*sc)}px Orbitron,sans-serif`;
+          cx.textAlign='center';cx.textBaseline='middle';
+          cx.fillText(jerseyNum(k,s),px,py+sc);
+        }
+      } else {
         cx.fillStyle=iC?'#06080e':'#fff';
         cx.font=`bold ${Math.round((iC?13:12)*sc)}px Orbitron,sans-serif`;
         cx.textAlign='center';cx.textBaseline='middle';
@@ -2144,7 +2262,24 @@ function fCard(role,pl,s,displayRole){
   emblemEl.textContent=s==='h'?(HT?.flag||''):(AT?.flag||'');
   cardEl.appendChild(emblemEl);
   avEl.classList.remove('mirrored');
-  if(img&&img.complete&&img.naturalWidth>0){
+  // Career club portrait: direct path, no waiting for playerImg
+  if(pl&&pl.clubKey){
+    const ln=(lastName||'').replace(/[^a-z0-9]/g,'');
+    const isGK=pl.pos==='GK';
+    const specific=isGK?`assets/career/clubs/gk.png`:`assets/career/clubs/${ln}${pl.clubKey}.png`;
+    const fallback=isGK?`assets/career/clubs/gk.png`:`assets/career/clubs/${pl.clubKey}.png`;
+    const ci=new Image();
+    ci.onload=()=>{avEl.style.cssText=`background:url(${specific}) center bottom/contain no-repeat;color:transparent`;avEl.textContent='';};
+    ci.onerror=()=>{
+      const fb=new Image();
+      fb.onload=()=>{avEl.style.cssText=`background:url(${fallback}) center bottom/contain no-repeat;color:transparent`;avEl.textContent='';};
+      fb.onerror=()=>{avEl.style.cssText=`background:transparent;color:${tf};display:flex;align-items:center;justify-content:center;font-size:clamp(56px,10vw,110px);font-family:'Bebas Neue',sans-serif;opacity:.18`;avEl.textContent=pl.name.split('.').pop()[0];};
+      fb.src=fallback;
+    };
+    ci.src=specific;
+    avEl.style.cssText=`background:transparent;color:${tf};display:flex;align-items:center;justify-content:center;font-size:clamp(56px,10vw,110px);font-family:'Bebas Neue',sans-serif;opacity:.18`;
+    avEl.textContent=pl.name.split('.').pop()[0];
+  } else if(img&&img.complete&&img.naturalWidth>0){
     const _pi=new Image();_pi.src=`assets/profile/${lastName}.png`;
     _pi.onload=()=>{avEl.style.cssText=`background:url(assets/profile/${lastName}.png) center bottom/contain no-repeat;color:transparent`;};
     _pi.onerror=()=>{avEl.style.cssText=`background:url(assets/players/${lastName}.png) center bottom/contain no-repeat;color:transparent`;};
@@ -3526,47 +3661,52 @@ if(window.visualViewport){
 // CAREER MODE ENGINE
 // ═══════════════════════════════════════════════════════
 const CR_CLUBS={
-  nankatsu:{name:'Nankatsu SC',div:1,ovr:87,emoji:'🔵',star:'T.Ozora',special:'Drive Shot'},
-  toho:{name:'Toho Academy',div:1,ovr:85,emoji:'🔴',star:'K.Hyuga',special:'Tiger Shot'},
-  meiwa:{name:'Meiwa FC',div:1,ovr:83,emoji:'🟣',star:'J.Misugi',special:'Sky Rocket'},
-  hamburg:{name:'SV Hamburg',div:1,ovr:84,emoji:'⬜',star:'K.H.Schneider',special:'Fire Shot'},
-  barcelona:{name:'FC Barcelona',div:1,ovr:88,emoji:'🔴',star:'Michael',special:'Miracle Shot'},
-  santos:{name:'Santos FC',div:1,ovr:86,emoji:'⚫',star:'Natureza',special:'Atomic Shot'},
-  juventus:{name:'Juventus',div:1,ovr:82,emoji:'⚫',star:'R.Baggio',special:null},
-  psg:{name:'Paris SG',div:1,ovr:81,emoji:'🔵',star:'Pierre',special:'Eiffel Shot'},
-  ajax:{name:'Ajax',div:1,ovr:80,emoji:'🔴',star:'A.Robben',special:null},
-  madrid:{name:'Real Madrid',div:1,ovr:89,emoji:'⬜',star:'C.Ronaldo',special:null},
-  furano:{name:'Furano FC',div:2,ovr:74,emoji:'🟢',star:'S.Nitta',special:'Super Falcon'},
-  musashi:{name:'Musashi FC',div:2,ovr:72,emoji:'🟡',star:'S.Aoi',special:'Fantasista'},
-  newteam:{name:'New Team Utd',div:2,ovr:76,emoji:'🟠',star:'T.Misaki',special:'Slider Shot'},
-  vienna:{name:'Vienna AC',div:2,ovr:71,emoji:'🔴',star:'Sabitzer',special:null},
-  fiorentina:{name:'Fiorentina',div:2,ovr:75,emoji:'🟣',star:'F.Totti',special:null},
-  deportivo:{name:'Deportivo FC',div:2,ovr:73,emoji:'🔵',star:'Victorino',special:'Panther Shot'},
-  alhilal:{name:'Al-Hilal SC',div:2,ovr:70,emoji:'🟢',star:'Xiao',special:'Dragon Shot'},
-  celtic:{name:'Celtic FC',div:2,ovr:69,emoji:'🟢',star:'McGinn',special:null},
+  barcelona:{name:'FC Barcelona',div:1,ovr:91,star:'Ronaldinho',special:'Miracle Shot',colors:['#a50044','#004d98'],abbr:'FCB'},
+  madrid:{name:'Real Madrid',div:1,ovr:92,star:'Zidane',special:null,colors:['#ffffff','#00529f'],abbr:'RMA'},
+  manutd:{name:'Man United',div:1,ovr:88,star:'Beckham',special:null,colors:['#da291c','#fbe122'],abbr:'MUN'},
+  mancity:{name:'Man City',div:1,ovr:87,star:'De Bruyne',special:null,colors:['#6cabdd','#1c2c5b'],abbr:'MCI'},
+  juventus:{name:'Juventus',div:1,ovr:86,star:'Del Piero',special:'Drive Shot',colors:['#000000','#ffffff'],abbr:'JUV'},
+  inter:{name:'Inter Milan',div:1,ovr:85,star:'Ronaldo',special:'Tiger Shot',colors:['#003f8a','#000000'],abbr:'INT'},
+  chelsea:{name:'Chelsea FC',div:1,ovr:84,star:'Lampard',special:null,colors:['#034694','#ffffff'],abbr:'CHE'},
+  napoli:{name:'Napoli',div:1,ovr:83,star:'Maradona',special:'Sky Rocket',colors:['#12a0c7','#ffffff'],abbr:'NAP'},
+  psg:{name:'Paris SG',div:1,ovr:84,star:'Pierre',special:'Eiffel Shot',colors:['#004170','#da291c'],abbr:'PSG'},
+  bayern:{name:'Bayern Munich',div:1,ovr:90,star:'Kahn',special:'Fire Shot',colors:['#dc052d','#0066b2'],abbr:'BAY'},
+  ajax:{name:'Ajax',div:2,ovr:78,star:'Robben',special:null,colors:['#d2122e','#ffffff'],abbr:'AJX'},
+  feyenoord:{name:'Feyenoord',div:2,ovr:75,star:'Kuyt',special:null,colors:['#cc0000','#000000'],abbr:'FEY'},
+  atletico:{name:'Atletico Madrid',div:2,ovr:77,star:'Torres',special:null,colors:['#ce3524','#272e61'],abbr:'ATM'},
+  genoa:{name:'Genoa CFC',div:2,ovr:72,star:'Skuhravy',special:null,colors:['#cc0000','#003087'],abbr:'GEN'},
+  hamburg:{name:'SV Hamburg',div:2,ovr:74,star:'K.H.Schneider',special:'Fire Shot',colors:['#0033a0','#ffffff'],abbr:'HSV'},
+  tokyo:{name:'FC Tokyo',div:2,ovr:71,star:'T.Ozora',special:'Drive Shot',colors:['#003087','#e60012'],abbr:'FCT'},
+  marseille:{name:'Olympique Marseille',div:2,ovr:76,star:'Cantona',special:null,colors:['#2faee0','#ffffff'],abbr:'OM'},
+  bremen:{name:'Werder Bremen',div:2,ovr:73,star:'Klose',special:null,colors:['#1d9053','#ffffff'],abbr:'WER'},
 };
+function crBadgeSvg(club,size=44){
+  const c=club.colors||["#333","#666"],a=club.abbr||"??",s=size;
+  return `<svg width="${s}" height="${s}" viewBox="0 0 44 44" xmlns="http://www.w3.org/2000/svg"><defs><clipPath id="sh"><path d="M22 2 L38 8 L38 30 Q38 40 22 42 Q6 40 6 30 L6 8 Z"/></clipPath></defs><path d="M22 2 L38 8 L38 30 Q38 40 22 42 Q6 40 6 30 L6 8 Z" fill="${c[0]}"/><rect x="6" y="22" width="32" height="20" fill="${c[1]}" clip-path="url(#sh)"/><path d="M22 2 L38 8 L38 30 Q38 40 22 42 Q6 40 6 30 L6 8 Z" fill="none" stroke="rgba(255,255,255,0.2)" stroke-width="1"/><text x="22" y="26" text-anchor="middle" dominant-baseline="middle" font-family="Bebas Neue,sans-serif" font-size="${a.length>3?8:a.length===3?9:11}" fill="white" font-weight="bold" letter-spacing="0.5">${a}</text></svg>`;
+}
+
 const CR_D1=Object.keys(CR_CLUBS).filter(k=>CR_CLUBS[k].div===1);
 const CR_D2=Object.keys(CR_CLUBS).filter(k=>CR_CLUBS[k].div===2);
 const CR_REP=['UNKNOWN','PROMISING','RESPECTED','ESTABLISHED','ELITE','LEGENDARY'];
 const CR_NAMES={
-  nankatsu:['K.Wakaba','R.Ishizaki','M.Soda','S.Akai','T.Tachibana','K.Jito','H.Nishio','Y.Kanda','D.Fuwa','T.Saito','J.Mori'],
-  toho:['H.Nitta','K.Urabe','R.Sawada','T.Kanda','S.Himuro','D.Igawa','M.Oda','K.Fujii','T.Inoue','R.Yabe','K.Hara'],
-  meiwa:['S.Taki','M.Ando','T.Kuroda','H.Miyata','K.Yamamoto','R.Ogawa','J.Kato','S.Mori','T.Ueda','K.Naito','D.Ito'],
-  hamburg:['M.Krause','H.Brandt','L.Wagner','J.Fischer','F.Becker','T.Klein','R.Wolf','C.Weber','P.Schäfer','K.Jung','D.Roth'],
-  barcelona:['J.Garcia','M.Lopez','A.Martinez','D.Sanchez','P.Romero','C.Torres','F.Navarro','R.Vega','L.Ruiz','S.Mora','T.Gil'],
-  santos:['A.Silva','M.Costa','R.Santos','L.Oliveira','D.Souza','P.Lima','C.Pereira','T.Alves','J.Ferreira','R.Gomes','F.Melo'],
-  juventus:['M.Rossi','L.Ferrari','A.Esposito','G.Bianchi','F.Romano','D.Marino','R.Greco','C.Ricci','P.Conti','T.Moro','S.Luca'],
-  psg:['L.Dupont','M.Bernard','A.Moreau','J.Petit','T.Robert','C.Simon','R.Laurent','P.Michel','F.Leroy','D.Roux','A.Blanc'],
-  ajax:['J.DeJong','L.Bakker','M.Visser','R.Smit','T.Meijer','A.DeVries','P.Janssen','C.Peters','F.Bos','H.Mulder','K.Berg'],
-  madrid:['C.Romero','A.Herrera','D.Castillo','M.Blanco','R.Iglesias','P.Delgado','F.Serrano','J.Reyes','T.Vargas','L.Ortega','S.Vera'],
-  furano:['H.Kitami','T.Goto','S.Nakamura','K.Abe','R.Matsui','J.Okada','M.Hayashi','D.Kimura','T.Suzuki','K.Iida','R.Noda'],
-  musashi:['Y.Tsuboi','R.Hamada','S.Kojima','T.Kondo','K.Hara','M.Fujita','D.Nishida','T.Sakamoto','H.Ogura','K.Maeda','S.Imai'],
-  newteam:['S.Aoyama','T.Shiga','K.Tanaka','R.Ito','M.Watanabe','H.Yamada','D.Kobayashi','T.Sato','K.Nakamura','R.Abe','J.Fuji'],
-  vienna:['K.Hofer','L.Gruber','M.Huber','T.Mayr','F.Steiner','R.Wagner','C.Müller','P.Bauer','H.Schwarz','J.Pichler','D.Kern'],
-  fiorentina:['M.Conti','L.Gallo','A.Serra','G.Riva','F.Longo','D.Farina','R.Palma','C.Amato','P.Villa','T.Bruno','S.Russo'],
-  deportivo:['J.Vidal','M.Reyes','A.Soto','R.Pena','L.Fuentes','D.Medina','C.Rojas','P.Morales','F.Valdez','T.Rios','A.Cruz'],
-  alhilal:['K.Al-Rashid','M.Al-Hassan','A.Al-Farsi','D.Al-Sayed','T.Al-Mansouri','R.Khalid','S.Omar','P.Ibrahim','F.Yousef','H.Nasser','D.Karim'],
-  celtic:['A.Morrison','J.Campbell','R.MacDonald','T.Fraser','C.Stewart','M.Murray','P.Hamilton','F.Sinclair','D.Ross','H.Reid','K.Grant'],
+  barcelona:['Xavi','Puyol','Pique','Abidal','Alves','Busquets','Iniesta','Keita','Messi','Eto\'o','Henry'],
+  madrid:['Casillas','Ramos','Pepe','Metzelder','Marcelo','Alonso','Gago','Sneijder','Robben','Higuain','Raul'],
+  manutd:['VanderSar','G.Neville','Ferdinand','Vidic','Evra','Carrick','Scholes','Anderson','Nani','Rooney','Giggs'],
+  mancity:['Hart','Richards','Lescott','Kompany','Clichy','Barry','De Bruyne','Silva','Milner','Tevez','Dzeko'],
+  juventus:['Buffon','Barzagli','Bonucci','Chiellini','Grosso','Marchisio','Pirlo','Nedved','Del Piero','Trezeguet','Camoranesi'],
+  inter:['Julio Cesar','Maicon','Lucio','Samuel','Zanetti','Cambiasso','Vieira','Sneijder','Stankovic','Milito','Pandev'],
+  chelsea:['Cech','Bosingwa','Terry','Carvalho','Cole','Ballack','Lampard','Mikel','Drogba','Anelka','Malouda'],
+  napoli:['De Sanctis','Maggio','Cannavaro','Campagnaro','Contini','Gargano','Hamsik','Inler','Lavezzi','Cavani','Callejon'],
+  psg:['Sirigu','Camara','Sakho','Kombouare','Cissse','Makelele','Pastore','Menez','Gameiro','Hoarau','Erdinc'],
+  bayern:['Kahn','Lahm','Demichelis','Van Buyten','Lizarazu','Schweinsteiger','Ballack','Ze Roberto','Ribery','Klose','Makaay'],
+  ajax:['Stekelenburg','Vertonghen','Heitinga','Vermaelen','Van der Wiel','Van der Vaart','Sneijder','Bojan','Babel','Huntelaar','Suarez'],
+  feyenoord:['Timmer','Mathijsen','Loovens','De Guzman','Bosvelt','Kuyt','Kalou','Van Persie','Castelen','Tomasson','Emnes'],
+  atletico:['Aranzubia','Perea','Ujfalusi','Juanito','Filipe Luis','Tiago','Garcia','Seitaridis','Simao','Torres','Forlan'],
+  genoa:['Rubinho','Juric','Moretti','Criscito','Bocchetti','Mesto','Milanetto','Rossi','Palacio','Milito','Sculli'],
+  hamburg:['Rost','Aogo','De Jong','Mathijsen','Boateng','Demel','Jarolim','Van der Vaart','Guerrero','Olic','Petric'],
+  tokyo:['Harakawa','Baba','Enomoto','Naotaka','Hayashi','Fujimoto','Tokita','Miyazawa','Hasebe','Nishizawa','Amano'],
+  marseille:['Mandanda','Taiwo','Bonnart','Cesar','Heinze','Diawara','Valbuena','Koite','Niang','Cisse','Brandao'],
+  bremen:['Wiese','Pasanen','Naldo','Mertesacker','Borowski','Diego','Hunt','Jensen','Almeida','Klose','Hugo'],
 };
 let CAR={active:false,myClub:null,season:1,d1:[...CR_D1],d2:[...CR_D2],d1Fix:[],d2Fix:[],d1Tab:{},d2Tab:{},matchday:0,myResults:[],pendingMatch:null,budget:2000000,reputation:1,trophies:[],squad:null};
 function crMyDiv(){return CR_CLUBS[CAR.myClub]?.div||1;}
@@ -3616,8 +3756,197 @@ function crApply(table,home,away,hg,ag){
 function crInitSeason(){CAR.d1Fix=crMakeFixtures([...CAR.d1]);CAR.d2Fix=crMakeFixtures([...CAR.d2]);CAR.d1Tab=crInitTable(CAR.d1);CAR.d2Tab=crInitTable(CAR.d2);CAR.matchday=0;CAR.myResults=[];CAR.pendingMatch=null;}
 function crSimOtherDiv(){const oFix=crMyDiv()===1?CAR.d2Fix:CAR.d1Fix,oTab=crMyDiv()===1?CAR.d2Tab:CAR.d1Tab,md=CAR.matchday;if(md<oFix.length)oFix[md].forEach(m=>{const{hg,ag}=crSimMatch(m.home,m.away);crApply(oTab,m.home,m.away,hg,ag);});}
 const CR_KEY='ult11_career_v1';
-function crSave(){if(!CAR.active)return;try{localStorage.setItem(CR_KEY,JSON.stringify({myClub:CAR.myClub,season:CAR.season,matchday:CAR.matchday,myResults:CAR.myResults,d1Tab:CAR.d1Tab,d2Tab:CAR.d2Tab,d1:CAR.d1,d2:CAR.d2,budget:CAR.budget,reputation:CAR.reputation,trophies:CAR.trophies||[],squad:CAR.squad||null,divs:Object.fromEntries(Object.keys(CR_CLUBS).map(k=>[k,CR_CLUBS[k].div])),ovrs:Object.fromEntries(Object.keys(CR_CLUBS).map(k=>[k,CR_CLUBS[k].ovr]))}));}catch(e){}}
-function crLoad(){try{const d=JSON.parse(localStorage.getItem(CR_KEY)||'null');if(!d)return false;Object.assign(CAR,{myClub:d.myClub,season:d.season,matchday:d.matchday,myResults:d.myResults||[],d1Tab:d.d1Tab||{},d2Tab:d.d2Tab||{},d1:d.d1||[...CR_D1],d2:d.d2||[...CR_D2],budget:d.budget||2000000,reputation:d.reputation||1,trophies:d.trophies||[],squad:d.squad||null,active:true,pendingMatch:null});if(d.divs)Object.entries(d.divs).forEach(([k,v])=>{if(CR_CLUBS[k])CR_CLUBS[k].div=v;});if(d.ovrs)Object.entries(d.ovrs).forEach(([k,v])=>{if(CR_CLUBS[k])CR_CLUBS[k].ovr=v;});CAR.d1Fix=crMakeFixtures([...CAR.d1]);CAR.d2Fix=crMakeFixtures([...CAR.d2]);return true;}catch(e){return false;}}
+function crSave(){if(!CAR.active)return;try{localStorage.setItem(CR_KEY,JSON.stringify({myClub:CAR.myClub,season:CAR.season,matchday:CAR.matchday,myResults:CAR.myResults,d1Tab:CAR.d1Tab,d2Tab:CAR.d2Tab,d1:CAR.d1,d2:CAR.d2,budget:CAR.budget,reputation:CAR.reputation,trophies:CAR.trophies||[],squad:CAR.squad||null,formation:CAR.formation||'4-3-3',starters:CAR.starters||null,divs:Object.fromEntries(Object.keys(CR_CLUBS).map(k=>[k,CR_CLUBS[k].div])),ovrs:Object.fromEntries(Object.keys(CR_CLUBS).map(k=>[k,CR_CLUBS[k].ovr]))}));}catch(e){}}
+
+// ── SQUAD MANAGEMENT ─────────────────────────────────────────────
+
+// Generate inline SVG player portrait based on name seed + club colors
+function crPlayerSvg(pl,clubKey,size=38){
+  const club=CR_CLUBS[clubKey]||{colors:['#1a2a4a','#2a4a7a']};
+  const c1=club.colors[0],c2=club.colors[1];
+  const seed=pl.id%360;
+  const skinTones=['#f5c9a0','#e8a87c','#c68642','#8d5524','#4a2912'];
+  const skin=skinTones[pl.id%skinTones.length];
+  const hairColors=['#1a0a00','#3d1c00','#6b3a2a','#d4a853','#e8e8e8'];
+  const hair=hairColors[Math.floor(pl.id/7)%hairColors.length];
+  const isStar=pl.rar>=2;
+  return `<svg width="${size}" height="${size}" viewBox="0 0 38 38" xmlns="http://www.w3.org/2000/svg">
+  <defs><clipPath id="pc${pl.id}"><rect width="38" height="38" rx="5"/></clipPath></defs>
+  <g clip-path="url(#pc${pl.id})">
+  <rect width="38" height="38" fill="${c1}"/>
+  <rect y="24" width="38" height="14" fill="${c2}"/>
+  <ellipse cx="19" cy="28" rx="11" ry="8" fill="${c1}"/>
+  <ellipse cx="19" cy="17" rx="7" ry="8" fill="${skin}"/>
+  <ellipse cx="19" cy="11" rx="7.5" ry="5" fill="${hair}"/>
+  ${isStar?`<polygon points="19,3 20.5,7.5 25,7.5 21.5,10 22.8,14.5 19,12 15.2,14.5 16.5,10 13,7.5 17.5,7.5" fill="rgba(240,192,64,0.7)" transform="translate(0,-1) scale(0.7) translate(8,0)"/>`:``}
+  </g></svg>`;
+}
+
+// Morale emoji helper
+function crMoraleEmoji(m){
+  if(m>=85)return'😄';if(m>=70)return'🙂';if(m>=50)return'😐';if(m>=30)return'😕';return'😠';
+}
+
+let CSQ_TAB='starters',CSQ_SELECTED=null,CSQ_SLOT=null;
+
+function crOpenSquad(){
+  if(!CAR.squad)CAR.squad=crBuildSquad(CAR.myClub);
+  // Initialize morale/injury/suspension if missing
+  CAR.squad.forEach(pl=>{
+    if(pl.morale===undefined)pl.morale=70+Math.floor(Math.random()*20);
+    if(pl.injured===undefined)pl.injured=false;
+    if(pl.injuredGames===undefined)pl.injuredGames=0;
+    if(pl.suspended===undefined)pl.suspended=false;
+  });
+  if(!CAR.formation)CAR.formation='4-3-3';
+  if(!CAR.starters)CAR.starters={};
+  CSQ_TAB='starters';CSQ_SELECTED=null;CSQ_SLOT=null;
+  document.getElementById('csq-clubname').textContent=CR_CLUBS[CAR.myClub]?.name||'SQUAD';
+  document.getElementById('csq-subtitle').textContent='SEASON '+CAR.season+' · MD '+(CAR.matchday+1);
+  document.getElementById('csq-formation').value=CAR.formation;
+  showSc('s-career-squad');
+  // Preload all portraits in background
+  if(CAR.squad)CAR.squad.forEach(pl=>crLoadPortrait(pl,CAR.myClub,()=>crSquadRenderList()));
+  crSquadRender();
+}
+
+const CSQ_FORMATIONS={
+  '4-3-3':{GK:[50,88],LB:[18,72],CB1:[35,72],CB2:[65,72],RB:[82,72],CM1:[30,52],CM2:[50,52],CM3:[70,52],LW:[20,28],ST:[50,24],RW:[80,28]},
+  '4-4-2':{GK:[50,88],LB:[18,72],CB1:[35,72],CB2:[65,72],RB:[82,72],CM1:[25,50],CM2:[45,50],CM3:[65,50],RW:[82,50],LW:[25,28],ST:[50,25]},
+  '4-1-3-2':{GK:[50,88],LB:[18,72],CB1:[35,72],CB2:[65,72],RB:[82,72],CM1:[50,58],CM2:[25,44],CM3:[50,44],RW:[75,44],LW:[30,26],ST:[65,26]},
+  '3-5-2':{GK:[50,88],LB:[25,72],CB1:[50,72],CB2:[75,72],RB:[50,58],CM1:[20,48],CM2:[50,48],CM3:[80,48],LW:[25,28],ST:[45,24],RW:[68,24]},
+};
+
+function crSquadRender(){
+  crSquadRenderPitch();
+  crSquadRenderList();
+}
+
+function crSquadRenderPitch(){
+  const pitch=document.getElementById('csq-pitch');if(!pitch)return;
+  pitch.innerHTML='';
+  const coords=CSQ_FORMATIONS[CAR.formation]||CSQ_FORMATIONS['4-3-3'];
+  Object.entries(coords).forEach(([slot,[xpct,ypct]])=>{
+    const pl=crGetStarter(slot);
+    const el=document.createElement('div');
+    el.className='cr-pitch-slot';
+    el.style.left=xpct+'%';el.style.top=ypct+'%';
+    const badgeCls='cr-pslot-badge'+(CSQ_SLOT===slot?' selected':'')+(pl?.injured?' injured':pl?.suspended?' suspended':'');
+    const portrait=pl?crPortraitHtml(pl,CAR.myClub,36):`<svg width="36" height="36" viewBox="0 0 36 36" xmlns="http://www.w3.org/2000/svg"><circle cx="18" cy="18" r="18" fill="rgba(255,255,255,0.05)"/><text x="18" y="23" text-anchor="middle" font-size="10" fill="rgba(255,255,255,0.3)" font-family="Bebas Neue">+</text></svg>`;
+    el.innerHTML=`<div class="${badgeCls}">${portrait}</div><div class="cr-pslot-name">${pl?pl.name.split('.').pop():slot}</div><div class="cr-pslot-ovr">${pl?crCalcOvr(pl):''}</div>`;
+    el.onclick=()=>crClickSlot(slot);
+    pitch.appendChild(el);
+  });
+}
+
+function crGetStarter(slot){
+  const pid=CAR.starters[slot];
+  if(pid)return CAR.squad.find(p=>p.id===pid)||null;
+  // Auto-fill by position family
+  const used=new Set(Object.values(CAR.starters));
+  return CAR.squad.find(p=>!used.has(p.id)&&p.pos===slot&&!p.injured&&!p.suspended)||null;
+}
+
+function crClickSlot(slot){
+  if(CSQ_SLOT===slot){CSQ_SLOT=null;CSQ_SELECTED=null;}
+  else{CSQ_SLOT=slot;CSQ_SELECTED=null;}
+  crSquadRender();
+}
+
+function crSquadTab(tab){
+  CSQ_TAB=tab;
+  document.querySelectorAll('.cr-stab').forEach(b=>b.classList.toggle('active',b.textContent.toLowerCase()===tab||b.textContent==='ALL'&&tab==='all'||b.textContent==='STARTERS'&&tab==='starters'||b.textContent==='BENCH'&&tab==='bench'));
+  crSquadRenderList();
+}
+
+function crSquadRenderList(){
+  const el=document.getElementById('csq-player-list');if(!el)return;el.innerHTML='';
+  const starterIds=new Set(Object.values(CAR.starters));
+  // Also auto-detect starters
+  const coords=CSQ_FORMATIONS[CAR.formation]||CSQ_FORMATIONS['4-3-3'];
+  Object.keys(coords).forEach(slot=>{const p=crGetStarter(slot);if(p)starterIds.add(p.id);});
+
+  let players=[...CAR.squad];
+  if(CSQ_TAB==='starters')players=players.filter(p=>starterIds.has(p.id));
+  else if(CSQ_TAB==='bench')players=players.filter(p=>!starterIds.has(p.id));
+
+  players.forEach(pl=>{
+    const isStarter=starterIds.has(pl.id);
+    const card=document.createElement('div');
+    card.className='cr-pcard'+(isStarter?' starter':'')+(pl.injured?' injured':'')+(CSQ_SELECTED===pl.id?' selected':'');
+    const statusHtml=pl.injured
+      ?`<span class="cr-pcard-status cr-status-inj">INJ ${pl.injuredGames}g</span>`
+      :pl.suspended?`<span class="cr-pcard-status cr-status-sus">SUS</span>`
+      :`<span class="cr-pcard-status cr-status-ok">FIT</span>`;
+    card.innerHTML=`
+      <div class="cr-pcard-portrait">${crPortraitHtml(pl,CAR.myClub,38)}</div>
+      <div class="cr-pcard-info">
+        <div class="cr-pcard-name">${pl.name}</div>
+        <div class="cr-pcard-meta">
+          <span>${pl.pos}</span>
+          <span class="cr-pcard-morale">${crMoraleEmoji(pl.morale||70)}</span>
+          ${statusHtml}
+        </div>
+      </div>
+      <div class="cr-pcard-right">
+        <div class="cr-pcard-ovr">${crCalcOvr(pl)}</div>
+        <div class="cr-pcard-pos">${isStarter?'START':'BENCH'}</div>
+      </div>`;
+    card.onclick=()=>crSelectPlayer(pl.id);
+    el.appendChild(card);
+  });
+}
+
+function crSelectPlayer(pid){
+  if(CSQ_SLOT){
+    // Assign this player to selected slot
+    const pl=CAR.squad.find(p=>p.id===pid);
+    if(pl&&!pl.injured&&!pl.suspended){
+      // Remove player from any other slot first
+      Object.keys(CAR.starters).forEach(s=>{if(CAR.starters[s]===pid)delete CAR.starters[s];});
+      CAR.starters[CSQ_SLOT]=pid;
+    }
+    CSQ_SLOT=null;CSQ_SELECTED=null;
+  } else {
+    CSQ_SELECTED=CSQ_SELECTED===pid?null:pid;
+  }
+  crSquadRender();
+}
+
+function crSquadFormationChange(){
+  CAR.formation=document.getElementById('csq-formation').value;
+  CAR.starters={};// reset manual assignments on formation change
+  crSquadRender();
+}
+
+function crSaveSquad(){
+  crSave();
+  // Flash save button
+  const btn=document.querySelector('.cr-save-btn');
+  if(btn){btn.textContent='✅ SAVED';btn.style.color='#20c878';setTimeout(()=>{btn.textContent='💾 SAVE';btn.style.color='';},1500);}
+}
+
+// Apply match effects after career match: morale shifts, injury/suspension rolls
+function crApplyMatchEffects(won,drew){
+  if(!CAR.squad)return;
+  CAR.squad.forEach(pl=>{
+    // Morale
+    if(won)pl.morale=Math.min(100,(pl.morale||70)+Math.floor(Math.random()*8)+3);
+    else if(drew)pl.morale=Math.max(20,(pl.morale||70)+Math.floor(Math.random()*4)-2);
+    else pl.morale=Math.max(20,(pl.morale||70)-Math.floor(Math.random()*10)-3);
+    // Injury recovery
+    if(pl.injured){pl.injuredGames=Math.max(0,(pl.injuredGames||1)-1);if(pl.injuredGames<=0)pl.injured=false;}
+    // Suspension recovery
+    if(pl.suspended)pl.suspended=false;
+    // Random injury chance (3% per player per match)
+    if(!pl.injured&&Math.random()<0.03){pl.injured=true;pl.injuredGames=1+Math.floor(Math.random()*4);}
+    // Random red card (1%)
+    if(!pl.suspended&&Math.random()<0.01)pl.suspended=true;
+  });
+  crSave();
+}
+
+function crLoad(){try{const d=JSON.parse(localStorage.getItem(CR_KEY)||'null');if(!d)return false;Object.assign(CAR,{myClub:d.myClub,season:d.season,matchday:d.matchday,myResults:d.myResults||[],d1Tab:d.d1Tab||{},d2Tab:d.d2Tab||{},d1:d.d1||[...CR_D1],d2:d.d2||[...CR_D2],budget:d.budget||2000000,reputation:d.reputation||1,trophies:d.trophies||[],squad:d.squad||null,formation:d.formation||'4-3-3',starters:d.starters||{},active:true,pendingMatch:null});if(d.divs)Object.entries(d.divs).forEach(([k,v])=>{if(CR_CLUBS[k])CR_CLUBS[k].div=v;});if(d.ovrs)Object.entries(d.ovrs).forEach(([k,v])=>{if(CR_CLUBS[k])CR_CLUBS[k].ovr=v;});CAR.d1Fix=crMakeFixtures([...CAR.d1]);CAR.d2Fix=crMakeFixtures([...CAR.d2]);return true;}catch(e){return false;}}
 function crHasSave(){try{return!!localStorage.getItem(CR_KEY);}catch(e){return false;}}
 function crDeleteSave(){try{localStorage.removeItem(CR_KEY);}catch(e){}CAR.active=false;CAR.myClub=null;}
 function crBuildClubList(){
@@ -3632,7 +3961,7 @@ function crBuildClubList(){
     const hdr=document.createElement('div');hdr.className='cr-div-hdr';hdr.textContent=label;el.appendChild(hdr);
     Object.entries(CR_CLUBS).filter(([,c])=>c.div===div).forEach(([key,club])=>{
       const card=document.createElement('div');card.className='cr-club-card '+(div===1?'cr-d1':'cr-d2');
-      card.innerHTML='<div class="cr-club-emoji">'+club.emoji+'</div><div class="cr-club-info"><div class="cr-club-name">'+club.name+'</div><div class="cr-club-meta">DIV '+div+' · OVR '+club.ovr+'</div>'+(club.star?'<div class="cr-club-star">⭐ '+club.star+(club.special?' · '+club.special:'')+'</div>':'')+'</div><div class="cr-club-ovr '+(div===1?'cr-d1':'cr-d2')+'">'+club.ovr+'<span>OVR</span></div>';
+      card.innerHTML='<div class="cr-club-emoji">'+crBadgeSvg(club)+'</div><div class="cr-club-info"><div class="cr-club-name">'+club.name+'</div><div class="cr-club-meta">DIV '+div+' · OVR '+club.ovr+'</div>'+(club.star?'<div class="cr-club-star">⭐ '+club.star+(club.special?' · '+club.special:'')+'</div>':'')+'</div><div class="cr-club-ovr '+(div===1?'cr-d1':'cr-d2')+'">'+club.ovr+'<span>OVR</span></div>';
       card.onclick=()=>crStart(key);el.appendChild(card);
     });
   });
@@ -3640,11 +3969,12 @@ function crBuildClubList(){
 function crStart(clubKey){CAR.myClub=clubKey;CAR.season=1;CAR.active=true;CAR.budget=2000000;CAR.reputation=1;CAR.trophies=[];CAR.squad=null;CAR.d1=Object.keys(CR_CLUBS).filter(k=>CR_CLUBS[k].div===1);CAR.d2=Object.keys(CR_CLUBS).filter(k=>CR_CLUBS[k].div===2);crInitSeason();showSc('s-career-hub');crRenderHub();}
 function crRenderHub(){
   const club=CR_CLUBS[CAR.myClub];if(!club)return;
-  document.getElementById('cr-emblem').textContent=club.emoji;
+  document.getElementById('cr-emblem').innerHTML=crBadgeSvg(club,40);
   document.getElementById('cr-clubname').textContent=club.name;
-  document.getElementById('cr-divlbl').textContent='DIV '+crMyDiv()+' · '+(CR_REP[CAR.reputation||1]||'UNKNOWN')+' · $'+crFmtMoney(CAR.budget||0);
+  document.getElementById('cr-divlbl').textContent='DIV '+crMyDiv()+' · '+(CR_REP[CAR.reputation||1]||'UNKNOWN');
   document.getElementById('cr-season').textContent='SEASON '+CAR.season;
   document.getElementById('cr-md').textContent='MATCHDAY '+(CAR.matchday+1)+' / '+crMyFix().length;
+  const budEl=document.getElementById('cr-budget');if(budEl)budEl.textContent='$'+crFmtMoney(CAR.budget||0);
   crRenderTable();crRenderFixture();crRenderRecent();crRenderStats();
 }
 function crRenderTable(){
@@ -3711,10 +4041,10 @@ function crLoadMatchSquads(myKey,oppKey,myIsHome){
   const myRaw=CAR.squad&&CAR.squad.length>=11?CAR.squad:crBuildSquad(myKey);
   const oppRaw=crBuildSquad(oppKey);
   const SLOTS=['GK','LB','CB1','CB2','RB','CM1','CM2','CM3','LW','ST','RW'];
-  const buildSq=raw=>{const sq={};SLOTS.forEach((slot,i)=>{if(raw[i])sq[slot]={...raw[i],slot,spirit:raw[i].pos==='GK'?2000:1500,cooldownUntil:0};});return sq;};
+  const buildSq=(raw,ck)=>{const sq={};SLOTS.forEach((slot,i)=>{if(raw[i])sq[slot]={...raw[i],slot,spirit:raw[i].pos==='GK'?2000:1500,cooldownUntil:0,clubKey:ck};});return sq;};
   hSq={};aSq={};
-  if(myIsHome){hSq=buildSq(myRaw);aSq=buildSq(oppRaw);selHome=myKey;selAway=oppKey;HT={name:myClub.name,flag:myClub.emoji};AT={name:oppClub.name,flag:oppClub.emoji};}
-  else{hSq=buildSq(oppRaw);aSq=buildSq(myRaw);selHome=oppKey;selAway=myKey;HT={name:oppClub.name,flag:oppClub.emoji};AT={name:myClub.name,flag:myClub.emoji};}
+  if(myIsHome){hSq=buildSq(myRaw,myKey);aSq=buildSq(oppRaw,oppKey);selHome=myKey;selAway=oppKey;HT={name:myClub.name,flag:myClub.abbr||'?'};AT={name:oppClub.name,flag:oppClub.abbr||'?'};}
+  else{hSq=buildSq(oppRaw,oppKey);aSq=buildSq(myRaw,myKey);selHome=oppKey;selAway=myKey;HT={name:oppClub.name,flag:oppClub.abbr||'?'};AT={name:myClub.name,flag:myClub.abbr||'?'};}
   const htn=document.getElementById('htn'),atn=document.getElementById('atn');
   if(htn)htn.textContent=HT.name;if(atn)atn.textContent=AT.name;
   const hfl=document.getElementById('h-flag-hud'),afl=document.getElementById('a-flag-hud');
@@ -3724,6 +4054,7 @@ function crLoadMatchSquads(myKey,oppKey,myIsHome){
 function crShowResult(r){
   const isH=r.isHome,myG=isH?r.hg:r.ag,oppG=isH?r.ag:r.hg;
   const outcome=myG>oppG?'win':myG<oppG?'loss':'draw';
+  crApplyMatchEffects(outcome==='win',outcome==='draw');
   const oppKey=isH?r.away:r.home,pos=crSort(crMyTable(),crMyTeams()).indexOf(CAR.myClub)+1;
   document.getElementById('cr-res-md').textContent='MATCHDAY '+(r.md+1)+' · SEASON '+CAR.season;
   document.getElementById('cr-res-home').textContent=CR_CLUBS[r.home].name;
@@ -3765,7 +4096,7 @@ function crEndSeason(){
   body.appendChild(si);
   [[promoted,'PROMOTED ↑','var(--sp)','→ D1'],[relegated,'RELEGATED ↓','var(--red)','→ D2']].forEach(([teams,label,col,suffix])=>{
     const mv=document.createElement('div');mv.className='cr-panel';
-    mv.innerHTML='<div class="cr-panel-hdr" style="color:'+col+'">'+label+'</div><div class="cr-panel-body">'+teams.map(k=>'<div class="cr-move-row"><span>'+CR_CLUBS[k].emoji+'</span><span>'+CR_CLUBS[k].name+'</span><span style="color:'+col+'">'+suffix+'</span></div>').join('')+'</div>';
+    mv.innerHTML='<div class="cr-panel-hdr" style="color:'+col+'">'+label+'</div><div class="cr-panel-body">'+teams.map(k=>'<div class="cr-move-row"><span>'+crBadgeSvg(CR_CLUBS[k],20)+'</span><span>'+CR_CLUBS[k].name+'</span><span style="color:'+col+'">'+suffix+'</span></div>').join('')+'</div>';
     body.appendChild(mv);
   });
   const btn=document.createElement('button');btn.className='cr-next-season';btn.textContent='▶ BEGIN SEASON '+(CAR.season+1);

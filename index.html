@@ -1,4 +1,6 @@
 <!DOCTYPE html>
+<!-- ULTIMATE ELEVEN - BETA VERSION -->
+<!-- Captain Tsubasa Football Strategy Game -->
 <html lang="en">
 <head>
 <meta charset="UTF-8">
@@ -7,9 +9,197 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="theme-color" content="#06080e">
-<title>Ultimate Eleven</title>
+<title>Ultimate Eleven - Football Strategy Game | Beta</title>
+<meta name="description" content="Ultimate Eleven - A Captain Tsubasa inspired football strategy game with 11 vs 11 gameplay">
 <link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Rajdhani:wght@600;700&family=Orbitron:wght@400;700&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="style.css">
+<link rel="stylesheet" href="style.css?v=4">
+<style>
+/* CAREER MODE - inline to bypass cache */
+#s-career-clubs{background:radial-gradient(ellipse 80% 50% at 50% 0%,rgba(30,114,220,.08),transparent 60%),#06080e;overflow:hidden;}
+#s-career-hub{background:#06080e;}
+#s-career-season,#s-career-result{background:#06080e;}
+.cr-topbar{flex-shrink:0;display:flex!important;align-items:center;gap:10px;padding:10px 16px;background:linear-gradient(180deg,#0a1628,#071020);border-bottom:1px solid rgba(255,255,255,.07);}
+.cr-title{font-family:'Bebas Neue',sans-serif;font-size:clamp(16px,2.4vw,22px);letter-spacing:.12em;color:#f0c040;}
+.cr-sub{font-family:'Orbitron',sans-serif;font-size:7px;letter-spacing:.2em;color:#48586a;margin-left:2px;}
+.cr-topbar .back-btn{margin-left:auto;}
+.cr-clubs-scroll{flex:1;overflow-y:auto;padding:14px;}
+.cr-save-row{display:flex;gap:8px;margin-bottom:12px;}
+.cr-continue-btn{flex:1;padding:13px;background:rgba(240,192,64,.1);border:1.5px solid rgba(240,192,64,.35);border-radius:9px;color:#f0c040;font-family:'Bebas Neue',sans-serif;font-size:clamp(14px,1.8vw,18px);letter-spacing:.12em;cursor:pointer;}
+.cr-newgame-btn{padding:13px 14px;background:rgba(220,32,32,.06);border:1px solid rgba(220,32,32,.22);border-radius:9px;color:rgba(220,32,32,.65);font-family:'Orbitron',sans-serif;font-size:7px;letter-spacing:.15em;cursor:pointer;}
+.cr-div-hdr{font-family:'Bebas Neue',sans-serif;font-size:clamp(13px,1.8vw,17px);letter-spacing:.1em;color:rgba(255,255,255,.25);padding:8px 0 6px;border-top:1px solid rgba(255,255,255,.06);margin-top:4px;}
+.cr-club-card{display:flex!important;align-items:center;gap:12px;padding:14px 16px;background:rgba(7,14,28,.94);border:1px solid rgba(255,255,255,.1);border-radius:9px;cursor:pointer;margin-bottom:9px;position:relative;min-height:64px;}
+.cr-club-card:hover{border-color:rgba(255,255,255,.22);background:rgba(15,25,50,.97);}
+.cr-club-card::before{content:'';position:absolute;left:0;top:0;bottom:0;width:3px;border-radius:9px 0 0 9px;background:transparent;transition:.15s;}
+.cr-club-card.cr-d1:hover::before{background:#f0c040;}
+.cr-club-card.cr-d2:hover::before{background:#44c8ff;}
+.cr-club-emoji{width:44px;height:44px;border-radius:7px;display:flex;align-items:center;justify-content:center;flex-shrink:0;overflow:hidden;}
+.cr-strip-emblem{width:40px;height:40px;border-radius:7px;display:flex;align-items:center;justify-content:center;flex-shrink:0;overflow:hidden;}
+.cr-fix-emoji{display:flex;align-items:center;justify-content:center;}
+.cr-club-info{flex:1;min-width:0;}
+.cr-club-name{font-family:'Bebas Neue',sans-serif;font-size:clamp(15px,2vw,20px);letter-spacing:.07em;line-height:1;color:#eceff4;}
+.cr-club-meta{font-family:'Orbitron',sans-serif;font-size:6px;letter-spacing:.16em;color:#48586a;margin-top:2px;}
+.cr-club-star{font-family:'Orbitron',sans-serif;font-size:6px;letter-spacing:.1em;color:#f0c040;margin-top:3px;}
+.cr-club-ovr{font-family:'Orbitron',sans-serif;font-size:clamp(16px,2.2vw,24px);font-weight:900;flex-shrink:0;text-align:center;display:flex;flex-direction:column;align-items:center;}
+.cr-club-ovr span{font-size:5px;letter-spacing:.14em;color:#48586a;margin-top:1px;}
+.cr-club-ovr.cr-d1{color:#f0c040;}
+.cr-club-ovr.cr-d2{color:#44c8ff;}
+/* Hub */
+.cr-strip{flex-shrink:0;display:flex;align-items:center;gap:12px;padding:10px 14px;background:linear-gradient(135deg,rgba(30,114,220,.1),rgba(7,14,28,0));border-bottom:1px solid rgba(255,255,255,.06);}
+.cr-strip-emblem{width:40px;height:40px;border-radius:7px;display:flex;align-items:center;justify-content:center;font-size:22px;background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.08);flex-shrink:0;}
+.cr-strip-info{flex:1;}
+.cr-strip-name{font-family:'Bebas Neue',sans-serif;font-size:clamp(16px,2.2vw,22px);letter-spacing:.08em;line-height:1;}
+.cr-strip-meta{font-family:'Orbitron',sans-serif;font-size:6px;letter-spacing:.16em;color:#48586a;margin-top:2px;}
+.cr-strip-right{text-align:right;flex-shrink:0;}
+.cr-strip-season{font-family:'Bebas Neue',sans-serif;font-size:clamp(14px,1.8vw,18px);letter-spacing:.1em;color:#f0c040;}
+.cr-strip-md{font-family:'Orbitron',sans-serif;font-size:6px;letter-spacing:.13em;color:#48586a;}
+.cr-hub-body{flex:1;display:grid;grid-template-columns:1fr 1fr;gap:10px;padding:10px;overflow:hidden;min-height:0;}
+.cr-col{display:flex;flex-direction:column;gap:10px;overflow:hidden;min-height:0;}
+.cr-panel{background:rgba(7,14,28,.94);border:1px solid rgba(255,255,255,.07);border-radius:10px;overflow:hidden;display:flex;flex-direction:column;}
+.cr-panel-hdr{padding:7px 12px;background:rgba(255,255,255,.03);border-bottom:1px solid rgba(255,255,255,.06);font-family:'Orbitron',sans-serif;font-size:7px;letter-spacing:.2em;color:#48586a;flex-shrink:0;display:flex;justify-content:space-between;}
+.cr-panel-hdr span{color:#f0c040;}
+.cr-panel-body{padding:8px 10px;flex:1;overflow-y:auto;min-height:0;}
+.cr-stat-lbl{font-family:'Orbitron',sans-serif;font-size:6px;letter-spacing:.16em;color:#48586a;margin-bottom:3px;}
+.cr-position{font-family:'Bebas Neue',sans-serif;font-size:clamp(26px,4vw,42px);letter-spacing:.06em;color:#f0c040;line-height:1;}
+.cr-pts-line{font-family:'Orbitron',sans-serif;font-size:6px;letter-spacing:.14em;color:#48586a;margin-top:3px;}
+/* Result / Season */
+.cr-res-bg{position:absolute;inset:0;background:radial-gradient(ellipse 60% 40% at 50% 30%,rgba(30,114,220,.12),transparent 70%);}
+.cr-res-content{position:relative;display:flex;flex-direction:column;align-items:center;justify-content:center;flex:1;gap:16px;padding:20px;}
+.cr-res-md{font-family:'Orbitron',sans-serif;font-size:7px;letter-spacing:.2em;color:#48586a;}
+.cr-res-box{display:flex;align-items:center;gap:20px;padding:16px 24px;background:rgba(7,14,28,.94);border:1px solid rgba(255,255,255,.08);border-radius:12px;}
+.cr-res-team{font-family:'Bebas Neue',sans-serif;font-size:clamp(16px,2.5vw,24px);letter-spacing:.08em;min-width:120px;text-align:center;}
+.cr-res-score{font-family:'Bebas Neue',sans-serif;font-size:clamp(36px,6vw,60px);letter-spacing:.04em;min-width:120px;text-align:center;}
+.cr-res-score.win{color:#20c878;}.cr-res-score.loss{color:#dc2020;}.cr-res-score.draw{color:#f0c040;}
+.cr-res-outcome{font-family:'Bebas Neue',sans-serif;font-size:clamp(24px,4vw,40px);letter-spacing:.1em;}
+.cr-res-outcome.win{color:#20c878;}.cr-res-outcome.loss{color:#dc2020;}.cr-res-outcome.draw{color:#f0c040;}
+.cr-res-detail{font-family:'Orbitron',sans-serif;font-size:7px;letter-spacing:.14em;color:#48586a;}
+.cr-se-title{font-family:'Bebas Neue',sans-serif;font-size:clamp(30px,5vw,52px);letter-spacing:.1em;color:#f0c040;}
+.cr-se-sub{font-family:'Orbitron',sans-serif;font-size:8px;letter-spacing:.2em;color:#48586a;}
+.cr-season-body{flex:1;overflow-y:auto;padding:14px;display:flex;flex-direction:column;gap:10px;}
+.cr-next-season{padding:clamp(11px,1.7vh,15px);border-radius:8px;background:linear-gradient(135deg,#f0c040,#7a5a08);border:none;color:#04060c;font-family:'Bebas Neue',sans-serif;font-size:clamp(15px,2vw,20px);letter-spacing:.14em;cursor:pointer;width:100%;}
+/* Table rows */
+.cr-trow{display:grid;grid-template-columns:24px 1fr 28px 28px 28px 28px 36px 36px;align-items:center;padding:5px 8px;border-bottom:1px solid rgba(255,255,255,.04);font-family:'Rajdhani',sans-serif;font-weight:600;font-size:clamp(11px,1.3vw,13px);gap:2px;}
+.cr-thdr{font-family:'Orbitron',sans-serif;font-size:6px;letter-spacing:.12em;color:#48586a;padding:4px 8px;background:rgba(255,255,255,.02);position:sticky;top:0;}
+.cr-me{color:#f0c040;background:rgba(240,192,64,.05);}
+.cr-trow span{text-align:center;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+.cr-trow .cr-tname{text-align:left;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+.cr-tpos{color:#48586a;font-family:'Orbitron',sans-serif;font-size:9px;}
+.cr-tpts{color:#eceff4;font-weight:700;}
+.cr-pos{color:#20c878;}
+.cr-neg{color:#dc2020;}
+.cr-rline{height:1px;margin:2px 0;}
+.cr-rline-rel{background:rgba(220,32,32,.3);}
+.cr-rline-pro{background:rgba(32,200,120,.3);}
+/* Fixture */
+.cr-fixture{display:flex;align-items:center;justify-content:center;gap:14px;padding:10px 12px;}
+.cr-fix-team{display:flex;flex-direction:column;align-items:center;gap:4px;flex:1;}
+.cr-fix-emblem{font-size:28px;}
+.cr-fix-name{font-family:'Bebas Neue',sans-serif;font-size:clamp(12px,1.6vw,16px);letter-spacing:.06em;text-align:center;}
+.cr-fix-ovr{font-family:'Orbitron',sans-serif;font-size:6px;letter-spacing:.12em;color:#48586a;}
+.cr-fix-vs{font-family:'Bebas Neue',sans-serif;font-size:clamp(14px,2vw,18px);letter-spacing:.1em;color:#f0c040;flex-shrink:0;}
+.cr-play-btn{display:block;width:calc(100% - 24px);margin:0 12px 10px;padding:10px;background:linear-gradient(135deg,rgba(240,192,64,.15),rgba(240,192,64,.05));border:1.5px solid rgba(240,192,64,.4);border-radius:8px;color:#f0c040;font-family:'Bebas Neue',sans-serif;font-size:clamp(14px,1.8vw,18px);letter-spacing:.14em;cursor:pointer;}
+.cr-play-btn:hover{background:linear-gradient(135deg,rgba(240,192,64,.25),rgba(240,192,64,.1));}
+/* Recent results */
+.cr-rrow{display:flex;align-items:center;gap:6px;padding:4px 0;border-bottom:1px solid rgba(255,255,255,.04);font-family:'Rajdhani',sans-serif;font-weight:600;font-size:clamp(10px,1.3vw,13px);}
+.cr-rrow-badge{width:28px;text-align:center;font-size:10px;font-family:'Orbitron',sans-serif;font-weight:700;flex-shrink:0;}
+.cr-rrow-badge.win{color:#20c878;}.cr-rrow-badge.loss{color:#dc2020;}.cr-rrow-badge.draw{color:#f0c040;}
+.cr-rrow-info{flex:1;color:#48586a;font-size:10px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+.cr-rrow-score{font-family:'Orbitron',sans-serif;font-size:9px;color:#eceff4;}
+/* Stats */
+.cr-stat-row{display:flex;justify-content:space-between;align-items:center;padding:4px 0;border-bottom:1px solid rgba(255,255,255,.04);}
+.cr-stat-key{font-family:'Orbitron',sans-serif;font-size:6px;letter-spacing:.14em;color:#48586a;}
+.cr-stat-val{font-family:'Bebas Neue',sans-serif;font-size:clamp(14px,1.8vw,18px);color:#eceff4;}
+/* Stats grid */
+.cr-stats-grid{display:grid;grid-template-columns:1fr 1fr;gap:6px;}
+.cr-stat{background:rgba(255,255,255,.03);border:1px solid rgba(255,255,255,.06);border-radius:6px;padding:7px 10px;display:flex;flex-direction:column;gap:2px;}
+.cr-stat span{font-family:'Orbitron',sans-serif;font-size:6px;letter-spacing:.14em;color:#48586a;}
+.cr-stat strong{font-family:'Bebas Neue',sans-serif;font-size:clamp(18px,2.5vw,26px);color:#eceff4;line-height:1;}
+/* Fixture inner */
+.cr-fix-inner{padding:8px 12px 0;}
+.cr-fix-label{font-family:'Orbitron',sans-serif;font-size:6px;letter-spacing:.2em;color:#48586a;margin-bottom:6px;}
+.cr-fix-teams{display:flex;align-items:center;justify-content:space-between;gap:8px;}
+.cr-fix-team{flex:1;display:flex;flex-direction:column;align-items:center;gap:3px;}
+.cr-fix-emoji{font-size:28px;}
+.cr-fix-name{font-family:'Bebas Neue',sans-serif;font-size:clamp(12px,1.6vw,16px);letter-spacing:.06em;text-align:center;color:#eceff4;}
+.cr-fix-ovr{font-family:'Orbitron',sans-serif;font-size:6px;letter-spacing:.12em;color:#48586a;}
+.cr-fix-vs{font-family:'Bebas Neue',sans-serif;font-size:clamp(14px,2vw,20px);letter-spacing:.1em;color:#f0c040;flex-shrink:0;}
+.cr-bye{font-family:'Orbitron',sans-serif;font-size:8px;letter-spacing:.2em;color:#48586a;padding:16px;text-align:center;}
+.cr-empty{font-family:'Orbitron',sans-serif;font-size:7px;letter-spacing:.14em;color:#48586a;padding:10px 0;}
+/* Recent results rows */
+.cr-result-row{display:flex;align-items:center;gap:6px;padding:5px 0;border-bottom:1px solid rgba(255,255,255,.04);font-family:'Rajdhani',sans-serif;font-weight:600;font-size:clamp(10px,1.3vw,13px);}
+.cr-rmd{font-family:'Orbitron',sans-serif;font-size:7px;color:#48586a;flex-shrink:0;width:28px;}
+.cr-rhome{flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+.cr-rscore{font-family:'Orbitron',sans-serif;font-size:9px;flex-shrink:0;padding:2px 6px;border-radius:3px;}
+.cr-rscore.win{color:#20c878;background:rgba(32,200,120,.1);}
+.cr-rscore.loss{color:#dc2020;background:rgba(220,32,32,.1);}
+.cr-rscore.draw{color:#f0c040;background:rgba(240,192,64,.1);}
+.cr-raway{flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;text-align:right;color:#48586a;}
+/* Action bar */
+.cr-action-bar{flex-shrink:0;display:flex;align-items:center;gap:8px;padding:8px 12px;background:rgba(4,6,12,.98);border-bottom:1px solid rgba(255,255,255,.06);}
+.cr-action-btn{padding:8px 16px;border-radius:6px;font-family:'Bebas Neue',sans-serif;font-size:clamp(13px,1.6vw,17px);letter-spacing:.1em;cursor:pointer;border:1.5px solid;transition:.15s;flex-shrink:0;}
+.cr-play{background:rgba(240,192,64,.12);border-color:rgba(240,192,64,.5);color:#f0c040;}
+.cr-play:hover{background:rgba(240,192,64,.22);}
+.cr-sim{background:rgba(30,114,220,.1);border-color:rgba(30,114,220,.4);color:#44c8ff;}
+.cr-sim:hover{background:rgba(30,114,220,.2);}
+.cr-simall{background:rgba(255,255,255,.04);border-color:rgba(255,255,255,.12);color:#48586a;}
+.cr-simall:hover{background:rgba(255,255,255,.08);color:#eceff4;}
+.cr-budget-display{margin-left:auto;text-align:right;}
+.cr-budget-lbl{font-family:'Orbitron',sans-serif;font-size:5px;letter-spacing:.2em;color:#48586a;}
+.cr-budget-val{font-family:'Bebas Neue',sans-serif;font-size:clamp(14px,1.8vw,20px);letter-spacing:.06em;color:#20c878;}
+.cr-mgmt-panel{flex-shrink:0;}
+.cr-mgmt-grid{display:grid;grid-template-columns:1fr 1fr;gap:6px;padding:8px;}
+.cr-mgmt-btn{display:flex;flex-direction:column;align-items:center;gap:4px;padding:10px 6px;background:rgba(255,255,255,.03);border:1px solid rgba(255,255,255,.07);border-radius:7px;cursor:pointer;transition:.15s;color:#eceff4;}
+.cr-mgmt-btn:hover{background:rgba(255,255,255,.07);border-color:rgba(240,192,64,.25);}
+.cr-mgmt-icon{font-size:18px;}
+.cr-mgmt-lbl{font-family:'Orbitron',sans-serif;font-size:6px;letter-spacing:.15em;color:#48586a;}
+.cr-mgmt-btn:hover .cr-mgmt-lbl{color:#f0c040;}
+/* Squad screen */
+#s-career-squad{background:#06080e;overflow:hidden;}
+.cr-squad-topbar{flex-shrink:0;display:flex;align-items:center;gap:10px;padding:8px 14px;background:linear-gradient(180deg,#0a1628,#071020);border-bottom:1px solid rgba(255,255,255,.07);}
+.cr-squad-title{flex:1;text-align:center;font-family:'Bebas Neue',sans-serif;font-size:clamp(16px,2vw,22px);letter-spacing:.12em;color:#f0c040;}
+.cr-squad-subtitle{display:block;font-family:'Orbitron',sans-serif;font-size:6px;letter-spacing:.2em;color:#48586a;margin-top:1px;}
+.cr-save-btn{padding:6px 14px;background:rgba(32,200,120,.1);border:1.5px solid rgba(32,200,120,.4);border-radius:6px;color:#20c878;font-family:'Bebas Neue',sans-serif;font-size:clamp(12px,1.4vw,16px);letter-spacing:.1em;cursor:pointer;}
+.cr-save-btn:hover{background:rgba(32,200,120,.2);}
+.cr-squad-body{flex:1;display:grid;grid-template-columns:1fr 1.1fr;gap:0;overflow:hidden;min-height:0;}
+.cr-squad-left{display:flex;flex-direction:column;border-right:1px solid rgba(255,255,255,.06);overflow:hidden;}
+.cr-squad-formation-bar{display:flex;align-items:center;gap:8px;padding:6px 12px;background:rgba(255,255,255,.02);border-bottom:1px solid rgba(255,255,255,.05);flex-shrink:0;}
+.cr-fml{font-family:'Orbitron',sans-serif;font-size:6px;letter-spacing:.18em;color:#48586a;}
+.cr-fsel{background:rgba(7,14,28,.9);border:1px solid rgba(255,255,255,.12);border-radius:4px;color:#f0c040;font-family:'Bebas Neue',sans-serif;font-size:14px;letter-spacing:.1em;padding:3px 8px;cursor:pointer;}
+.cr-pitch{flex:1;position:relative;background:linear-gradient(180deg,#0a2410 0%,#0d3318 40%,#0a2410 100%);overflow:hidden;}
+.cr-pitch::before{content:'';position:absolute;inset:6px;border:1px solid rgba(255,255,255,.08);border-radius:3px;}
+.cr-pitch::after{content:'';position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);width:60px;height:60px;border:1px solid rgba(255,255,255,.08);border-radius:50%;}
+.cr-pitch-slot{position:absolute;transform:translate(-50%,-50%);display:flex;flex-direction:column;align-items:center;gap:2px;cursor:pointer;transition:.15s;}
+.cr-pitch-slot:hover .cr-pslot-badge{border-color:rgba(240,192,64,.6);box-shadow:0 0 8px rgba(240,192,64,.3);}
+.cr-pslot-badge{width:36px;height:36px;border-radius:50%;border:2px solid rgba(255,255,255,.2);overflow:hidden;background:#111;flex-shrink:0;display:flex;align-items:center;justify-content:center;}
+.cr-pslot-badge.injured{border-color:#dc2020;opacity:.7;}
+.cr-pslot-badge.suspended{border-color:#f0c040;opacity:.7;}
+.cr-pslot-badge.selected{border-color:#f0c040;box-shadow:0 0 10px rgba(240,192,64,.5);}
+.cr-pslot-name{font-family:'Bebas Neue',sans-serif;font-size:9px;letter-spacing:.05em;color:#eceff4;text-shadow:0 1px 3px rgba(0,0,0,.8);white-space:nowrap;max-width:48px;overflow:hidden;text-overflow:ellipsis;}
+.cr-pslot-ovr{font-family:'Orbitron',sans-serif;font-size:6px;color:#f0c040;text-shadow:0 1px 3px rgba(0,0,0,.9);}
+/* Player list */
+.cr-squad-right{display:flex;flex-direction:column;overflow:hidden;}
+.cr-squad-tabs{display:flex;flex-shrink:0;border-bottom:1px solid rgba(255,255,255,.06);}
+.cr-stab{flex:1;padding:7px;background:transparent;border:none;color:#48586a;font-family:'Orbitron',sans-serif;font-size:7px;letter-spacing:.12em;cursor:pointer;border-bottom:2px solid transparent;transition:.15s;}
+.cr-stab.active{color:#f0c040;border-bottom-color:#f0c040;}
+.cr-squad-list{flex:1;overflow-y:auto;padding:4px;}
+/* Player card */
+.cr-pcard{display:grid;grid-template-columns:38px 1fr auto;align-items:center;gap:8px;padding:6px 8px;border-radius:6px;cursor:pointer;border:1px solid transparent;margin-bottom:3px;transition:.15s;}
+.cr-pcard:hover{background:rgba(255,255,255,.04);border-color:rgba(255,255,255,.08);}
+.cr-pcard.selected{background:rgba(240,192,64,.07);border-color:rgba(240,192,64,.25);}
+.cr-pcard.starter{border-left:2px solid rgba(30,114,220,.5);}
+.cr-pcard.injured{opacity:.6;}
+.cr-pcard-portrait{width:38px;height:38px;border-radius:6px;overflow:hidden;flex-shrink:0;position:relative;}
+.cr-pcard-info{min-width:0;}
+.cr-pcard-name{font-family:'Bebas Neue',sans-serif;font-size:clamp(13px,1.6vw,16px);letter-spacing:.05em;line-height:1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+.cr-pcard-meta{font-family:'Orbitron',sans-serif;font-size:6px;letter-spacing:.1em;color:#48586a;margin-top:2px;display:flex;gap:6px;align-items:center;}
+.cr-pcard-morale{font-size:9px;}
+.cr-pcard-status{font-family:'Orbitron',sans-serif;font-size:6px;padding:2px 5px;border-radius:3px;flex-shrink:0;}
+.cr-status-ok{color:#20c878;background:rgba(32,200,120,.1);}
+.cr-status-inj{color:#dc2020;background:rgba(220,32,32,.1);}
+.cr-status-sus{color:#f0c040;background:rgba(240,192,64,.1);}
+.cr-pcard-right{display:flex;flex-direction:column;align-items:flex-end;gap:3px;}
+.cr-pcard-ovr{font-family:'Orbitron',sans-serif;font-size:13px;font-weight:700;color:#eceff4;}
+.cr-pcard-pos{font-family:'Orbitron',sans-serif;font-size:6px;color:#48586a;}
+</style>
 </head>
 <body>
 
@@ -66,10 +256,10 @@
         <span class="hm-item-lbl">LEAGUE</span>
         <span class="hm-item-soon">SOON</span>
       </button>
-      <button class="hm-item locked" data-img="career"     onclick="showSc('s-career-clubs')"            onmouseenter="hmHover('career')">
+      <button class="hm-item" data-img="career"     onclick="showSc('s-career-clubs')"            onmouseenter="hmHover('career')">
         <span class="hm-item-num">04</span>
         <span class="hm-item-lbl">CAREER</span>
-        <span class="hm-item-soon">SOON</span>
+        <span class="hm-item-arrow">→</span>
       </button>
       <button class="hm-item locked" data-img="create"     onclick="cs()"            onmouseenter="hmHover('create')">
         <span class="hm-item-num">05</span>
@@ -410,7 +600,9 @@
 
 <!-- ══════════════ CAREER: HUB ══════════════ -->
 <div id="s-career-hub" class="screen">
+  <!-- TOP BAR -->
   <div class="cr-strip">
+    <button class="back-btn" onclick="showSc('s-home')" style="margin-right:10px;">← MENU</button>
     <div class="cr-strip-emblem" id="cr-emblem">⚽</div>
     <div class="cr-strip-info">
       <div class="cr-strip-name" id="cr-clubname">Club</div>
@@ -418,10 +610,24 @@
     </div>
     <div class="cr-strip-right">
       <div class="cr-strip-season" id="cr-season">SEASON 1</div>
-      <div class="cr-strip-md" id="cr-md">MATCHDAY 1 / 34</div>
+      <div class="cr-strip-md" id="cr-md">MATCHDAY 1 / 18</div>
     </div>
   </div>
+
+  <!-- ACTION BAR -->
+  <div class="cr-action-bar">
+    <button class="cr-action-btn cr-play" onclick="crPlay()">▶ PLAY MATCH</button>
+    <button class="cr-action-btn cr-sim" onclick="crSimNext()">⏩ SIMULATE</button>
+    <button class="cr-action-btn cr-simall" onclick="crSimAll()">⏭ SIM ALL</button>
+    <div class="cr-budget-display">
+      <div class="cr-budget-lbl">BUDGET</div>
+      <div class="cr-budget-val" id="cr-budget">$2.0M</div>
+    </div>
+  </div>
+
+  <!-- MAIN BODY -->
   <div class="cr-hub-body">
+    <!-- LEFT: Table + Results -->
     <div class="cr-col">
       <div class="cr-panel" style="flex:2;min-height:0;">
         <div class="cr-panel-hdr">LEAGUE TABLE <span id="cr-table-div"></span></div>
@@ -432,19 +638,89 @@
         <div class="cr-panel-body" id="cr-results-body"></div>
       </div>
     </div>
+
+    <!-- RIGHT: Fixture + Position + Stats + Management -->
     <div class="cr-col">
       <div class="cr-panel" style="flex-shrink:0;">
         <div class="cr-panel-hdr">NEXT FIXTURE <span id="cr-fix-md"></span></div>
         <div id="cr-fixture-area"></div>
-        <div class="cr-panel-body" style="padding:8px 12px;">
-          <div class="cr-stat-lbl">YOUR POSITION</div>
-          <div class="cr-position" id="cr-position">1ST</div>
-          <div class="cr-pts-line" id="cr-pts-line">0 PTS · GD 0</div>
+        <div style="display:flex;gap:16px;padding:6px 12px 10px;align-items:flex-end;">
+          <div>
+            <div class="cr-stat-lbl">POSITION</div>
+            <div class="cr-position" id="cr-position">1ST</div>
+            <div class="cr-pts-line" id="cr-pts-line">0 PTS · GD 0</div>
+          </div>
         </div>
       </div>
+
       <div class="cr-panel" style="flex:1;min-height:0;">
         <div class="cr-panel-hdr">SEASON STATS</div>
         <div class="cr-panel-body" id="cr-stats-body"></div>
+      </div>
+
+      <!-- MANAGEMENT TABS -->
+      <div class="cr-panel cr-mgmt-panel">
+        <div class="cr-panel-hdr">MANAGEMENT</div>
+        <div class="cr-mgmt-grid">
+          <button class="cr-mgmt-btn" onclick="crOpenSquad()">>
+            <span class="cr-mgmt-icon">👕</span>
+            <span class="cr-mgmt-lbl">SQUAD</span>
+          </button>
+          <button class="cr-mgmt-btn" onclick="alert('Transfer market coming soon!')">
+            <span class="cr-mgmt-icon">💸</span>
+            <span class="cr-mgmt-lbl">TRANSFERS</span>
+          </button>
+          <button class="cr-mgmt-btn" onclick="alert('Coach menu coming soon!')">
+            <span class="cr-mgmt-icon">📋</span>
+            <span class="cr-mgmt-lbl">COACH</span>
+          </button>
+          <button class="cr-mgmt-btn" onclick="alert('Formation editor coming soon!')">
+            <span class="cr-mgmt-icon">🗂</span>
+            <span class="cr-mgmt-lbl">TACTICS</span>
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ══════════════ CAREER: SQUAD MANAGEMENT ══════════════ -->
+<div id="s-career-squad" class="screen">
+  <div class="cr-squad-topbar">
+    <button class="back-btn" onclick="showSc('s-career-hub')">← HUB</button>
+    <div class="cr-squad-title">
+      <span id="csq-clubname">SQUAD</span>
+      <span class="cr-squad-subtitle" id="csq-subtitle">SEASON 1 · MD 1</span>
+    </div>
+    <button class="cr-save-btn" onclick="crSaveSquad()">💾 SAVE</button>
+  </div>
+
+  <div class="cr-squad-body">
+    <!-- LEFT: Formation pitch view -->
+    <div class="cr-squad-left">
+      <div class="cr-squad-formation-bar">
+        <span class="cr-fml">FORMATION</span>
+        <select id="csq-formation" class="cr-fsel" onchange="crSquadFormationChange()">
+          <option value="4-3-3">4-3-3</option>
+          <option value="4-4-2">4-4-2</option>
+          <option value="4-1-3-2">4-1-3-2</option>
+          <option value="3-5-2">3-5-2</option>
+        </select>
+      </div>
+      <div class="cr-pitch" id="csq-pitch">
+        <!-- slots rendered by JS -->
+      </div>
+    </div>
+
+    <!-- RIGHT: Player list -->
+    <div class="cr-squad-right">
+      <div class="cr-squad-tabs">
+        <button class="cr-stab active" onclick="crSquadTab('starters')">STARTERS</button>
+        <button class="cr-stab" onclick="crSquadTab('bench')">BENCH</button>
+        <button class="cr-stab" onclick="crSquadTab('all')">ALL</button>
+      </div>
+      <div class="cr-squad-list" id="csq-player-list">
+        <!-- players rendered by JS -->
       </div>
     </div>
   </div>
@@ -477,6 +753,6 @@
 </div>
 
 </div><!-- /viewport -->
-<script src="game.js"></script>
+<script src="game.js?v=3" defer></script>
 </body>
 </html>

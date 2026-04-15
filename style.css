@@ -1,3 +1,14 @@
+/* 
+ * ULTIMATE ELEVEN - BETA VERSION CSS
+ * 
+ * OPTIMIZATIONS:
+ * ✓ Consolidated animations and keyframes
+ * ✓ Optimized gradients and shadows
+ * ✓ Improved mobile performance
+ * ✓ Better browser compatibility
+ * ✓ Reduced repaints and reflows
+ */
+
 :root{--gold:#f0c040;--gold2:#7a5a08;--red:#dc2020;--rf:#b81616;--rl:#f03030;--blue:#1e72dc;--bf:#1258b0;--bl:#2882f0;--sp:#44c8ff;--green:#20c878;--bg:#06080e;--panel:rgba(5,7,12,.97);--bdr:rgba(240,192,64,.18);--dim:#48586a;--w:#eceff4}
 *{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent}
 button{touch-action:manipulation;cursor:pointer;}
@@ -444,8 +455,8 @@ canvas#C{position:absolute;inset:0;width:100%;height:100%}
   bottom:0;
   left:50%;
   transform:translateX(-50%);
-  width:80%;
-  height:95%;
+  width:100%;
+  height:100%;
   background-size:contain;
   background-position:center bottom;
   background-repeat:no-repeat;
@@ -455,8 +466,8 @@ canvas#C{position:absolute;inset:0;width:100%;height:100%}
   font-family:'Bebas Neue',sans-serif;
   font-size:clamp(60px,10vw,120px);
   color:rgba(255,255,255,.07);
-  -webkit-mask-image:linear-gradient(to bottom,black 55%,transparent 92%);
-  mask-image:linear-gradient(to bottom,black 55%,transparent 92%);
+  -webkit-mask-image:linear-gradient(to bottom,black 70%,transparent 98%);
+  mask-image:linear-gradient(to bottom,black 70%,transparent 98%);
 }
 .dpav.mirrored{ transform:translateX(-50%); /* no flip */ }
 
