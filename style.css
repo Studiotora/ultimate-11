@@ -1186,16 +1186,11 @@ html,body{overscroll-behavior:none;}
 .cr-next-season:hover{filter:brightness(1.07);transform:translateY(-1px);}
 
 /* ── LOADING SCREEN ── */
-#s-loading{background:#06080e;}
+#s-loading{background:#06080e;align-items:flex-end;justify-content:flex-end;}
+.loading-corner{display:flex;align-items:center;gap:10px;padding:clamp(16px,2.5vh,28px) clamp(20px,3vw,36px);}
+.loading-label{font-family:'Bebas Neue',sans-serif;font-size:clamp(15px,2vw,20px);letter-spacing:.2em;color:var(--gold);}
 .loading-dots{display:flex;align-items:center;gap:5px;}
-.loading-dots span{
-  width:6px;height:6px;border-radius:50%;
-  background:var(--gold);
-  animation:ldot .9s ease-in-out infinite;
-}
+.loading-dots span{width:6px;height:6px;border-radius:50%;background:var(--gold);animation:ldot .9s ease-in-out infinite;}
 .loading-dots span:nth-child(2){animation-delay:.2s;}
 .loading-dots span:nth-child(3){animation-delay:.4s;}
-@keyframes ldot{
-  0%,80%,100%{transform:scale(.4);opacity:.3;}
-  40%{transform:scale(1);opacity:1;}
-}
+@keyframes ldot{0%,80%,100%{transform:scale(.35);opacity:.25;}40%{transform:scale(1);opacity:1;}}

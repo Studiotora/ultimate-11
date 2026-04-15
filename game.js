@@ -895,9 +895,24 @@ function openTeamMenu(){
     fieldReserves.forEach((pid,i)=>{ if(i<5) HOME_RESERVES[i+1]=pid; });
   }
   initHomeSlots(true);
-  if(HT) HT.p.forEach(pl=>playerImg(pl));
   buildFormationMenu();
-  showSc('s-team');
+  // Show loading screen while portraits preload, then show team editor
+  showSc('s-loading');
+  const _teamImgs=[];
+  [[HT,AT]].flat().forEach(t=>{ if(t)t.p.forEach(pl=>{ const img=playerImg(pl); if(img&&!img.complete)_teamImgs.push(img); }); });
+  if(!_teamImgs.length){ showSc('s-team'); [200,600].forEach(t=>setTimeout(buildFormationMenu,t)); }
+  else {
+    let _done=false;
+    const _finish=()=>{ if(_done)return; _done=true; showSc('s-team'); [200,600].forEach(t=>setTimeout(buildFormationMenu,t)); };
+    let _loaded=0;
+    _teamImgs.forEach(img=>{
+      if(img.complete&&img.naturalWidth>0){_loaded++;if(_loaded>=_teamImgs.length)_finish();return;}
+      const _ol=img.onload,_oe=img.onerror;
+      img.onload=()=>{if(_ol)_ol();_loaded++;if(_loaded>=_teamImgs.length)_finish();};
+      img.onerror=()=>{if(_oe)_oe();_loaded++;if(_loaded>=_teamImgs.length)_finish();};
+    });
+    setTimeout(_finish,4000); // 4s safety timeout
+  }
   [200,600].forEach(t=>setTimeout(buildFormationMenu,t));
 }
 function startGame(){
@@ -1218,14 +1233,14 @@ function tick(dt=1){
     const carrier2=sq(s)[G.ck];
     if(carrier2&&carrier2.pos!=='GK'){
       const engClose=ROLES.engager&&PP[ds][ROLES.engager]&&dist(cp,PP[ds][ROLES.engager])<IR()*2.2;
-      carrier2.spirit=Math.max(0,(carrier2.spirit||1500)-(engClose?0.55:0.18)*dt);
+      carrier2.spirit=Math.max(0,(carrier2.spirit||1500)-(engClose?0.55:0.18));
     }
     ['h','a'].forEach(side=>{
       Object.entries(sq(side)).forEach(([k,pl])=>{
         if(!pl||pl.pos==='GK')return;
         if(side===s&&k===G.ck)return;
         const maxSp=1500;
-        if((pl.spirit||maxSp)<maxSp) pl.spirit=Math.min(maxSp,(pl.spirit||0)+0.12*dt);
+        if((pl.spirit||maxSp)<maxSp) pl.spirit=Math.min(maxSp,(pl.spirit||0)+0.12);
       });
     });
   }
@@ -1291,11 +1306,11 @@ function tick(dt=1){
     }
   }
 
-  moveOffBall(s,ds);
+  moveOffBall(s,ds,dt);
   applyRepulsion();
 }
 
-function moveOffBall(s,ds){
+function moveOffBall(s,ds,dt=1){
   const cp=PP[s][G.ck]; if(!cp)return;
   const dir=dirFor(s);
   const carrierProg=progressFor(s,cp);
@@ -1309,10 +1324,10 @@ function moveOffBall(s,ds){
   //
   // Movement speeds — runners must be fast enough to visibly support play
   // ─────────────────────────────────────────────────────────────
-  const DRIFT_SPEED   = W * 0.00020;
-  const ROLE_SPEED    = W * 0.00030;
-  const SUPPORT_SPEED = W * 0.00040;
-  const STRIKER_SPEED = W * 0.00055;
+  const DRIFT_SPEED   = W * 0.00020 * dt;
+  const ROLE_SPEED    = W * 0.00030 * dt;
+  const SUPPORT_SPEED = W * 0.00040 * dt;
+  const STRIKER_SPEED = W * 0.00055 * dt;
   function spdMult(pl){return pl?clamp(0.60+(gs(pl,'spd')-60)*0.010,0.70,1.30):1.0;}
   function glide(cur,tx,ty,spd,pl){
     const dx=tx-cur.x,dy=ty-cur.y;
@@ -1497,18 +1512,14 @@ function asnC(){assignRoles();}
 
 let raf=null;
 let _lastFrameTs=0;
-const TARGET_FPS=60;
-const TARGET_MS=1000/TARGET_FPS;
 function startAnim(){
   cancelAnimationFrame(raf);
   _lastFrameTs=0;
   (function loop(ts){
-    // Delta-time scalar — keeps movement speed consistent across frame rates
-    const dt=_lastFrameTs?Math.min((ts-_lastFrameTs)/TARGET_MS,3):1;
+    const dt=_lastFrameTs?Math.min((ts-_lastFrameTs)/16.667,3):1;
     _lastFrameTs=ts;
     if(G.phase==='moving')tick(dt);
     if(G.phase==='pass_anim'){tickBallTravel(dt);tickPassMotion();}
-    // Ball snaps to forward edge of carrier
     if(G.phase==='moving'&&G.ck&&PP[G.poss]&&PP[G.poss][G.ck]){
       const _cp=PP[G.poss][G.ck];
       const _dir=dirFor(G.poss);
@@ -1516,8 +1527,8 @@ function startAnim(){
       ball.x=_cp.x+_dir*_off;ball.y=_cp.y;
       ball.tx=ball.x;ball.ty=ball.y;
     }else{
-      const blerp=Math.min(.18*dt,1);
-      ball.x+=(ball.tx-ball.x)*blerp;ball.y+=(ball.ty-ball.y)*blerp;
+      ball.x+=(ball.tx-ball.x)*Math.min(.18*dt,1);
+      ball.y+=(ball.ty-ball.y)*Math.min(.18*dt,1);
     }
     trail.push({x:ball.x,y:ball.y,a:.6});
     if(trail.length>24)trail.shift();
@@ -3066,20 +3077,17 @@ function secondHalf(){G.half=2;G.tL=2700;iPos();const q=sq('a');const kk=['CM2',
 function initMatch(){
   Object.values(hSq).forEach(p=>{if(p){p.spirit=(p.pos==="GK"?2000:1500);p.cooldownUntil=0;}});Object.values(aSq).forEach(p=>{if(p){p.spirit=(p.pos==="GK"?2000:1500);p.cooldownUntil=0;}});
   G={half:1,tL:2700,hG:0,aG:0,poss:'h',ck:null,chk:null,mom:50,duels:0,shots:0,hP:0,tP:0,phase:'idle',mt:null,di:null,D:{},pm:false,kickoffUntil:0,pressing:false,goalGen:0};
-  // Show loading screen while images preload
-  showSc('s-loading');
-  preloadSquadImages(()=>{
-    showSc('s-match');rsz();iPos();
-    startMatchMusic();
-    const sk=hSq['CM2']?'CM2':(hSq['CM1']?'CM1':'ST');G.poss='h';G.ck=sk;G.tP++;G.hP++;
-    if(PP.h[sk]){PP.h[sk].x=W/2;PP.h[sk].y=H/2;}ball.x=W/2;ball.y=H/2;ball.tx=W/2;ball.ty=H/2;
-    asnC();updP();updH();startMT();startAnim();
-    document.getElementById('passhint').style.display='none';
-    say('Kick off! '+HT.name+' vs '+AT.name+' — build from midfield.');
-    showReferee('KICK OFF');
-    G.kickoffUntil=Date.now()+3500;
-    G.phase='idle';setTimeout(()=>{G.phase='moving';document.getElementById('passhint').style.display='block';},1200);
-  });
+  preloadSquadImages(); // start loading all player face images
+  showSc('s-match');rsz();iPos();
+  startMatchMusic();
+  const sk=hSq['CM2']?'CM2':(hSq['CM1']?'CM1':'ST');G.poss='h';G.ck=sk;G.tP++;G.hP++;
+  if(PP.h[sk]){PP.h[sk].x=W/2;PP.h[sk].y=H/2;}ball.x=W/2;ball.y=H/2;ball.tx=W/2;ball.ty=H/2;
+  asnC();updP();updH();startMT();startAnim();
+  document.getElementById('passhint').style.display='none';
+  say('Kick off! '+HT.name+' vs '+AT.name+' — build from midfield.');
+  showReferee('KICK OFF');
+  G.kickoffUntil=Date.now()+3500;
+  G.phase='idle';setTimeout(()=>{G.phase='moving';document.getElementById('passhint').style.display='block';},1200);
 }
 // ── FORMATION POPUP ──────────────────────────────────────────────
 function openFormationPicker(){
