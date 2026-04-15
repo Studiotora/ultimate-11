@@ -1201,14 +1201,15 @@ function carrierAdvanceVector(side,cp){
   return {x:clampedTx-cp.x, y:clampedTy-cp.y};
 }
 
-function tick(){
+function tick(dt=1){
   const s=G.poss,ds=s==='h'?'a':'h';
   const cp=PP[s][G.ck];if(!cp)return;
   const dir=dirFor(s);
 
   const mv=carrierAdvanceVector(s,cp);
-  cp.x=clamp(cp.x+clamp(mv.x,-MAX_CARRIER_STEP(),MAX_CARRIER_STEP()),W*.01,W*.99);
-  cp.y=clamp(cp.y+clamp(mv.y,-MAX_CARRIER_STEP(),MAX_CARRIER_STEP()),H*.03,H*.97);
+  const cs=MAX_CARRIER_STEP()*dt;
+  cp.x=clamp(cp.x+clamp(mv.x*dt,-cs,cs),W*.01,W*.99);
+  cp.y=clamp(cp.y+clamp(mv.y*dt,-cs,cs),H*.03,H*.97);
   if(G_moveTarget&&Math.hypot(cp.x-G_moveTarget.x,cp.y-G_moveTarget.y)<W*.03)G_moveTarget=null;
   ball.tx=cp.x;ball.ty=cp.y;
 
@@ -1217,14 +1218,14 @@ function tick(){
     const carrier2=sq(s)[G.ck];
     if(carrier2&&carrier2.pos!=='GK'){
       const engClose=ROLES.engager&&PP[ds][ROLES.engager]&&dist(cp,PP[ds][ROLES.engager])<IR()*2.2;
-      carrier2.spirit=Math.max(0,(carrier2.spirit||1500)-(engClose?0.55:0.18));
+      carrier2.spirit=Math.max(0,(carrier2.spirit||1500)-(engClose?0.55:0.18)*dt);
     }
     ['h','a'].forEach(side=>{
       Object.entries(sq(side)).forEach(([k,pl])=>{
         if(!pl||pl.pos==='GK')return;
         if(side===s&&k===G.ck)return;
         const maxSp=1500;
-        if((pl.spirit||maxSp)<maxSp) pl.spirit=Math.min(maxSp,(pl.spirit||0)+0.12);
+        if((pl.spirit||maxSp)<maxSp) pl.spirit=Math.min(maxSp,(pl.spirit||0)+0.12*dt);
       });
     });
   }
@@ -1259,7 +1260,7 @@ function tick(){
       const dd=Math.hypot(dx,dy)||1;
       // FIX: use MAX_DEF_STEP directly — old DS()*closeFactor was ~0.24px/frame (invisible movement)
       const pressMult=(G.pressing&&ds==='h')?1.5:1.0;
-      const step=MAX_DEF_STEP()*pressMult;
+      const step=MAX_DEF_STEP()*pressMult*dt;
       dp.x=clamp(dp.x+(dx/dd)*step,W*.01,W*.99);
       dp.y=clamp(dp.y+(dy/dd)*step,H*.03,H*.97);
       if(Date.now()>=(G.kickoffUntil||0) && dist(dp,cp)<IR()){G.chk=ROLES.engager;opDuel(false);return;}
@@ -1271,7 +1272,7 @@ function tick(){
     if(dp2){
       const dx=cp.x-dp2.x,dy=cp.y-dp2.y;
       const dd=Math.hypot(dx,dy)||1;
-      const step=MAX_DEF_STEP()*0.80;
+      const step=MAX_DEF_STEP()*0.80*dt;
       dp2.x=clamp(dp2.x+(dx/dd)*step,W*.01,W*.99);
       dp2.y=clamp(dp2.y+(dy/dd)*step,H*.03,H*.97);
     }
@@ -1495,12 +1496,19 @@ function pickCarrierAfterWin(side,winnerKey){
 function asnC(){assignRoles();}
 
 let raf=null;
+let _lastFrameTs=0;
+const TARGET_FPS=60;
+const TARGET_MS=1000/TARGET_FPS;
 function startAnim(){
   cancelAnimationFrame(raf);
-  (function loop(){
-    if(G.phase==='moving')tick();
-    if(G.phase==='pass_anim'){tickBallTravel();tickPassMotion();}
-    // Ball snaps to forward edge of carrier — offset in direction of attack
+  _lastFrameTs=0;
+  (function loop(ts){
+    // Delta-time scalar — keeps movement speed consistent across frame rates
+    const dt=_lastFrameTs?Math.min((ts-_lastFrameTs)/TARGET_MS,3):1;
+    _lastFrameTs=ts;
+    if(G.phase==='moving')tick(dt);
+    if(G.phase==='pass_anim'){tickBallTravel(dt);tickPassMotion();}
+    // Ball snaps to forward edge of carrier
     if(G.phase==='moving'&&G.ck&&PP[G.poss]&&PP[G.poss][G.ck]){
       const _cp=PP[G.poss][G.ck];
       const _dir=dirFor(G.poss);
@@ -1508,13 +1516,14 @@ function startAnim(){
       ball.x=_cp.x+_dir*_off;ball.y=_cp.y;
       ball.tx=ball.x;ball.ty=ball.y;
     }else{
-      ball.x+=(ball.tx-ball.x)*.18;ball.y+=(ball.ty-ball.y)*.18;
+      const blerp=Math.min(.18*dt,1);
+      ball.x+=(ball.tx-ball.x)*blerp;ball.y+=(ball.ty-ball.y)*blerp;
     }
     trail.push({x:ball.x,y:ball.y,a:.6});
     if(trail.length>24)trail.shift();
     trail.forEach(t=>t.a*=.88);
     draw();raf=requestAnimationFrame(loop);
-  })();
+  })(0);
 }
 
 // ── PERSPECTIVE TRANSFORMS (module scope — used by draw + drawT) ──
@@ -1901,8 +1910,8 @@ function tickPassMotion(){
   });
 }
 
-function tickBallTravel(){
-  ballTravel.progress++;
+function tickBallTravel(dt=1){
+  ballTravel.progress+=dt;
   const t=Math.min(1,ballTravel.progress/ballTravel.duration);
   const ease=t<.5?2*t*t:1-Math.pow(-2*t+2,2)/2;
   ball.x=ballTravel.fx+(ballTravel.tx-ballTravel.fx)*ease;
@@ -3057,17 +3066,20 @@ function secondHalf(){G.half=2;G.tL=2700;iPos();const q=sq('a');const kk=['CM2',
 function initMatch(){
   Object.values(hSq).forEach(p=>{if(p){p.spirit=(p.pos==="GK"?2000:1500);p.cooldownUntil=0;}});Object.values(aSq).forEach(p=>{if(p){p.spirit=(p.pos==="GK"?2000:1500);p.cooldownUntil=0;}});
   G={half:1,tL:2700,hG:0,aG:0,poss:'h',ck:null,chk:null,mom:50,duels:0,shots:0,hP:0,tP:0,phase:'idle',mt:null,di:null,D:{},pm:false,kickoffUntil:0,pressing:false,goalGen:0};
-  preloadSquadImages(); // start loading all player face images
-  showSc('s-match');rsz();iPos();
-  startMatchMusic();
-  const sk=hSq['CM2']?'CM2':(hSq['CM1']?'CM1':'ST');G.poss='h';G.ck=sk;G.tP++;G.hP++;
-  if(PP.h[sk]){PP.h[sk].x=W/2;PP.h[sk].y=H/2;}ball.x=W/2;ball.y=H/2;ball.tx=W/2;ball.ty=H/2;
-  asnC();updP();updH();startMT();startAnim();
-  document.getElementById('passhint').style.display='none';
-  say('Kick off! '+HT.name+' vs '+AT.name+' — build from midfield.');
-  showReferee('KICK OFF');
-  G.kickoffUntil=Date.now()+3500;
-  G.phase='idle';setTimeout(()=>{G.phase='moving';document.getElementById('passhint').style.display='block';},1200);
+  // Show loading screen while images preload
+  showSc('s-loading');
+  preloadSquadImages(()=>{
+    showSc('s-match');rsz();iPos();
+    startMatchMusic();
+    const sk=hSq['CM2']?'CM2':(hSq['CM1']?'CM1':'ST');G.poss='h';G.ck=sk;G.tP++;G.hP++;
+    if(PP.h[sk]){PP.h[sk].x=W/2;PP.h[sk].y=H/2;}ball.x=W/2;ball.y=H/2;ball.tx=W/2;ball.ty=H/2;
+    asnC();updP();updH();startMT();startAnim();
+    document.getElementById('passhint').style.display='none';
+    say('Kick off! '+HT.name+' vs '+AT.name+' — build from midfield.');
+    showReferee('KICK OFF');
+    G.kickoffUntil=Date.now()+3500;
+    G.phase='idle';setTimeout(()=>{G.phase='moving';document.getElementById('passhint').style.display='block';},1200);
+  });
 }
 // ── FORMATION POPUP ──────────────────────────────────────────────
 function openFormationPicker(){

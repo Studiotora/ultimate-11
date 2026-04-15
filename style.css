@@ -1184,3 +1184,18 @@ html,body{overscroll-behavior:none;}
 .cr-move-row span:last-child{margin-left:auto;font-family:'Orbitron',sans-serif;font-size:7px;}
 .cr-next-season{padding:clamp(11px,1.7vh,15px);border-radius:8px;background:linear-gradient(135deg,var(--gold),var(--gold2));border:none;color:#04060c;font-family:'Bebas Neue',sans-serif;font-size:clamp(15px,2vw,20px);letter-spacing:.14em;cursor:pointer;transition:.14s;width:100%;box-shadow:0 0 24px rgba(240,192,64,.25);}
 .cr-next-season:hover{filter:brightness(1.07);transform:translateY(-1px);}
+
+/* ── LOADING SCREEN ── */
+#s-loading{background:#06080e;}
+.loading-dots{display:flex;align-items:center;gap:5px;}
+.loading-dots span{
+  width:6px;height:6px;border-radius:50%;
+  background:var(--gold);
+  animation:ldot .9s ease-in-out infinite;
+}
+.loading-dots span:nth-child(2){animation-delay:.2s;}
+.loading-dots span:nth-child(3){animation-delay:.4s;}
+@keyframes ldot{
+  0%,80%,100%{transform:scale(.4);opacity:.3;}
+  40%{transform:scale(1);opacity:1;}
+}

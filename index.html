@@ -66,10 +66,10 @@
         <span class="hm-item-lbl">LEAGUE</span>
         <span class="hm-item-soon">SOON</span>
       </button>
-      <button class="hm-item" data-img="career" onclick="showSc('s-career-clubs')" onmouseenter="hmHover('career')">
+      <button class="hm-item locked" data-img="career"     onclick="cs()"            onmouseenter="hmHover('career')">
         <span class="hm-item-num">04</span>
         <span class="hm-item-lbl">CAREER</span>
-        <span class="hm-item-arrow">→</span>
+        <span class="hm-item-soon">SOON</span>
       </button>
       <button class="hm-item locked" data-img="create"     onclick="cs()"            onmouseenter="hmHover('create')">
         <span class="hm-item-num">05</span>
@@ -246,7 +246,7 @@
       <!-- Two player panels -->
       <div class="dpwrap">
         <!-- Ball floats between cards at dpwrap level -->
-        <div class="dp-ball" id="dp-ball"></div>
+        <div class="dp-ball show" id="dp-ball">⚽</div>
 
         <!-- ATTACKER (left) -->
         <div class="dp-card-wrap atk">
@@ -388,89 +388,14 @@
 <audio id="matchMusic3" loop><source src="assets/audio/match3.mp3" type="audio/mpeg"></audio>
 
 
-<!-- CAREER: CLUB SELECT -->
-<div id="s-career-clubs" class="screen">
-  <div class="cr-topbar">
-    <div class="cr-title">CAREER MODE</div>
-    <div class="cr-sub">SELECT YOUR CLUB</div>
-    <button class="back-btn" onclick="showSc('s-home')">← MENU</button>
-  </div>
-  <div id="cr-clubs-list" class="cr-clubs-scroll"></div>
-</div>
-
-<!-- CAREER: HUB -->
-<div id="s-career-hub" class="screen">
-  <div class="cr-hub-nav">
-    <button class="back-btn" onclick="showSc('s-home')">← MENU</button>
-    <div class="cr-save-indicator">AUTO-SAVE ON</div>
-  </div>
-  <div class="cr-strip">
-    <div class="cr-strip-emblem" id="cr-emblem">⚽</div>
-    <div class="cr-strip-info">
-      <div class="cr-strip-name" id="cr-clubname">Club</div>
-      <div class="cr-strip-meta" id="cr-divlbl">DIVISION 1</div>
+<!-- LOADING SCREEN -->
+<div id="s-loading" class="screen" style="background:#06080e;align-items:flex-end;justify-content:flex-end;">
+  <div style="padding:clamp(16px,2.5vh,28px) clamp(20px,3vw,36px);display:flex;align-items:center;gap:10px;">
+    <div class="loading-dots">
+      <span></span><span></span><span></span>
     </div>
-    <div class="cr-strip-right">
-      <div class="cr-strip-season" id="cr-season">SEASON 1</div>
-      <div class="cr-strip-md" id="cr-md">MATCHDAY 1 / 34</div>
-    </div>
+    <div style="font-family:'Bebas Neue',sans-serif;font-size:clamp(16px,2.2vw,22px);letter-spacing:.18em;color:var(--gold)">NOW LOADING</div>
   </div>
-  <div class="cr-hub-body">
-    <div class="cr-col">
-      <div class="cr-panel cr-panel-flex2">
-        <div class="cr-panel-hdr">LEAGUE TABLE</div>
-        <div class="cr-panel-body" id="cr-table-body"></div>
-      </div>
-      <div class="cr-panel cr-panel-flex1">
-        <div class="cr-panel-hdr">RECENT RESULTS</div>
-        <div class="cr-panel-body" id="cr-results-body"></div>
-      </div>
-    </div>
-    <div class="cr-col">
-      <div class="cr-panel">
-        <div class="cr-panel-hdr">NEXT FIXTURE <span id="cr-fix-md">MD1</span></div>
-        <div id="cr-fixture-area"></div>
-        <div class="cr-panel-body cr-pos-panel">
-          <div class="cr-stat-lbl">YOUR POSITION</div>
-          <div class="cr-position" id="cr-position">1ST</div>
-          <div class="cr-pts-line" id="cr-pts-line">0 PTS</div>
-        </div>
-      </div>
-      <div class="cr-panel cr-panel-flex1">
-        <div class="cr-panel-hdr">SEASON STATS</div>
-        <div class="cr-panel-body" id="cr-stats-body"></div>
-      </div>
-    </div>
-  </div>
-  <div class="cr-actions">
-    <button class="cr-act cr-act-simall" onclick="crSimAll()">⏩ SIM ALL<span class="cr-act-sub">MATCHDAY</span></button>
-    <button class="cr-act cr-act-sim" onclick="crSimNext()">▶ SIMULATE<span class="cr-act-sub">YOUR MATCH</span></button>
-    <button class="cr-act cr-act-play" onclick="crPlay()">⚽ PLAY<span class="cr-act-sub">KICK OFF</span></button>
-  </div>
-</div>
-
-<!-- CAREER: MATCH RESULT -->
-<div id="s-career-result" class="screen cr-result-screen">
-  <div class="cr-res-box" id="cr-res-box">
-    <div class="cr-res-md" id="cr-res-md"></div>
-    <div class="cr-res-teams">
-      <div class="cr-res-tname home" id="cr-res-home"></div>
-      <div class="cr-res-score" id="cr-res-score"></div>
-      <div class="cr-res-tname away" id="cr-res-away"></div>
-    </div>
-    <div class="cr-res-outcome" id="cr-res-outcome"></div>
-    <div class="cr-res-detail" id="cr-res-detail"></div>
-    <button class="cr-res-continue" onclick="crCloseResult()">CONTINUE →</button>
-  </div>
-</div>
-
-<!-- CAREER: SEASON END -->
-<div id="s-career-season" class="screen">
-  <div class="cr-topbar">
-    <div class="cr-title" id="cr-se-title">SEASON COMPLETE</div>
-    <div class="cr-sub" id="cr-se-sub"></div>
-  </div>
-  <div class="cr-season-body" id="cr-season-body"></div>
 </div>
 
 </div><!-- /viewport -->
