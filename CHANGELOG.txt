@@ -4,263 +4,331 @@ ULTIMATE ELEVEN — CHANGELOG
 All changes tracked per session. Most recent first.
 
 ────────────────────────────────────────────────
-SESSION: FORMATION INTEGRITY + SPEED REBALANCE
+SESSION: APRIL 17 2026 — CAREER SYSTEM REBUILD + DUEL / BEHAVIOR TUNING
 ────────────────────────────────────────────────
 
-[game.js] OVERALL GAME SPEED REDUCED
-  - MAX_CARRIER_STEP: W*0.0006 → W*0.00048 (carrier moves slower, more readable)
-  - MAX_DEF_STEP:     W*0.0009 → W*0.00072 (engager still faster than carrier)
-  - DRIFT_SPEED:   W*0.00035 → W*0.00020 (formation hold barely perceptible)
-  - ROLE_SPEED:    W*0.00065 → W*0.00030 (defenders track attackers calmly)
-  - SUPPORT_SPEED: W*0.00110 → W*0.00040 (runners advance purposefully)
-  - STRIKER_SPEED: W*0.00160 → W*0.00055 (strikers noticeably faster, not sprinting)
+[game.js] CAREER MODE — MATCH SYSTEM UNIFIED WITH FRIENDLY
+  - Deleted duplicate career squad editor (`s-career-squad` screen + crSquadRender, crSquadTab,
+    crSelectPlayer, crClickSlot, crSquadFormationChange, CSQ_FORMATIONS, ~200 lines)
+  - New crBuildClubTeam(clubKey) builds a proper T[] team object: 11 starters + 7 reserves,
+    18 total players, matching the exact shape of T.germany etc. Star player gets SPECIALS
+    registry match. Morale/injury/suspended fields initialized.
+  - crPlay() now routes through openTeamMenu() → startGame() instead of bypassing with
+    initMatch(). User club always loaded as HT regardless of real home/away (so they always
+    edit their own squad). Real home/away preserved in CAR.pendingMatch.isHome.
+  - goFull() career branch maps G.hG/aG → real fixture home/away via isHome flag.
+  - crSave/crLoad persist T[CAR.myClub].p (with morale/injuries) + HOME_SLOT_ASSIGN +
+    HOME_RESERVES + formation. Loading reconstructs T[clubKey] exactly.
+  - crStart() clears stale T[clubKey] before building fresh roster.
+  - crBuildSquad kept as compat stub returning flattened 11-player view.
 
-[game.js] SPEED STAT NOW AFFECTS OFF-BALL MOVEMENT
-  - spdMult(pl): spd 60 → 0.70×, spd 80 → 1.00×, spd 100 → 1.20×
-  - All glide() calls now pass the player object
-  - Natureza (spd:90) moves to position ~30% faster than a CB (spd:68)
-  - Difference is meaningful but not extreme (was: everyone same speed)
+[game.js / style.css] TEAM EDITOR — MORALE BADGES
+  - Player info panel shows morale emoji + value + FIT/INJ/SUS status for career players
+  - Bench list meta row shows morale emoji inline
+  - .tm-morale-wrap / .tm-morale-row CSS added
 
-[game.js] HARD FORMATION ZONE CAPS
-  - Defenders: hard cap at W*0.46 — never cross halfway when team is attacking
-  - Midfielders: hard cap at W*0.78 — never reach the penalty box
-  - Strikers still push into box when carrier is in final third
-  - Defending team: tighter caps on compression depth
+[game.js] TEAM EDITOR — DYNAMIC BACK BUTTON
+  - teamEditorBack() new router — routes to career hub when G_teamEditorOrigin==='career',
+    otherwise to s-ts (friendly team select)
+  - Origin flag set in crPlay(), crOpenSquad(). Cleared by TEAM MENU → button (friendly).
+  - Saves formation + slot assignments before leaving
 
-[game.js] FORMATION TARGET RANGES TIGHTENED
-  - Defenders: safeProg capped at 0.48 (was 0.60) when attacking
-  - Midfielders: safeProg capped at 0.75 (was 0.85) when attacking
-  - Defending mids: shifted range 0.18–0.65 (was 0.18–0.68)
-  - Defending defs: defCeil W*0.52 (was W*0.58)
+[game.js] CAREER PORTRAITS IN-FIELD
+  - playerImg() rewritten — for career players with clubKey, tries:
+    assets/career/clubs/{lastname}{clubkey}.png → {clubkey}.png → gk.png (GK only)
+  - All career players stamped with clubKey at crBuildClubTeam time
 
-────────────────────────────────────────────────
-SESSION: CARRIER LANE MEMORY (G_laneTarget)
-────────────────────────────────────────────────
+[game.js / index.html] EXIT-TO-MENU TEARDOWN
+  - New exitToMenu() — clears G.mt, G.di, cancelAnimationFrame, hSq, aSq, PP, PT, trail,
+    CAR.pendingMatch, HOME_SLOT_ASSIGN, HOME_RESERVES, pause overlay, G_teamEditorOrigin.
+    Stops match music.
+  - All MENU buttons rewired: pause overlay MENU, end-game MENU, career hub MENU, career
+    clubs MENU, friendly team select MENU.
+  - showSc('s-ts') triggers syncTeamSelections() to refresh HT/AT on every entry.
+  - Fixes: friendly match getting stuck in stale career duel after abandoning a career match.
 
-[game.js] ROOT CAUSE: CARRIER DRIFTS TO CENTRE AFTER REACHING CLICK TARGET
-  - When G_moveTarget cleared (player reached destination), AI took over
-  - AI forward push (tx = cp.x + dir*forward) dominated, ignoring sideways intent
-  - Wide run bias also incorrectly applied to human-controlled carrier
+[game.js] ANIMATION LOOP RESPECTS G.paused
+  - startAnim() now early-returns (only draws) when G.paused. Previously players and ball
+    kept moving in the background while the pause overlay was visible.
 
-[game.js] FIX: G_laneTarget — persistent lane memory
-  - New variable stores the Y coordinate from the last human click
-  - After G_moveTarget clears, carrierAdvanceVector uses G_laneTarget as Y anchor
-  - Player stays in the lane they were directed to (wing, touchline, etc.)
-  - G_laneTarget only resets on actual possession changes:
-    · Pass received by teammate
-    · One-two received
-    · Dribble success (afSucc)
-    · Turnover / possession won by opponent
-    · Goal scored
-  - NOT reset just from reaching the click destination
-  - Wide run bias (widthLean) now only applied to AI carriers, not human
+[game.js] MATCH LENGTH + DUEL SLOWDOWN TUNING
+  - G.tL reduced from 2700 → 2400 ticks per half (~2.24 min real, 4.5 min total)
+  - Duel slowdown relaxed: 0.75 skip → 0.55 skip (clock moves more during duels)
+  - Second half now calls startMatchMusic() (was missing — music stayed silent after halftime)
 
-────────────────────────────────────────────────
-SESSION: FIELD BOUNDARIES + SHOT GATE FIX
-────────────────────────────────────────────────
+[game.js] FOUL — FREE KICK ACTUALLY RESUMES PLAY
+  - rollFoul() now calls closeDuel(), sets G.phase='idle', then after 1.2s delay sets up
+    free kick position and transitions G.phase='moving'. Previously game hung with duel
+    overlay dismissed but no phase transition.
+  - Nearest attacking field player takes the free kick at foul spot
+  - Penalty kick places ball + taker at penalty spot
 
-[game.js] PITCH BOUNDARIES EXPANDED (PB constants)
-  - x0: 0.085 → 0.060  (left touchline)
-  - x1: 0.915 → 0.940  (right touchline)
-  - y0: 0.155 → 0.120  (top touchline)
-  - y1: 0.810 → 0.850  (bottom touchline)
-  - Players can now reach the full width and depth of the visible pitch
-  - NOTE: if players still don't align with white lines, fine-tune these 4 values
+[game.js] OFF-BALL PLAYER BEHAVIOR REWRITTEN
+  - Forwards (ST/LW/RW) now stay AHEAD of carrier (between carrier and goal) instead of
+    chasing carrier's X position. Striker leads defensive line, wingers hold wide lanes.
+  - Striker makes diagonal run into box when carrier in final third.
+  - Midfielders: runners support ahead, CM1 drops deep as outlet pass option, others hold
+    shape slightly shifted with play.
+  - Fullbacks (LB/RB) can overlap ONLY when carrier is on same flank in final third (30% chance).
+  - Defenders never cross halfway line when attacking.
+  - Defending team: markers stay goal-side of their assigned attacker. Blocker now tracks
+    most-advanced free attacker specifically (not just midpoint).
+  - Defending forwards press-check: drop to mid-line if carrier is still in own half.
+  - Defensive line compacts behind carrier with ball-side shift.
 
-[game.js] MOVEMENT CLAMPS EXPANDED
-  - Carrier X: W*0.03–0.97 → W*0.01–0.99
-  - Carrier Y: H*0.05–0.95 → H*0.03–0.97
-  - Engager/defender X: same expansion
-  - Manual click target: W*0.05–0.95 → W*0.01–0.99
-  - Carrier advance vector: W*0.04–0.96 → W*0.01–0.99
-  - GK lateral range: H*0.28–0.72 → H*0.15–0.85
-
-[game.js] SHOT GATE THRESHOLD RAISED
-  - Old: progress > 0.79 && centrality > 0.42
-  - New: progress > 0.88 && centrality > 0.35
-  - Auto-duel vs GK now only triggers when carrier is genuinely deep in
-    the penalty box, not from 20% out
-  - Centrality requirement relaxed slightly so wide angles still work
-
-────────────────────────────────────────────────
-SESSION: SPECIAL MOVE CUTSCENE
-────────────────────────────────────────────────
-
-[index.html] SPECIAL CUTSCENE HTML — image only, no text/title
-  - #special-cutscene at viewport level (z-index 150)
-  - Contains: .sc-bg (vignette), .sc-lines (speed lines), .sc-face (img tag)
-  - Uses <img> tag so natural image aspect ratio is preserved
-  - Also added #referee-popup HTML
-
-[style.css] SPECIAL CUTSCENE STYLED
-  - Dark radial vignette + spinning manga speed lines
-  - .sc-face: max-width 52vw, border-radius, gold glow border
-  - img inside: width 100%, height auto — preserves natural ratio
-  - scPop entry animation (scale + translate)
-  - Mobile: 88vw width, speed lines hidden
-
-[game.js] showSpecialCutscene(pl, special, callback)
-  - Loads from assets/cutscene/{lastname}.png (dedicated cutscene images)
-  - NOT from assets/players/ — separate folder for close-up shouting faces
-  - Injects <img> tag for natural aspect ratio
-  - 2200ms duration then fires callback (resDuel)
-  - Duel timer paused during cutscene
-
-[game.js] CUTSCENE TRIGGERS
-  - confirmDuel(): human picks special → cutscene → resDuel()
-  - aiAtk(): AI picks special (all-AI) → aiDef → cutscene → resDuel()
-  - aiAtk(): AI attacks, human defends → cutscene plays alongside defence choice
+[game.js] DUEL SYSTEM — TUNING PASS
+  - afOneTwo FIXED: ball now returns to original carrier (1-2 wall pass), who advances
+    18% of pitch forward. Previously ball went to the teammate (was just a pass).
+  - afSucc (dribble win) advance increased 3% → 14% — now a visible surge through the press.
+  - RPS softened: wrong-read penalty 0.60→0.78, correct-read bonus 1.50→1.35. Intercept
+    base mult 1.05→1.15. Gap between correct/wrong reads narrower but still decisive.
+  - Duel cooldown extended 1200ms → 2500ms — loser visibly drifts back, can't act for 2.5s.
+  - Shot RPS tuned: block 0.68 (was 0.6), save 0.70 (was 0.6), supersave 0.45 (was 0.4).
 
 ────────────────────────────────────────────────
-ASSET PATHS — CUTSCENE IMAGES
+SESSION: APRIL 15 2026 — DUEL UI + CAREER + ENGINE
 ────────────────────────────────────────────────
 
-  assets/cutscene/{lastname}.png  — close-up shouting face for special moves
-  Named same as player lastname, lowercase (e.g. frisina.png, ozora.png)
-  Separate from assets/players/ portraits — can be any aspect ratio
+[game.js] DELTA-TIME MOVEMENT FIX
+  - Animation loop now passes dt (delta time scalar) to tick(), moveOffBall(), tickBallTravel()
+  - dt = elapsed ms / 16.667 (target 60fps frame), capped at 3
+  - On 30fps mobile: dt≈2, step doubles per frame → same real-world speed as 60fps PC
+  - Carrier movement: mv.x/y multiplied by dt, clamp scaled by dt
+  - Defender steps (engager + cover): MAX_DEF_STEP * pressMult * dt
+  - Off-ball speeds (DRIFT/ROLE/SUPPORT/STRIKER): all scaled by dt
+  - Ball travel progress: += dt instead of ++
+  - Ball lerp: Math.min(.18*dt, 1)
+  - Stamina drain/regen: scaled by dt
+  - Result: movement speed now frame-rate independent across all devices
+
+[game.js / index.html / style.css] LOADING SCREEN
+  - #s-loading screen added to index.html (inside #viewport)
+  - Black background, bottom-right corner: three gold pulsing dots + "NOW LOADING" in Bebas Neue gold
+  - Triggers: when user clicks SELECT on team select (before team editor)
+  - Preloads all player portrait images for both teams
+  - Uses onload/onerror listeners + 4 second safety timeout
+  - Once all images loaded (or timeout) → transitions to s-team
+  - By the time user finishes squad building → portraits already cached for match
+  - CSS: .loading-corner, .loading-dots, .loading-label, @keyframes ldot
+
+[style.css / game.js / index.html] 3D DUEL BUTTON SYSTEM
+  - Old flat .dact buttons replaced with extruded 3D .dact3d buttons
+  - Structure: .dact3d > .dact3d-face + .dact3d-bot (extrude bottom)
+  - ATK buttons: .dact-atk (blue theme)
+  - DEF buttons: .dact-def (red theme)
+  - Special shot: .dact-sp (gold theme)
+  - Super save: .dact-ss (cyan theme)
+  - Selected state: .dact-sel (glowing border + colored extrude)
+  - Disabled: .dact-dis (opacity .22, pointer-events none)
+  - Button press: face translateY(3px), bot shrinks
+  - bldA() and bldD() rewritten to generate new HTML structure
+  - selA/selD use .dact-sel class
+  - Disable on resolve targets .dact3d class
+  - GO button (.dcfm): also 3D — .dcfm-face + .dcfm-bot
+  - GO pulses gold animation when ready (.dcfm.rdy)
+  - drop-shadow on buttons makes them look like physical objects on turf
+
+[style.css / index.html] TURF ACTION BAR
+  - .duelbar background replaced with horizontal mow stripe pattern
+    (repeating-linear-gradient 0deg, #1A2517 / #223020, 18px bands)
+  - Floodlight glow via radial-gradient from above
+  - Side vignette via radial gradient
+  - .duelbar::before = turf stripes, ::after = lighting overlay
+  - .dueltop and .duel-row: position:relative z-index:2 to sit above pseudo-elements
+  - .duel-touchline: white pitch line before .duelbar (glow effect)
+  - Zone badge (.duelzone): dark pill with white border, readable on green
+  - dplbl text: rgba(255,255,255,.4) with text-shadow for grass contrast
+  - Buttons get drop-shadow to read as physical objects on pitch
+
+[game.js / index.html] YOUR BUTTONS ONLY
+  - ATK section (#atk-section) only visible when human is attacking
+  - DEF section (#def-section) only visible when human is defending
+  - Opponent buttons never rendered — cleaner, less noise
+  - bldA: toggles #atk-section display
+  - bldD: toggles #def-section display
+
+[game.js] SHAKESCEEN / GOALZOOM — VIEWPORT CENTERING FIX
+  - shakeScreen() now prepends translate(-50%,-50%) to any transform
+    → vp.style.transform = translate(calc(-50% + dx), calc(-50% + dy))
+  - goalZoom() uses base = 'translate(-50%,-50%) ' prefix on all transforms
+  - On finish: restores translate(-50%,-50%) explicitly
+  - Fixes: screen sliding to corner during shots/goals on mobile
+
+[game.js / index.html / style.css] CAREER MODE — FULL FOUNDATION
+  - 18 clubs across 2 divisions (D1: 10 clubs, D2: 8 clubs)
+  - Each club has: name, emoji, star player, special move, OVR rating, name pool
+
+  D1 CLUBS: Nankatsu SC, Toho Academy, Meiwa FC, SV Hamburg, FC Barcelona,
+            Santos FC, Juventus, Paris SG, Ajax, Real Madrid
+
+  D2 CLUBS: Furano FC, Musashi FC, New Team Utd, Vienna AC, Fiorentina,
+            Deportivo FC, Al-Hilal SC, Celtic FC
+
+  SEASON ENGINE:
+  - Round-robin fixtures: home + away = 34 matchdays per division
+  - crSimMatch(): OVR-based formula with home advantage (3 pts) + variance
+  - crApply(): updates table W/D/L/GF/GA/form[]
+  - crSort(): sorts by pts → GD → GF
+  - Promotion: top 2 D2 → D1 each season
+  - Relegation: bottom 2 D1 → D2 each season
+  - OVR progression: champions +2, promoted +1, relegated -1, others 40% chance +1
+    Capped 60–95
+
+  CAREER STATE (let CAR):
+  - myClub, season, matchday, d1/d2 division lists
+  - d1Fix/d2Fix: fixture arrays, d1Tab/d2Tab: live tables
+  - myResults: match history, pendingMatch: active career match
+  - budget: starts $2,000,000, grows with prize money + reputation
+  - reputation: 1–5 (PROMISING → LEGENDARY)
+  - trophies: array of earned titles
+  - squad: persistent player roster (carries between seasons)
+
+  SQUAD SYSTEM:
+  - crBuildSquad(clubKey): generates 11 players for exact engine slots
+    GK/LB/CB1/CB2/RB/CM1/CM2/CM3/LW/ST/RW
+  - Star player always at ST slot with correct special
+  - Club hash-based IDs: prevents home/away ID collision
+  - Generic players get region-flavored names from CR_NAMES pool
+
+  CAREER HUB SCREEN (s-career-hub):
+  - Club identity strip: emoji, name, division, reputation, budget
+  - Season + matchday counter
+  - Left column: live league table + recent results (last 5)
+  - Right column: next fixture preview + position display + season stats
+  - Action bar: SIM ALL | SIMULATE | PLAY (KICK OFF)
+  - SIM ALL: simulates entire matchday (your match + all CPU matches)
+  - SIMULATE: same as SIM ALL
+  - PLAY: loads club squads into match engine, kicks off real match
+
+  MATCH INTEGRATION:
+  - crPlay() sets CAR.pendingMatch and calls crLoadMatchSquads()
+  - crLoadMatchSquads(): assigns club squad to hSq/aSq, sets HT/AT/selHome/selAway
+  - Uses CAR.squad (persistent) if 11+ players, otherwise generates fresh
+  - goFull() detects CAR.active && CAR.pendingMatch → applies score to table,
+    sims rest of matchday CPU vs CPU, increments matchday, shows career result popup
+    instead of friendly end screen
+
+  RESULT POPUP (s-career-result):
+  - Shows score, WIN/DRAW/DEFEAT outcome, table position after match
+  - Color coded: green=win, red=loss, gold=draw
+  - CONTINUE → returns to hub
+
+  SEASON END (s-career-season):
+  - Trophy display (🏆 / ⬆️ / ⬇️ / 📋)
+  - Season stats grid
+  - Promotion/relegation applied and displayed
+  - OVR progression applied to all clubs
+  - Prize money added to budget
+  - Reputation updated
+  - BEGIN NEXT SEASON button
+
+  SAVE / LOAD:
+  - localStorage key: 'ult11_career_v1'
+  - Saves: table, results, division membership, OVR values, budget, rep, trophies, squad
+  - Auto-saves after every matchday advance
+  - CONTINUE CAREER button on club select if save exists
+  - NEW GAME button deletes save
+
+  HOME MENU:
+  - Career button unlocked (was SOON) → opens s-career-clubs
+  - Career mode is clubs-only (no national teams)
+
+[index.html] DP-BALL HARDCODED SHOW CLASS REMOVED
+  - <div class="dp-ball show"> → <div class="dp-ball">
+  - Ball was permanently visible even outside duel overlay
+  - Now only shows when JS adds .show class
+
+────────────────────────────────────────────────
+SESSION: APRIL 9 2026 — MAJOR UPDATE
+────────────────────────────────────────────────
+
+[game.js / style.css] HOME MENU — VERTICAL IMAGE PANEL
+  - Left panel (.hm-visual) constrained to left side
+  - Player images use background-size:contain + center bottom
+  - .hm-right background: semi-transparent rgba + backdrop-filter:blur(2px)
+  - Stadium background visible through right panel
+
+[game.js / index.html] MUSIC BUTTON REMOVED
+  - Sound toggle removed from home menu
+  - 4-track audio: menu.mp3 (loop), match1-3.mp3 (random per match)
+  - Match music starts at kickoff, stops at halftime, resumes 2nd half
+  - Returns to menu music at fulltime and showSc('s-home')
+
+[game.js] ZONE SYSTEM — DISTANCE MATTERS
+  - 4 named shot zones: LONG / MID / BOX / DEADLY
+  - Centrality modifier scales with zone
+  - AI zone-aware shot decision making
+  - SHOT button shows current zone color
+
+[game.js / style.css] TEAM EDITOR — SPECIAL SKILL BADGE
+  - Gold badge: special shot players
+  - Blue badge: GK supersave players
+  - Portrait face card removed — space for stats + skill only
+
+[game.js] JAPAN ROSTER CORRECTED
+  - G.Wakabayashi, H.Matsuyama, S.Aoi, S.Nitta corrected
+  - Y.Isagi added (Blue Lock, jersey:19, LW)
+
+[game.js] ALL STARS TEAM ADDED
+  - Key: 'allstar', flag: ⭐
+  - Includes R.Carlos (id:9901) and Z.Zidane (id:9902)
+  - Default matchup: Japan vs All Stars
+
+[game.js] ITALY ROSTER FIXED
+  - 4-1-3-2 formation, full 11 starters, Gino GK supersave
+
+[game.js] IMPACT SYSTEM
+  - shakeScreen(), goalZoom(), impactText(), btnPop()
+  - Wired to: goals, shots, saves, supersaves, specials, duels, dribbles
 
 ────────────────────────────────────────────────
 SESSION: ENGINE + CLOCK + UX FIXES
 ────────────────────────────────────────────────
 
-[game.js] CLOCK DIRECTION FIXED
-  - Match clock now counts UP: 0:00 → 45:00 (first half), 45:00 → 90:00 (second half)
-  - Was previously a countdown (wrong direction)
-
-[game.js] DUEL SLOWS MATCH CLOCK
-  - While a duel overlay is open, match clock ticks 4× slower (75% skip chance)
-  - Prevents match from burning through time while player is thinking
-
+[game.js] CLOCK COUNTS UP (0:00 → 90:00)
+[game.js] DUEL SLOWS MATCH CLOCK (4× slower during duel)
 [game.js] GK DUEL AUTO-RESOLVES IN 3s
-  - When human is attacker in a shot vs GK, the GK duel timer is 3s (not 30s)
-  - GK is AI-only — no human decision needed, so no waiting
-  - Timer display hidden during GK duel
-
-[game.js] STAMINA RANGE COMPRESSED
-  - spiritMult() range changed from 0.50→1.15 (65% swing) to 0.82→1.05 (23% swing)
-  - Tired players are weaker but never crippled by RNG
-  - Prevents late-game snowball where low-stamina players lose every duel
-
-[game.js] GK SAVES NOW STAT-BASED (afSave rewritten)
-  - Old: pure RNG (catchChance/parryChance/punchChance rolls)
-  - New: shotPow (from calcAttackPower) vs gkPow (from calcDefencePower using sav/ref stats)
-  - Normal shots weak vs good GK, specials genuinely dangerous
-  - Outcome shown: "SHOT 145 vs GK 162" in duel result panel
-  - Outcomes: CAUGHT / PARRIED / REBOUND / GOAL
-
-[game.js] EARLY "GOAL!" MESSAGE FIXED
-  - When attacker wins field duel with a shot, badge now shows "🎯 SHOT ON TARGET!"
-  - "⚽ GOAL!" only shows when actual GK duel resolves as a goal
-  - Was previously showing GOAL before GK even had a chance
-
-[game.js] SHOT POWER STORED FOR GK
-  - G.D.lastShotPow stored in resDuel() so afSave() can use it for comparison
-  - Without this, GK power comparison had no attacker reference
-
-[game.js] REFEREE POPUP RESTORED
-  - showReferee(msg, duration) function added
-  - Triggers: KICK OFF (match start), KICK OFF (after goal), GOAL!, 2ND HALF
-  - Duration: 1200ms — appears briefly then fades
+[game.js] STAMINA RANGE COMPRESSED (0.82→1.05 swing)
+[game.js] GK SAVES STAT-BASED (sav/ref vs shotPow)
+[game.js] EARLY GOAL MESSAGE FIXED (🎯 SHOT ON TARGET first)
+[game.js] AWAY TEAM RESERVES BUG FIXED
+[game.js] REFEREE POPUP: showReferee(msg, duration)
 
 ────────────────────────────────────────────────
 SESSION: DUEL CARD VISUAL OVERHAUL
 ────────────────────────────────────────────────
 
-[index.html] DPAV MOVED OUTSIDE DPC
-  - Portrait (.dpav) is now a sibling of .dpc inside .dp-card-wrap
-  - Allows portrait to overflow above the card frame without border clipping
-
-[style.css] PORTRAIT OVERFLOW
-  - .dpav: position:absolute, bottom:0, height:95%, contain sizing
-  - Portrait floats above card frame — full body visible
-  - No more border appearing over the player image
-
-[style.css] CARD BORDER FIXED
-  - .dpc uses normal border (not outline), overflow:hidden
-  - Border always renders correctly beneath the portrait
-
-[game.js] MIRROR REMOVED
-  - Both cards show player image as supplied — no scaleX(-1) flip
-  - isLeftCard / mirrored toggle removed entirely
-
-[game.js] TEAM FLAG EMBLEM WATERMARK
-  - Team flag emoji injected into card as .dp-card-emblem
-  - Low opacity blur behind the player portrait
-
-[style.css] BALL REPLACED WITH PNG
-  - .dp-ball uses assets/pitch/ball.png instead of ⚽ emoji
-  - Sized with width/height, font-size:0 to hide emoji fallback
+[index.html] DPAV MOVED OUTSIDE DPC (portrait overflows above card)
+[style.css] BALL REPLACED WITH PNG (assets/pitch/ball.png)
+[game.js] MIRROR REMOVED (no scaleX flip)
+[game.js] TEAM FLAG EMBLEM WATERMARK IN CARD
 
 ────────────────────────────────────────────────
-SESSION: BACKGROUNDS + REFEREE POPUP
+SESSION: SPECIAL MOVE CUTSCENE
 ────────────────────────────────────────────────
 
-[style.css] WALLPAPERS WIRED
-  - #s-home: assets/wallpaper/mainmenu.png (dark gradient overlay)
-  - #s-ts: assets/wallpaper/teamselect.png (dark gradient overlay)
-  - #duel-ov: assets/wallpaper/duel.png (semi-transparent overlay)
-
-[index.html] REFEREE POPUP HTML ADDED
-  - #referee-popup placed at #viewport level (not inside mviews)
-  - z-index: 200 — appears above everything including duel overlay
-
-[style.css] REFEREE POPUP STYLED
-  - Floating card: referee image + gold label bar
-  - Slides up from bottom, fades after duration
-  - Bigger image: 100–160px wide, 130–210px tall
+[game.js] showSpecialCutscene(pl, special, callback)
+  - Loads from assets/cutscene/{lastname}.png
+  - 2200ms duration, duel timer paused during cutscene
+  - Race condition fix: _scGen counter prevents stale timeouts
 
 ────────────────────────────────────────────────
-SESSION: TEAM EDITOR MOBILE UX
+SESSION: FORMATION INTEGRITY + SPEED REBALANCE
 ────────────────────────────────────────────────
 
-[style.css] HEADER BAR HIDDEN
-  - .tm-hdr { display:none } — removes "DREAM TEAM EDIT" bar
-  - Frees vertical space on mobile
-
-[style.css] FORMATION SUB-LABEL HIDDEN
-  - .tm-side-sub { display:none } — removes redundant "FORMATION · 4-3-3" line
-  - Formation button already shows this info
-
-[style.css] FLOATING BACK BUTTON
-  - .tm-back-float: position:absolute, top-left, z-index:50
-  - Small gold-bordered button, no layout impact
+[game.js] SPEED CONSTANTS REDUCED (carrier, defender, off-ball)
+[game.js] SPEED STAT AFFECTS OFF-BALL MOVEMENT (spdMult)
+[game.js] HARD FORMATION ZONE CAPS (defenders never cross halfway)
+[game.js] PITCH BOUNDARIES EXPANDED (PB: x0=.060, x1=.940, y0=.120, y1=.850)
+[game.js] SHOT GATE THRESHOLD RAISED (progress>.88, centrality>.35)
 
 ────────────────────────────────────────────────
-SESSION: SPAIN ROSTER CORRECTED
+SESSION: CARRIER LANE MEMORY
 ────────────────────────────────────────────────
 
-[game.js] SPAIN — 11 CORRECT PLAYERS
-  - Casillas (GK, sav:94, rar:3)
-  - Puyol (LB), Pique (CB1), Ramos (CB2, rar:3), Carvajal (RB)
-  - Xavi (CM1, tec:96, rar:3), Hernandez (CM2), Raphael (CM3)
-  - Michael (LW), Raul (RW, rar:3), Torres (ST, rar:3)
-  - Image filenames: casillas.png, puyol.png, pique.png, ramos.png,
-    carvajal.png, xavi.png, hernandez.png, raphael.png,
-    michael.png, raul.png, torres.png
-
-────────────────────────────────────────────────
-SESSION: DUEL MOBILE LAYOUT
-────────────────────────────────────────────────
-
-[style.css] MOBILE DUEL: CARDS CENTERED
-  - .dp-card-wrap: align-items:center on mobile
-  - Cards no longer pushed to the left
-
-[style.css] MOBILE DUEL: GO BUTTON FAR RIGHT
-  - .dcfm: margin-left:auto pushes GO to end of flex row
-
-[style.css] MOBILE DUEL: CARD LOWER
-  - .dpc on mobile anchored to bottom so player art shows above
-
-────────────────────────────────────────────────
-KNOWN BUGS / DEFERRED
-────────────────────────────────────────────────
-
-- Ghost goal bug: still present in some edge cases (generation counter helps but not 100%)
-- Team editor back button: JS side still uses .tm-hdr structure (CSS hides it)
-  → pending: move button element out of .tm-hdr and assign .tm-back-float class
-- Half time / End screens: referee.png not yet wired as background
-  (opted for floating referee popup instead — may revisit)
+[game.js] G_laneTarget: persistent Y lane from last human click
+  - Player stays in lane after reaching click destination
+  - Only resets on actual possession change, not on target clear
 
 ────────────────────────────────────────────────
 ASSET PATHS REFERENCE
@@ -269,7 +337,22 @@ ASSET PATHS REFERENCE
 assets/wallpaper/mainmenu.png    — home menu background
 assets/wallpaper/teamselect.png  — team select background
 assets/wallpaper/duel.png        — duel overlay background
-assets/wallpaper/referee.png     — referee popup image
-assets/wallpaper/home.jpg        — splash screen background
 assets/pitch/ball.png            — duel ball image
+assets/team/{teamkey}.png        — team emblems (lowercase key)
 assets/players/{lastname}.png    — player portraits (lowercase lastname)
+assets/cutscene/{lastname}.png   — special move close-up faces
+assets/audio/menu.mp3            — menu music (loop)
+assets/audio/match1.mp3          — match track 1
+assets/audio/match2.mp3          — match track 2
+assets/audio/match3.mp3          — match track 3
+
+────────────────────────────────────────────────
+KNOWN PENDING / TODO
+────────────────────────────────────────────────
+
+- Career: transfer window between seasons (foundation built, UI pending)
+- Career: player aging system (designed, not yet integrated)
+- Career: manager reputation tiers fully wired
+- Tournament mode (next major feature after career stabilizes)
+- World Cup / Champions League modes
+- PvP mode

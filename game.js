@@ -568,6 +568,7 @@ function showSc(id){
   document.getElementById(id).classList.add('active');
   if(id==='s-home'){hmHover('friendly');returnToMenuMusic();}
   if(id==='s-career-clubs'){crBuildClubList();}
+  if(id==='s-ts'){if(typeof syncTeamSelections==='function')syncTeamSelections();}
 }
 function cs(){say('Coming soon!');}
 
@@ -862,6 +863,7 @@ function assignPlayerToSlot(slot,pid){
   if(resIdx!==-1){ HOME_RESERVES[resIdx]=prev||null; }
   HOME_SLOT_ASSIGN[slot]=pid;
   buildFormationMenu();
+  if(CAR.active)crSave();
 }
 function autoPickHomeTeam(){ initHomeSlots(false); buildFormationMenu(); }
 function resetHomeTeamMenu(){ activeHomeFormation='4-3-3'; HOME_RESERVES=[null,null,null,null,null,null]; initHomeSlots(false); SELECTED_HOME_SLOT='ST'; buildFormationMenu(); }
@@ -895,7 +897,13 @@ function buildBenchList(){
     const main=document.createElement('div'); main.className='tm-bench-main';
     const nm=document.createElement('div'); nm.className='tm-bench-name'; nm.textContent=pl.name;
     const meta=document.createElement('div'); meta.className='tm-bench-meta';
-    meta.textContent=(assignedSlot?('IN '+displayPosLabel(assignedSlot)):inReserve?'IN RESERVES':'AVAILABLE')+' · '+posFamily(pl.pos);
+    let metaTxt=(assignedSlot?('IN '+displayPosLabel(assignedSlot)):inReserve?'IN RESERVES':'AVAILABLE')+' · '+posFamily(pl.pos);
+    if(pl.morale!==undefined){
+      const m=pl.morale||70;
+      const emoji=m>=85?'😄':m>=70?'🙂':m>=50?'😐':m>=30?'😕':'😠';
+      metaTxt+=' · '+emoji+(pl.injured?' INJ':pl.suspended?' SUS':'');
+    }
+    meta.textContent=metaTxt;
     main.appendChild(nm); main.appendChild(meta);
     const stats=document.createElement('div'); stats.className='tm-bench-stats';
     stats.innerHTML='SPD '+gs(pl,'spd')+'<br>PAS '+gs(pl,'pas');
@@ -920,6 +928,45 @@ function updateSelectedSlotPanel(){
   buildBenchList();
 }
 
+// Full teardown when leaving mid-match / returning to main menu.
+// Kills timers, clears squads, clears pending career match, stops animations.
+function exitToMenu(){
+  try{clearInterval(G.mt);clearInterval(G.di);cancelAnimationFrame(raf);}catch(e){}
+  if(G){G.phase='idle';G.paused=false;G.mt=null;G.di=null;G.pm=false;G.kickoffUntil=0;G.goalGen=(G.goalGen||0)+1;}
+  if(typeof closeDuel==='function')closeDuel();
+  hSq={};aSq={};PP={h:{},a:{}};PT={h:{},a:{}};
+  if(typeof trail!=='undefined')trail=[];
+  // Reset pause overlay if visible
+  const po=document.getElementById('pause-overlay');if(po)po.style.display='none';
+  const pb=document.getElementById('pauseBtn');if(pb){pb.textContent='⏸';pb.classList.remove('paused');}
+  const ph=document.getElementById('passhint');if(ph)ph.style.display='none';
+  // Abandon career match without saving the score (counts as not played)
+  if(CAR.pendingMatch){CAR.pendingMatch=null;}
+  // Clear roster/team-editor state so a fresh friendly match doesn't inherit career squads
+  HOME_SLOT_ASSIGN={};HOME_RESERVES=[null,null,null,null,null,null];
+  G_teamEditorOrigin=null;
+  stopMatchMusic&&stopMatchMusic();
+  showSc('s-home');
+}
+
+// Dynamic back from the team editor — route to career hub if in career mode.
+function teamEditorBack(){
+  // Only route to career hub when this team-editor session was opened from career.
+  if(G_teamEditorOrigin==='career'){
+    CAR.formation=activeHomeFormation;
+    if(T[CAR.myClub])T[CAR.myClub].formation=activeHomeFormation;
+    crSave();
+    CAR.pendingMatch=null;
+    G_teamEditorOrigin=null;
+    showSc('s-career-hub');
+    if(typeof crRenderHub==='function')crRenderHub();
+    return;
+  }
+  G_teamEditorOrigin=null;
+  showSc('s-ts');
+}
+let G_teamEditorOrigin=null;
+
 function openTeamMenu(){
   if(!selHome||!selAway||selHome===selAway)return;
   // Use team's preferred formation if defined
@@ -937,25 +984,33 @@ function openTeamMenu(){
   buildFormationMenu();
   // Show loading screen while portraits preload, then show team editor
   showSc('s-loading');
-  const _teamImgs=[];
-  [[HT,AT]].flat().forEach(t=>{ if(t)t.p.forEach(pl=>{ const img=playerImg(pl); if(img&&!img.complete)_teamImgs.push(img); }); });
-  if(!_teamImgs.length){ showSc('s-team'); [200,600].forEach(t=>setTimeout(buildFormationMenu,t)); }
-  else {
-    let _done=false;
-    const _finish=()=>{ if(_done)return; _done=true; showSc('s-team'); [200,600].forEach(t=>setTimeout(buildFormationMenu,t)); };
-    let _loaded=0;
-    _teamImgs.forEach(img=>{
-      if(img.complete&&img.naturalWidth>0){_loaded++;if(_loaded>=_teamImgs.length)_finish();return;}
-      const _ol=img.onload,_oe=img.onerror;
-      img.onload=()=>{if(_ol)_ol();_loaded++;if(_loaded>=_teamImgs.length)_finish();};
-      img.onerror=()=>{if(_oe)_oe();_loaded++;if(_loaded>=_teamImgs.length)_finish();};
-    });
-    setTimeout(_finish,4000); // 4s safety timeout
+  // Kick off image loading for all roster players (both teams)
+  const allPlayers=[];
+  [HT,AT].forEach(t=>{if(t&&t.p)t.p.forEach(pl=>allPlayers.push(pl));});
+  allPlayers.forEach(pl=>playerImg(pl));
+  // Poll for completion: check IMG_CACHE entries for each player
+  const cacheKeyFor=(pl)=>{
+    if(!pl)return null;
+    if(pl.clubKey){const ln=playerLastName(pl)||'';return'cr_'+ln+'_'+pl.clubKey;}
+    return playerLastName(pl);
+  };
+  const keys=allPlayers.map(cacheKeyFor).filter(Boolean);
+  const allResolved=()=>keys.every(k=>{const c=IMG_CACHE[k];return c&&c!=='loading'&&c!=='loading2';});
+  if(!keys.length||allResolved()){showSc('s-team');[200,600].forEach(t=>setTimeout(buildFormationMenu,t));}
+  else{
+    let done=false;
+    const finish=()=>{if(done)return;done=true;showSc('s-team');[200,600].forEach(t=>setTimeout(buildFormationMenu,t));};
+    const poll=setInterval(()=>{if(allResolved()){clearInterval(poll);finish();}},120);
+    setTimeout(()=>{clearInterval(poll);finish();},4000); // 4s safety
   }
   [200,600].forEach(t=>setTimeout(buildFormationMenu,t));
 }
 function startGame(){
   if(!selHome||!selAway||!HT||!AT||selHome===selAway)return;
+  // If we started this flow outside career mode (or pending match is stale), clear it
+  if(!CAR.active||!CAR.pendingMatch||(CAR.pendingMatch.home!==selHome&&CAR.pendingMatch.home!==selAway&&CAR.pendingMatch.away!==selHome&&CAR.pendingMatch.away!==selAway)){
+    CAR.pendingMatch=null;
+  }
   hSq={};aSq={};
   const roster=HT.p.slice();
   const used=new Set();
@@ -985,7 +1040,7 @@ function startGame(){
 
 const CV=document.getElementById('C');const cx=CV.getContext('2d');
 let W=0,H=0,PP={h:{},a:{}},PT={h:{},a:{}},ball={x:0,y:0,tx:0,ty:0},trail=[];
-const CR=17,CDms=1200,CS=()=>W*.00023,DS=()=>W*.00030,IR=()=>W*.022,PC=()=>W*.08;
+const CR=17,CDms=2500,CS=()=>W*.00023,DS=()=>W*.00030,IR=()=>W*.022,PC=()=>W*.08;
 const MAX_CARRIER_STEP=()=>Math.max(0.25,W*.00048); // carrier — slow deliberate movement
 const MAX_DEF_STEP=()=>Math.max(0.35,W*.00072);     // engager — slightly faster than carrier
 const MAX_OFFBALL_STEP=()=>Math.max(0.3,W*.0007);  // off-ball
@@ -1013,7 +1068,7 @@ function iPos(){
     POS.forEach(({k})=>{if(!q[k])return;const p=fp(k,s==='h'?'home':'away',G.half);PP[s][k]={x:p.x*W,y:p.y*H};PT[s][k]={x:p.x*W,y:p.y*H};});
   });ball={x:W/2,y:H/2,tx:W/2,ty:H/2};trail=[];
 }
-let G={half:1,tL:2700,hG:0,aG:0,poss:'h',ck:null,chk:null,mom:50,duels:0,shots:0,hP:0,tP:0,phase:'idle',mt:null,di:null,D:{},pm:false,kickoffUntil:0,goalGen:0};
+let G={half:1,tL:2400,hG:0,aG:0,poss:'h',ck:null,chk:null,mom:50,duels:0,shots:0,hP:0,tP:0,phase:'idle',mt:null,di:null,D:{},pm:false,kickoffUntil:0,goalGen:0};
 function setC(k,s){G.poss=s;G.ck=k;G.tP++;if(s==='h')G.hP++;updP();updH();}
 // ═══════════════════════════════════════════════════════════════
 // MOVEMENT ENGINE v2 — Possession State Machine
@@ -1309,16 +1364,29 @@ function tick(dt=1){
   if(ROLES.engager&&!ocd(ds,ROLES.engager)){
     const dp=PP[ds][ROLES.engager];
     if(dp){
+      // Reassign engager if current one is too far and a closer defender is available
+      const currentDist=Math.hypot(dp.x-cp.x,dp.y-cp.y);
+      if(currentDist>W*0.18){
+        let closestK=null,closestD=currentDist*0.75; // must be notably closer
+        Object.keys(sq(ds)).forEach(k=>{
+          if(!sq(ds)[k]||k==='GK'||k===ROLES.engager||ocd(ds,k)||!PP[ds][k])return;
+          const d=Math.hypot(PP[ds][k].x-cp.x,PP[ds][k].y-cp.y);
+          if(d<closestD){closestD=d;closestK=k;}
+        });
+        if(closestK){ROLES.engager=closestK;G.chk=closestK;}
+      }
+    }
+    const dp2=PP[ds][ROLES.engager];
+    if(dp2){
       const targetX=cp.x-dir*W*.01;
       const targetY=cp.y;
-      const dx=targetX-dp.x,dy=targetY-dp.y;
+      const dx=targetX-dp2.x,dy=targetY-dp2.y;
       const dd=Math.hypot(dx,dy)||1;
-      // FIX: use MAX_DEF_STEP directly — old DS()*closeFactor was ~0.24px/frame (invisible movement)
       const pressMult=(G.pressing&&ds==='h')?1.5:1.0;
       const step=MAX_DEF_STEP()*pressMult*dt;
-      dp.x=clamp(dp.x+(dx/dd)*step,W*.01,W*.99);
-      dp.y=clamp(dp.y+(dy/dd)*step,H*.03,H*.97);
-      if(Date.now()>=(G.kickoffUntil||0) && dist(dp,cp)<IR()){G.chk=ROLES.engager;opDuel(false);return;}
+      dp2.x=clamp(dp2.x+(dx/dd)*step,W*.01,W*.99);
+      dp2.y=clamp(dp2.y+(dy/dd)*step,H*.03,H*.97);
+      if(Date.now()>=(G.kickoffUntil||0) && dist(dp2,cp)<IR()){G.chk=ROLES.engager;opDuel(false);return;}
     }
   }
   // PRESS: second player (cover) also sprints toward carrier
@@ -1339,7 +1407,7 @@ function tick(dt=1){
     for(const k of Object.keys(defQ)){
       if(!defQ[k]||k===ROLES.engager||k==='GK'||ocd(ds,k))continue;
       const dp=PP[ds][k];if(!dp)continue;
-      if(dist(dp,cp)<IR()*.85){
+      if(dist(dp,cp)<IR()*1.05){
         ROLES.engager=k;G.chk=k;
         opDuel(false);return;
       }
@@ -1354,20 +1422,14 @@ function moveOffBall(s,ds,dt=1){
   const cp=PP[s][G.ck]; if(!cp)return;
   const dir=dirFor(s);
   const carrierProg=progressFor(s,cp);
-  const dangerProg=carrierProg;
-  const threatLevel=clamp((dangerProg-.30)/.45,0,1);
+  const threatLevel=clamp((carrierProg-.30)/.45,0,1);
 
-  // ── PHILOSOPHY ────────────────────────────────────────────────
-  // Most players barely move — only players with an ACTIVE ROLE
-  // move with purpose. Everyone else holds their formation position.
-  // This creates the CT tactical stillness broken by purposeful runs.
-  //
-  // Movement speeds — runners must be fast enough to visibly support play
-  // ─────────────────────────────────────────────────────────────
+  // Speeds
   const DRIFT_SPEED   = W * 0.00020 * dt;
-  const ROLE_SPEED    = W * 0.00030 * dt;
-  const SUPPORT_SPEED = W * 0.00040 * dt;
-  const STRIKER_SPEED = W * 0.00055 * dt;
+  const ROLE_SPEED    = W * 0.00034 * dt;
+  const SUPPORT_SPEED = W * 0.00042 * dt;
+  const STRIKER_SPEED = W * 0.00058 * dt;
+  const TRACK_SPEED   = W * 0.00048 * dt;
   function spdMult(pl){return pl?clamp(0.60+(gs(pl,'spd')-60)*0.010,0.70,1.30):1.0;}
   function glide(cur,tx,ty,spd,pl){
     const dx=tx-cur.x,dy=ty-cur.y;
@@ -1376,21 +1438,22 @@ function moveOffBall(s,ds,dt=1){
     const step=Math.min(spd*(pl?spdMult(pl):1.0),d);
     cur.x+=(dx/d)*step;cur.y+=(dy/d)*step;
   }
+  // Helper: "ahead of carrier" means further toward opponent's goal than carrier.
+  // dir>0 means attacking to the right (higher X), dir<0 to the left.
+  function aheadOf(carrierX, offset){return carrierX + dir*offset;}
+
+  const attGoalX = goalXFor(s);
+  const ownGoalX = ownGoalXFor(s);
+  const halfwayX = W*0.5;
 
   // ── ATTACKING TEAM ────────────────────────────────────────────
-  // Compute a "safe forward X" — runners never go behind the halfway line
-  // when attacking, never into own box when defending
-  const ownGoalX = ownGoalXFor(s);
-  const attGoalX = goalXFor(s);
-  // Floor: runners must stay at least 20% of pitch ahead of own goal
-  const runnerFloor = dir>0 ? clamp(cp.x, W*.20, W*.90) : clamp(cp.x, W*.10, W*.80);
-
   Object.keys(sq(s)).forEach(k=>{
     if(!sq(s)[k]||k===G.ck||!PP[s][k])return;
     const cur=PP[s][k];
     const p=fp(k,s==='h'?'home':'away',G.half);
+    const pl=sq(s)[k];
 
-    // GK: pinned to goal line — hard clamp prevents any wandering
+    // GK — pinned to own goal line
     if(k==='GK'){
       const gkPinX=dir>0?Math.min(p.x*W,W*.072):Math.max(p.x*W,W*.928);
       const gkPinY=clamp(p.y*H+(cp.y-H*.5)*0.04,H*.15,H*.85);
@@ -1400,70 +1463,118 @@ function moveOffBall(s,ds,dt=1){
       return;
     }
 
-    // Cooling down: drift back to formation
-    if(ocd(s,k)){glide(cur,p.x*W,p.y*H,DRIFT_SPEED*0.5,sq(s)[k]);return;}
+    // Cooling down — return to formation position
+    if(ocd(s,k)){glide(cur,p.x*W,p.y*H,DRIFT_SPEED*0.6,pl);return;}
 
-    const pl=sq(s)[k];
-    const isStriker=k==='ST'||k==='LW'||k==='RW';
-    const carrierInFinalThird=carrierProg>0.65;
+    const zone=zo(k);
+    const isStriker=k==='ST';
+    const isWinger=k==='LW'||k==='RW';
+    const isForward=isStriker||isWinger;
+    const isMid=zone==='mid';
+    const isDef=zone==='def';
 
-    if(k===ROLES.runner1){
-      const tx=clamp(attGoalX*(dir>0?.78:.22),W*.08,W*.92);
-      const ty=p.y*H;
-      const spd=isStriker&&carrierInFinalThird?STRIKER_SPEED:SUPPORT_SPEED;
+    // ── FORWARDS: stay AHEAD of the carrier, stretching the defensive line
+    if(isForward){
+      let tx,ty=p.y*H; // keep horizontal lane from formation
+      if(isStriker){
+        // Striker leads the line — pushes high when carrier advances
+        const offset = carrierProg<0.4 ? W*0.14 : carrierProg<0.7 ? W*0.22 : W*0.28;
+        tx = aheadOf(cp.x, offset);
+        tx = dir>0 ? clamp(tx, halfwayX, W*0.92) : clamp(tx, W*0.08, halfwayX);
+        // When carrier is in final third, make a diagonal run into the box
+        if(carrierProg>0.65){
+          ty = lerp(p.y*H, H*0.5, 0.25);
+          tx = dir>0 ? clamp(tx, W*0.70, W*0.90) : clamp(tx, W*0.10, W*0.30);
+        }
+      } else {
+        // Wingers stay wide, run parallel to carrier or slightly ahead
+        const offset = carrierProg<0.4 ? W*0.06 : W*0.14;
+        tx = aheadOf(cp.x, offset);
+        tx = dir>0 ? clamp(tx, W*0.35, W*0.93) : clamp(tx, W*0.07, W*0.65);
+        // Hold the wide lane — don't drift to center
+        ty = p.y*H;
+      }
+      const spd = k===ROLES.runner1||k===ROLES.runner2 ? STRIKER_SPEED : SUPPORT_SPEED*0.9;
       glide(cur,tx,ty,spd,pl);
-    }else if(k===ROLES.runner2){
-      const tx=clamp(attGoalX*(dir>0?.65:.35),W*.08,W*.92);
-      const ty=p.y*H;
-      const spd=isStriker&&carrierInFinalThird?STRIKER_SPEED:SUPPORT_SPEED*0.90;
-      glide(cur,tx,ty,spd,pl);
-    }else{
-      let tx=p.x*W,ty=p.y*H;
-      if(isStriker&&carrierInFinalThird){
-        tx=clamp(attGoalX*(dir>0?.82:.18),W*.08,W*.92);
-        glide(cur,tx,ty,STRIKER_SPEED*0.75,pl);
+      return;
+    }
+
+    // ── MIDFIELDERS: support lanes, one drops deep as outlet
+    if(isMid){
+      // Runner roles: supporting run ahead of carrier
+      if(k===ROLES.runner1||k===ROLES.runner2){
+        const offset = k===ROLES.runner1 ? W*0.12 : W*0.08;
+        const tx = aheadOf(cp.x, offset);
+        const ty = lerp(p.y*H, cp.y, 0.25);
+        glide(cur, dir>0?clamp(tx,W*.15,W*.85):clamp(tx,W*.15,W*.85), ty, SUPPORT_SPEED, pl);
         return;
       }
-      if(zo(k)==='mid'){
-        const safeProg=clamp(carrierProg-0.12,0.25,0.70);
-        tx=(dir>0?safeProg:1-safeProg)*W;
-        tx=clamp(tx,W*.18,W*.75);ty=p.y*H;
-      }else if(zo(k)==='def'){
-        const safeProg=clamp(carrierProg-0.28,0.12,0.45);
-        tx=(dir>0?safeProg:1-safeProg)*W;
-        tx=clamp(tx,W*.08,W*.44);ty=p.y*H;
+      // Holding mid — stay slightly behind carrier as an outlet (e.g. CM1)
+      if(k==='CM1'){
+        const tx = cp.x - dir*W*0.10;
+        const ty = lerp(p.y*H, H*0.5, 0.15);
+        glide(cur, dir>0?clamp(tx,W*.10,W*.75):clamp(tx,W*.25,W*.90), ty, DRIFT_SPEED*1.4, pl);
+        return;
       }
-      glide(cur,tx,ty,DRIFT_SPEED,pl);
+      // Other mids: hold shape, drift slightly with play
+      const baseProgress = clamp(carrierProg - 0.15, 0.30, 0.60);
+      const tx = (dir>0 ? baseProgress : 1-baseProgress) * W;
+      const ty = p.y*H;
+      glide(cur,clamp(tx,W*.20,W*.80),ty,DRIFT_SPEED,pl);
+      return;
+    }
+
+    // ── DEFENDERS: hold the line, don't push beyond halfway
+    if(isDef){
+      // Fullback overlap ONLY if carrier is on same side in final third
+      const isLB=k==='LB', isRB=k==='RB';
+      const sameSide = (isLB && cp.y<H*0.45) || (isRB && cp.y>H*0.55);
+      if((isLB||isRB) && carrierProg>0.70 && sameSide && Math.random()<0.3){
+        // Overlap run
+        const tx = aheadOf(cp.x, W*0.06);
+        const ty = p.y*H;
+        glide(cur,dir>0?clamp(tx,W*.40,W*.85):clamp(tx,W*.15,W*.60),ty,SUPPORT_SPEED*0.85,pl);
+        return;
+      }
+      // Normal: hold defensive line based on carrier progress, never past halfway
+      const lineProg = clamp(carrierProg - 0.35, 0.08, 0.42);
+      const tx = (dir>0 ? lineProg : 1-lineProg) * W;
+      const cap = dir>0 ? W*0.48 : W*0.52;
+      const final = dir>0 ? Math.min(tx, cap) : Math.max(tx, cap);
+      const ty = p.y*H;
+      glide(cur,final,ty,DRIFT_SPEED*1.2,pl);
+      return;
     }
   });
 
   // ── DEFENDING TEAM ────────────────────────────────────────────
-  // Build marker map once per tick
+  const ddir = dirFor(ds); // defenders attack the OTHER way
   const assignedDefs=new Set([ROLES.engager,ROLES.cover,ROLES.blocker]);
   const freeAtk=validOutfieldKeys(s).filter(k=>k!==G.ck);
+
+  // Build marker map — each free defender marks nearest free attacker
   const markerMap={};
+  const usedAtk=new Set();
   Object.keys(sq(ds)).forEach(k=>{
     if(!sq(ds)[k]||assignedDefs.has(k)||k==='GK'||!PP[ds][k])return;
     let bestA=null,bestD=Infinity;
     freeAtk.forEach(ak=>{
-      if(!PP[s][ak])return;
-      const already=Object.values(markerMap).includes(ak);
-      const d=dist(PP[ds][k],PP[s][ak])*(already?2:1);
+      if(!PP[s][ak]||usedAtk.has(ak))return;
+      const d=dist(PP[ds][k],PP[s][ak]);
       if(d<bestD){bestD=d;bestA=ak;}
     });
-    if(bestA)markerMap[k]=bestA;
+    if(bestA){markerMap[k]=bestA;usedAtk.add(bestA);}
   });
 
   Object.keys(sq(ds)).forEach(k=>{
     if(!sq(ds)[k]||!PP[ds][k])return;
-    if(k===ROLES.engager)return; // engager handled in tick()
+    if(k===ROLES.engager)return; // handled in tick()
     const cur=PP[ds][k];
     const p=fp(k,ds==='h'?'home':'away',G.half);
+    const pl=sq(ds)[k];
 
+    // GK
     if(k==='GK'){
-      // GK stays deep — fast lerp + hard override so it never wanders off line
-      // MUST use dirFor(ds) — the defending team's own direction, not the attacker's
-      const ddir=dirFor(ds);
       const gkBase=ddir>0?Math.min(p.x*W,W*.072):Math.max(p.x*W,W*.928);
       const gkY=clamp(p.y*H+(cp.y-H*.5)*0.06,H*.12,H*.88);
       cur.x=lerp(cur.x,gkBase,0.08); cur.y=lerp(cur.y,gkY,0.06);
@@ -1471,43 +1582,95 @@ function moveOffBall(s,ds,dt=1){
       if(ddir<0&&cur.x<W*.91)cur.x=W*.928;
       return;
     }
-    if(ocd(ds,k)){glide(cur,p.x*W,p.y*H,DRIFT_SPEED*0.5,sq(ds)[k]);return;}
 
+    if(ocd(ds,k)){glide(cur,p.x*W,p.y*H,DRIFT_SPEED*0.6,pl);return;}
+
+    // Cover — sits between carrier and own goal, second line of defense
     if(k===ROLES.cover){
-      const goalX=ownGoalXFor(ds);
-      const tx=clamp(lerp(cp.x,goalX,0.40),W*.04,W*.96);
-      const ty=lerp(p.y*H,cp.y,0.28);
-      glide(cur,tx,ty,ROLE_SPEED,sq(ds)[k]);
-    }else if(k===ROLES.blocker){
-      const goalX=ownGoalXFor(ds);
-      const tx=clamp(lerp(cp.x,goalX,0.62),W*.04,W*.96);
-      const ty=lerp(H*.5,cp.y,0.20);
-      glide(cur,tx,ty,ROLE_SPEED*0.85,sq(ds)[k]);
-    }else if(markerMap[k]){
+      const dgx=ownGoalXFor(ds);
+      const tx=clamp(lerp(cp.x,dgx,0.35),W*.04,W*.96);
+      const ty=lerp(p.y*H,cp.y,0.35);
+      glide(cur,tx,ty,ROLE_SPEED*1.1,pl);
+      return;
+    }
+
+    // Blocker — cuts passing lane to the most dangerous attacker
+    if(k===ROLES.blocker){
+      const dgx=ownGoalXFor(ds);
+      // Find most dangerous attacker (closest to defensive goal)
+      let threat=null, bestProg=-1;
+      freeAtk.forEach(ak=>{
+        if(!PP[s][ak])return;
+        const prog=progressFor(s,PP[s][ak]);
+        if(prog>bestProg){bestProg=prog;threat=ak;}
+      });
+      if(threat&&PP[s][threat]){
+        const tp=PP[s][threat];
+        // Position between ball and threat
+        const tx = lerp(cp.x, tp.x, 0.55);
+        const ty = lerp(cp.y, tp.y, 0.55);
+        glide(cur,tx,ty,ROLE_SPEED*1.0,pl);
+      } else {
+        const tx=clamp(lerp(cp.x,dgx,0.55),W*.04,W*.96);
+        const ty=lerp(H*.5,cp.y,0.25);
+        glide(cur,tx,ty,ROLE_SPEED*0.9,pl);
+      }
+      return;
+    }
+
+    // Markers — goal-side of their man, BUT if carrier is nearby and dangerous, track carrier instead
+    if(markerMap[k]){
       const tgt=PP[s][markerMap[k]];
       if(tgt){
-        const goalX=ownGoalXFor(ds);
-        const tx=lerp(tgt.x,goalX,0.16);
-        const ty=lerp(tgt.y,H*.5,0.10);
-        glide(cur,tx,ty,ROLE_SPEED*0.80,sq(ds)[k]);
-      }else{
-        glide(cur,p.x*W,p.y*H,DRIFT_SPEED,sq(ds)[k]);
+        const dgx=ownGoalXFor(ds);
+        // Swap to carrier tracking if: (a) carrier is progress>0.55 AND (b) I'm closer to carrier than my marker
+        const distToCarrier=Math.hypot(cur.x-cp.x,cur.y-cp.y);
+        const distToMarker=Math.hypot(cur.x-tgt.x,cur.y-tgt.y);
+        const threatClose = carrierProg>0.55 && distToCarrier<distToMarker*1.15;
+        if(threatClose){
+          // Track the carrier's projected forward path
+          const ahead = dir>0 ? 1 : -1; // attacker direction
+          const predictX = cp.x + ahead*W*0.03;
+          const tx = lerp(predictX,dgx,0.15);
+          const ty = lerp(cp.y,H*0.5,0.10);
+          glide(cur,tx,ty,TRACK_SPEED*1.15,pl);
+          return;
+        }
+        // Stay goal-side of the attacker
+        const goalSideBias = 0.18 + threatLevel*0.12;
+        const tx=lerp(tgt.x,dgx,goalSideBias);
+        const ty=lerp(tgt.y,H*0.5,0.08);
+        glide(cur,tx,ty,TRACK_SPEED*0.9,pl);
+        return;
       }
-    }else{
-      let tx=p.x*W,ty=p.y*H;
-      if(zo(k)==='mid'){
-        const base=clamp(dangerProg-.08,.22,.68);
-        const shifted=clamp(base-threatLevel*.15,.18,.65);
-        tx=clamp((dir>0?1-shifted:shifted)*W,W*.15,W*.85);ty=p.y*H;
-      }else if(zo(k)==='def'){
-        const base=clamp(dangerProg-.26,.10,.40);
-        const shifted=clamp(base-threatLevel*.10,.08,.36);
-        const defFloor=dir>0?W*.10:W*.06;
-        const defCeil=dir>0?W*.52:W*.90;
-        tx=clamp((dir>0?1-shifted:shifted)*W,defFloor,defCeil);ty=p.y*H;
-      }
-      glide(cur,tx,ty,DRIFT_SPEED,sq(ds)[k]);
     }
+
+    // Unmarked — shift with play into defensive shape
+    const zone=zo(k);
+    let tx=p.x*W, ty=p.y*H;
+    if(zone==='def'){
+      // Defensive line compacts toward carrier side, never past halfway
+      const lineProg = clamp(carrierProg - 0.20, 0.08, 0.38);
+      tx = (ddir>0 ? lineProg : 1-lineProg) * W;
+      // Ball-side shift
+      ty = lerp(p.y*H, cp.y, 0.18);
+      const cap = ddir>0 ? W*0.48 : W*0.52;
+      tx = ddir>0 ? Math.min(tx,cap) : Math.max(tx,cap);
+    } else if(zone==='mid'){
+      // Midfield line drops if carrier in their half
+      const lineProg = clamp(carrierProg - 0.05, 0.28, 0.62);
+      tx = (ddir>0 ? lineProg : 1-lineProg) * W;
+      ty = lerp(p.y*H, cp.y, 0.12);
+    } else {
+      // Forwards press-check: drop to mid if carrier is in their own half
+      if(carrierProg<0.35){
+        const pressProg = 0.35;
+        tx = (ddir>0 ? pressProg : 1-pressProg) * W;
+      } else {
+        tx = p.x*W;
+      }
+    }
+    glide(cur,clamp(tx,W*.06,W*.94),clamp(ty,H*.05,H*.95),DRIFT_SPEED*1.3,pl);
   });
 }
 
@@ -1558,6 +1721,7 @@ function startAnim(){
   (function loop(ts){
     const dt=_lastFrameTs?Math.min((ts-_lastFrameTs)/16.667,3):1;
     _lastFrameTs=ts;
+    if(G.paused){draw();raf=requestAnimationFrame(loop);return;}
     if(G.phase==='moving')tick(dt);
     if(G.phase==='pass_anim'){tickBallTravel(dt);tickPassMotion();}
     if(G.phase==='moving'&&G.ck&&PP[G.poss]&&PP[G.poss][G.ck]){
@@ -1766,6 +1930,13 @@ function crLoadPortrait(pl,clubKey,onLoad){
   return null;
 }
 
+// Minimal SVG placeholder for career player portraits (used as final fallback).
+function crPlayerSvg(pl,clubKey,size=38){
+  const club=(clubKey&&CR_CLUBS[clubKey])||{colors:['#1a2a4a','#2a4a7a']};
+  const c1=club.colors[0]||'#1a2a4a',c2=club.colors[1]||'#2a4a7a';
+  return `<svg width="${size}" height="${size}" viewBox="0 0 38 38" xmlns="http://www.w3.org/2000/svg"><rect width="38" height="38" rx="5" fill="${c1}"/><rect y="24" width="38" height="14" fill="${c2}"/><circle cx="19" cy="18" r="7" fill="#e8a87c"/></svg>`;
+}
+
 // Returns an <img> tag with src=specific, onerror fallback to club, then SVG
 function crPortraitHtml(pl,clubKey,size=38){
   if(!pl||!clubKey)return crPlayerSvg(pl,clubKey,size);
@@ -1783,25 +1954,53 @@ function playerLastName(pl){
 }
 
 function playerImg(pl){
-  // Career GK: always use gk.png
-  if(pl&&pl.clubKey&&pl.pos==='GK'){
-    const gkKey='career_gk';
-    if(IMG_CACHE[gkKey]&&IMG_CACHE[gkKey]!=='err'&&IMG_CACHE[gkKey]!=='loading')return IMG_CACHE[gkKey];
-    if(!IMG_CACHE[gkKey]){
-      IMG_CACHE[gkKey]='loading';
-      const gi=new Image();
-      gi.onload=()=>{IMG_CACHE[gkKey]=gi;};
-      gi.onerror=()=>{IMG_CACHE[gkKey]='err';};
-      gi.src='assets/career/clubs/gk.png';
+  if(!pl)return null;
+  // Career players: try assets/career/clubs/{lastname}{clubkey}.png → {clubkey}.png → gk.png (GK only)
+  if(pl.clubKey){
+    const ln=playerLastName(pl)||'';
+    const ck=pl.clubKey;
+    const key='cr_'+ln+'_'+ck;
+    const cached=IMG_CACHE[key];
+    if(cached && cached!=='err' && cached!=='loading' && cached!=='loading2')return cached;
+    if(cached==='err'){
+      // exhausted specific+club, try generic GK
+      if(pl.pos==='GK'){
+        const gk='career_gk';
+        const gkC=IMG_CACHE[gk];
+        if(gkC && gkC!=='err' && gkC!=='loading')return gkC;
+        if(!gkC){
+          IMG_CACHE[gk]='loading';
+          const gi=new Image();
+          gi.onload=()=>{IMG_CACHE[gk]=gi;};
+          gi.onerror=()=>{IMG_CACHE[gk]='err';};
+          gi.src='assets/career/clubs/gk.png';
+        }
+      }
+      return null;
+    }
+    if(!cached){
+      // Start loading specific; onerror → try club fallback; onerror of that → 'err'
+      IMG_CACHE[key]='loading';
+      const img=new Image();
+      img.onload=()=>{IMG_CACHE[key]=img;};
+      img.onerror=()=>{
+        IMG_CACHE[key]='loading2';
+        const fb=new Image();
+        fb.onload=()=>{IMG_CACHE[key]=fb;};
+        fb.onerror=()=>{IMG_CACHE[key]='err';};
+        fb.src=`assets/career/clubs/${ck}.png`;
+      };
+      img.src=`assets/career/clubs/${ln}${ck}.png`;
     }
     return null;
   }
+  // Friendly/national players: assets/players/{lastname}.png
   const key=playerLastName(pl);
   if(!key)return null;
   if(IMG_CACHE[key]==='err')return null;
   if(IMG_CACHE[key])return IMG_CACHE[key]==='loading'?null:IMG_CACHE[key];
+  IMG_CACHE[key]='loading';
   const img=new Image();
-  IMG_CACHE[key]=img;
   img.onload=()=>{IMG_CACHE[key]=img;};
   img.onerror=()=>{IMG_CACHE[key]='err';};
   img.src=`assets/players/${key}.png`;
@@ -2217,10 +2416,32 @@ function opDuel(isShot, committedAk){
   const carrier=sq(as)[G.ck];const dk=isShot?'GK':(G.chk||Object.keys(sq(ds)).find(k=>sq(ds)[k]));
   const def=sq(ds)[dk];
   if(isShot&&!def){say('Shot blocked — no goalkeeper!');G.phase='moving';return;}
+  // 2v1 detection — carrier faced by two defenders within tackle range (not for shots vs GK)
+  let dk2=null;
+  if(!isShot&&carrier&&PP[as][G.ck]){
+    const cp=PP[as][G.ck];
+    const defQ=sq(ds);
+    const candidates=[];
+    Object.keys(defQ).forEach(k=>{
+      if(!defQ[k]||k===dk||k==='GK'||ocd(ds,k)||!PP[ds][k])return;
+      const d=dist(PP[ds][k],cp);
+      if(d<IR()*1.35) candidates.push({k,d});
+    });
+    candidates.sort((a,b)=>a.d-b.d);
+    if(candidates.length){
+      dk2=candidates[0].k;
+      // Flag the second defender as engaged — blocks them from cooldown, shows the context
+      const d2=defQ[dk2];if(d2)d2._pending2v1=true;
+    }
+  }
   // committedAk: shot already decided in field duel — attacker gets no second choice, no extra stamina cost
-  G.D={carrier,def,dk,as,ds,isShot,ak:committedAk||null,pk:null,defA:null};
+  G.D={carrier,def,dk,dk2,as,ds,isShot,ak:committedAk||null,pk:null,defA:null,is2v1:!!dk2,duelStage:1};
   const zL={gk:'BUILD-UP',def:'DEFENSIVE THIRD',mid:'MIDFIELD',att:'ATTACKING THIRD'};
-  const z=isShot?'att':zo(G.ck);document.getElementById('dzone').textContent=isShot?'GOAL ATTEMPT':(zL[z]||'DUEL');
+  const z=isShot?'att':zo(G.ck);
+  let zoneTxt=isShot?'GOAL ATTEMPT':(zL[z]||'DUEL');
+  if(G.D.is2v1) zoneTxt='⚠ 2 vs 1 — '+zoneTxt;
+  if(G.D.duelStage===2) zoneTxt='⚠ 2 vs 1 — SECOND DEFENDER';
+  document.getElementById('dzone').textContent=zoneTxt;
   const homeLeft=(G.half===1),leftSide=homeLeft?'h':'a';
   const leftPl=leftSide===as?carrier:def,rightPl=leftSide===as?def:carrier;
   const leftRole=leftSide===as?'ATTACKER':'DEFENDER',rightRole=leftSide===as?'DEFENDER':'ATTACKER';
@@ -2232,6 +2453,8 @@ function opDuel(isShot, committedAk){
     ballEl.className='dp-ball'+(hasBall?' show ball-left':' show ball-right');
   }
   bldA(carrier,isShot); bldD(def,ds,isShot);
+  // ── 2v1 visual: show a second mini defender card stacked next to the main defender ──
+  renderSecondDefender(G.D.is2v1?G.D.dk2:null, ds);
   document.getElementById('di').textContent=as==='h'?'CHOOSE ATTACK (30s)':ds==='h'?'CHOOSE DEFENCE (30s)':'AI DUEL';
   document.getElementById('dcfm').classList.remove('rdy'); document.getElementById('duel-res').classList.remove('show');
   document.getElementById('duel-ov').classList.add('show');
@@ -2241,6 +2464,53 @@ function opDuel(isShot, committedAk){
   if(as==='a'&&!G.D.ak) setTimeout(aiAtk, 280);
   if(as==='a'&&G.D.ak)  setTimeout(()=>{ if(G.D.as==='a'&&G.D.ds==='a') tryRes(); }, 280);
   if(ds==='a') setTimeout(aiDef, as==='a' ? 490 : 260);
+}
+
+// ── 2v1 SECOND DEFENDER MINI-CARD ─────────────────────────────────
+// Renders a bigger portrait of the second defender, positioned BEHIND the main defender
+// for a perspective layered feel. Side mirrors the main defender's side.
+function renderSecondDefender(dk2, ds){
+  const existing=document.getElementById('dpd2-wrap');
+  if(!dk2||!sq(ds)[dk2]){if(existing)existing.remove();return;}
+  const pl=sq(ds)[dk2];
+  const dpwrap=document.querySelector('.dpwrap');
+  if(!dpwrap)return;
+  // Determine which VISUAL side the defender is on.
+  // fCard('a', leftPl, ...) puts whoever is on the left into the .atk card slot.
+  // leftSide = home in 1st half, away in 2nd half. Defender is on the visual left when leftSide===ds.
+  const homeLeft = (G.half===1);
+  const leftSide = homeLeft ? 'h' : 'a';
+  const defOnLeft = (leftSide === ds);
+  let el=existing;
+  if(!el){
+    el=document.createElement('div');
+    el.id='dpd2-wrap';
+    el.className='dpd2-wrap';
+    dpwrap.appendChild(el);
+  }
+  el.classList.toggle('on-left',defOnLeft);
+  el.classList.toggle('on-right',!defOnLeft);
+  const lastName=playerLastName(pl)||'';
+  let bg='';
+  if(pl.clubKey){
+    const ln=lastName.replace(/[^a-z0-9]/g,'');
+    const isGK=pl.pos==='GK';
+    bg=isGK?`assets/career/clubs/gk.png`:`assets/career/clubs/${ln}${pl.clubKey}.png`;
+  } else {
+    bg=`assets/players/${lastName}.png`;
+  }
+  const tl=ds==='h'?'#2882f0':'#f03030';
+  const spMax=pl.pos==='GK'?2000:1500;
+  const spPct=Math.round(((pl.spirit||spMax)/spMax)*100);
+  el.innerHTML=`
+    <div class="dpd2-badge">2ND DEFENDER</div>
+    <div class="dpd2-av" style="background-image:url('${bg}')"></div>
+    <div class="dpd2-info">
+      <div class="dpd2-nm">${pl.name}</div>
+      <div class="dpd2-ps">${pl.pos}</div>
+      <div class="dpd2-energy"><div class="dpd2-energy-fill" style="width:${spPct}%"></div></div>
+    </div>`;
+  el.style.setProperty('--tl',tl);
 }
 
 function fCard(role,pl,s,displayRole){
@@ -2638,20 +2908,21 @@ const ATK_ACTIONS={
 };
 const DEF_ACTIONS={
   tackle:    {base:'def', phys:'pow', mult:1.00, cost:60},
-  intercept: {base:'pas', phys:'def', mult:1.05, cost:50},
+  intercept: {base:'pas', phys:'def', mult:1.15, cost:50},
   block:     {base:'def', phys:'pow', mult:1.10, cost:70},
   save:      {base:'sav', phys:'ref', mult:1.80, cost:90},
   punch:     {base:'ref', phys:'pow', mult:1.40, cost:70},
   supersave: {base:'sav', phys:'ref', mult:3.20, cost:320},
 };
 // B_RPS: attacker's multiplier based on matchup
-// 1.5 = read correctly, 0.6 = read wrong, 1.0 = neutral
+// 1.35 = read correctly (was 1.5), 0.78 = read wrong (was 0.6), 1.0 = neutral
+// Softened so wrong reads still punish but don't completely collapse.
 const RPS={
-  pass:     {tackle:0.6, intercept:1.5, block:1.0, save:1.0, punch:1.0, supersave:1.0},
-  dribble:  {tackle:1.5, intercept:0.6, block:1.0, save:1.0, punch:1.0, supersave:1.0},
-  'one-two':{tackle:1.5, intercept:0.6, block:1.0, save:1.0, punch:1.0, supersave:1.0},
-  shoot:    {tackle:1.0, intercept:1.0, block:0.6, save:0.6, punch:1.0, supersave:0.4},
-  special:  {tackle:1.0, intercept:1.0, block:0.6, save:0.4, punch:1.2, supersave:0.3},
+  pass:     {tackle:0.78, intercept:1.35, block:1.0,  save:1.0,  punch:1.0, supersave:1.0},
+  dribble:  {tackle:1.35, intercept:0.82, block:1.0,  save:1.0,  punch:1.0, supersave:1.0},
+  'one-two':{tackle:1.35, intercept:0.82, block:1.0,  save:1.0,  punch:1.0, supersave:1.0},
+  shoot:    {tackle:1.0,  intercept:1.0,  block:0.68, save:0.70, punch:1.0, supersave:0.45},
+  special:  {tackle:1.0,  intercept:1.0,  block:0.68, save:0.48, punch:1.15,supersave:0.35},
 };
 
 function spiritMult(pl){
@@ -2750,6 +3021,17 @@ function calcDefencePower(def,defA,attackAction){
   if(defA==='block') mult*=1.04;
   if(ROLES.cover && sq(G.D.ds||'a')[ROLES.cover]===def) mult*=(1+ENGINE_CONFIG.duel.coverDefenceBonus);
   if(ROLES.blocker && sq(G.D.ds||'a')[ROLES.blocker]===def) mult*=(1+ENGINE_CONFIG.duel.blockerDefenceBonus);
+  // BOX-DEFENDER BOOST — defending inside own penalty box = +22% power.
+  // Defensive zone is last 22% of pitch from defender's own goal.
+  // Defender's own goal: home defends bottom (high Y), away defends top (low Y).
+  const ds=G.D.ds, dk=G.D.dk;
+  if(ds&&dk&&PP[ds]&&PP[ds][dk]&&defA!=='save'&&defA!=='supersave'&&defA!=='punch'){
+    const dp=PP[ds][dk];
+    // Box: center third on X (0.30-0.70), last 22% of pitch on Y from own goal
+    const inBoxX = dp.x>W*0.30 && dp.x<W*0.70;
+    const inBoxY = ds==='h' ? dp.y>H*0.78 : dp.y<H*0.22;
+    if(inBoxX&&inBoxY) mult*=1.22;
+  }
   return (sBase+sPhys/2)*mult*spiritMult(def)*rng;
 }
 
@@ -2766,6 +3048,18 @@ function resDuel(){
   const atkPow=calcAttackPower(carrier,ak,as);
   let defPow=calcDefencePower(def,defA,ak);
   G.D.lastShotPow=(['shoot','special'].includes(ak))?atkPow:0;
+  // 2v1: second defender contributes 55% of their own defence power using the same action.
+  if(G.D.is2v1 && G.D.dk2 && sq(ds)[G.D.dk2] && !isShot){
+    const def2=sq(ds)[G.D.dk2];
+    const def2Pow=calcDefencePower(def2,defA,ak)*0.55;
+    defPow+=def2Pow;
+    G.D.lastDef2Pow=def2Pow;
+    // Drain stamina slightly on 2nd defender
+    const defCost2=(DEF_ACTIONS[defA]||{}).cost||0;
+    if(defCost2>0){const maxSp=def2.pos==='GK'?2000:1500;def2.spirit=Math.max(0,(def2.spirit||maxSp)-Math.round(defCost2*0.6));}
+    // Cooldown on 2nd defender if attacker wins
+    // (applied further down alongside dk cooldown)
+  }
   // Wall duel — extra defenders nearby add power bonus
   if(!isShot&&def&&PP[ds][dk]){
     const defPos=PP[ds][dk];
@@ -2797,6 +3091,8 @@ function resDuel(){
   updH();
   if(win&&dk)scd(ds,dk);        // loser: full cooldown
   if(!win)scd(as,G.ck);         // loser: full cooldown
+  // 2v1: second defender also gets cooldown on defender-team loss
+  if(win && G.D.is2v1 && G.D.dk2) scd(ds,G.D.dk2);
   // Only the loser gets cooldown — winner is free to act immediately
   const hW=(as==='h'&&win)||(as==='a'&&!win);
   const rc2=hW?'#20c878':'#dc2020';
@@ -2893,7 +3189,7 @@ function resDuel(){
   },950);
 }
 
-function closeDuel(){document.getElementById('duel-ov').classList.remove('show');document.getElementById('duel-res').classList.remove('show');G.pm=false;document.getElementById('pass-banner').style.display='none';}
+function closeDuel(){document.getElementById('duel-ov').classList.remove('show');document.getElementById('duel-res').classList.remove('show');G.pm=false;document.getElementById('pass-banner').style.display='none';const d2=document.getElementById('dpd2-wrap');if(d2)d2.remove();}
 function resume(s,msg){
   closeDuel(); if(msg)say(msg); G.phase='idle'; document.getElementById('passhint').style.display='none';
   // Grace period after duel — no new duel or shot gate can fire for 2.5s
@@ -3080,28 +3376,73 @@ function afPass(s,tk){
       }
     }
   }
-  const receiverName=q[tk]?q[tk].name:'Teammate'; setC(tk,s); if(PP[s][tk]){ball.tx=PP[s][tk].x;ball.ty=PP[s][tk].y;} G_moveTarget=null;G_laneTarget=null; resume(s,receiverName+' receives!');
+  const receiverName=q[tk]?q[tk].name:'Teammate';
+  // Offside check before completing pass
+  if(checkOffside(s,tk))return;
+  setC(tk,s); if(PP[s][tk]){ball.tx=PP[s][tk].x;ball.ty=PP[s][tk].y;} G_moveTarget=null;G_laneTarget=null; resume(s,receiverName+' receives!');
 }
 
 function afOneTwo(s,tk,oldCarrier){
+  // 1-2 (wall pass) — teammate touches the ball back, original carrier receives
+  // and has already advanced forward. Ball must return to the carrier.
   if(s==='h')G.mom=Math.min(100,G.mom+6); else G.mom=Math.max(0,G.mom-6);
   const q=sq(s), carrKey=oldCarrier?Object.keys(q).find(k=>q[k]===oldCarrier):null;
-  if(carrKey&&PP[s][carrKey]){const dir=dirFor(s), cp=PP[s][carrKey]; cp.x=clamp(cp.x+dir*W*.12,W*.04,W*.96); PT[s][carrKey]={x:cp.x,y:cp.y};}
-  if(tk&&q[tk]){setC(tk,s); if(PP[s][tk]){ball.tx=PP[s][tk].x;ball.ty=PP[s][tk].y;}}
-  G_moveTarget=null;G_laneTarget=null; say((q[G.ck]?q[G.ck].name:'Teammate')+' receives — '+(oldCarrier?oldCarrier.name:'runner')+' goes again!'); resume(s,null);
+  if(!carrKey||!PP[s][carrKey]){
+    // Fallback — original carrier not found, treat as pass
+    if(tk&&q[tk]){setC(tk,s); if(PP[s][tk]){ball.tx=PP[s][tk].x;ball.ty=PP[s][tk].y;}}
+    G_moveTarget=null;G_laneTarget=null;
+    resume(s,'Give-and-go');
+    return;
+  }
+  // Advance the original carrier forward — wall pass beats the press
+  const dir=dirFor(s), cp=PP[s][carrKey];
+  const gx=goalXFor(s);
+  // Target advance: 12% pitch, but don't overshoot shot-gate zone or goal line
+  let newX = cp.x + dir*W*.12;
+  // Clamp to just inside shot zone — roughly 88% of pitch distance from own goal
+  const maxX = dir>0 ? W*0.88 : W*0.12;
+  newX = dir>0 ? Math.min(newX, maxX) : Math.max(newX, maxX);
+  newX = clamp(newX, W*.05, W*.95);
+  cp.x=newX;
+  cp.y=lerp(cp.y,H*.5,0.15);
+  PT[s][carrKey]={x:cp.x,y:cp.y};
+  // Short grace — just enough for visual transition, then play resumes and shot gate can fire
+  G.kickoffUntil=Math.max(G.kickoffUntil||0,Date.now()+800);
+  // Keep carrier on the ball (ball returns after teammate's touch)
+  setC(carrKey,s);
+  ball.x=cp.x;ball.y=cp.y;ball.tx=cp.x;ball.ty=cp.y;
+  // Stop auto-advance so the carrier stands at the shot-ready position instead of running past the goal
+  G_moveTarget={x:cp.x,y:cp.y};
+  G_laneTarget=cp.y;
+  const wallName=tk&&q[tk]?q[tk].name:'teammate';
+  resume(s,(oldCarrier?oldCarrier.name:'Carrier')+' gets it back from '+wallName+' — through on goal!');
 }
 
 function afSucc(s,c){
   // After dribble win — 1.5s before shot gate can fire (prevents ghost instant shot)
-  G.kickoffUntil=Math.max(G.kickoffUntil||0,Date.now()+1500);
+  G.kickoffUntil=Math.max(G.kickoffUntil||0,Date.now()+1200);
   if(s==='h')G.mom=Math.min(100,G.mom+4); else G.mom=Math.max(0,G.mom-4);
-  const cp=PP[s][G.ck]; if(cp){const dir=dirFor(s); cp.x=clamp(cp.x+dir*W*.03,W*.04,W*.96); if(PT[s][G.ck])PT[s][G.ck]={x:cp.x,y:cp.y}; ball.x=cp.x;ball.y=cp.y;ball.tx=cp.x;ball.ty=cp.y;}
-  G_moveTarget=null;G_laneTarget=null; resume(s,c?c.name+' gets through!':'Through!');
+  const cp=PP[s][G.ck];
+  if(cp){
+    const dir=dirFor(s);
+    let newX = cp.x + dir*W*.08;
+    const maxX = dir>0 ? W*0.88 : W*0.12;
+    newX = dir>0 ? Math.min(newX, maxX) : Math.max(newX, maxX);
+    newX = clamp(newX, W*.05, W*.95);
+    cp.x=newX;
+    if(PT[s][G.ck])PT[s][G.ck]={x:cp.x,y:cp.y};
+    ball.x=cp.x;ball.y=cp.y;ball.tx=cp.x;ball.ty=cp.y;
+    G_moveTarget={x:cp.x,y:cp.y};G_laneTarget=cp.y;
+  }
+  resume(s,c?c.name+' beats the press — takes it forward!':'Through!');
 }
 
 function afTurn(ns){
   G.goalGen++;
   if(ns==='h')G.mom=Math.min(100,G.mom+6); else G.mom=Math.max(0,G.mom-6);
+  // Foul check — defender won via tackle/block (not intercept)
+  const defA=G.D.defA,attSide=G.D.as,dk=G.D.dk;
+  if((defA==='tackle'||defA==='block')&&rollFoul(ns===attSide?G.D.ds:attSide, dk, attSide))return;
   G_moveTarget=null;G_laneTarget=null; const winnerKey=G.D.dk||null, pk=pickCarrierAfterWin(ns,winnerKey); G.poss=ns; G.ck=pk; G.tP++; if(ns==='h')G.hP++; if(PP[ns][pk]){ball.tx=PP[ns][pk].x;ball.ty=PP[ns][pk].y;} updP();
   const q=sq(ns); resume(ns,(q[pk]?q[pk].name:'Player')+' wins the ball!');
 }
@@ -3143,19 +3484,161 @@ function updP(){
 function startMT(){
   clearInterval(G.mt);
   G.mt=setInterval(()=>{
+    if(G.paused)return;
     if(G.phase==='idle')return;
-    // Slow match clock during duels so thinking time doesn't eat the match
     const inDuel=G.phase==='duel_result'||G.phase==='duel'||document.getElementById('duel-ov').classList.contains('show');
-    if(inDuel&&Math.random()<0.75)return; // 75% chance to skip tick during duel = 4× slower
+    if(inDuel&&Math.random()<0.55)return;
     if(G.tL<=0){clearInterval(G.mt);G.half===1?goHalf():goFull();return;}
     G.tL--;updH();
   },56);
 }
 
+// ── PAUSE ────────────────────────────────────────────────────────
+function togglePause(){
+  if(!G.mt)return;
+  G.paused=!G.paused;
+  const btn=document.getElementById('pauseBtn');
+  const overlay=document.getElementById('pause-overlay');
+  if(G.paused){
+    btn.textContent='▶';btn.classList.add('paused');
+    if(overlay)overlay.style.display='flex';
+  } else {
+    btn.textContent='⏸';btn.classList.remove('paused');
+    if(overlay)overlay.style.display='none';
+  }
+}
+
+// ── EVENT BANNER (offside / foul) ────────────────────────────────
+function showEventBanner(text,type,duration=2200){
+  const el=document.getElementById('event-banner');if(!el)return;
+  el.textContent=text;
+  el.className='event-banner '+(type||'');
+  void el.offsetWidth;
+  el.classList.add('show');
+  setTimeout(()=>el.classList.remove('show'),duration);
+}
+
+// ── OFFSIDE CHECK ─────────────────────────────────────────────────
+// Call when attacker receives the ball — checks if they were behind last defender
+function checkOffside(attackSide,slot){
+  if(!G||G.phase!=='moving')return false;
+  const defSide=attackSide==='h'?'a':'h';
+  const attPos=PP[attackSide]?.[slot];
+  if(!attPos)return false;
+  // Find second-last defender (last outfield defender, GK excluded)
+  const defenders=Object.entries(PP[defSide]||{})
+    .filter(([k])=>k!=='GK')
+    .map(([,p])=>p.y)
+    .sort((a,b)=>attackSide==='h'?a-b:b-a); // sort toward attacking goal
+  const lastDef=defenders[0]; // nearest defender to their own goal
+  if(lastDef===undefined)return false;
+  // Attacker offside if ahead of last defender (in direction of attack)
+  const offside=attackSide==='h'?(attPos.y<lastDef):(attPos.y>lastDef);
+  // Only flag in attacking half
+  const inAttHalf=attackSide==='h'?(attPos.y<H/2):(attPos.y>H/2);
+  if(offside&&inAttHalf){
+    showEventBanner('⛳ OFFSIDE','offside');
+    say('Offside! Free kick to '+(defSide==='h'?HT?.name:AT?.name)+'.');
+    // Reset possession to defending team
+    setTimeout(()=>{
+      G.poss=defSide;
+      const dk=Object.keys(sq(defSide)).find(k=>sq(defSide)[k]&&k!=='GK')||Object.keys(sq(defSide))[0];
+      G.ck=dk;G.chk=null;
+      if(PP[defSide]&&PP[defSide][dk]){PP[defSide][dk].x=attPos.x;PP[defSide][dk].y=attPos.y;}
+      ball.x=attPos.x;ball.y=attPos.y;
+      G.kickoffUntil=Date.now()+2000;
+    },800);
+    return true;
+  }
+  return false;
+}
+
+// ── FOUL SYSTEM ───────────────────────────────────────────────────
+function rollFoul(defSide,defSlot,attSide){
+  // 8% chance of foul on tackle
+  if(Math.random()>0.08)return false;
+  const defPl=sq(defSide)[defSlot];
+  const defPos=PP[defSide]?.[defSlot];
+  if(!defPos)return false;
+  const inBox=defSide==='h'?(defPos.x>W*.35&&defPos.x<W*.65&&defPos.y>H*.75):(defPos.x>W*.35&&defPos.x<W*.65&&defPos.y<H*.25);
+  const isPK=inBox&&Math.random()<0.4;
+  const foulName=defPl?defPl.name.split('.').pop():'Defender';
+  if(isPK){
+    showEventBanner('🟥 PENALTY!','foul',3500);
+    say(foulName+' brings them down — PENALTY KICK!');
+    showReferee('PENALTY!');
+  } else {
+    showEventBanner('🟨 FOUL — FREE KICK','foul',3000);
+    say(foulName+' — foul! Free kick awarded.');
+    showReferee('FOUL');
+  }
+  // Close the duel overlay right away and lock the match into an idle grace.
+  closeDuel();
+  G.phase='idle';
+  const ph=document.getElementById('passhint');if(ph)ph.style.display='none';
+  // Freeze everyone visually during the foul pause — no movement at all
+  G.kickoffUntil=Date.now()+(isPK?4000:3700);
+  // Show a visible "FREE KICK" overlay banner for the full pause duration
+  showFreeKickPause(isPK?'PENALTY!':'FREE KICK',foulName, isPK?3500:3200);
+  // Award possession to attacking team at foul position after the pause
+  setTimeout(()=>{
+    G.poss=attSide;
+    // Find the nearest attacking field player (not GK) to take the free kick
+    const attQ=sq(attSide);
+    const candidates=Object.keys(attQ).filter(k=>attQ[k]&&k!=='GK');
+    let ak=candidates[0]||Object.keys(attQ)[0];
+    if(candidates.length){
+      let best=Infinity;
+      candidates.forEach(k=>{
+        const pp=PP[attSide]?.[k];
+        if(!pp)return;
+        const d=Math.hypot(pp.x-defPos.x,pp.y-defPos.y);
+        if(d<best){best=d;ak=k;}
+      });
+    }
+    G.ck=ak;G.chk=null;G_moveTarget=null;G_laneTarget=null;
+    if(PP[attSide]&&PP[attSide][ak]){PP[attSide][ak].x=defPos.x;PP[attSide][ak].y=defPos.y;}
+    ball.x=defPos.x;ball.y=defPos.y;ball.tx=defPos.x;ball.ty=defPos.y;
+    // Penalty: place ball at penalty spot
+    if(isPK){
+      const pSpotY=attSide==='h'?H*.12:H*.88;
+      ball.x=W/2;ball.y=pSpotY;ball.tx=W/2;ball.ty=pSpotY;
+      if(PP[attSide][ak]){PP[attSide][ak].x=W/2;PP[attSide][ak].y=pSpotY;}
+    }
+    updP();
+    // Resume play
+    G.phase='moving';
+    asnC();
+    if(attSide==='h'){const ph2=document.getElementById('passhint');if(ph2)ph2.style.display='block';}
+    G.kickoffUntil=Date.now()+1500;
+  },isPK?3500:3200);
+  return true;
+}
+
+// ── FREE KICK PAUSE OVERLAY ──────────────────────────────────────
+// A prominent banner that makes fouls feel like a real stoppage.
+function showFreeKickPause(title,foulName,duration){
+  let el=document.getElementById('fk-overlay');
+  if(!el){
+    el=document.createElement('div');
+    el.id='fk-overlay';
+    el.className='fk-overlay';
+    (document.getElementById('viewport')||document.body).appendChild(el);
+  }
+  el.innerHTML=`
+    <div class="fk-card">
+      <div class="fk-title">${title}</div>
+      <div class="fk-sub">${foulName} fouled the attacker</div>
+      <div class="fk-ref">REFEREE HAS WHISTLED</div>
+    </div>`;
+  el.classList.remove('show');void el.offsetWidth;el.classList.add('show');
+  setTimeout(()=>{el.classList.remove('show');},duration);
+}
+
 function updH(){
   // tL counts DOWN from 2700→0. Convert to minutes counting UP.
-  const elapsed=2700-G.tL; // seconds elapsed this half
-  const matchSec=(G.half===1?0:45*60)+Math.round((elapsed/2700)*45*60);
+  const elapsed=2400-G.tL; // seconds elapsed this half
+  const matchSec=(G.half===1?0:45*60)+Math.round((elapsed/2400)*45*60);
   const m=Math.floor(matchSec/60),s=matchSec%60;
   document.getElementById('htime').textContent=String(m).padStart(2,'0')+':'+String(s).padStart(2,'0');
   document.getElementById('hhalf').textContent=G.half===1?'FIRST HALF':'SECOND HALF';
@@ -3177,8 +3660,66 @@ function goHalf(){
   const pp=G.tP>0?Math.round(G.hP/G.tP*100):50;document.getElementById('htp').textContent=pp+'%';
   document.getElementById('hht').textContent=HT?.name||'HOME';document.getElementById('aht').textContent=AT?.name||'AWAY';
   setTeamEmblem(document.getElementById('hht-flag'),selHome,HT?.flag||'🏳');setTeamEmblem(document.getElementById('aht-flag'),selAway,AT?.flag||'🏳');
+  G.subsUsed=G.subsUsed||0;
+  buildSubPanel();
   showSc('s-half');
   stopMatchMusic();
+}
+
+// ── HALFTIME SUBSTITUTIONS ────────────────────────────────────────
+let HT_SUB_OUT=null; // slot key of player being subbed out
+
+function buildSubPanel(){
+  const subsLeft=3-(G.subsUsed||0);
+  const el=document.getElementById('ht-subs-left');
+  if(el)el.textContent=subsLeft+' remaining';
+  buildSubPitchList();
+  buildSubBenchList();
+}
+
+function buildSubPitchList(){
+  const el=document.getElementById('ht-pitch-list');if(!el)return;el.innerHTML='';
+  Object.entries(hSq).forEach(([slot,pl])=>{
+    if(!pl)return;
+    const row=document.createElement('div');
+    row.className='ht-sub-row'+(HT_SUB_OUT===slot?' selected':'')+(pl._subOut?' out':'');
+    const spPct=Math.round((pl.spirit||1500)/1500*100);
+    const spEmoji=spPct>70?'💪':spPct>40?'😤':'😓';
+    row.innerHTML=`<span class="ht-sub-pos">${slot}</span><span>${pl.name.split('.').pop()}</span><span class="ht-sub-spirit">${spEmoji}${spPct}%</span>`;
+    if(!pl._subOut&&(G.subsUsed||0)<3){
+      row.onclick=()=>{HT_SUB_OUT=HT_SUB_OUT===slot?null:slot;buildSubPanel();};
+    }
+    el.appendChild(row);
+  });
+}
+
+function buildSubBenchList(){
+  const el=document.getElementById('ht-bench-list');if(!el)return;el.innerHTML='';
+  const benchIds=HOME_RESERVES||[];
+  const allPlayers=HT?.p||[];
+  benchIds.forEach(pid=>{
+    const pl=allPlayers.find(p=>p.id===pid);if(!pl)return;
+    const row=document.createElement('div');
+    row.className='ht-sub-row';
+    row.innerHTML=`<span class="ht-sub-pos">${pl.pos}</span><span>${pl.name.split('.').pop()}</span>`;
+    if(HT_SUB_OUT&&(G.subsUsed||0)<3){
+      row.onclick=()=>doSub(HT_SUB_OUT,pl);
+    }
+    el.appendChild(row);
+  });
+  if(!benchIds.length){el.innerHTML='<div style="font-size:11px;color:#48586a;padding:8px;">No bench players</div>';}
+}
+
+function doSub(outSlot,inPl){
+  if(!outSlot||!inPl)return;
+  const outPl=hSq[outSlot];if(!outPl)return;
+  // Replace in hSq
+  hSq[outSlot]={...inPl,slot:outSlot,spirit:Math.min(inPl.spirit||1500,1500),cooldownUntil:0,clubKey:outPl.clubKey};
+  outPl._subOut=true;
+  G.subsUsed=(G.subsUsed||0)+1;
+  HT_SUB_OUT=null;
+  say(outPl.name.split('.').pop()+' off → '+inPl.name.split('.').pop()+' on.');
+  buildSubPanel();
 }
 function goFull(){
   clearInterval(G.mt);clearInterval(G.di);G.phase='idle';closeDuel();
@@ -3186,8 +3727,10 @@ function goFull(){
   stopMatchMusic();
   if(CAR.active&&CAR.pendingMatch){
     const pm=CAR.pendingMatch;
-    crApply(crMyTable(),pm.home,pm.away,G.hG,G.aG);
-    const r={md:pm.md,home:pm.home,away:pm.away,hg:G.hG,ag:G.aG,isHome:pm.isHome};
+    // Engine ran user as "home" regardless of fixture. Map G.hG/aG back to real home/away.
+    const realHg=pm.isHome?G.hG:G.aG, realAg=pm.isHome?G.aG:G.hG;
+    crApply(crMyTable(),pm.home,pm.away,realHg,realAg);
+    const r={md:pm.md,home:pm.home,away:pm.away,hg:realHg,ag:realAg,isHome:pm.isHome};
     CAR.myResults.push(r);
     crMyFix()[pm.md].forEach(m=>{
       if(m.home===CAR.myClub||m.away===CAR.myClub)return;
@@ -3207,11 +3750,11 @@ function goFull(){
   document.getElementById('wtag').textContent=wt;showSc('s-end');
   returnToMenuMusic();
 }
-function secondHalf(){G.half=2;G.tL=2700;iPos();const q=sq('a');const kk=['CM2','CM1','ST'].find(k=>q[k])||Object.keys(q).find(k=>q[k]);G.poss='a';G.ck=kk;G.tP++;if(PP.a[kk]){PP.a[kk].x=W/2;PP.a[kk].y=H/2;}ball.x=W/2;ball.y=H/2;ball.tx=W/2;ball.ty=H/2;showSc('s-match');updH();updP();startMT();startAnim();say((AT?.name||'Away')+' kick off — 2nd half!');showReferee('2ND HALF');G.kickoffUntil=Date.now()+3000;G.phase='idle';setTimeout(()=>{asnC();G.phase='moving';},1200);}
+function secondHalf(){G.half=2;G.tL=2400;iPos();const q=sq('a');const kk=['CM2','CM1','ST'].find(k=>q[k])||Object.keys(q).find(k=>q[k]);G.poss='a';G.ck=kk;G.tP++;if(PP.a[kk]){PP.a[kk].x=W/2;PP.a[kk].y=H/2;}ball.x=W/2;ball.y=H/2;ball.tx=W/2;ball.ty=H/2;showSc('s-match');updH();updP();startMT();startAnim();startMatchMusic();say((AT?.name||'Away')+' kick off — 2nd half!');showReferee('2ND HALF');G.kickoffUntil=Date.now()+3000;G.phase='idle';setTimeout(()=>{asnC();G.phase='moving';},1200);}
 
 function initMatch(){
   Object.values(hSq).forEach(p=>{if(p){p.spirit=(p.pos==="GK"?2000:1500);p.cooldownUntil=0;}});Object.values(aSq).forEach(p=>{if(p){p.spirit=(p.pos==="GK"?2000:1500);p.cooldownUntil=0;}});
-  G={half:1,tL:2700,hG:0,aG:0,poss:'h',ck:null,chk:null,mom:50,duels:0,shots:0,hP:0,tP:0,phase:'idle',mt:null,di:null,D:{},pm:false,kickoffUntil:0,pressing:false,goalGen:0};
+  G={half:1,tL:2400,hG:0,aG:0,poss:'h',ck:null,chk:null,mom:50,duels:0,shots:0,hP:0,tP:0,phase:'idle',mt:null,di:null,D:{},pm:false,kickoffUntil:0,pressing:false,goalGen:0,paused:false,subsUsed:0};
   preloadSquadImages(); // start loading all player face images
   showSc('s-match');rsz();iPos();
   startMatchMusic();
@@ -3234,6 +3777,7 @@ function openFormationPicker(){
     b.innerHTML=`<span class="tm-fopt-name">${name}</span>`;
     b.onclick=()=>{
       activeHomeFormation=name;
+      if(CAR.active){CAR.formation=name;if(T[CAR.myClub])T[CAR.myClub].formation=name;}
       // Remap existing slot assignments to new formation without re-running initHomeSlots
       // This prevents reserve players from being pulled into starter slots
       const newSlots=Object.keys(FORMATIONS[name].coords);
@@ -3261,6 +3805,7 @@ function openFormationPicker(){
       HOME_SLOT_ASSIGN=newAssign;
       buildFormationMenu();
       closeFormationPicker();
+      if(CAR.active)crSave();
     };
     grid.appendChild(b);
   });
@@ -3596,6 +4141,15 @@ function updateSelectedSlotPanel(){
       let skillEl=statsRow.parentNode.querySelector('.tm-skill-wrap');
       if(!skillEl){skillEl=document.createElement('div');skillEl.className='tm-skill-wrap';statsRow.parentNode.appendChild(skillEl);}
       skillEl.innerHTML=skillHtml;
+      // Career-only: morale / status badge
+      let moraleEl=statsRow.parentNode.querySelector('.tm-morale-wrap');
+      if(pl.clubKey||pl.morale!==undefined){
+        if(!moraleEl){moraleEl=document.createElement('div');moraleEl.className='tm-morale-wrap';statsRow.parentNode.appendChild(moraleEl);}
+        const m=pl.morale||70;
+        const emoji=m>=85?'😄':m>=70?'🙂':m>=50?'😐':m>=30?'😕':'😠';
+        const status=pl.injured?`<span style="color:#ff5c5c">INJ ${pl.injuredGames||1}g</span>`:pl.suspended?`<span style="color:#ffb84a">SUS</span>`:`<span style="color:#6be37a">FIT</span>`;
+        moraleEl.innerHTML=`<div class="tm-morale-row"><span class="tm-morale-lbl">MORALE</span><span class="tm-morale-val">${emoji} ${m}</span><span class="tm-morale-sep">·</span><span class="tm-morale-status">${status}</span></div>`;
+      } else if(moraleEl){moraleEl.innerHTML='';}
     } else if(statsRow){
       statsRow.innerHTML='';
       const skillEl=statsRow.parentNode?.querySelector('.tm-skill-wrap');
@@ -3708,7 +4262,7 @@ const CR_NAMES={
   marseille:['Mandanda','Taiwo','Bonnart','Cesar','Heinze','Diawara','Valbuena','Koite','Niang','Cisse','Brandao'],
   bremen:['Wiese','Pasanen','Naldo','Mertesacker','Borowski','Diego','Hunt','Jensen','Almeida','Klose','Hugo'],
 };
-let CAR={active:false,myClub:null,season:1,d1:[...CR_D1],d2:[...CR_D2],d1Fix:[],d2Fix:[],d1Tab:{},d2Tab:{},matchday:0,myResults:[],pendingMatch:null,budget:2000000,reputation:1,trophies:[],squad:null};
+let CAR={active:false,myClub:null,season:1,d1:[...CR_D1],d2:[...CR_D2],d1Fix:[],d2Fix:[],d1Tab:{},d2Tab:{},matchday:0,myResults:[],pendingMatch:null,budget:2000000,reputation:1,trophies:[],formation:'4-3-3'};
 function crMyDiv(){return CR_CLUBS[CAR.myClub]?.div||1;}
 function crMyTable(){return crMyDiv()===1?CAR.d1Tab:CAR.d2Tab;}
 function crMyFix(){return crMyDiv()===1?CAR.d1Fix:CAR.d2Fix;}
@@ -3719,23 +4273,74 @@ function crPlayed(t){return t.w+t.d+t.l;}
 function crFmtMoney(n){return n>=1000000?(n/1000000).toFixed(1)+'M':n>=1000?Math.round(n/1000)+'K':String(n);}
 function crSort(table,keys){return[...keys].sort((a,b)=>{const ta=table[a],tb=table[b];if(crPts(tb)!==crPts(ta))return crPts(tb)-crPts(ta);if(crGD(tb)!==crGD(ta))return crGD(tb)-crGD(ta);return tb.gf-ta.gf;});}
 function crCalcOvr(pl){if(!pl)return 60;const s=pl.spd||70,p=pl.pwr||70,t=pl.tec||70,d=pl.def||70;if(pl.pos==='GK')return Math.round(((pl.sav||d)*.45)+(p*.2)+(d*.2)+((pl.ref||p)*.15));if(['CB1','CB2'].includes(pl.pos))return Math.round(d*.45+p*.3+s*.15+t*.1);if(['LB','RB'].includes(pl.pos))return Math.round(d*.35+s*.25+p*.2+t*.2);if(['CM1','CM2','CM3'].includes(pl.pos))return Math.round(t*.35+s*.25+p*.2+d*.2);return Math.round(p*.35+t*.3+s*.25+d*.1);}
-function crBuildSquad(clubKey){
-  const club=CR_CLUBS[clubKey],tier=club.div,base=tier===1?72:60,range=tier===1?14:12;
+// ── BUILD CAREER CLUB AS A FULL TEAM OBJECT IN T[] ─────────────────
+// Creates a team in the exact same shape as T.germany etc: {name, flag, p:[18 players], reserves:[7 ids]}
+// Uses the star's name to hit the SPECIALS registry when applicable.
+function crBuildClubTeam(clubKey){
+  if(T[clubKey]&&T[clubKey]._career)return T[clubKey]; // already built
+  const club=CR_CLUBS[clubKey];if(!club)return null;
+  const tier=club.div,base=tier===1?74:64,range=tier===1?12:12;
   const names=[...(CR_NAMES[clubKey]||CR_NAMES.madrid)];
-  const SLOTS=['GK','LB','CB1','CB2','RB','CM1','CM2','CM3','LW','ST','RW'];
   const hash=clubKey.split('').reduce((a,ch)=>a+ch.charCodeAt(0),0);
   const idBase=(hash*100)%90000+1000;
-  return SLOTS.map((slot,i)=>{
-    const isStar=slot==='ST',isGK=slot==='GK';
-    const ovr=Math.max(50,base+Math.floor(Math.random()*range));
-    const sb=isStar?(tier===1?85:75):ovr;
-    return{id:idBase+i,name:isStar?club.star:(names[i]||'P.'+i),pos:slot,slot,rar:isStar?2:1,
-      spd:sb-Math.floor(Math.random()*8),pwr:sb-Math.floor(Math.random()*8),
-      tec:sb-Math.floor(Math.random()*8),def:isGK?sb:(isStar?52:sb-Math.floor(Math.random()*14)),
-      sav:isGK?sb+6:undefined,ref:isGK?sb+2:undefined,
-      spirit:isGK?2000:1500,cooldownUntil:0,age:isStar?22:18+Math.floor(Math.random()*14),contract:2+Math.floor(Math.random()*3)};
+  // 11 starters + 7 reserves = 18 players. Slot assignments match friendly teams.
+  const LINEUP=[
+    {slot:'GK', pos:'GK', jersey:1},
+    {slot:'LB', pos:'LB', jersey:3},
+    {slot:'CB1',pos:'CB1',jersey:5},
+    {slot:'CB2',pos:'CB2',jersey:4},
+    {slot:'RB', pos:'RB', jersey:2},
+    {slot:'CM1',pos:'CM1',jersey:6},
+    {slot:'CM2',pos:'CM2',jersey:8},
+    {slot:'CM3',pos:'CM3',jersey:10},
+    {slot:'LW', pos:'LW', jersey:11},
+    {slot:'ST', pos:'ST', jersey:9},
+    {slot:'RW', pos:'RW', jersey:7},
+    // reserves
+    {slot:null, pos:'GK', jersey:12,reserve:true},
+    {slot:null, pos:'CB1',jersey:13,reserve:true},
+    {slot:null, pos:'LB', jersey:14,reserve:true},
+    {slot:null, pos:'CM2',jersey:15,reserve:true},
+    {slot:null, pos:'CM1',jersey:16,reserve:true},
+    {slot:null, pos:'LW', jersey:17,reserve:true},
+    {slot:null, pos:'ST', jersey:18,reserve:true},
+  ];
+  const rng=(min,max)=>min+Math.floor(Math.random()*(max-min+1));
+  const players=[];
+  const reserveIds=[];
+  LINEUP.forEach((row,i)=>{
+    const isStar=row.slot==='ST',isGK=row.pos==='GK';
+    const ovr=Math.max(50,base+rng(0,range));
+    const sb=isStar?(tier===1?88:80):ovr;
+    const name=isStar?club.star:(names[i]||'P.'+clubKey.slice(0,3)+(i+1));
+    const pl={
+      id:idBase+i,
+      name,
+      pos:row.pos,
+      spd:Math.max(45,sb-rng(0,8)),
+      pwr:Math.max(45,sb-rng(0,8)),
+      tec:Math.max(45,sb-rng(0,8)),
+      def:isGK?sb:(['LW','ST','RW'].includes(row.pos)?Math.max(40,sb-rng(12,20)):sb-rng(0,10)),
+      rar:isStar?2:(sb>=80?2:1),
+      jersey:row.jersey,
+      clubKey,
+      morale:70+rng(0,20),
+      injured:false,
+      injuredGames:0,
+      suspended:false
+    };
+    if(isGK){pl.sav=Math.min(98,sb+rng(4,8));pl.ref=Math.min(98,sb+rng(0,5));}
+    players.push(pl);
+    if(row.reserve)reserveIds.push(pl.id);
   });
+  // Pick a formation; default 4-3-3
+  const formation='4-3-3';
+  T[clubKey]={name:club.name,flag:club.abbr||'?',p:players,reserves:reserveIds,formation,_career:true};
+  return T[clubKey];
 }
+
+// ── BACKWARDS-COMPAT STUBS (old career squad UI removed) ─────────
+function crBuildSquad(clubKey){const t=crBuildClubTeam(clubKey);return t?t.p.slice(0,11).map((p,i)=>({...p,slot:p.pos,spirit:p.pos==='GK'?2000:1500,cooldownUntil:0})):[];}
 function crMakeFixtures(teams){
   const ts=[...teams];if(ts.length%2!==0)ts.push('BYE');
   const half=ts.length/2,rds=ts.length-1,rounds=[];let list=[...ts];
@@ -3756,197 +4361,82 @@ function crApply(table,home,away,hg,ag){
 function crInitSeason(){CAR.d1Fix=crMakeFixtures([...CAR.d1]);CAR.d2Fix=crMakeFixtures([...CAR.d2]);CAR.d1Tab=crInitTable(CAR.d1);CAR.d2Tab=crInitTable(CAR.d2);CAR.matchday=0;CAR.myResults=[];CAR.pendingMatch=null;}
 function crSimOtherDiv(){const oFix=crMyDiv()===1?CAR.d2Fix:CAR.d1Fix,oTab=crMyDiv()===1?CAR.d2Tab:CAR.d1Tab,md=CAR.matchday;if(md<oFix.length)oFix[md].forEach(m=>{const{hg,ag}=crSimMatch(m.home,m.away);crApply(oTab,m.home,m.away,hg,ag);});}
 const CR_KEY='ult11_career_v1';
-function crSave(){if(!CAR.active)return;try{localStorage.setItem(CR_KEY,JSON.stringify({myClub:CAR.myClub,season:CAR.season,matchday:CAR.matchday,myResults:CAR.myResults,d1Tab:CAR.d1Tab,d2Tab:CAR.d2Tab,d1:CAR.d1,d2:CAR.d2,budget:CAR.budget,reputation:CAR.reputation,trophies:CAR.trophies||[],squad:CAR.squad||null,formation:CAR.formation||'4-3-3',starters:CAR.starters||null,divs:Object.fromEntries(Object.keys(CR_CLUBS).map(k=>[k,CR_CLUBS[k].div])),ovrs:Object.fromEntries(Object.keys(CR_CLUBS).map(k=>[k,CR_CLUBS[k].ovr]))}));}catch(e){}}
+function crSave(){if(!CAR.active)return;try{
+  const myTeam=T[CAR.myClub];
+  const rosterSnap=myTeam?{p:myTeam.p,reserves:myTeam.reserves,formation:myTeam.formation||activeHomeFormation}:null;
+  localStorage.setItem(CR_KEY,JSON.stringify({
+    myClub:CAR.myClub,season:CAR.season,matchday:CAR.matchday,myResults:CAR.myResults,
+    d1Tab:CAR.d1Tab,d2Tab:CAR.d2Tab,d1:CAR.d1,d2:CAR.d2,
+    budget:CAR.budget,reputation:CAR.reputation,trophies:CAR.trophies||[],
+    roster:rosterSnap,slotAssign:HOME_SLOT_ASSIGN||{},reservesAssign:HOME_RESERVES||[],
+    formation:activeHomeFormation||'4-3-3',
+    divs:Object.fromEntries(Object.keys(CR_CLUBS).map(k=>[k,CR_CLUBS[k].div])),
+    ovrs:Object.fromEntries(Object.keys(CR_CLUBS).map(k=>[k,CR_CLUBS[k].ovr]))
+  }));
+}catch(e){}}
 
-// ── SQUAD MANAGEMENT ─────────────────────────────────────────────
-
-// Generate inline SVG player portrait based on name seed + club colors
-function crPlayerSvg(pl,clubKey,size=38){
-  const club=CR_CLUBS[clubKey]||{colors:['#1a2a4a','#2a4a7a']};
-  const c1=club.colors[0],c2=club.colors[1];
-  const seed=pl.id%360;
-  const skinTones=['#f5c9a0','#e8a87c','#c68642','#8d5524','#4a2912'];
-  const skin=skinTones[pl.id%skinTones.length];
-  const hairColors=['#1a0a00','#3d1c00','#6b3a2a','#d4a853','#e8e8e8'];
-  const hair=hairColors[Math.floor(pl.id/7)%hairColors.length];
-  const isStar=pl.rar>=2;
-  return `<svg width="${size}" height="${size}" viewBox="0 0 38 38" xmlns="http://www.w3.org/2000/svg">
-  <defs><clipPath id="pc${pl.id}"><rect width="38" height="38" rx="5"/></clipPath></defs>
-  <g clip-path="url(#pc${pl.id})">
-  <rect width="38" height="38" fill="${c1}"/>
-  <rect y="24" width="38" height="14" fill="${c2}"/>
-  <ellipse cx="19" cy="28" rx="11" ry="8" fill="${c1}"/>
-  <ellipse cx="19" cy="17" rx="7" ry="8" fill="${skin}"/>
-  <ellipse cx="19" cy="11" rx="7.5" ry="5" fill="${hair}"/>
-  ${isStar?`<polygon points="19,3 20.5,7.5 25,7.5 21.5,10 22.8,14.5 19,12 15.2,14.5 16.5,10 13,7.5 17.5,7.5" fill="rgba(240,192,64,0.7)" transform="translate(0,-1) scale(0.7) translate(8,0)"/>`:``}
-  </g></svg>`;
-}
-
-// Morale emoji helper
-function crMoraleEmoji(m){
-  if(m>=85)return'😄';if(m>=70)return'🙂';if(m>=50)return'😐';if(m>=30)return'😕';return'😠';
-}
-
-let CSQ_TAB='starters',CSQ_SELECTED=null,CSQ_SLOT=null;
-
+// ── SQUAD MANAGEMENT — routes to friendly team editor (s-team) ─────
+// Opened from career hub. Loads the user's club into HT and opens the existing team editor.
 function crOpenSquad(){
-  if(!CAR.squad)CAR.squad=crBuildSquad(CAR.myClub);
-  // Initialize morale/injury/suspension if missing
-  CAR.squad.forEach(pl=>{
-    if(pl.morale===undefined)pl.morale=70+Math.floor(Math.random()*20);
-    if(pl.injured===undefined)pl.injured=false;
-    if(pl.injuredGames===undefined)pl.injuredGames=0;
-    if(pl.suspended===undefined)pl.suspended=false;
-  });
-  if(!CAR.formation)CAR.formation='4-3-3';
-  if(!CAR.starters)CAR.starters={};
-  CSQ_TAB='starters';CSQ_SELECTED=null;CSQ_SLOT=null;
-  document.getElementById('csq-clubname').textContent=CR_CLUBS[CAR.myClub]?.name||'SQUAD';
-  document.getElementById('csq-subtitle').textContent='SEASON '+CAR.season+' · MD '+(CAR.matchday+1);
-  document.getElementById('csq-formation').value=CAR.formation;
-  showSc('s-career-squad');
-  // Preload all portraits in background
-  if(CAR.squad)CAR.squad.forEach(pl=>crLoadPortrait(pl,CAR.myClub,()=>crSquadRenderList()));
-  crSquadRender();
-}
-
-const CSQ_FORMATIONS={
-  '4-3-3':{GK:[50,88],LB:[18,72],CB1:[35,72],CB2:[65,72],RB:[82,72],CM1:[30,52],CM2:[50,52],CM3:[70,52],LW:[20,28],ST:[50,24],RW:[80,28]},
-  '4-4-2':{GK:[50,88],LB:[18,72],CB1:[35,72],CB2:[65,72],RB:[82,72],CM1:[25,50],CM2:[45,50],CM3:[65,50],RW:[82,50],LW:[25,28],ST:[50,25]},
-  '4-1-3-2':{GK:[50,88],LB:[18,72],CB1:[35,72],CB2:[65,72],RB:[82,72],CM1:[50,58],CM2:[25,44],CM3:[50,44],RW:[75,44],LW:[30,26],ST:[65,26]},
-  '3-5-2':{GK:[50,88],LB:[25,72],CB1:[50,72],CB2:[75,72],RB:[50,58],CM1:[20,48],CM2:[50,48],CM3:[80,48],LW:[25,28],ST:[45,24],RW:[68,24]},
-};
-
-function crSquadRender(){
-  crSquadRenderPitch();
-  crSquadRenderList();
-}
-
-function crSquadRenderPitch(){
-  const pitch=document.getElementById('csq-pitch');if(!pitch)return;
-  pitch.innerHTML='';
-  const coords=CSQ_FORMATIONS[CAR.formation]||CSQ_FORMATIONS['4-3-3'];
-  Object.entries(coords).forEach(([slot,[xpct,ypct]])=>{
-    const pl=crGetStarter(slot);
-    const el=document.createElement('div');
-    el.className='cr-pitch-slot';
-    el.style.left=xpct+'%';el.style.top=ypct+'%';
-    const badgeCls='cr-pslot-badge'+(CSQ_SLOT===slot?' selected':'')+(pl?.injured?' injured':pl?.suspended?' suspended':'');
-    const portrait=pl?crPortraitHtml(pl,CAR.myClub,36):`<svg width="36" height="36" viewBox="0 0 36 36" xmlns="http://www.w3.org/2000/svg"><circle cx="18" cy="18" r="18" fill="rgba(255,255,255,0.05)"/><text x="18" y="23" text-anchor="middle" font-size="10" fill="rgba(255,255,255,0.3)" font-family="Bebas Neue">+</text></svg>`;
-    el.innerHTML=`<div class="${badgeCls}">${portrait}</div><div class="cr-pslot-name">${pl?pl.name.split('.').pop():slot}</div><div class="cr-pslot-ovr">${pl?crCalcOvr(pl):''}</div>`;
-    el.onclick=()=>crClickSlot(slot);
-    pitch.appendChild(el);
-  });
-}
-
-function crGetStarter(slot){
-  const pid=CAR.starters[slot];
-  if(pid)return CAR.squad.find(p=>p.id===pid)||null;
-  // Auto-fill by position family
-  const used=new Set(Object.values(CAR.starters));
-  return CAR.squad.find(p=>!used.has(p.id)&&p.pos===slot&&!p.injured&&!p.suspended)||null;
-}
-
-function crClickSlot(slot){
-  if(CSQ_SLOT===slot){CSQ_SLOT=null;CSQ_SELECTED=null;}
-  else{CSQ_SLOT=slot;CSQ_SELECTED=null;}
-  crSquadRender();
-}
-
-function crSquadTab(tab){
-  CSQ_TAB=tab;
-  document.querySelectorAll('.cr-stab').forEach(b=>b.classList.toggle('active',b.textContent.toLowerCase()===tab||b.textContent==='ALL'&&tab==='all'||b.textContent==='STARTERS'&&tab==='starters'||b.textContent==='BENCH'&&tab==='bench'));
-  crSquadRenderList();
-}
-
-function crSquadRenderList(){
-  const el=document.getElementById('csq-player-list');if(!el)return;el.innerHTML='';
-  const starterIds=new Set(Object.values(CAR.starters));
-  // Also auto-detect starters
-  const coords=CSQ_FORMATIONS[CAR.formation]||CSQ_FORMATIONS['4-3-3'];
-  Object.keys(coords).forEach(slot=>{const p=crGetStarter(slot);if(p)starterIds.add(p.id);});
-
-  let players=[...CAR.squad];
-  if(CSQ_TAB==='starters')players=players.filter(p=>starterIds.has(p.id));
-  else if(CSQ_TAB==='bench')players=players.filter(p=>!starterIds.has(p.id));
-
-  players.forEach(pl=>{
-    const isStarter=starterIds.has(pl.id);
-    const card=document.createElement('div');
-    card.className='cr-pcard'+(isStarter?' starter':'')+(pl.injured?' injured':'')+(CSQ_SELECTED===pl.id?' selected':'');
-    const statusHtml=pl.injured
-      ?`<span class="cr-pcard-status cr-status-inj">INJ ${pl.injuredGames}g</span>`
-      :pl.suspended?`<span class="cr-pcard-status cr-status-sus">SUS</span>`
-      :`<span class="cr-pcard-status cr-status-ok">FIT</span>`;
-    card.innerHTML=`
-      <div class="cr-pcard-portrait">${crPortraitHtml(pl,CAR.myClub,38)}</div>
-      <div class="cr-pcard-info">
-        <div class="cr-pcard-name">${pl.name}</div>
-        <div class="cr-pcard-meta">
-          <span>${pl.pos}</span>
-          <span class="cr-pcard-morale">${crMoraleEmoji(pl.morale||70)}</span>
-          ${statusHtml}
-        </div>
-      </div>
-      <div class="cr-pcard-right">
-        <div class="cr-pcard-ovr">${crCalcOvr(pl)}</div>
-        <div class="cr-pcard-pos">${isStarter?'START':'BENCH'}</div>
-      </div>`;
-    card.onclick=()=>crSelectPlayer(pl.id);
-    el.appendChild(card);
-  });
-}
-
-function crSelectPlayer(pid){
-  if(CSQ_SLOT){
-    // Assign this player to selected slot
-    const pl=CAR.squad.find(p=>p.id===pid);
-    if(pl&&!pl.injured&&!pl.suspended){
-      // Remove player from any other slot first
-      Object.keys(CAR.starters).forEach(s=>{if(CAR.starters[s]===pid)delete CAR.starters[s];});
-      CAR.starters[CSQ_SLOT]=pid;
-    }
-    CSQ_SLOT=null;CSQ_SELECTED=null;
-  } else {
-    CSQ_SELECTED=CSQ_SELECTED===pid?null:pid;
+  if(!CAR.active||!CAR.myClub)return;
+  // Build the user's club as a T[] team if not done
+  crBuildClubTeam(CAR.myClub);
+  // Need an opponent in T as well so the team editor has a valid away side.
+  // Use the next fixture opponent — if none, fall back to any other club.
+  const fix=crMyFix();let oppKey=null;
+  if(CAR.matchday<fix.length){
+    const myMatch=fix[CAR.matchday].find(m=>m.home===CAR.myClub||m.away===CAR.myClub);
+    if(myMatch)oppKey=myMatch.home===CAR.myClub?myMatch.away:myMatch.home;
   }
-  crSquadRender();
+  if(!oppKey)oppKey=Object.keys(CR_CLUBS).find(k=>k!==CAR.myClub);
+  crBuildClubTeam(oppKey);
+  selHome=CAR.myClub;selAway=oppKey;HT=T[CAR.myClub];AT=T[oppKey];
+  // Restore formation if persisted
+  if(CAR.formation&&FORMATIONS[CAR.formation])activeHomeFormation=CAR.formation;
+  G_teamEditorOrigin='career';
+  openTeamMenu();
 }
 
-function crSquadFormationChange(){
-  CAR.formation=document.getElementById('csq-formation').value;
-  CAR.starters={};// reset manual assignments on formation change
-  crSquadRender();
-}
-
-function crSaveSquad(){
-  crSave();
-  // Flash save button
-  const btn=document.querySelector('.cr-save-btn');
-  if(btn){btn.textContent='✅ SAVED';btn.style.color='#20c878';setTimeout(()=>{btn.textContent='💾 SAVE';btn.style.color='';},1500);}
-}
+// Morale emoji helper (still used in hub / result popup if referenced)
+function crMoraleEmoji(m){if(m>=85)return'😄';if(m>=70)return'🙂';if(m>=50)return'😐';if(m>=30)return'😕';return'😠';}
 
 // Apply match effects after career match: morale shifts, injury/suspension rolls
 function crApplyMatchEffects(won,drew){
-  if(!CAR.squad)return;
-  CAR.squad.forEach(pl=>{
-    // Morale
-    if(won)pl.morale=Math.min(100,(pl.morale||70)+Math.floor(Math.random()*8)+3);
-    else if(drew)pl.morale=Math.max(20,(pl.morale||70)+Math.floor(Math.random()*4)-2);
-    else pl.morale=Math.max(20,(pl.morale||70)-Math.floor(Math.random()*10)-3);
-    // Injury recovery
+  if(!T[CAR.myClub])return;
+  T[CAR.myClub].p.forEach(pl=>{
+    if(pl.morale===undefined)pl.morale=75;
+    if(won)pl.morale=Math.min(100,pl.morale+Math.floor(Math.random()*8)+3);
+    else if(drew)pl.morale=Math.max(20,pl.morale+Math.floor(Math.random()*4)-2);
+    else pl.morale=Math.max(20,pl.morale-Math.floor(Math.random()*10)-3);
     if(pl.injured){pl.injuredGames=Math.max(0,(pl.injuredGames||1)-1);if(pl.injuredGames<=0)pl.injured=false;}
-    // Suspension recovery
     if(pl.suspended)pl.suspended=false;
-    // Random injury chance (3% per player per match)
     if(!pl.injured&&Math.random()<0.03){pl.injured=true;pl.injuredGames=1+Math.floor(Math.random()*4);}
-    // Random red card (1%)
     if(!pl.suspended&&Math.random()<0.01)pl.suspended=true;
   });
   crSave();
 }
 
-function crLoad(){try{const d=JSON.parse(localStorage.getItem(CR_KEY)||'null');if(!d)return false;Object.assign(CAR,{myClub:d.myClub,season:d.season,matchday:d.matchday,myResults:d.myResults||[],d1Tab:d.d1Tab||{},d2Tab:d.d2Tab||{},d1:d.d1||[...CR_D1],d2:d.d2||[...CR_D2],budget:d.budget||2000000,reputation:d.reputation||1,trophies:d.trophies||[],squad:d.squad||null,formation:d.formation||'4-3-3',starters:d.starters||{},active:true,pendingMatch:null});if(d.divs)Object.entries(d.divs).forEach(([k,v])=>{if(CR_CLUBS[k])CR_CLUBS[k].div=v;});if(d.ovrs)Object.entries(d.ovrs).forEach(([k,v])=>{if(CR_CLUBS[k])CR_CLUBS[k].ovr=v;});CAR.d1Fix=crMakeFixtures([...CAR.d1]);CAR.d2Fix=crMakeFixtures([...CAR.d2]);return true;}catch(e){return false;}}
+function crLoad(){try{
+  const d=JSON.parse(localStorage.getItem(CR_KEY)||'null');if(!d)return false;
+  Object.assign(CAR,{
+    myClub:d.myClub,season:d.season,matchday:d.matchday,myResults:d.myResults||[],
+    d1Tab:d.d1Tab||{},d2Tab:d.d2Tab||{},d1:d.d1||[...CR_D1],d2:d.d2||[...CR_D2],
+    budget:d.budget||2000000,reputation:d.reputation||1,trophies:d.trophies||[],
+    formation:d.formation||'4-3-3',active:true,pendingMatch:null
+  });
+  if(d.divs)Object.entries(d.divs).forEach(([k,v])=>{if(CR_CLUBS[k])CR_CLUBS[k].div=v;});
+  if(d.ovrs)Object.entries(d.ovrs).forEach(([k,v])=>{if(CR_CLUBS[k])CR_CLUBS[k].ovr=v;});
+  // Restore user-club roster (morale, injuries, player state)
+  if(d.roster&&d.roster.p&&CAR.myClub){
+    const club=CR_CLUBS[CAR.myClub];
+    T[CAR.myClub]={name:club.name,flag:club.abbr||'?',p:d.roster.p,reserves:d.roster.reserves||[],formation:d.roster.formation||'4-3-3',_career:true};
+  }
+  if(d.slotAssign)HOME_SLOT_ASSIGN=d.slotAssign;
+  if(d.reservesAssign)HOME_RESERVES=d.reservesAssign;
+  if(d.formation&&typeof activeHomeFormation!=='undefined')activeHomeFormation=d.formation;
+  CAR.d1Fix=crMakeFixtures([...CAR.d1]);CAR.d2Fix=crMakeFixtures([...CAR.d2]);
+  return true;
+}catch(e){return false;}}
 function crHasSave(){try{return!!localStorage.getItem(CR_KEY);}catch(e){return false;}}
 function crDeleteSave(){try{localStorage.removeItem(CR_KEY);}catch(e){}CAR.active=false;CAR.myClub=null;}
 function crBuildClubList(){
@@ -3966,7 +4456,7 @@ function crBuildClubList(){
     });
   });
 }
-function crStart(clubKey){CAR.myClub=clubKey;CAR.season=1;CAR.active=true;CAR.budget=2000000;CAR.reputation=1;CAR.trophies=[];CAR.squad=null;CAR.d1=Object.keys(CR_CLUBS).filter(k=>CR_CLUBS[k].div===1);CAR.d2=Object.keys(CR_CLUBS).filter(k=>CR_CLUBS[k].div===2);crInitSeason();showSc('s-career-hub');crRenderHub();}
+function crStart(clubKey){CAR.myClub=clubKey;CAR.season=1;CAR.active=true;CAR.budget=2000000;CAR.reputation=1;CAR.trophies=[];CAR.d1=Object.keys(CR_CLUBS).filter(k=>CR_CLUBS[k].div===1);CAR.d2=Object.keys(CR_CLUBS).filter(k=>CR_CLUBS[k].div===2);delete T[clubKey];crBuildClubTeam(clubKey);HOME_SLOT_ASSIGN={};HOME_RESERVES=[null,null,null,null,null,null];crInitSeason();showSc('s-career-hub');crRenderHub();}
 function crRenderHub(){
   const club=CR_CLUBS[CAR.myClub];if(!club)return;
   document.getElementById('cr-emblem').innerHTML=crBadgeSvg(club,40);
@@ -4033,23 +4523,16 @@ function crPlay(){
   if(!myMatch){crSimAll();return;}
   const isHome=myMatch.home===CAR.myClub,oppKey=isHome?myMatch.away:myMatch.home;
   CAR.pendingMatch={home:myMatch.home,away:myMatch.away,isHome,md:CAR.matchday,oppKey};
-  if(!CAR.squad)CAR.squad=crBuildSquad(CAR.myClub);
-  crLoadMatchSquads(CAR.myClub,oppKey,isHome);
-}
-function crLoadMatchSquads(myKey,oppKey,myIsHome){
-  const myClub=CR_CLUBS[myKey],oppClub=CR_CLUBS[oppKey];
-  const myRaw=CAR.squad&&CAR.squad.length>=11?CAR.squad:crBuildSquad(myKey);
-  const oppRaw=crBuildSquad(oppKey);
-  const SLOTS=['GK','LB','CB1','CB2','RB','CM1','CM2','CM3','LW','ST','RW'];
-  const buildSq=(raw,ck)=>{const sq={};SLOTS.forEach((slot,i)=>{if(raw[i])sq[slot]={...raw[i],slot,spirit:raw[i].pos==='GK'?2000:1500,cooldownUntil:0,clubKey:ck};});return sq;};
-  hSq={};aSq={};
-  if(myIsHome){hSq=buildSq(myRaw,myKey);aSq=buildSq(oppRaw,oppKey);selHome=myKey;selAway=oppKey;HT={name:myClub.name,flag:myClub.abbr||'?'};AT={name:oppClub.name,flag:oppClub.abbr||'?'};}
-  else{hSq=buildSq(oppRaw,oppKey);aSq=buildSq(myRaw,myKey);selHome=oppKey;selAway=myKey;HT={name:oppClub.name,flag:oppClub.abbr||'?'};AT={name:myClub.name,flag:myClub.abbr||'?'};}
-  const htn=document.getElementById('htn'),atn=document.getElementById('atn');
-  if(htn)htn.textContent=HT.name;if(atn)atn.textContent=AT.name;
-  const hfl=document.getElementById('h-flag-hud'),afl=document.getElementById('a-flag-hud');
-  if(hfl)setTeamEmblem(hfl,selHome,HT.flag);if(afl)setTeamEmblem(afl,selAway,AT.flag);
-  initMatch();
+  // Build both clubs as real T[] teams and route through the friendly team editor.
+  crBuildClubTeam(CAR.myClub);
+  crBuildClubTeam(oppKey);
+  // Always put user's club as the "home" side in the editor (HT) so they edit their own squad.
+  // Real home/away is preserved in CAR.pendingMatch.isHome and applied at match end.
+  selHome=CAR.myClub;selAway=oppKey;
+  HT=T[selHome];AT=T[selAway];
+  if(CAR.formation&&FORMATIONS[CAR.formation])activeHomeFormation=CAR.formation;
+  G_teamEditorOrigin='career';
+  openTeamMenu();
 }
 function crShowResult(r){
   const isH=r.isHome,myG=isH?r.hg:r.ag,oppG=isH?r.ag:r.hg;
