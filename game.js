@@ -2532,13 +2532,11 @@ function fCard(role,pl,s,displayRole){
   const avEl=document.getElementById(p+'av');
   const lastName=playerLastName(pl);
   const img=playerImg(pl);
-  // Team flag emblem watermark — PNG if available, flag emoji fallback
+  // Team flag emblem watermark
   cardEl.querySelector('.dp-card-emblem')?.remove();
   const emblemEl=document.createElement('div');
   emblemEl.className='dp-card-emblem';
-  const emblemKey=s==='h'?selHome:selAway;
-  const emblemFlag=s==='h'?(HT?.flag||''):(AT?.flag||'');
-  setTeamEmblem(emblemEl, emblemKey, emblemFlag);
+  emblemEl.textContent=s==='h'?(HT?.flag||''):(AT?.flag||'');
   cardEl.appendChild(emblemEl);
   avEl.classList.remove('mirrored');
   // Career club portrait: direct path, no waiting for playerImg
