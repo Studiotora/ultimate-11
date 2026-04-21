@@ -291,10 +291,10 @@
 
 @media (max-width:900px){
   #s-home .hm-left{width:55%;padding:4vh 4vw;}
-  #s-home .hm-menu{width:48%;gap:8px;padding:2vh 2vw 2vh 0;}
-  #s-home .hm-btn{height:44px;}
+  #s-home .hm-menu{width:48%;gap:6px;padding:1.5vh 2vw 1.5vh 0;}
+  #s-home .hm-btn{height:38px;}
   #s-home .hm-face{padding:0 16px 0 34px;}
-  #s-home .hm-btn .hm-label{font-size:13px;letter-spacing:1.5px;}
+  #s-home .hm-btn .hm-label{font-size:12px;letter-spacing:1.5px;}
   #s-home .hm-btn .hm-num{font-size:10px;letter-spacing:2px;}
   #s-home .hm-dot{width:7px;height:7px;margin-right:8px;}
   #s-home .hm-hint{gap:18px;font-size:9px;letter-spacing:2px;}
@@ -402,6 +402,17 @@
         <span class="hm-num">06</span>
       </div>
     </button>
+
+    <button class="hm-btn" onclick="openWorld()">
+      <div class="hm-face front">
+        <div class="hm-row"><span class="hm-accent"></span><span class="hm-dot"></span><span class="hm-label">World</span></div>
+        <span class="hm-num">07</span>
+      </div>
+      <div class="hm-face back">
+        <div class="hm-row"><span class="hm-accent"></span><span class="hm-dot"></span><span class="hm-label">▶ Travel</span></div>
+        <span class="hm-num">07</span>
+      </div>
+    </button>
   </nav>
 
   <div class="hm-hint">
@@ -416,6 +427,26 @@
   </audio>
 
 </div>
+
+<!-- WORLD (globe) -->
+<div id="s-world" class="screen" style="background:#000;">
+  <iframe id="world-frame" src="" style="position:absolute;inset:0;width:100%;height:100%;border:0;display:block;"></iframe>
+  <button onclick="closeWorld()" style="position:absolute;top:14px;left:14px;z-index:20;padding:9px 16px;background:rgba(0,0,0,.55);border:1px solid rgba(255,255,255,.25);backdrop-filter:blur(8px);color:#fff;font-family:'Bebas Neue',sans-serif;font-size:clamp(12px,1.5vw,15px);letter-spacing:.15em;border-radius:6px;cursor:pointer;">← MENU</button>
+</div>
+
+<script>
+  function openWorld(){
+    var fr=document.getElementById('world-frame');
+    if(!fr.src||fr.src==='about:blank'||fr.src.indexOf('globe.html')===-1){ fr.src='globe.html'; }
+    showSc('s-world');
+  }
+  function closeWorld(){
+    var fr=document.getElementById('world-frame');
+    // stop the 3D scene & audio by unloading
+    fr.src='about:blank';
+    showSc('s-home');
+  }
+</script>
 
 <div id="s-ts" class="screen">
   <div class="ts-hdr"><h2>FRIENDLY — SELECT TEAMS</h2><button class="back-btn" onclick="showSc('s-home')">← MENU</button></div>
