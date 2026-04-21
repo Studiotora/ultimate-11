@@ -298,6 +298,10 @@
   #s-home .hm-btn .hm-num{font-size:10px;letter-spacing:2px;}
   #s-home .hm-dot{width:7px;height:7px;margin-right:8px;}
   #s-home .hm-hint{gap:18px;font-size:9px;letter-spacing:2px;}
+  /* 2v1 second defender — keep inside viewport on phones */
+  .dpd2-wrap{transform:scale(.72);}
+  .dpd2-wrap.on-right{right:2vw!important;}
+  .dpd2-wrap.on-left{left:2vw!important;}
 }
 </style>
 </head>
@@ -576,7 +580,7 @@
       <!-- Two player panels -->
       <div class="dpwrap">
         <!-- Ball floats between cards at dpwrap level -->
-        <div class="dp-ball show" id="dp-ball">⚽</div>
+        <div class="dp-ball show" id="dp-ball"></div>
 
         <!-- ATTACKER (left) -->
         <div class="dp-card-wrap atk">
