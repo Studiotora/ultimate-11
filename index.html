@@ -223,6 +223,78 @@
 .ht-sub-row.out{background:rgba(220,32,32,.08);border-color:rgba(220,32,32,.25);color:#dc2020;text-decoration:line-through;}
 .ht-sub-pos{font-family:'Orbitron',sans-serif;font-size:7px;color:#48586a;width:24px;flex-shrink:0;}
 .ht-sub-spirit{font-size:9px;margin-left:auto;}
+
+/* ==================== NEW HOME MENU (scoped to #s-home) ==================== */
+#s-home{overflow:hidden;color:#fff;font-family:"Arial Black","Helvetica Neue",sans-serif;
+  background-image:url('assets/wallpaper/mainmenu.png');
+  background-size:cover;background-position:center;background-color:#05070d;}
+/* atmospheric overlays on top of the PNG */
+#s-home::before{content:"";position:absolute;inset:0;pointer-events:none;
+  background:
+    radial-gradient(ellipse at 20% 50%, rgba(0,234,255,.18), transparent 60%),
+    radial-gradient(ellipse at 80% 70%, rgba(255,46,77,.18), transparent 55%),
+    repeating-linear-gradient(90deg, rgba(255,255,255,.04) 0 2px, transparent 2px 80px),
+    repeating-linear-gradient(0deg,  rgba(255,255,255,.04) 0 2px, transparent 2px 80px);
+  mix-blend-mode:screen;}
+#s-home .hm-streak{position:absolute;width:140%;height:60px;filter:blur(6px);transform:rotate(-12deg);pointer-events:none;z-index:1;animation:hm-slide 8s linear infinite;}
+#s-home .hm-streak.s1{top:25%;background:linear-gradient(90deg,transparent,rgba(0,234,255,.30),transparent);}
+#s-home .hm-streak.s2{top:65%;background:linear-gradient(90deg,transparent,rgba(255,46,77,.30),transparent);animation-duration:11s;animation-delay:-3s;}
+@keyframes hm-slide{0%{transform:translateX(-30%) rotate(-12deg);}100%{transform:translateX(30%) rotate(-12deg);}}
+#s-home .hm-ball{position:absolute;left:38%;top:55%;width:260px;height:260px;border-radius:50%;z-index:2;opacity:.18;pointer-events:none;
+  background:radial-gradient(circle at 30% 30%, #fff 0%, #cfd8e3 40%, #3a4a66 80%);
+  box-shadow:0 0 60px rgba(0,234,255,.35), inset -20px -30px 50px rgba(0,0,0,.6);
+  animation:hm-spin 18s linear infinite;}
+@keyframes hm-spin{to{transform:rotate(360deg);}}
+
+/* LEFT title block */
+#s-home .hm-left{position:absolute;left:0;top:0;bottom:0;width:55%;display:flex;flex-direction:column;justify-content:center;padding:6vh 5vw;z-index:3;}
+#s-home .hm-title{font-size:clamp(48px,7vw,112px);line-height:.9;font-style:italic;font-weight:900;letter-spacing:-2px;text-transform:uppercase;
+  background:linear-gradient(180deg,#fff 0%, #ffcc33 55%, #ff8a00 100%);
+  -webkit-background-clip:text;background-clip:text;-webkit-text-fill-color:transparent;
+  filter:drop-shadow(0 6px 0 rgba(0,0,0,.6)) drop-shadow(0 0 22px rgba(255,204,51,.35));
+  transform:skewX(-6deg);}
+#s-home .hm-title .big{display:block;font-size:1.25em;}
+#s-home .hm-press{margin-top:50px;font-size:12px;letter-spacing:6px;color:#fff;opacity:.6;animation:hm-blink 1.3s infinite;}
+@keyframes hm-blink{50%{opacity:.15;}}
+
+/* RIGHT menu */
+#s-home .hm-menu{position:absolute;right:0;top:0;bottom:0;width:40%;display:flex;flex-direction:column;justify-content:center;gap:14px;padding:4vh 3vw 4vh 0;z-index:5;perspective:1200px;}
+#s-home .hm-btn{position:relative;height:64px;cursor:pointer;transform-style:preserve-3d;transition:transform .5s cubic-bezier(.2,.9,.3,1.2);will-change:transform;background:transparent;border:none;padding:0;}
+#s-home .hm-btn.locked{cursor:default;opacity:.55;}
+#s-home .hm-face{position:absolute;inset:0;display:flex;align-items:center;justify-content:space-between;padding:0 28px 0 44px;backface-visibility:hidden;
+  clip-path:polygon(6% 0, 100% 0, 100% 100%, 0 100%);
+  border:2px solid rgba(255,255,255,.18);
+  box-shadow:inset 0 1px 0 rgba(255,255,255,.25), 0 10px 30px rgba(0,0,0,.55);}
+#s-home .hm-face.front{background:linear-gradient(100deg, rgba(10,15,26,.92) 0%, rgba(18,28,52,.92) 50%, rgba(36,12,24,.92) 100%);}
+#s-home .hm-face.back{transform:rotateX(180deg);background:linear-gradient(100deg, #ff2e4d 0%, #ff6a2a 60%, #ffcc33 100%);color:#0a0f1a;}
+#s-home .hm-btn:not(.locked):hover{transform:translateX(-18px) rotateX(180deg);}
+#s-home .hm-btn:not(.locked):hover .hm-face.front{box-shadow:none;}
+#s-home .hm-btn .hm-label{font-size:22px;font-weight:900;font-style:italic;letter-spacing:3px;text-transform:uppercase;text-shadow:0 2px 0 rgba(0,0,0,.6);}
+#s-home .hm-face.back .hm-label{text-shadow:none;color:#0a0f1a;}
+#s-home .hm-btn .hm-num{font-size:13px;letter-spacing:3px;color:#00eaff;font-weight:800;}
+#s-home .hm-face.back .hm-num{color:#0a0f1a;}
+#s-home .hm-accent{position:absolute;left:0;top:0;bottom:0;width:10px;background:linear-gradient(180deg,#00eaff,#ff2e4d);clip-path:polygon(0 0,100% 0,60% 100%,0 100%);}
+#s-home .hm-face.back .hm-accent{background:linear-gradient(180deg,#0a0f1a,#3a0010);}
+#s-home .hm-dot{width:10px;height:10px;border-radius:50%;background:#ffcc33;box-shadow:0 0 12px #ffcc33, 0 0 2px #fff;margin-right:14px;}
+#s-home .hm-face.back .hm-dot{background:#0a0f1a;box-shadow:none;}
+#s-home .hm-row{display:flex;align-items:center;}
+#s-home .hm-btn.locked .hm-num{color:#8a94a6;}
+#s-home .hm-btn.locked .hm-label{color:#8a94a6;}
+
+/* meta + hint */
+#s-home .hm-meta{position:absolute;top:22px;right:28px;z-index:9;display:flex;gap:14px;align-items:center;font-size:11px;letter-spacing:3px;color:#cfd8e3;}
+#s-home .hm-pill{padding:6px 12px;border:1px solid rgba(255,255,255,.2);background:rgba(0,0,0,.35);backdrop-filter:blur(6px);}
+#s-home .hm-pill.live{color:#ff2e4d;border-color:rgba(255,46,77,.6);}
+#s-home .hm-pill.live::before{content:"";display:inline-block;width:7px;height:7px;border-radius:50%;background:#ff2e4d;margin-right:6px;animation:hm-blink 1s infinite;}
+#s-home .hm-hint{position:absolute;bottom:20px;left:0;right:0;z-index:9;display:flex;justify-content:center;gap:30px;font-size:11px;letter-spacing:3px;color:#8a94a6;}
+#s-home .hm-hint b{color:#fff;margin-right:6px;}
+
+@media (max-width:900px){
+  #s-home .hm-left{width:60%;padding:4vh 4vw;}
+  #s-home .hm-menu{width:46%;}
+  #s-home .hm-label{font-size:16px;letter-spacing:2px;}
+  #s-home .hm-btn{height:52px;}
+}
 </style>
 </head>
 <body>
@@ -244,58 +316,95 @@
 <!-- HOME MENU -->
 <div id="s-home" class="screen">
 
-  <!-- Background stays fixed — mainmenu.png -->
+  <!-- atmosphere layers on top of mainmenu.png -->
+  <div class="hm-streak s1"></div>
+  <div class="hm-streak s2"></div>
+  <div class="hm-ball"></div>
 
-  <!-- Left: changing player/scene image -->
-  <div class="hm-visual">
-    <div class="hm-img" id="hm-img-friendly"    style="background-image:url('assets/menu/friendly.png')"></div>
-    <div class="hm-img" id="hm-img-tournament"  style="background-image:url('assets/menu/tournament.png')"></div>
-    <div class="hm-img" id="hm-img-league"      style="background-image:url('assets/menu/league.png')"></div>
-    <div class="hm-img" id="hm-img-career"      style="background-image:url('assets/menu/career.png')"></div>
-    <div class="hm-img" id="hm-img-create"      style="background-image:url('assets/menu/create.png')"></div>
-    <div class="hm-img" id="hm-img-settings"    style="background-image:url('assets/menu/settings.png')"></div>
-    <div class="hm-vignette"></div>
+  <div class="hm-meta">
+    <span class="hm-pill">v0.9.2</span>
+    <span class="hm-pill live">ONLINE</span>
   </div>
 
-  <!-- Right: logo + ladder -->
-  <div class="hm-right">
-    <div class="hm-logo">
-      <div class="hm-logo-title">ULTIMATE<br>ELEVEN</div>
-      <div class="hm-logo-sub">FOOTBALL STRATEGY · 11 VS 11</div>
-    </div>
+  <!-- LEFT: title -->
+  <div class="hm-left">
+    <h1 class="hm-title">Ultimate<span class="big">Eleven</span></h1>
+    <div class="hm-press">▼ SELECT A MODE</div>
+  </div>
 
-    <nav class="hm-ladder">
-      <button class="hm-item active" data-img="friendly"   onclick="showSc('s-ts')"  onmouseenter="hmHover('friendly')">
-        <span class="hm-item-num">01</span>
-        <span class="hm-item-lbl">FRIENDLY</span>
-        <span class="hm-item-arrow">→</span>
-      </button>
-      <button class="hm-item locked" data-img="tournament" onclick="cs()"            onmouseenter="hmHover('tournament')">
-        <span class="hm-item-num">02</span>
-        <span class="hm-item-lbl">TOURNAMENT</span>
-        <span class="hm-item-soon">SOON</span>
-      </button>
-      <button class="hm-item locked" data-img="league"     onclick="cs()"            onmouseenter="hmHover('league')">
-        <span class="hm-item-num">03</span>
-        <span class="hm-item-lbl">LEAGUE</span>
-        <span class="hm-item-soon">SOON</span>
-      </button>
-      <button class="hm-item" data-img="career"     onclick="showSc('s-career-clubs')"            onmouseenter="hmHover('career')">
-        <span class="hm-item-num">04</span>
-        <span class="hm-item-lbl">CAREER</span>
-        <span class="hm-item-arrow">→</span>
-      </button>
-      <button class="hm-item locked" data-img="create"     onclick="cs()"            onmouseenter="hmHover('create')">
-        <span class="hm-item-num">05</span>
-        <span class="hm-item-lbl">CREATE TEAM</span>
-        <span class="hm-item-soon">SOON</span>
-      </button>
-      <button class="hm-item locked" data-img="settings"   onclick="cs()"            onmouseenter="hmHover('settings')">
-        <span class="hm-item-num">06</span>
-        <span class="hm-item-lbl">SETTINGS</span>
-        <span class="hm-item-soon">SOON</span>
-      </button>
-    </nav>
+  <!-- RIGHT: flipping menu -->
+  <nav class="hm-menu">
+    <button class="hm-btn" onclick="showSc('s-ts')">
+      <div class="hm-face front">
+        <div class="hm-row"><span class="hm-accent"></span><span class="hm-dot"></span><span class="hm-label">Friendly Match</span></div>
+        <span class="hm-num">01</span>
+      </div>
+      <div class="hm-face back">
+        <div class="hm-row"><span class="hm-accent"></span><span class="hm-dot"></span><span class="hm-label">▶ Kick Off</span></div>
+        <span class="hm-num">01</span>
+      </div>
+    </button>
+
+    <button class="hm-btn locked" onclick="cs()">
+      <div class="hm-face front">
+        <div class="hm-row"><span class="hm-accent"></span><span class="hm-dot"></span><span class="hm-label">Tournament</span></div>
+        <span class="hm-num">02</span>
+      </div>
+      <div class="hm-face back">
+        <div class="hm-row"><span class="hm-accent"></span><span class="hm-dot"></span><span class="hm-label">Coming Soon</span></div>
+        <span class="hm-num">02</span>
+      </div>
+    </button>
+
+    <button class="hm-btn" onclick="showSc('s-career-clubs')">
+      <div class="hm-face front">
+        <div class="hm-row"><span class="hm-accent"></span><span class="hm-dot"></span><span class="hm-label">Master League</span></div>
+        <span class="hm-num">03</span>
+      </div>
+      <div class="hm-face back">
+        <div class="hm-row"><span class="hm-accent"></span><span class="hm-dot"></span><span class="hm-label">▶ Your Legend</span></div>
+        <span class="hm-num">03</span>
+      </div>
+    </button>
+
+    <button class="hm-btn locked" onclick="cs()">
+      <div class="hm-face front">
+        <div class="hm-row"><span class="hm-accent"></span><span class="hm-dot"></span><span class="hm-label">Career</span></div>
+        <span class="hm-num">04</span>
+      </div>
+      <div class="hm-face back">
+        <div class="hm-row"><span class="hm-accent"></span><span class="hm-dot"></span><span class="hm-label">Coming Soon</span></div>
+        <span class="hm-num">04</span>
+      </div>
+    </button>
+
+    <button class="hm-btn locked" onclick="cs()">
+      <div class="hm-face front">
+        <div class="hm-row"><span class="hm-accent"></span><span class="hm-dot"></span><span class="hm-label">Create Team</span></div>
+        <span class="hm-num">05</span>
+      </div>
+      <div class="hm-face back">
+        <div class="hm-row"><span class="hm-accent"></span><span class="hm-dot"></span><span class="hm-label">Coming Soon</span></div>
+        <span class="hm-num">05</span>
+      </div>
+    </button>
+
+    <button class="hm-btn locked" onclick="cs()">
+      <div class="hm-face front">
+        <div class="hm-row"><span class="hm-accent"></span><span class="hm-dot"></span><span class="hm-label">Settings</span></div>
+        <span class="hm-num">06</span>
+      </div>
+      <div class="hm-face back">
+        <div class="hm-row"><span class="hm-accent"></span><span class="hm-dot"></span><span class="hm-label">Coming Soon</span></div>
+        <span class="hm-num">06</span>
+      </div>
+    </button>
+  </nav>
+
+  <div class="hm-hint">
+    <span><b>↑↓</b> NAVIGATE</span>
+    <span><b>ENTER</b> SELECT</span>
+    <span><b>ESC</b> BACK</span>
   </div>
 
   <!-- Background music -->

@@ -390,8 +390,29 @@ canvas#C{position:absolute;inset:0;width:100%;height:100%}
 #duel-ov.show{display:flex}
 .da-bg{position:absolute;inset:0;background:repeating-linear-gradient(-45deg,transparent,transparent 4px,rgba(255,255,255,.006) 4px,rgba(255,255,255,.006) 5px);pointer-events:none;z-index:0}
 .dvs{position:absolute;left:50%;top:35%;transform:translate(-50%,-50%);font-family:'Bebas Neue',sans-serif;font-size:clamp(32px,5vw,60px);color:var(--gold);letter-spacing:.06em;filter:drop-shadow(0 0 24px rgba(240,192,64,.7));opacity:0;pointer-events:none;z-index:5}
-.dvs.show{animation:vsA .6s forwards}
+.dvs.show{animation:vsA .6s forwards, vsPulse 2.2s ease-in-out .6s infinite}
 @keyframes vsA{0%{opacity:0;transform:translate(-50%,-50%) scale(.4)}45%{opacity:1;transform:translate(-50%,-50%) scale(1.06)}65%{transform:translate(-50%,-50%) scale(1)}82%{opacity:1}100%{opacity:.15}}
+@keyframes vsPulse{0%,100%{opacity:.15;transform:translate(-50%,-50%) scale(1)}50%{opacity:.32;transform:translate(-50%,-50%) scale(1.04)}}
+
+/* atmospheric bokeh particles drifting upward in duel scene */
+#duel-ov::before{
+  content:'';position:absolute;inset:0;pointer-events:none;z-index:1;opacity:.55;
+  background:
+    radial-gradient(circle 2px at 12% 85%,rgba(255,240,200,.9),transparent 70%),
+    radial-gradient(circle 1.5px at 28% 92%,rgba(200,220,255,.7),transparent 70%),
+    radial-gradient(circle 3px at 44% 88%,rgba(255,220,160,.8),transparent 70%),
+    radial-gradient(circle 2px at 62% 90%,rgba(220,240,255,.6),transparent 70%),
+    radial-gradient(circle 2.5px at 78% 82%,rgba(255,230,180,.85),transparent 70%),
+    radial-gradient(circle 1.5px at 90% 93%,rgba(200,220,255,.7),transparent 70%),
+    radial-gradient(circle 2px at 20% 70%,rgba(255,240,200,.5),transparent 70%),
+    radial-gradient(circle 1.5px at 70% 75%,rgba(220,240,255,.55),transparent 70%);
+  animation: bokehDrift 14s linear infinite;
+  will-change:transform;
+}
+@keyframes bokehDrift{
+  from{ transform:translateY(0); }
+  to  { transform:translateY(-50vh); }
+}
 /* ── DUEL CARDS ──────────────────────────────────────────────────── */
 
 /* Outer row holding both cards + ball */
@@ -399,6 +420,32 @@ canvas#C{position:absolute;inset:0;width:100%;height:100%}
   flex:1;display:flex;align-items:stretch;gap:0;
   position:relative;z-index:3;min-height:0;
   padding:clamp(8px,1.2vh,14px) clamp(16px,3vw,40px) 0;
+  overflow:hidden;
+}
+.dpwrap::before,.dpwrap::after{
+  content:'';position:absolute;left:50%;top:50%;
+  width:180%;height:300%;
+  transform:translate(-50%,-50%) scale(3);
+  transform-origin:50% 50%;
+  pointer-events:none;mix-blend-mode:screen;opacity:0;z-index:1;
+  animation:duelRush 1.3s linear infinite;will-change:transform,opacity;
+}
+.dpwrap::before{
+  background:repeating-conic-gradient(from 0deg at 50% 50%,rgba(255,255,255,0) 0deg,rgba(255,255,255,0) 2.2deg,rgba(255,255,255,.9) 2.2deg,rgba(255,255,255,.9) 2.9deg);
+  -webkit-mask:radial-gradient(circle at 50% 50%,transparent 0%,transparent 10%,#000 35%,#000 100%);
+          mask:radial-gradient(circle at 50% 50%,transparent 0%,transparent 10%,#000 35%,#000 100%);
+}
+.dpwrap::after{
+  background:repeating-conic-gradient(from 1deg at 50% 50%,rgba(255,255,255,0) 0deg,rgba(255,255,255,0) 3.5deg,rgba(255,255,255,.75) 3.5deg,rgba(255,255,255,.75) 4deg);
+  -webkit-mask:radial-gradient(circle at 50% 50%,transparent 0%,transparent 12%,#000 40%,#000 100%);
+          mask:radial-gradient(circle at 50% 50%,transparent 0%,transparent 12%,#000 40%,#000 100%);
+  animation-delay:-0.65s;
+}
+@keyframes duelRush{
+  0%{transform:translate(-50%,-50%) scale(3);opacity:0}
+  15%{opacity:.55}
+  70%{opacity:.55}
+  100%{transform:translate(-50%,-50%) scale(.15);opacity:0}
 }
 
 /* Each half — positioning context for portrait + card */
@@ -409,42 +456,50 @@ canvas#C{position:absolute;inset:0;width:100%;height:100%}
 .dp-card-wrap.atk{border-right:1px solid rgba(255,255,255,.05)}
 
 /* ── 2v1 second-defender perspective-stack card ── */
+/* No big box — just the player art with a small label badge, layered behind main card. */
 .dpd2-wrap{
   position:absolute;
-  top:clamp(40px,6vh,80px);
-  width:clamp(220px,24vw,320px);
-  background:linear-gradient(140deg,rgba(15,20,30,.85),rgba(4,6,14,.95));
-  border:2px solid var(--tl,#f03030);
-  border-radius:12px;
-  padding:10px 12px 14px;
-  display:flex;flex-direction:column;align-items:center;gap:6px;
-  box-shadow:0 0 28px rgba(240,48,48,.45), 0 10px 30px rgba(0,0,0,.75);
-  z-index:4;
-  opacity:.88;
-  transform:scale(.90);
+  top:clamp(20px,3vh,60px);
+  bottom:clamp(100px,15vh,180px);
+  width:clamp(240px,26vw,360px);
+  background:transparent;
+  border:none;
+  padding:0;
+  display:flex;flex-direction:column;align-items:center;justify-content:flex-end;gap:4px;
+  z-index:3;
+  opacity:.85;
+  transform:scale(.92);
   pointer-events:none;
   animation:dpd2-pop .4s cubic-bezier(.3,1.6,.5,1);
-  filter:blur(.3px);
+  filter:drop-shadow(0 8px 16px rgba(0,0,0,.6)) drop-shadow(0 0 18px rgba(240,48,48,.35));
 }
-/* Side-specific positioning: behind the MAIN defender card, peeking toward screen edge */
-.dpd2-wrap.on-right{right:clamp(-20px,1vw,20px);}
-.dpd2-wrap.on-left{left:clamp(-20px,1vw,20px);}
-@keyframes dpd2-pop{from{transform:scale(.4);opacity:0}to{transform:scale(.90);opacity:.88}}
+.dpd2-wrap.on-right{right:clamp(-40px,-1vw,0px);}
+.dpd2-wrap.on-left{left:clamp(-40px,-1vw,0px);}
+.dpd2-wrap::after{
+  content:'';position:absolute;left:50%;bottom:clamp(40px,6vh,70px);
+  width:55%;height:12px;
+  transform:translateX(-50%);
+  background:radial-gradient(ellipse at center,rgba(0,0,0,.6) 0%,rgba(0,0,0,.25) 55%,transparent 80%);
+  pointer-events:none;z-index:0;
+}
+@keyframes dpd2-pop{from{transform:scale(.4);opacity:0}to{transform:scale(.92);opacity:.85}}
 .dpd2-badge{
-  font-family:'Bebas Neue',sans-serif;font-size:11px;letter-spacing:.22em;
-  color:#ff9999;background:rgba(184,22,22,.35);
-  padding:3px 10px;border-radius:4px;border:1px solid rgba(255,136,136,.4);
+  font-family:'Bebas Neue',sans-serif;font-size:10px;letter-spacing:.22em;
+  color:#ff9999;background:rgba(184,22,22,.55);
+  padding:3px 10px;border-radius:4px;border:1px solid rgba(255,136,136,.45);
+  order:3;
+  margin-top:4px;
 }
 .dpd2-av{
-  width:clamp(140px,15vw,200px);height:clamp(140px,15vw,200px);
+  width:100%;flex:1;min-height:clamp(180px,22vh,280px);
   background-size:contain;background-repeat:no-repeat;background-position:center bottom;
-  filter:drop-shadow(0 6px 12px rgba(0,0,0,.6));
+  order:1;
 }
-.dpd2-info{text-align:center;width:100%;}
-.dpd2-nm{font-family:'Bebas Neue',sans-serif;font-size:clamp(15px,1.5vw,19px);color:#fff;letter-spacing:.08em;}
-.dpd2-ps{font-family:'Orbitron',sans-serif;font-size:11px;color:rgba(255,255,255,.55);margin-top:2px;letter-spacing:.1em;}
-.dpd2-energy{height:4px;background:rgba(255,255,255,.1);border-radius:2px;margin-top:8px;overflow:hidden;width:80%;margin-left:auto;margin-right:auto;}
-.dpd2-energy-fill{height:100%;background:#44aaff;transition:width .3s;}
+.dpd2-info{text-align:center;width:100%;display:flex;flex-direction:column;align-items:center;gap:2px;order:2;}
+.dpd2-nm{font-family:'Bebas Neue',sans-serif;font-size:clamp(13px,1.3vw,16px);color:rgba(255,255,255,.85);letter-spacing:.08em;text-shadow:0 2px 6px rgba(0,0,0,.8);}
+.dpd2-ps{font-family:'Orbitron',sans-serif;font-size:9px;color:rgba(255,255,255,.45);letter-spacing:.1em;}
+.dpd2-energy{display:none;}
+.dpd2-energy-fill{display:none;}
 
 /* Role label above */
 .dp-role{
@@ -509,6 +564,92 @@ canvas#C{position:absolute;inset:0;width:100%;height:100%}
 }
 .dpav.mirrored{ transform:translateX(-50%); /* no flip */ }
 
+/* ── PLAYER IDLE RUN-BOB + ACTION ANIMATIONS ─────────────────────── */
+.dpav{
+  animation: dpavRunBob .48s cubic-bezier(.5,0,.5,1) infinite alternate;
+  filter:
+    drop-shadow(0 0 14px rgba(120,200,255,.35))
+    drop-shadow(0 3px 0 rgba(0,0,0,.7))
+    drop-shadow(0 22px 14px rgba(0,0,0,.75));
+}
+/* spotlight behind player — team colored */
+.dp-card-wrap.atk::before{
+  content:'';position:absolute;left:50%;bottom:10%;
+  width:110%;height:85%;
+  transform:translateX(-50%);
+  background:radial-gradient(ellipse at center,rgba(80,170,255,.55) 0%,rgba(80,170,255,.25) 35%,rgba(80,170,255,.08) 60%,transparent 78%);
+  pointer-events:none;z-index:0;
+  filter:blur(2px);
+}
+.dp-card-wrap:not(.atk)::before{
+  content:'';position:absolute;left:50%;bottom:10%;
+  width:110%;height:85%;
+  transform:translateX(-50%);
+  background:radial-gradient(ellipse at center,rgba(255,80,80,.55) 0%,rgba(255,80,80,.25) 35%,rgba(255,80,80,.08) 60%,transparent 78%);
+  pointer-events:none;z-index:0;
+  filter:blur(2px);
+}
+/* ground shadow that squashes as player lifts */
+.dp-card-wrap::after{
+  content:'';position:absolute;left:50%;bottom:8%;
+  width:55%;height:14px;
+  transform:translateX(-50%);
+  background:radial-gradient(ellipse at center,rgba(0,0,0,.7) 0%,rgba(0,0,0,.35) 50%,transparent 80%);
+  pointer-events:none;z-index:4;
+  animation: dpavGround .48s cubic-bezier(.5,0,.5,1) infinite alternate;
+}
+.dp-card-wrap:not(.atk) .dpav,
+.dp-card-wrap:not(.atk)::after{ animation-delay:-.24s; }
+
+@keyframes dpavRunBob{
+  0%  { transform:translateX(-50%) translateY(0)     scale(1); }
+  100%{ transform:translateX(-50%) translateY(-12px) scale(1.02); }
+}
+@keyframes dpavGround{
+  0%  { transform:translateX(-50%) scale(1,1);   opacity:.85; }
+  100%{ transform:translateX(-50%) scale(.6,.7); opacity:.45; }
+}
+
+/* Action bursts — JS adds `.act-*` class for ~700ms */
+.dpav.act-dribble{ animation: dpavDribble .45s cubic-bezier(.3,1.6,.5,1) 1, dpavRunBob .55s ease-in-out infinite alternate .45s; }
+.dpav.act-pass   { animation: dpavPass    .5s ease-out 1,                 dpavRunBob .55s ease-in-out infinite alternate .5s; }
+.dpav.act-shoot  { animation: dpavShoot   .6s cubic-bezier(.3,1.4,.4,1) 1, dpavRunBob .55s ease-in-out infinite alternate .6s; }
+.dpav.act-tackle { animation: dpavTackle  .45s ease-out 1,                 dpavRunBob .55s ease-in-out infinite alternate .45s; }
+.dpav.act-hit    { animation: dpavHit     .4s ease-out 1,                  dpavRunBob .55s ease-in-out infinite alternate .4s; }
+
+@keyframes dpavDribble{
+  0%  { transform:translateX(-50%) translateY(0) rotate(0); }
+  30% { transform:translateX(-50%) translateY(-14px) translate(20px,0) rotate(6deg) scale(1.05); }
+  60% { transform:translateX(-50%) translateY(-4px)  translate(10px,0) rotate(-2deg); }
+  100%{ transform:translateX(-50%) translateY(0) rotate(0); }
+}
+@keyframes dpavPass{
+  0%  { transform:translateX(-50%) translateY(0) rotate(0); }
+  25% { transform:translateX(-50%) translateY(-6px) rotate(-8deg); }
+  55% { transform:translateX(-50%) translateY(-12px) rotate(10deg) scale(1.04); }
+  100%{ transform:translateX(-50%) translateY(0) rotate(0); }
+}
+@keyframes dpavShoot{
+  0%  { transform:translateX(-50%) translateY(0) rotate(0) scale(1); }
+  30% { transform:translateX(-50%) translateY(-18px) rotate(-14deg) scale(1.10); }
+  55% { transform:translateX(-50%) translateY(-25px) rotate(20deg)  scale(1.15); }
+  75% { transform:translateX(-50%) translateY(-10px) rotate(8deg)   scale(1.05); }
+  100%{ transform:translateX(-50%) translateY(0) rotate(0) scale(1); }
+}
+@keyframes dpavTackle{
+  0%  { transform:translateX(-50%) translateY(0) rotate(0); }
+  40% { transform:translateX(-50%) translateY(-2px) translate(40px,0) rotate(18deg) scale(1.08); }
+  70% { transform:translateX(-50%) translateY(-6px) translate(20px,0) rotate(6deg); }
+  100%{ transform:translateX(-50%) translateY(0) rotate(0); }
+}
+@keyframes dpavHit{
+  0%  { transform:translateX(-50%) translateY(0) rotate(0); }
+  20% { transform:translateX(-50%) translate(-10px,0) rotate(-8deg); }
+  40% { transform:translateX(-50%) translate(8px,0) rotate(6deg); }
+  60% { transform:translateX(-50%) translate(-5px,0) rotate(-3deg); }
+  100%{ transform:translateX(-50%) translateY(0) rotate(0); }
+}
+
 /* INFO PANEL — bottom portion of card */
 .dpc-info{
   flex-shrink:0;
@@ -559,8 +700,9 @@ canvas#C{position:absolute;inset:0;width:100%;height:100%}
 /* Action bar — broadcast navy */
 .duel-touchline{height:3px;flex-shrink:0;position:relative;z-index:11;background:linear-gradient(90deg,transparent 0%,rgba(255,255,255,.15) 5%,rgba(255,255,255,.85) 20%,#fff 50%,rgba(255,255,255,.85) 80%,rgba(255,255,255,.15) 95%,transparent 100%);box-shadow:0 0 10px rgba(255,255,255,.4),0 0 30px rgba(255,255,255,.1);}
 .duelbar{flex-shrink:0;position:relative;overflow:hidden;padding:clamp(8px,1.4vh,13px) clamp(10px,1.8vw,22px);z-index:10;box-shadow:0 -4px 20px rgba(0,0,0,.4);}
-.duelbar::before{content:'';position:absolute;inset:0;background:repeating-linear-gradient(0deg,#1A2517 0px,#1A2517 18px,#223020 18px,#223020 36px);}
-.duelbar::after{content:'';position:absolute;inset:0;background:radial-gradient(ellipse 70% 120% at 50% -20%,rgba(180,220,140,.13) 0%,rgba(140,190,100,.06) 40%,transparent 70%),radial-gradient(ellipse 100% 100% at 50% 50%,transparent 50%,rgba(0,0,0,.22) 100%);pointer-events:none;}
+.duelbar::before{content:'';position:absolute;inset:-36px 0;background:repeating-linear-gradient(0deg,#1A2517 0px,#1A2517 18px,#223020 18px,#223020 36px);animation:duelTurfScroll 1.3s linear infinite;will-change:transform;}
+@keyframes duelTurfScroll{from{transform:translateY(-36px)}to{transform:translateY(0)}}
+.duelbar::after{content:'';position:absolute;inset:0;background:linear-gradient(180deg,rgba(4,8,16,.85) 0%,rgba(4,8,16,.4) 10%,transparent 28%),radial-gradient(ellipse 70% 120% at 50% -20%,rgba(180,220,140,.13) 0%,rgba(140,190,100,.06) 40%,transparent 70%),radial-gradient(ellipse 100% 100% at 50% 50%,transparent 50%,rgba(0,0,0,.22) 100%);pointer-events:none;}
 .dueltop{display:flex;align-items:center;justify-content:space-between;margin-bottom:clamp(4px,.6vh,6px);position:relative;z-index:2;}
 .duelzone{font-family:'Bebas Neue',sans-serif;font-size:clamp(13px,1.8vw,17px);letter-spacing:.1em;color:#fff;background:rgba(0,0,0,.45);border:1px solid rgba(255,255,255,.35);border-radius:3px;padding:2px 8px;text-shadow:0 1px 3px rgba(0,0,0,.8);}
 .dtw{display:flex;align-items:center;gap:6px}
@@ -593,6 +735,9 @@ canvas#C{position:absolute;inset:0;width:100%;height:100%}
 .dact-atk:hover .dact3d-face{border-color:rgba(40,120,220,.8);background:linear-gradient(180deg,rgba(255,255,255,.09) 0%,transparent 40%),rgba(8,20,70,.95);}
 .dact-atk.dact-sel .dact3d-face{border-color:var(--blue);background:linear-gradient(180deg,rgba(60,140,255,.14) 0%,rgba(6,16,60,.96) 100%);box-shadow:0 0 16px rgba(30,114,220,.5);}
 .dact-atk.dact-sel .dact3d-bot{background:var(--blue);box-shadow:0 0 10px rgba(30,114,220,.6);}
+/* 2v1 second-move selection — orange glow so user sees both picks */
+.dact-atk.dact-sel2 .dact3d-face{border-color:#ff9440;background:linear-gradient(180deg,rgba(255,148,64,.18) 0%,rgba(60,28,4,.96) 100%);box-shadow:0 0 16px rgba(255,148,64,.55);}
+.dact-atk.dact-sel2 .dact3d-bot{background:#ff9440;box-shadow:0 0 10px rgba(255,148,64,.6);}
 /* DEF = red */
 .dact-def .dact3d-face{border-color:rgba(200,50,50,.45);}
 .dact-def .dact3d-bot{background:rgba(120,20,20,.9);box-shadow:0 2px 8px rgba(0,0,0,.5);}
@@ -1241,12 +1386,15 @@ html,body{overscroll-behavior:none;}
 .loading-runner{
   width:clamp(160px,20vw,260px) !important;
   height:clamp(160px,20vw,260px) !important;
+  /* Background color fallback so something shows even if the PNG is missing */
+  background-color:rgba(240,192,64,.08);
   background-image:url('assets/players/loading-run.png') !important;
   background-repeat:no-repeat !important;
   background-size:500% 500% !important;
   background-position:0% 0% !important;
   animation:lrun 1.25s steps(1,end) infinite !important;
   filter:drop-shadow(0 4px 10px rgba(0,0,0,.75));
+  border-radius:8px;
 }
 @keyframes lrun{
     0%   {background-position:  0%   0%;}

@@ -547,10 +547,14 @@ function calcOvr(pl){
   return Math.round(v);
 }
 
-// Set team emblem in any element — img if available, flag emoji as fallback
+// Set team emblem in any element — emoji shows instantly, img replaces it if PNG loads
 function setTeamEmblem(el, teamKey, flagEmoji){
   if(!el)return;
-  el.style.display='';  // always visible
+  el.style.display='';
+  // Paint emoji fallback synchronously first so we always see something
+  el.innerHTML='';
+  el.textContent=flagEmoji||'🏳';
+  if(!teamKey)return;
   const src='assets/team/'+(teamKey||'').toLowerCase()+'.png';
   const img=new Image();
   img.onload=()=>{
@@ -560,7 +564,7 @@ function setTeamEmblem(el, teamKey, flagEmoji){
     i.style.cssText='width:100%;height:100%;object-fit:contain;display:block;';
     el.appendChild(i);
   };
-  img.onerror=()=>{el.innerHTML='';el.textContent=flagEmoji||'🏳';};
+  // onerror: do nothing — the emoji is already shown
   img.src=src;
 }
 function showSc(id){
@@ -2455,7 +2459,10 @@ function opDuel(isShot, committedAk){
   bldA(carrier,isShot); bldD(def,ds,isShot);
   // ── 2v1 visual: show a second mini defender card stacked next to the main defender ──
   renderSecondDefender(G.D.is2v1?G.D.dk2:null, ds);
-  document.getElementById('di').textContent=as==='h'?'CHOOSE ATTACK (30s)':ds==='h'?'CHOOSE DEFENCE (30s)':'AI DUEL';
+  // 2v1 attacker: hint that 2 moves are needed
+  const albl=document.getElementById('albl');
+  if(albl) albl.textContent = (G.D.is2v1 && as==='h' && !isShot) ? 'ATTACK (vs 1ST)' : 'ATTACK';
+  document.getElementById('di').textContent=as==='h'?(G.D.is2v1?'PICK 2 MOVES (30s)':'CHOOSE ATTACK (30s)'):ds==='h'?'CHOOSE DEFENCE (30s)':'AI DUEL';
   document.getElementById('dcfm').classList.remove('rdy'); document.getElementById('duel-res').classList.remove('show');
   document.getElementById('duel-ov').classList.add('show');
   const vs=document.getElementById('dvs');vs.classList.remove('show');void vs.offsetWidth;vs.classList.add('show');
@@ -2525,11 +2532,13 @@ function fCard(role,pl,s,displayRole){
   const avEl=document.getElementById(p+'av');
   const lastName=playerLastName(pl);
   const img=playerImg(pl);
-  // Team flag emblem watermark
+  // Team flag emblem watermark — PNG if available, flag emoji fallback
   cardEl.querySelector('.dp-card-emblem')?.remove();
   const emblemEl=document.createElement('div');
   emblemEl.className='dp-card-emblem';
-  emblemEl.textContent=s==='h'?(HT?.flag||''):(AT?.flag||'');
+  const emblemKey=s==='h'?selHome:selAway;
+  const emblemFlag=s==='h'?(HT?.flag||''):(AT?.flag||'');
+  setTeamEmblem(emblemEl, emblemKey, emblemFlag);
   cardEl.appendChild(emblemEl);
   avEl.classList.remove('mirrored');
   // Career club portrait: direct path, no waiting for playerImg
@@ -2704,15 +2713,41 @@ function bldD(def,ds,isShot){
 
 function selA(a,btn){
   btnPop(btn);
-  G.D.ak=a.id;G.D.pk=null; document.querySelectorAll('#abtns .dact3d').forEach(b=>b.classList.remove('dact-sel')); btn.classList.add('dact-sel');
+  // 2v1 attacker flow: first selection is action vs defender 1, second is action vs defender 2.
+  // When the match is 2v1 and user has already chosen ak, this click becomes ak2.
+  if(G.D.is2v1 && G.D.as==='h' && G.D.ak && !G.D.ak2 && a.id!=='pass' && a.id!=='one-two'){
+    G.D.ak2=a.id;
+    document.querySelectorAll('#abtns .dact3d').forEach(b=>b.classList.remove('dact-sel2'));
+    btn.classList.add('dact-sel2');
+    // Highlight stage 2 label
+    const albl=document.getElementById('albl');if(albl)albl.textContent='ATTACK (vs 2ND)';
+    chkRdy();
+    return;
+  }
+  G.D.ak=a.id;G.D.pk=null;G.D.ak2=null;
+  document.querySelectorAll('#abtns .dact3d').forEach(b=>{b.classList.remove('dact-sel');b.classList.remove('dact-sel2');});
+  btn.classList.add('dact-sel');
   if(a.id==='pass'||a.id==='one-two'){
     document.getElementById('duel-ov').classList.remove('show'); G.pm=true; document.getElementById('pass-banner').style.display='block';
     document.getElementById('pass-banner').textContent=a.id==='one-two'?'ONE-TWO — PICK TEAMMATE':'PASS MODE — CLICK A PLAYER';
     document.getElementById('dcfm').classList.remove('rdy');
-  } else chkRdy();
+  } else {
+    // In 2v1 prompt the user for a second move
+    if(G.D.is2v1 && G.D.as==='h'){
+      const albl=document.getElementById('albl');if(albl)albl.textContent='ATTACK (vs 2ND)';
+    }
+    chkRdy();
+  }
 }
 function selD(a,btn){btnPop(btn);G.D.defA=a.id;document.querySelectorAll('#dbtns .dact3d').forEach(b=>b.classList.remove('dact-sel'));btn.classList.add('dact-sel');chkRdy();}
-function chkRdy(){const needsPk=G.D.ak==='pass'||G.D.ak==='one-two';const ao=G.D.as!=='h'||(G.D.ak&&(!needsPk||G.D.pk));const do2=G.D.ds!=='h'||G.D.defA;document.getElementById('dcfm').classList.toggle('rdy',!!(ao&&do2));}
+function chkRdy(){
+  const needsPk=G.D.ak==='pass'||G.D.ak==='one-two';
+  // In 2v1 with human attacker: both ak AND ak2 must be chosen (unless it's a pass variant)
+  const needsAk2 = G.D.is2v1 && G.D.as==='h' && G.D.ak && !needsPk;
+  const ao = G.D.as!=='h' || (G.D.ak && (!needsPk || G.D.pk) && (!needsAk2 || G.D.ak2));
+  const do2 = G.D.ds!=='h' || G.D.defA;
+  document.getElementById('dcfm').classList.toggle('rdy',!!(ao&&do2));
+}
 
 function weightedPick(items){
   const total=items.reduce((s,i)=>s+Math.max(0,i.w),0); if(total<=0)return items[0]?.id||null;
@@ -3045,20 +3080,25 @@ function resDuel(){
   document.querySelectorAll('.dact3d').forEach(b=>b.classList.add('dact-dis'));
   document.getElementById('dcfm').classList.remove('rdy');
   const {carrier,def,dk,as,ds,isShot,ak,pk,defA}=G.D;
-  const atkPow=calcAttackPower(carrier,ak,as);
+  let atkPow=calcAttackPower(carrier,ak,as);
   let defPow=calcDefencePower(def,defA,ak);
   G.D.lastShotPow=(['shoot','special'].includes(ak))?atkPow:0;
   // 2v1: second defender contributes 55% of their own defence power using the same action.
+  // If the attacker is human and chose a second attack action (ak2), use it against def2's counter.
   if(G.D.is2v1 && G.D.dk2 && sq(ds)[G.D.dk2] && !isShot){
     const def2=sq(ds)[G.D.dk2];
-    const def2Pow=calcDefencePower(def2,defA,ak)*0.55;
+    const ak2 = G.D.ak2 || ak; // fallback: same as primary
+    const atkPow2=calcAttackPower(carrier,ak2,as);
+    const def2Pow=calcDefencePower(def2,defA,ak2)*0.55;
+    // Attacker's effective power is the weighted average of both attack rolls
+    atkPow = atkPow*0.65 + atkPow2*0.35;
     defPow+=def2Pow;
     G.D.lastDef2Pow=def2Pow;
-    // Drain stamina slightly on 2nd defender
+    // Drain stamina on attacker for second action + on 2nd defender
+    const atkCost2=(ATK_ACTIONS[ak2]||{}).cost||0;
+    if(carrier && atkCost2>0 && G.D.ak2) carrier.spirit=Math.max(0,(carrier.spirit||1500)-Math.round(atkCost2*0.5));
     const defCost2=(DEF_ACTIONS[defA]||{}).cost||0;
     if(defCost2>0){const maxSp=def2.pos==='GK'?2000:1500;def2.spirit=Math.max(0,(def2.spirit||maxSp)-Math.round(defCost2*0.6));}
-    // Cooldown on 2nd defender if attacker wins
-    // (applied further down alongside dk cooldown)
   }
   // Wall duel — extra defenders nearby add power bonus
   if(!isShot&&def&&PP[ds][dk]){
