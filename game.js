@@ -1211,7 +1211,15 @@ function roleScoreDefender(side,key,cp,type){
   const d=dist(p,cp);
   const centralBias=1-Math.abs(p.y/H-.5);
   const shotDanger=1-Math.abs(cp.y/H-.5);
-  if(type==='engager')return 4.2-(d/(W*.12))+goalside*1.6-laneDiff*2.4-(ocd(side,key)?5:0);
+  const z=zo(key);
+  // ENGAGER: the player who actually goes for the duel. Distance dominates
+  // (closest player engages). Forwards are heavily penalized so they don't
+  // get dragged back into our own box. Mids and defenders preferred.
+  if(type==='engager'){
+    const fwPenalty=(z==='att')?6.0:0;          // forwards almost never engage
+    const midPreference=(z==='mid')?0.6:0;      // mids slightly preferred over defs when close
+    return 8.0 - (d/(W*0.06)) + goalside*0.6 - laneDiff*0.5 + midPreference - fwPenalty - (ocd(side,key)?5:0);
+  }
   if(type==='cover')return 3.8-goalside*-.8-(Math.abs((goalX+p.x)/2-cp.x)/(W*.18))+centralBias*.8-laneDiff*1.4-(d/(W*.24));
   return 3.5+shotDanger*1.3+centralBias*1.1-(Math.abs(p.x-goalX)/(W*.20))-laneDiff*1.6-(d/(W*.35));
 }
@@ -1305,12 +1313,13 @@ function carrierAdvanceVector(side,cp){
     const ix=G_inputVec.x, iy=G_inputVec.y;
     const mag=Math.hypot(ix,iy);
     if(mag>0.05){
-      const max=MAX_CARRIER_STEP();
-      // Normalize so diagonals aren't faster than cardinals; mag scales speed.
+      // Manual control feels MUCH better with a snappier base speed than the
+      // slow CPU AI step. Boost ~3.2× so full joystick = brisk run.
+      const max=MAX_CARRIER_STEP()*3.2;
       const nx=ix/Math.max(mag,1), ny=iy/Math.max(mag,1);
       return {x:nx*max*Math.min(mag,1), y:ny*max*Math.min(mag,1)};
     }
-    return {x:0, y:0}; // no input = stand still
+    return {x:0, y:0};
   }
   let tx=goalX,ty=cp.y;
   const carrier=sq(side)[G.ck];
@@ -1363,10 +1372,13 @@ function tick(dt=1){
     }
     ['h','a'].forEach(side=>{
       Object.entries(sq(side)).forEach(([k,pl])=>{
-        if(!pl||pl.pos==='GK')return;
-        if(side===s&&k===G.ck)return;
-        const maxSp=1500;
-        if((pl.spirit||maxSp)<maxSp) pl.spirit=Math.min(maxSp,(pl.spirit||0)+0.12);
+        if(!pl)return;
+        if(side===s&&k===G.ck)return; // current carrier doesn't regen
+        const isGK=pl.pos==='GK';
+        const maxSp=isGK?2000:1500;
+        // GKs regen slightly slower than outfield players (heavier kit, less running)
+        const regen=isGK?0.10:0.12;
+        if((pl.spirit||maxSp)<maxSp) pl.spirit=Math.min(maxSp,(pl.spirit||0)+regen);
       });
     });
   }
@@ -2325,10 +2337,10 @@ function handleCanvasInput(clientX, clientY){
 CV.addEventListener('click',e=>handleCanvasInput(e.clientX,e.clientY));
 CV.addEventListener('touchstart',e=>{
   e.preventDefault();
-  if(e.touches.length===1){
-    const t=e.touches[0];
-    handleCanvasInput(t.clientX,t.clientY);
-  }
+  // Use the new touch (changedTouches) — this lets a tap-to-pass register
+  // even while another finger is holding the virtual joystick.
+  const t=e.changedTouches[0];
+  if(t)handleCanvasInput(t.clientX,t.clientY);
 },{passive:false});
 
 function isOffside(side,receiverKey){
@@ -2743,7 +2755,13 @@ const SPECIALS={
   'Mancuso':    {l:'Fury Shot',        i:'🔴',c:400},
   'Vella':      {l:'Emerald Shot',     i:'💚',c:400},
 };
-function getSpecial(pl){if(!pl)return null;const n=pl.name||'';for(const key of Object.keys(SPECIALS)){if(n.includes(key))return SPECIALS[key];}return null;}
+function getSpecial(pl){
+  if(!pl)return null;
+  const n=pl.name||'';
+  for(const key of Object.keys(SPECIALS)){if(n.includes(key))return SPECIALS[key];}
+  // Generic super shot — every player who doesn't have a named special still has access to one.
+  return {l:'Power Strike', i:'⚡', c:300, generic:true};
+}
 
 // GK Super Save registry — every GK can attempt one, named per player
 const GK_SUPERS={
@@ -2777,7 +2795,9 @@ function bldA(carrier,isShot){
   if(G.D.ak){
     const lbl=document.createElement('div');
     lbl.style.cssText='color:var(--gold);font-size:11px;font-family:Orbitron,sans-serif;font-weight:700;letter-spacing:1px;opacity:.8;align-self:center;border:1px solid rgba(240,192,64,.2);border-radius:6px;padding:7px 12px;';
-    lbl.textContent=(G.D.ak==='special'?'⚡ SPECIAL SHOT':'⚽ SHOT')+' — COMMITTED';
+    const sn=SUPER_NAMES[G.D.ak];
+    const lblTxt = G.D.ak==='special' ? '⚡ SPECIAL SHOT' : (sn? sn.i+' '+sn.l.toUpperCase() : '⚽ SHOT');
+    lbl.textContent=lblTxt+' — COMMITTED';
     el.appendChild(lbl);chkRdy();return;
   }
   let acts;
@@ -2791,15 +2811,40 @@ function bldA(carrier,isShot){
     if(prog>.50)acts.push({id:'shoot',l:'Shoot',i:'⚽'});
     if(bestTeammateFor(G.D.as,G.ck,'one-two'))acts.push({id:'one-two',l:'1-2',i:'↑↑',ot:true});
   }
+  // ── SUPER toggle: when ON, base actions are upgraded to their super variant ──
+  // (Not shown for the shot panel — there the existing 'special' button already serves that role.)
+  const showSuperToggle = !isShot;
+  if(showSuperToggle){
+    const tBtn=document.createElement('button');
+    const on=!!G.D.atkSuperMode;
+    tBtn.className='dact3d dact-sp'+(on?' dact-sel':'');
+    tBtn.innerHTML='<div class="dact3d-face"><span class="dact3d-i">★</span><span class="dact3d-l">SUPER</span><span class="dact3d-c">'+(on?'ON':'OFF')+'</span></div><div class="dact3d-bot"></div>';
+    tBtn.onclick=()=>{G.D.atkSuperMode=!G.D.atkSuperMode;bldA(carrier,isShot);};
+    el.appendChild(tBtn);
+  }
   acts.forEach(a=>{
-    const cost=(ATK_ACTIONS[a.id]||{}).cost||0;
+    // When SUPER is on, swap pass/dribble/one-two/shoot for their super variants.
+    let useId=a.id, useLbl=a.l, useIcon=a.i, useSp=a.sp||a.ot;
+    if(G.D.atkSuperMode && !isShot){
+      if(a.id==='pass'){useId='super-pass';}
+      else if(a.id==='dribble'){useId='super-dribble';}
+      else if(a.id==='one-two'){useId='super-one-two';}
+      else if(a.id==='shoot'){useId='special';}
+      const meta=SUPER_NAMES[useId];
+      if(meta){useLbl=meta.l;useIcon=meta.i;useSp=true;}
+      else if(useId==='special'){
+        const spec=getSpecial(carrier);
+        if(spec){useLbl=spec.l;useIcon=spec.i;useSp=true;}
+      }
+    }
+    const cost=(ATK_ACTIONS[useId]||{}).cost||0;
     const ok=sp>=cost;
     const costTxt=cost>0?(ok?'−'+cost+' SP':'⚡ LOW'):'FREE';
     const btn=document.createElement('button');
-    const tc=a.sp||a.ot?'dact-sp':'dact-atk';
+    const tc=useSp?'dact-sp':'dact-atk';
     btn.className='dact3d '+tc+(ok?'':' dact-dis');
-    btn.innerHTML='<div class="dact3d-face"><span class="dact3d-i">'+a.i+'</span><span class="dact3d-l">'+a.l+'</span><span class="dact3d-c">'+costTxt+'</span></div><div class="dact3d-bot"></div>';
-    if(ok)btn.onclick=()=>selA(a,btn);
+    btn.innerHTML='<div class="dact3d-face"><span class="dact3d-i">'+useIcon+'</span><span class="dact3d-l">'+useLbl+'</span><span class="dact3d-c">'+costTxt+'</span></div><div class="dact3d-bot"></div>';
+    if(ok)btn.onclick=()=>selA({id:useId,l:useLbl,i:useIcon,sp:useSp,ot:a.ot},btn);
     el.appendChild(btn);
   });
 }
@@ -2834,11 +2879,37 @@ function bldD(def,ds,isShot){
       {id:'supersave',l:gkSuper.l,i:gkSuper.i,stat:'SAV★',locked:sp<320},
     ].forEach(makeDBtn);
   } else {
-    [
+    // SUPER toggle for outfield defence — every player has access to super tackle/intercept/block.
+    const tBtn=document.createElement('button');
+    const on=!!G.D.defSuperMode;
+    tBtn.className='dact3d dact-ss'+(on?' dact-sel':'');
+    tBtn.innerHTML='<div class="dact3d-face"><span class="dact3d-i">★</span><span class="dact3d-l">SUPER</span><span class="dact3d-c">'+(on?'ON':'OFF')+'</span></div><div class="dact3d-bot"></div>';
+    tBtn.onclick=()=>{G.D.defSuperMode=!G.D.defSuperMode;bldD(def,ds,isShot);};
+    el.appendChild(tBtn);
+
+    const baseList=[
       {id:'tackle',   l:'Tackle',    i:'🦵',stat:'DEF'},
       {id:'intercept',l:'Intercept', i:'✋',stat:'PAS'},
       {id:'block',    l:'Block',     i:'🛡',stat:'DEF'},
-    ].forEach(makeDBtn);
+    ];
+    baseList.forEach(a=>{
+      let useId=a.id, useLbl=a.l, useIcon=a.i, ss=false;
+      if(G.D.defSuperMode){
+        useId='super-'+a.id;
+        const meta=SUPER_NAMES[useId];
+        if(meta){useLbl=meta.l;useIcon=meta.i;ss=true;}
+      }
+      const cost=(DEF_ACTIONS[useId]||{}).cost||0;
+      const ok=sp>=cost;
+      const costTxt=cost>0?(ok?'−'+cost+' SP':'⚡ LOW'):'FREE';
+      const btn=document.createElement('button');
+      const tc=ss?'dact-ss':'dact-def';
+      btn.className='dact3d '+tc+(ok?'':' dact-dis');
+      btn.innerHTML='<div class="dact3d-face"><span class="dact3d-i">'+useIcon+'</span><span class="dact3d-l">'+useLbl+'</span><span class="dact3d-c">'+costTxt+'</span></div><div class="dact3d-bot"></div>';
+      if(ok)btn.onclick=()=>selD({id:useId,l:useLbl,i:useIcon},btn);
+      else btn.disabled=true;
+      el.appendChild(btn);
+    });
   }
 }
 
@@ -2945,14 +3016,35 @@ function aiAtk(){
     options.push({id:'one-two',w:oneTwoW});
   }
 
+  // ── AI super attack variants ──────────────────────────────────────
+  // AI uses super-pass / super-dribble / super-one-two opportunistically when:
+  //   - it has plenty of stamina (above 70% of max)
+  //   - the situation is high pressure or in the final third
+  // Cost is meaningful (160-220) so AI won't burn all stamina early.
+  const sp=carrier?(carrier.spirit||1500):1500;
+  const fresh=sp/1500 > 0.70;
+  if(fresh && canAfford('super-pass') && bestPass && !G.D.isShot){
+    const w=(0.6 + pressure*2.0 + prog*0.8) * (bh.passBias||1) * 0.6;
+    options.push({id:'super-pass',w});
+  }
+  if(fresh && canAfford('super-dribble') && !G.D.isShot){
+    const w=(0.5 + pressure*1.6 + prog*0.6) * (bh.dribbleBias||1) * 0.6;
+    options.push({id:'super-dribble',w});
+  }
+  if(fresh && canAfford('super-one-two') && ot && !G.D.isShot){
+    const w=(0.6 + pressure*1.8 + prog*0.7) * (bh.oneTwoBias||1) * 0.6;
+    options.push({id:'super-one-two',w});
+  }
+
   G.D.ak=weightedPick(options.filter(o=>o.w>0))||'pass';
-  if(G.D.ak==='pass')G.D.pk=bestPass;
-  if(G.D.ak==='one-two')G.D.pk=ot||bestPass;
+  if(G.D.ak==='pass'||G.D.ak==='super-pass')G.D.pk=bestPass;
+  if(G.D.ak==='one-two'||G.D.ak==='super-one-two')G.D.pk=ot||bestPass;
   if(G.D.ak==='special'){
     const spec=getSpecial(G.D.carrier);
     if(spec){
+      // AI vs AI: play cutscene then resolve. AI vs HUMAN defender: defer to
+      // confirmDuel so the cutscene plays AFTER the human picks defence.
       if(G.D.as==='a'&&G.D.ds==='a'){setTimeout(()=>{if(!G.D.defA)aiDef();showSpecialCutscene(G.D.carrier,spec,()=>resDuel());},200);return;}
-      else{showSpecialCutscene(G.D.carrier,spec,()=>{});}
     }
   }
   if(G.D.as==='a'&&G.D.ds==='a')tryRes();
@@ -2970,10 +3062,25 @@ function aiDef(){
     const punchBias=prog>.88?(1.8):((1-centrality)*1.4);
     const gkSp=def?(def.spirit||2000):2000;
     const canAffordSuper=gkSp>=320;
-    // Use Super Save vs special shots or when attacker is elite and stamina allows
-    const attackerIsElite=G.D.carrier&&gs(G.D.carrier,'sho')>=88;
+    const cushionAfter=gkSp-320; // remaining stamina if we use super
     const isSpecialShot=ak==='special';
-    const superW=canAffordSuper?(isSpecialShot?5.0:attackerIsElite?2.5:0.5):0;
+    const attackerIsElite=G.D.carrier&&gs(G.D.carrier,'sho')>=88;
+    // High-risk shot heuristic: close range + central + powerful attacker
+    const inBox=prog>0.82;
+    const dangerCentral=centrality>0.55;
+    const highRiskShot=isSpecialShot || (inBox && dangerCentral && attackerIsElite) || (inBox && centrality>0.7);
+    // Super save weight scales with danger AND with GK's stamina cushion.
+    // If using it would leave the GK below 200 stamina, scale down so the GK
+    // doesn't burn out for a low-danger shot.
+    let superW=0;
+    if(canAffordSuper){
+      const cushionFactor=clamp(cushionAfter/600,0.35,1.0); // <200 left → 0.35x; >=800 left → 1.0x
+      if(isSpecialShot)              superW=6.0*cushionFactor;
+      else if(highRiskShot)          superW=4.2*cushionFactor;
+      else if(attackerIsElite)       superW=2.2*cushionFactor;
+      else if(inBox&&dangerCentral)  superW=1.6*cushionFactor;
+      else                           superW=0.4*cushionFactor;
+    }
     const opts=[
       {id:'save',w:3.0+centrality*1.2},
       {id:'punch',w:1.2+punchBias},
@@ -3013,6 +3120,25 @@ function aiDef(){
     }
 
     const opts=[{id:'tackle',w:tackleW},{id:'intercept',w:interceptW},{id:'block',w:blockW}];
+
+    // ── AI super defence variants ─────────────────────────────────
+    // Use super-tackle / -intercept / -block when fresh, against threatening
+    // attacks (super atk by opponent, or in dangerous zones near own box).
+    const dSp=def?(def.spirit||1500):1500;
+    const dFresh=dSp/1500 > 0.65;
+    const akIsSuper=isSuperAtk(ak);
+    const dangerZone=prog>0.65; // attack is reaching dangerous areas
+    if(dFresh && dSp>=180){
+      const baseBoost = akIsSuper ? 2.4 : (dangerZone ? 1.0 : 0.4);
+      opts.push({id:'super-tackle',    w: tackleW    * 0.45 * baseBoost});
+    }
+    if(dFresh && dSp>=160){
+      opts.push({id:'super-intercept', w: interceptW * 0.45 * (akIsSuper?2.4:(dangerZone?1.0:0.4))});
+    }
+    if(dFresh && dSp>=200){
+      opts.push({id:'super-block',     w: blockW     * 0.45 * (akIsSuper?2.4:(dangerZone?1.0:0.4))});
+    }
+
     G.D.defA=weightedPick(opts.filter(o=>o.w>0));
   }
   if(G.D.as==='a'&&G.D.ds==='a')tryRes();
@@ -3028,7 +3154,14 @@ function confirmDuel(){
   if(!G.D.ak && G.D.as==='a') aiAtk();
   if(!G.D.defA && G.D.ds==='a') aiDef();
   if(G.D.ak && G.D.defA){
-    if(G.D.ak==='special'){const spec=getSpecial(G.D.carrier);if(spec){clearInterval(G.di);showSpecialCutscene(G.D.carrier,spec,()=>resDuel());return;}}
+    if(isSuperAtk(G.D.ak)){
+      const spec=G.D.ak==='special'?getSpecial(G.D.carrier):SUPER_NAMES[G.D.ak];
+      if(spec){clearInterval(G.di);showSpecialCutscene(G.D.carrier,spec,()=>resDuel());return;}
+    }
+    if(isSuperDef(G.D.defA) && G.D.defA!=='supersave'){
+      const spec=SUPER_NAMES[G.D.defA];
+      if(spec){clearInterval(G.di);showSpecialCutscene(G.D.def,spec,()=>resDuel());return;}
+    }
     resDuel();
   }
 }
@@ -3066,19 +3199,44 @@ function startCD(){
 // ═══════════════════════════════════════════════════════════════
 
 const ATK_ACTIONS={
-  pass:     {base:'pas', phys:'dri', mult:1.00, cost:0  },
-  dribble:  {base:'dri', phys:'spd', mult:1.12, cost:80 },
-  'one-two':{base:'pas', phys:'dri', mult:1.20, cost:60 },
-  shoot:    {base:'sho', phys:'pow', mult:1.30, cost:120},
-  special:  {base:'sho', phys:'pow', mult:2.50, cost:400},
+  pass:           {base:'pas', phys:'dri', mult:1.00, cost:0  },
+  dribble:        {base:'dri', phys:'spd', mult:1.12, cost:80 },
+  'one-two':      {base:'pas', phys:'dri', mult:1.20, cost:60 },
+  shoot:          {base:'sho', phys:'pow', mult:1.30, cost:120},
+  special:        {base:'sho', phys:'pow', mult:2.50, cost:400},
+  // ── Generic super attack variants — every player can use these ──────
+  'super-pass':   {base:'pas', phys:'dri', mult:1.65, cost:160},
+  'super-dribble':{base:'dri', phys:'spd', mult:1.85, cost:200},
+  'super-one-two':{base:'pas', phys:'dri', mult:2.05, cost:220},
 };
 const DEF_ACTIONS={
-  tackle:    {base:'def', phys:'pow', mult:1.00, cost:60},
-  intercept: {base:'pas', phys:'def', mult:1.15, cost:50},
-  block:     {base:'def', phys:'pow', mult:1.10, cost:70},
-  save:      {base:'sav', phys:'ref', mult:1.80, cost:90},
-  punch:     {base:'ref', phys:'pow', mult:1.40, cost:70},
-  supersave: {base:'sav', phys:'ref', mult:3.20, cost:320},
+  tackle:           {base:'def', phys:'pow', mult:1.00, cost:60 },
+  intercept:        {base:'pas', phys:'def', mult:1.15, cost:50 },
+  block:            {base:'def', phys:'pow', mult:1.10, cost:70 },
+  save:             {base:'sav', phys:'ref', mult:1.80, cost:90 },
+  punch:            {base:'ref', phys:'pow', mult:1.40, cost:70 },
+  supersave:        {base:'sav', phys:'ref', mult:3.20, cost:320},
+  // ── Generic super defence variants ─────────────────────────────────
+  'super-tackle':   {base:'def', phys:'pow', mult:1.75, cost:180},
+  'super-intercept':{base:'pas', phys:'def', mult:2.00, cost:160},
+  'super-block':    {base:'def', phys:'pow', mult:1.90, cost:200},
+};
+// Super → base action (used for RPS lookup and game-logic gating)
+const SUPER_TO_BASE={
+  'super-pass':'pass','super-dribble':'dribble','super-one-two':'one-two',
+  'super-tackle':'tackle','super-intercept':'intercept','super-block':'block',
+};
+function baseAction(id){return SUPER_TO_BASE[id]||id;}
+function isSuperAtk(id){return id==='special'||id==='super-pass'||id==='super-dribble'||id==='super-one-two';}
+function isSuperDef(id){return id==='supersave'||id==='super-tackle'||id==='super-intercept'||id==='super-block';}
+// UI labels + icons for super variants
+const SUPER_NAMES={
+  'super-pass':    {l:'Threading Pass',  i:'🎯'},
+  'super-dribble': {l:'Falcon Dribble',  i:'💨'},
+  'super-one-two': {l:'Lightning 1-2',   i:'⚡'},
+  'super-tackle':  {l:'Iron Tackle',     i:'⚔'},
+  'super-intercept':{l:'Aerial Intercept',i:'🦅'},
+  'super-block':   {l:'Iron Wall',       i:'🛡'},
 };
 // B_RPS: attacker's multiplier based on matchup
 // 1.35 = read correctly (was 1.5), 0.78 = read wrong (was 0.6), 1.0 = neutral
@@ -3156,8 +3314,10 @@ function calcAttackPower(carrier,ak,side){
     G._shotZone = zoneLabel;
   }
   if(ak==='dribble') mAction*=(bh.dribbleBias||1);
-  if(ak==='pass'||ak==='one-two') mAction*=(bh.passBias||1);
-  if(ak==='shoot') mAction*=(bh.shootBias||1);
+  const akBase2=baseAction(ak);
+  if(akBase2==='pass'||akBase2==='one-two') mAction*=(bh.passBias||1);
+  if(akBase2==='shoot') mAction*=(bh.shootBias||1);
+  if(akBase2==='dribble') mAction*=(bh.dribbleBias||1);
   if(ak==='special') mAction*=(bh.specialBias||1);
   if(ak==='special'&&!getSpecial(carrier))mAction=1.30;
   {
@@ -3180,18 +3340,20 @@ function calcDefencePower(def,defA,attackAction){
   const rng=ENGINE_CONFIG.duel.rngMin+Math.random()*(ENGINE_CONFIG.duel.rngMax-ENGINE_CONFIG.duel.rngMin);
   // GK saves/punches/supersave: dedicated stat formula, no RPS penalty — they're specialists
   const isGKAction = defA==='save'||defA==='punch'||defA==='supersave';
-  const bRPS = isGKAction ? 1.0 : ((RPS[attackAction]&&RPS[attackAction][defA])||1.0);
+  // RPS lookup uses base actions so super variants inherit the right matchup.
+  const akBase=baseAction(attackAction), defBase=baseAction(defA);
+  const bRPS = isGKAction ? 1.0 : ((RPS[akBase]&&RPS[akBase][defBase])||1.0);
   let mult=act.mult*bRPS;
-  if(defA==='tackle') mult*=(bh.defensiveAggression||1);
-  if(defA==='intercept') mult*=1.02;
-  if(defA==='block') mult*=1.04;
+  if(defBase==='tackle') mult*=(bh.defensiveAggression||1);
+  if(defBase==='intercept') mult*=1.02;
+  if(defBase==='block') mult*=1.04;
   if(ROLES.cover && sq(G.D.ds||'a')[ROLES.cover]===def) mult*=(1+ENGINE_CONFIG.duel.coverDefenceBonus);
   if(ROLES.blocker && sq(G.D.ds||'a')[ROLES.blocker]===def) mult*=(1+ENGINE_CONFIG.duel.blockerDefenceBonus);
   // BOX-DEFENDER BOOST — defending inside own penalty box = +22% power.
   // Defensive zone is last 22% of pitch from defender's own goal.
   // Defender's own goal: home defends bottom (high Y), away defends top (low Y).
   const ds=G.D.ds, dk=G.D.dk;
-  if(ds&&dk&&PP[ds]&&PP[ds][dk]&&defA!=='save'&&defA!=='supersave'&&defA!=='punch'){
+  if(ds&&dk&&PP[ds]&&PP[ds][dk]&&defBase!=='save'&&defBase!=='supersave'&&defBase!=='punch'){
     const dp=PP[ds][dk];
     // Box: center third on X (0.30-0.70), last 22% of pitch on Y from own goal
     const inBoxX = dp.x>W*0.30 && dp.x<W*0.70;
@@ -3268,20 +3430,24 @@ function resDuel(){
   const hW=(as==='h'&&win)||(as==='a'&&!win);
   const rc2=hW?'#20c878':'#dc2020';
   let badge='SUCCESS!',det='';
-  if(['shoot','special'].includes(ak)){
+  // Normalize super variants to their base for outcome routing/labels.
+  const akB=baseAction(ak), defAB=baseAction(defA);
+  if(akB==='shoot'){
     if(win){badge=G.D.isShot?'⚽ GOAL!':'🎯 SHOT ON TARGET!';det=carrier?carrier.name+(G.D.isShot?' scores!':' shoots!'):'';}
     else if(defA==='punch'){badge='PUNCHED!';det=def?def.name+' punches clear!':'';}
     else{badge='SAVED!';det=def?def.name+' keeps it out!':'';}
-  }else if(ak==='pass'||ak==='one-two'){
-    if(win){badge=ak==='one-two'?'ONE-TWO!':'PASS COMPLETE!';det=pk&&sq(as)[pk]?'→ '+sq(as)[pk].name:'';}
-    else{badge=defA==='intercept'?'INTERCEPTED!':'PASS CUT!';det=def?def.name+' steps in!':'';}
-  }else if(ak==='dribble'){
+  }else if(akB==='pass'||akB==='one-two'){
+    if(win){badge=akB==='one-two'?'ONE-TWO!':'PASS COMPLETE!';det=pk&&sq(as)[pk]?'→ '+sq(as)[pk].name:'';}
+    else{badge=defAB==='intercept'?'INTERCEPTED!':'PASS CUT!';det=def?def.name+' steps in!':'';}
+  }else if(akB==='dribble'){
     if(win){badge='DRIBBLE!';det=carrier?carrier.name+' beats the press!':'';}
-    else{badge=defA==='block'?'BLOCKED!':'TACKLED!';det=def?def.name+' wins it!':'';}
+    else{badge=defAB==='block'?'BLOCKED!':'TACKLED!';det=def?def.name+' wins it!':'';}
   }
-  const al={pass:'PASS',dribble:'DRIBBLE',shoot:'SHOOT',special:'SPECIAL','one-two':'ONE-TWO'};
-  const dl={tackle:'TACKLE',intercept:'INTERCEPT',block:'BLOCK',save:'SAVE',punch:'PUNCH'};
-  const _bRPS=(RPS[ak]&&RPS[ak][defA])||1.0;
+  const al={pass:'PASS',dribble:'DRIBBLE',shoot:'SHOOT',special:'SPECIAL','one-two':'ONE-TWO',
+    'super-pass':'SUPER PASS','super-dribble':'SUPER DRIBBLE','super-one-two':'SUPER 1-2'};
+  const dl={tackle:'TACKLE',intercept:'INTERCEPT',block:'BLOCK',save:'SAVE',punch:'PUNCH',
+    supersave:'SUPER SAVE','super-tackle':'SUPER TACKLE','super-intercept':'SUPER INTERCEPT','super-block':'SUPER BLOCK'};
+  const _bRPS=(RPS[akB]&&RPS[akB][defAB])||1.0;
   if(_bRPS>1.2&&win) badge='⚡ COUNTER! '+badge;
   else if(_bRPS<0.85&&!win) badge='🛡 COUNTERED! '+badge;
   document.getElementById('rbadge').textContent=badge;
@@ -3294,7 +3460,7 @@ function resDuel(){
   ro.classList.add('show');say(badge+(det?' — '+det:''));
 
   // ── IMPACT FEEDBACK ─────────────────────────────────────
-  if(['shoot','special'].includes(ak)){
+  if(akB==='shoot'){
     if(win&&G.D.isShot){
       // Goal — handled in afGoal with full zoom
       shakeScreen(8,120);
@@ -3311,13 +3477,13 @@ function resDuel(){
       shakeScreen(3,60);
       impactText('🧤 SAVED!','#44b4ff');
     }
-  } else if(ak==='special'&&!['shoot','special'].includes(ak)){
-    // shouldn't happen but guard
   } else {
-    if(win&&ak==='dribble'){impactText('✨ DRIBBLE!','#f0c040');}
-    else if(win&&ak==='one-two'){impactText('⚡ ONE-TWO!','#f0c040');}
-    else if(!win&&defA==='intercept'){impactText('✋ INTERCEPTED!','#dc2020');}
-    else if(!win&&defA==='tackle'){impactText('🦵 TACKLED!','#dc2020');}
+    if(win&&akB==='dribble'){impactText(isSuperAtk(ak)?'💨 FALCON DRIBBLE!':'✨ DRIBBLE!','#f0c040');}
+    else if(win&&akB==='one-two'){impactText(isSuperAtk(ak)?'⚡ LIGHTNING 1-2!':'⚡ ONE-TWO!','#f0c040');}
+    else if(win&&akB==='pass'&&isSuperAtk(ak)){impactText('🎯 THREADING PASS!','#f0c040');}
+    else if(!win&&defAB==='intercept'){impactText(isSuperDef(defA)?'🦅 AERIAL INTERCEPT!':'✋ INTERCEPTED!','#dc2020');}
+    else if(!win&&defAB==='tackle'){impactText(isSuperDef(defA)?'⚔ IRON TACKLE!':'🦵 TACKLED!','#dc2020');}
+    else if(!win&&defAB==='block'){impactText(isSuperDef(defA)?'🛡 IRON WALL!':'🛡 BLOCKED!','#dc2020');}
   }
   const powerDiff=Math.abs(atkPow-defPow);
   if(powerDiff>40){
@@ -4345,13 +4511,21 @@ function enterGame(){
     el.classList.toggle('active',el.dataset.img==='friendly');
   });
   _hmCurrent='friendly';
-  // Start music (needs user gesture — splash button click qualifies)
-  startMusic();
+  // Music already started at disclaimer accept — no need to restart here.
   try{
     const el=document.documentElement;
     const req=el.requestFullscreen||el.webkitRequestFullscreen||el.mozRequestFullScreen||el.msRequestFullscreen;
     if(req){const p=req.call(el);if(p&&p.catch)p.catch(()=>{});}
   }catch(e){}
+}
+
+function acceptDisclaimer(){
+  // Move from disclaimer/preloader to splash. Critical wallpapers were
+  // preloaded in the background while the user was reading.
+  // Start menu music here — clicking "I Understand" is the first user
+  // gesture and satisfies the browser's autoplay policy.
+  startMusic();
+  showSc('s-splash');
 }
 
 function checkOrientation(){
