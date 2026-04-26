@@ -2917,7 +2917,7 @@ function selA(a,btn){
   btnPop(btn);
   // 2v1 attacker flow: first selection is action vs defender 1, second is action vs defender 2.
   // When the match is 2v1 and user has already chosen ak, this click becomes ak2.
-  if(G.D.is2v1 && G.D.as==='h' && G.D.ak && !G.D.ak2 && a.id!=='pass' && a.id!=='one-two'){
+  if(G.D.is2v1 && G.D.as==='h' && G.D.ak && !G.D.ak2 && baseAction(a.id)!=='pass' && baseAction(a.id)!=='one-two'){
     G.D.ak2=a.id;
     document.querySelectorAll('#abtns .dact3d').forEach(b=>b.classList.remove('dact-sel2'));
     btn.classList.add('dact-sel2');
@@ -2929,9 +2929,15 @@ function selA(a,btn){
   G.D.ak=a.id;G.D.pk=null;G.D.ak2=null;
   document.querySelectorAll('#abtns .dact3d').forEach(b=>{b.classList.remove('dact-sel');b.classList.remove('dact-sel2');});
   btn.classList.add('dact-sel');
-  if(a.id==='pass'||a.id==='one-two'){
+  const akB=baseAction(a.id);
+  if(akB==='pass'||akB==='one-two'){
     document.getElementById('duel-ov').classList.remove('show'); G.pm=true; document.getElementById('pass-banner').style.display='block';
-    document.getElementById('pass-banner').textContent=a.id==='one-two'?'ONE-TWO — PICK TEAMMATE':'PASS MODE — CLICK A PLAYER';
+    const sn=SUPER_NAMES[a.id];
+    const isSuper=isSuperAtk(a.id);
+    let bannerTxt;
+    if(akB==='one-two') bannerTxt = isSuper ? '⚡ LIGHTNING 1-2 — PICK TEAMMATE' : 'ONE-TWO — PICK TEAMMATE';
+    else                bannerTxt = isSuper ? '🎯 THREADING PASS — CLICK A PLAYER' : 'PASS MODE — CLICK A PLAYER';
+    document.getElementById('pass-banner').textContent=bannerTxt;
     document.getElementById('dcfm').classList.remove('rdy');
   } else {
     // In 2v1 prompt the user for a second move
@@ -2943,7 +2949,8 @@ function selA(a,btn){
 }
 function selD(a,btn){btnPop(btn);G.D.defA=a.id;document.querySelectorAll('#dbtns .dact3d').forEach(b=>b.classList.remove('dact-sel'));btn.classList.add('dact-sel');chkRdy();}
 function chkRdy(){
-  const needsPk=G.D.ak==='pass'||G.D.ak==='one-two';
+  const akB=baseAction(G.D.ak||'');
+  const needsPk=akB==='pass'||akB==='one-two';
   // In 2v1 with human attacker: both ak AND ak2 must be chosen (unless it's a pass variant)
   const needsAk2 = G.D.is2v1 && G.D.as==='h' && G.D.ak && !needsPk;
   const ao = G.D.as!=='h' || (G.D.ak && (!needsPk || G.D.pk) && (!needsAk2 || G.D.ak2));
@@ -3519,8 +3526,8 @@ function resDuel(){
       }
     }
     else if(['shoot','special'].includes(ak)&&!win)afSave(ds);
-    else if(ak==='pass'&&win)afPass(as,pk);
-    else if(ak==='one-two'&&win)afOneTwo(as,pk,carrier);
+    else if((ak==='pass'||ak==='super-pass')&&win)afPass(as,pk);
+    else if((ak==='one-two'||ak==='super-one-two')&&win)afOneTwo(as,pk,carrier);
     else if(win)afSucc(as,carrier);
     else afTurn(ds);
   },950);
