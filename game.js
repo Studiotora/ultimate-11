@@ -361,7 +361,37 @@ const T={
 };
 const TEAM_KEYS=Object.keys(T);
 // All teams available — Japan and All Stars are featured first
-const DEMO_TEAMS=TEAM_KEYS;
+// Categorise teams: nationals (the original T entries) vs clubs (career clubs).
+// _natKeys is a snapshot of TEAM_KEYS at module load — clubs added later via
+// crBuildClubTeam() won't appear here, so this distinguishes the two cleanly.
+const _natKeys=TEAM_KEYS.slice();
+let TS_CATEGORY='nationals';
+// DEMO_TEAMS is now a getter-style array recomputed each time. We rebuild it
+// whenever the user toggles category. Clubs are built lazily on first switch.
+let DEMO_TEAMS=_natKeys.slice();
+
+function rebuildDemoTeams(){
+  if(TS_CATEGORY==='clubs'){
+    // Make sure all CR_CLUBS are built into T (career screen also builds them
+    // on demand, but friendly select needs them up front).
+    Object.keys(CR_CLUBS).forEach(k=>{ if(typeof crBuildClubTeam==='function') crBuildClubTeam(k); });
+    DEMO_TEAMS=Object.keys(CR_CLUBS).filter(k=>T[k]);
+  } else {
+    DEMO_TEAMS=_natKeys.slice();
+  }
+}
+
+function setTeamCategory(cat){
+  if(cat===TS_CATEGORY)return;
+  TS_CATEGORY=cat;
+  document.getElementById('ts-cat-nat')?.classList.toggle('active',cat==='nationals');
+  document.getElementById('ts-cat-clubs')?.classList.toggle('active',cat==='clubs');
+  rebuildDemoTeams();
+  // Reset to first two teams in new category
+  homeIdx=0;
+  awayIdx=Math.min(1,DEMO_TEAMS.length-1);
+  syncTeamSelections();
+}
 const GRID={
   bands:{buildUp:0.30,advance:0.50,threat:0.70,final:0.85},
   encounterWidth:0.08,
