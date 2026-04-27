@@ -4753,7 +4753,8 @@ function crSave(){if(!CAR.active)return;try{
     roster:rosterSnap,slotAssign:HOME_SLOT_ASSIGN||{},reservesAssign:HOME_RESERVES||[],
     formation:activeHomeFormation||'4-3-3',
     divs:Object.fromEntries(Object.keys(CR_CLUBS).map(k=>[k,CR_CLUBS[k].div])),
-    ovrs:Object.fromEntries(Object.keys(CR_CLUBS).map(k=>[k,CR_CLUBS[k].ovr]))
+    ovrs:Object.fromEntries(Object.keys(CR_CLUBS).map(k=>[k,CR_CLUBS[k].ovr])),
+    players:CAR.players||{}, txLog:CAR.txLog||[], freeAgents:CAR.freeAgents||[]
   }));
 }catch(e){}}
 
@@ -4804,7 +4805,8 @@ function crLoad(){try{
     myClub:d.myClub,season:d.season,matchday:d.matchday,myResults:d.myResults||[],
     d1Tab:d.d1Tab||{},d2Tab:d.d2Tab||{},d1:d.d1||[...CR_D1],d2:d.d2||[...CR_D2],
     budget:d.budget||2000000,reputation:d.reputation||1,trophies:d.trophies||[],
-    formation:d.formation||'4-3-3',active:true,pendingMatch:null
+    formation:d.formation||'4-3-3',active:true,pendingMatch:null,
+    players:d.players||{}, txLog:d.txLog||[], freeAgents:d.freeAgents||[]
   });
   if(d.divs)Object.entries(d.divs).forEach(([k,v])=>{if(CR_CLUBS[k])CR_CLUBS[k].div=v;});
   if(d.ovrs)Object.entries(d.ovrs).forEach(([k,v])=>{if(CR_CLUBS[k])CR_CLUBS[k].ovr=v;});
@@ -4965,7 +4967,350 @@ function crEndSeason(){
     body.appendChild(mv);
   });
   const btn=document.createElement('button');btn.className='cr-next-season';btn.textContent='▶ BEGIN SEASON '+(CAR.season+1);
-  btn.onclick=()=>{CAR.season++;CAR.d1=Object.keys(CR_CLUBS).filter(k=>CR_CLUBS[k].div===1);CAR.d2=Object.keys(CR_CLUBS).filter(k=>CR_CLUBS[k].div===2);crInitSeason();crSave();showSc('s-career-hub');crRenderHub();};
+  btn.onclick=()=>{CAR.season++;CAR.d1=Object.keys(CR_CLUBS).filter(k=>CR_CLUBS[k].div===1);CAR.d2=Object.keys(CR_CLUBS).filter(k=>CR_CLUBS[k].div===2);if(typeof crEndSeasonProgress==='function')crEndSeasonProgress();crInitSeason();crSave();showSc('s-career-hub');crRenderHub();};
   body.appendChild(btn);
   showSc('s-career-season');
 }
+
+// ════════════════════════════════════════════════════════════════════
+// TRANSFER MARKET — PES Master League style
+// ════════════════════════════════════════════════════════════════════
+// Each player gets persistent metadata: age, form, contract, value, club.
+// Value moves with: base OVR, age curve, form, position scarcity, randomness.
+// Players have contracts; expired ones become free agents (cheap).
+// Transfer log records every deal so the user can see history.
+// ────────────────────────────────────────────────────────────────────
+
+// Persistent player metadata, keyed by `${clubKey}:${playerId}`
+// Initialized lazily on first market open and after squad changes.
+if(!CAR.players)  CAR.players={};       // {key:{age,form,contract,value,club,name,pos,ovr,id,jersey,spd,pwr,tec,def,sav,ref,rar}}
+if(!CAR.txLog)    CAR.txLog=[];          // transfer history
+if(!CAR.freeAgents) CAR.freeAgents=[];   // unclubbed players
+
+function _plKey(clubKey,id){return clubKey+':'+id;}
+
+// Position scarcity multiplier — GKs and CBs hold value, attackers premium
+function _posScarcity(pos){
+  if(pos==='GK') return 1.15;
+  if(['CB1','CB2'].includes(pos)) return 1.05;
+  if(['LB','RB'].includes(pos))   return 0.95;
+  if(['CM1','CM2','CM3'].includes(pos)) return 1.10;
+  if(['LW','ST','RW'].includes(pos)) return 1.20; // forwards expensive
+  return 1.0;
+}
+
+// Age curve: peak at 26-29, declining sharply after 32
+function _ageMult(age){
+  if(age<=20) return 1.10;       // wonderkid premium
+  if(age<=23) return 1.20;       // rising star peak speculative value
+  if(age<=27) return 1.25;       // prime peak
+  if(age<=29) return 1.15;
+  if(age<=31) return 1.00;
+  if(age<=33) return 0.75;
+  if(age<=35) return 0.50;
+  return 0.25;                    // veteran
+}
+
+// Compute market value (€) — exponential on OVR so 90 ovr is much pricier than 80
+function crCalcValue(meta){
+  const ovr=meta.ovr||70;
+  // Base in millions: 70ovr ≈ 1M, 80 ≈ 5M, 85 ≈ 12M, 90 ≈ 35M, 92 ≈ 55M, 95 ≈ 95M
+  const base = Math.pow((ovr-50)/14, 3.2) * 1_000_000 * 0.75;
+  const age  = _ageMult(meta.age||27);
+  const pos  = _posScarcity(meta.pos||'CM2');
+  const form = 0.85 + (meta.form||5)*0.04;       // form 1..10 → 0.89..1.25
+  const rep  = 0.92 + (meta.rar||1)*0.05;        // rarity 1..3 → 0.97..1.07
+  const v=Math.round(base*age*pos*form*rep/10000)*10000; // round to 10k
+  return Math.max(50000, v);
+}
+
+// Initialize meta for a single player if not present
+function crInitPlayerMeta(clubKey,pl){
+  const k=_plKey(clubKey,pl.id);
+  if(CAR.players[k])return CAR.players[k];
+  // Generate plausible age — bell curve around 25
+  const age=Math.max(17,Math.min(38,Math.round(20+Math.random()*12)));
+  const form=Math.round(4+Math.random()*5); // 4-9
+  const contract=2+Math.floor(Math.random()*4); // 2-5 years
+  const meta={
+    id:pl.id, name:pl.name, pos:pl.pos, jersey:pl.jersey,
+    spd:pl.spd, pwr:pl.pwr, tec:pl.tec, def:pl.def, sav:pl.sav, ref:pl.ref, rar:pl.rar||1,
+    ovr:crCalcOvr(pl), club:clubKey, age, form, contract,
+  };
+  meta.value=crCalcValue(meta);
+  CAR.players[k]=meta;
+  return meta;
+}
+
+// Build/refresh metadata for every player in every club
+function crInitAllPlayers(){
+  Object.keys(CR_CLUBS).forEach(clubKey=>{
+    const team=crBuildClubTeam(clubKey);
+    if(!team)return;
+    team.p.forEach(pl=>crInitPlayerMeta(clubKey,pl));
+  });
+}
+
+// Recompute value for one player (after age/form changes)
+function crRevalue(meta){meta.value=crCalcValue(meta);return meta.value;}
+
+// END-OF-SEASON progression: age++, contracts--, form drift, OVR shifts
+function crEndSeasonProgress(){
+  Object.values(CAR.players).forEach(m=>{
+    m.age++;
+    m.contract=Math.max(0,m.contract-1);
+    // OVR drift: young players gain, old players decline
+    if(m.age<=24) m.ovr=Math.min(99,m.ovr+(Math.random()<0.6?1:0)+(Math.random()<0.2?1:0));
+    else if(m.age>=32) m.ovr=Math.max(50,m.ovr-(Math.random()<0.5?1:0)-(Math.random()<0.2?1:0));
+    else if(Math.random()<0.15) m.ovr+=Math.random()<0.5?1:-1;
+    m.form=Math.max(1,Math.min(10,m.form+(Math.random()<0.5?-1:1)));
+    // Expired contracts → free agent
+    if(m.contract<=0 && m.club){
+      CAR.freeAgents.push(_plKey(m.club,m.id));
+      m.club=null;
+      m.value=Math.round(crCalcValue(m)*0.6); // free agents discounted
+    } else {
+      crRevalue(m);
+    }
+  });
+}
+
+// Sell a player from your squad — full payment, no negotiation (PES classic)
+function crSellPlayer(playerId,buyerClubKey){
+  if(!CAR.active)return false;
+  const k=_plKey(CAR.myClub,playerId);
+  const m=CAR.players[k];
+  if(!m){alert('Player not found.');return false;}
+  // Don't allow selling if squad would drop below 14
+  const myCount=Object.values(CAR.players).filter(x=>x.club===CAR.myClub).length;
+  if(myCount<=14){alert('Cannot sell — squad too small (need 14+ players).');return false;}
+  const fee=m.value;
+  CAR.budget+=fee;
+  // Remove from your team in T[]
+  const team=T[CAR.myClub];
+  if(team){
+    team.p=team.p.filter(p=>p.id!==m.id);
+    team.reserves=(team.reserves||[]).filter(id=>id!==m.id);
+  }
+  // Move meta to buyer
+  if(buyerClubKey){
+    const newK=_plKey(buyerClubKey,m.id);
+    m.club=buyerClubKey;
+    delete CAR.players[k];
+    CAR.players[newK]=m;
+    // Add to buyer's T[] roster
+    crBuildClubTeam(buyerClubKey);
+    if(T[buyerClubKey]&&!T[buyerClubKey].p.find(p=>p.id===m.id)){
+      T[buyerClubKey].p.push({id:m.id,name:m.name,pos:m.pos,spd:m.spd,pwr:m.pwr,tec:m.tec,def:m.def,sav:m.sav,ref:m.ref,rar:m.rar,jersey:m.jersey});
+    }
+  } else {
+    // Released → free agent
+    CAR.freeAgents.push(k);
+    m.club=null;
+  }
+  CAR.txLog.unshift({day:CAR.matchday,season:CAR.season,type:'sold',name:m.name,from:CAR.myClub,to:buyerClubKey||'released',fee});
+  if(CAR.txLog.length>40)CAR.txLog.length=40;
+  crSave();
+  return true;
+}
+
+// Buy a player FROM another club (or free agent) — must afford full value
+function crBuyPlayer(playerId,sellerClubKey){
+  if(!CAR.active)return false;
+  const fromKey=sellerClubKey?_plKey(sellerClubKey,playerId):
+    CAR.freeAgents.find(fk=>fk.endsWith(':'+playerId));
+  const m=fromKey?CAR.players[fromKey]:null;
+  if(!m){alert('Player not found.');return false;}
+  const fee=m.value;
+  if(CAR.budget<fee){alert('Not enough budget.\nNeed €'+crFmtMoney(fee)+', have €'+crFmtMoney(CAR.budget));return false;}
+  // Don't allow more than 25 players
+  const myCount=Object.values(CAR.players).filter(x=>x.club===CAR.myClub).length;
+  if(myCount>=25){alert('Squad full (max 25 players). Sell or release someone first.');return false;}
+  CAR.budget-=fee;
+  // Remove from seller (if any)
+  if(sellerClubKey){
+    const seller=T[sellerClubKey];
+    if(seller){
+      seller.p=seller.p.filter(p=>p.id!==m.id);
+      seller.reserves=(seller.reserves||[]).filter(id=>id!==m.id);
+    }
+    delete CAR.players[fromKey];
+  } else {
+    // remove from free agent pool
+    CAR.freeAgents=CAR.freeAgents.filter(fk=>fk!==fromKey);
+    delete CAR.players[fromKey];
+  }
+  // Add to your club
+  const newK=_plKey(CAR.myClub,m.id);
+  m.club=CAR.myClub;
+  CAR.players[newK]=m;
+  crBuildClubTeam(CAR.myClub);
+  if(T[CAR.myClub]&&!T[CAR.myClub].p.find(p=>p.id===m.id)){
+    T[CAR.myClub].p.push({id:m.id,name:m.name,pos:m.pos,spd:m.spd,pwr:m.pwr,tec:m.tec,def:m.def,sav:m.sav,ref:m.ref,rar:m.rar,jersey:m.jersey});
+  }
+  CAR.txLog.unshift({day:CAR.matchday,season:CAR.season,type:'bought',name:m.name,from:sellerClubKey||'free',to:CAR.myClub,fee});
+  if(CAR.txLog.length>40)CAR.txLog.length=40;
+  crSave();
+  return true;
+}
+
+// ──────────────── TRANSFER MARKET UI ──────────────────────────
+// Two tabs: BROWSE (everyone else) | MY SQUAD (sell)
+let _txState={tab:'browse', filterClub:'all', filterPos:'all', search:''};
+
+function crOpenTransferMarket(){
+  if(!CAR.active){alert('Career mode required.');return;}
+  // Make sure metadata exists for everyone
+  crInitAllPlayers();
+  // Hide hub, show market
+  let scr=document.getElementById('s-career-tx');
+  if(!scr){
+    scr=document.createElement('div');
+    scr.id='s-career-tx';
+    scr.className='screen';
+    scr.innerHTML=`
+      <div class="ts-hdr" style="padding:8px 16px;">
+        <h2>TRANSFER MARKET</h2>
+        <div style="display:flex;gap:6px;">
+          <button id="tx-tab-browse" class="ts-cat-btn active" onclick="_txTab('browse')">🛒 BROWSE</button>
+          <button id="tx-tab-mine"   class="ts-cat-btn"        onclick="_txTab('mine')">👕 MY SQUAD</button>
+          <button id="tx-tab-free"   class="ts-cat-btn"        onclick="_txTab('free')">🆓 FREE AGENTS</button>
+          <button id="tx-tab-log"    class="ts-cat-btn"        onclick="_txTab('log')">📜 HISTORY</button>
+        </div>
+        <button class="back-btn" onclick="showSc('s-career-hub');crRenderHub();">← HUB</button>
+      </div>
+      <div style="padding:8px 16px;background:rgba(0,0,0,.4);display:flex;gap:14px;align-items:center;flex-wrap:wrap;border-bottom:1px solid rgba(255,255,255,.08);">
+        <div style="font-family:Bebas Neue,sans-serif;font-size:13px;letter-spacing:.16em;color:#cfd8e3;">BUDGET: <span id="tx-budget" style="color:#f0c040;font-size:18px;">€0</span></div>
+        <input id="tx-search" placeholder="Search player..." style="background:rgba(15,28,55,.7);border:1px solid rgba(255,255,255,.15);color:#fff;padding:6px 10px;border-radius:4px;font-family:Rajdhani,sans-serif;font-size:13px;outline:none;" oninput="_txState.search=this.value;crRenderMarket();">
+        <select id="tx-pos-filter" style="background:rgba(15,28,55,.7);border:1px solid rgba(255,255,255,.15);color:#fff;padding:6px 10px;border-radius:4px;font-family:Rajdhani,sans-serif;font-size:13px;" onchange="_txState.filterPos=this.value;crRenderMarket();">
+          <option value="all">All positions</option>
+          <option value="GK">Goalkeeper</option>
+          <option value="DEF">Defenders</option>
+          <option value="MID">Midfielders</option>
+          <option value="FWD">Forwards</option>
+        </select>
+      </div>
+      <div id="tx-list" style="flex:1;overflow-y:auto;padding:10px 14px;"></div>
+    `;
+    scr.style.cssText='background:linear-gradient(160deg,rgba(6,14,30,.92) 0%,rgba(4,8,14,.96) 100%);';
+    document.body.appendChild(scr);
+  }
+  showSc('s-career-tx');
+  _txState.tab='browse';
+  _txTab('browse');
+}
+
+function _txTab(t){
+  _txState.tab=t;
+  ['browse','mine','free','log'].forEach(x=>{
+    const b=document.getElementById('tx-tab-'+x);
+    if(b)b.classList.toggle('active',x===t);
+  });
+  crRenderMarket();
+}
+
+function _posCategory(pos){
+  if(pos==='GK')return 'GK';
+  if(['CB1','CB2','LB','RB'].includes(pos))return 'DEF';
+  if(['CM1','CM2','CM3'].includes(pos))return 'MID';
+  return 'FWD';
+}
+
+function crRenderMarket(){
+  const list=document.getElementById('tx-list');if(!list)return;
+  document.getElementById('tx-budget').textContent='€'+crFmtMoney(CAR.budget);
+  list.innerHTML='';
+  let players=[];
+  if(_txState.tab==='browse'){
+    players=Object.values(CAR.players).filter(m=>m.club&&m.club!==CAR.myClub);
+  } else if(_txState.tab==='mine'){
+    players=Object.values(CAR.players).filter(m=>m.club===CAR.myClub);
+  } else if(_txState.tab==='free'){
+    players=Object.values(CAR.players).filter(m=>!m.club);
+  } else if(_txState.tab==='log'){
+    list.innerHTML=_txRenderLog();return;
+  }
+  // Apply filters
+  if(_txState.filterPos!=='all'){
+    players=players.filter(m=>_posCategory(m.pos)===_txState.filterPos);
+  }
+  if(_txState.search){
+    const q=_txState.search.toLowerCase();
+    players=players.filter(m=>m.name.toLowerCase().includes(q)||(m.club&&m.club.toLowerCase().includes(q)));
+  }
+  // Sort by value desc
+  players.sort((a,b)=>b.value-a.value);
+  if(players.length===0){
+    list.innerHTML='<div style="text-align:center;padding:40px;color:#888;">No players match.</div>';
+    return;
+  }
+  // Render rows
+  players.slice(0,80).forEach(m=>{
+    const row=document.createElement('div');
+    row.className='tx-row';
+    row.style.cssText='display:grid;grid-template-columns:50px 1.6fr 1fr 60px 60px 60px 90px 110px;gap:8px;align-items:center;padding:8px 10px;background:rgba(15,28,55,.6);border:1px solid rgba(255,255,255,.06);border-radius:6px;margin-bottom:4px;font-family:Rajdhani,sans-serif;color:#cfd8e3;';
+    const clubName=m.club?(CR_CLUBS[m.club]?.name||m.club):'—';
+    const ageColor=m.age<=23?'#6cf':m.age>=32?'#f96':'#cfd8e3';
+    const formColor=m.form>=8?'#6f6':m.form<=4?'#f66':'#cfd8e3';
+    const ovrColor=m.ovr>=88?'#f0c040':m.ovr>=80?'#fff':'#cfd8e3';
+    const isMine=m.club===CAR.myClub;
+    const isFree=!m.club;
+    row.innerHTML=`
+      <div style="font-family:Bebas Neue,sans-serif;font-size:18px;color:${ovrColor};text-align:center;">${m.ovr}</div>
+      <div>
+        <div style="font-family:Bebas Neue,sans-serif;font-size:15px;letter-spacing:.05em;color:#fff;">${m.name}</div>
+        <div style="font-size:10px;color:#888;letter-spacing:.1em;">${m.pos} · ${clubName}</div>
+      </div>
+      <div style="font-size:11px;">CONT: ${m.contract}y</div>
+      <div style="text-align:center;color:${ageColor};font-size:13px;">${m.age}y</div>
+      <div style="text-align:center;color:${formColor};font-size:13px;">F${m.form}</div>
+      <div style="text-align:center;font-size:11px;color:#888;">⭐${m.rar||1}</div>
+      <div style="text-align:right;font-family:Bebas Neue,sans-serif;font-size:16px;color:#f0c040;letter-spacing:.05em;">€${crFmtMoney(m.value)}</div>
+      <div style="text-align:right;"></div>
+    `;
+    const btn=document.createElement('button');
+    btn.style.cssText='padding:6px 10px;border-radius:4px;font-family:Bebas Neue,sans-serif;letter-spacing:.1em;font-size:12px;cursor:pointer;border:none;color:#0a0f1a;';
+    if(isMine){
+      btn.textContent='RELEASE';
+      btn.style.background='linear-gradient(180deg,#f88,#c33)';btn.style.color='#fff';
+      btn.onclick=()=>{if(confirm('Release '+m.name+' for free? You get nothing.')){
+        crSellPlayer(m.id,null);crRenderMarket();
+      }};
+    } else if(isFree){
+      btn.textContent='SIGN';
+      btn.style.background='linear-gradient(180deg,#6f6,#3a3)';
+      btn.onclick=()=>{
+        if(confirm('Sign '+m.name+' for €'+crFmtMoney(m.value)+'?')){
+          if(crBuyPlayer(m.id,null))crRenderMarket();
+        }
+      };
+    } else {
+      btn.textContent='BUY';
+      btn.style.background='linear-gradient(180deg,#ffd566,#f0c040)';
+      btn.onclick=()=>{
+        if(confirm('Buy '+m.name+' from '+clubName+' for €'+crFmtMoney(m.value)+'?')){
+          if(crBuyPlayer(m.id,m.club))crRenderMarket();
+        }
+      };
+    }
+    row.children[7].appendChild(btn);
+    list.appendChild(row);
+  });
+}
+
+function _txRenderLog(){
+  if(!CAR.txLog||CAR.txLog.length===0)return '<div style="text-align:center;padding:40px;color:#888;">No transfers yet.</div>';
+  return CAR.txLog.map(t=>{
+    const fromName=CR_CLUBS[t.from]?.name||t.from||'—';
+    const toName=CR_CLUBS[t.to]?.name||t.to||'—';
+    const color=t.type==='bought'?'#6f6':'#f88';
+    return `<div style="padding:8px 12px;background:rgba(15,28,55,.5);border-radius:6px;margin-bottom:4px;display:flex;justify-content:space-between;align-items:center;font-family:Rajdhani,sans-serif;color:#cfd8e3;">
+      <div>
+        <div style="font-family:Bebas Neue,sans-serif;font-size:15px;color:#fff;">${t.name}</div>
+        <div style="font-size:11px;color:#888;">${fromName} → ${toName} · S${t.season} MD${t.day}</div>
+      </div>
+      <div style="font-family:Bebas Neue,sans-serif;font-size:16px;color:${color};">€${crFmtMoney(t.fee)}</div>
+    </div>`;
+  }).join('');
+}
+
