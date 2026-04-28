@@ -215,8 +215,8 @@ const T={
     {id:2304,name:'Granqvist',pos:'CB2',spd:68,pwr:82,tec:68,def:88,rar:1,jersey:6},
     {id:2305,name:'Lustig',pos:'RB',spd:74,pwr:72,tec:72,def:78,rar:1,jersey:2},
     {id:2306,name:'Ekdal',pos:'CM1',spd:76,pwr:78,tec:78,def:74,rar:1,jersey:8},
-    {id:2307,name:'Levi',pos:'CM2',spd:84,pwr:86,tec:88,def:68,rar:2,jersey:12},
-    {id:2308,name:'Forsberg',pos:'CM3',spd:82,pwr:80,tec:86,def:62,rar:2,jersey:7},
+    {id:2307,name:'S.Levi',pos:'CM3',spd:84,pwr:86,tec:96,def:64,rar:3,jersey:12},
+    {id:2308,name:'Forsberg',pos:'CM2',spd:82,pwr:80,tec:86,def:68,rar:2,jersey:7},
     {id:2309,name:'Claesson',pos:'LW',spd:80,pwr:76,tec:78,def:56,rar:1,jersey:11},
     {id:2310,name:'Berg',pos:'ST',spd:78,pwr:82,tec:76,def:54,rar:1,jersey:9},
     {id:2311,name:'Ibrahimovic',pos:'RW',spd:84,pwr:90,tec:86,def:52,rar:2,jersey:10},
@@ -304,7 +304,7 @@ const T={
     {id:704,name:'W.Samuel',pos:'CB2',spd:66,pwr:82,tec:68,def:88,rar:2},
     {id:705,name:'P.Sorin',pos:'RB',spd:80,pwr:70,tec:76,def:78,rar:1},
     {id:706,name:'J.Riquelme',pos:'CM1',spd:74,pwr:78,tec:92,def:62,rar:2},
-    {id:707,name:'P.Aimar',pos:'CM2',spd:82,pwr:76,tec:90,def:60,rar:2},
+    {id:707,name:'J.Diaz',pos:'CM2',spd:82,pwr:88,tec:90,def:62,rar:2,jersey:8},
     {id:708,name:'D.Simeone',pos:'CM3',spd:72,pwr:80,tec:78,def:80,rar:1},
     {id:709,name:'C.Tevez',pos:'LW',spd:86,pwr:84,tec:82,def:56,rar:2},
     {id:710,name:'G.Batistuta',pos:'ST',spd:80,pwr:92,tec:78,def:48,rar:2},
@@ -578,14 +578,63 @@ function calcOvr(pl){
 }
 
 // Set team emblem in any element — emoji shows instantly, img replaces it if PNG loads
+// SVG-generated generic player silhouette, used as ultimate fallback when
+// no `assets/career/clubs/player.png` is provided. Returns a data URL string.
+const _GENERIC_PLAYER_SVG_URL = (()=>{
+  const svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 280">
+    <defs>
+      <linearGradient id="g" x1="0" y1="0" x2="0" y2="1">
+        <stop offset="0" stop-color="#3a4a6a"/>
+        <stop offset="1" stop-color="#1a2438"/>
+      </linearGradient>
+    </defs>
+    <rect width="200" height="280" fill="transparent"/>
+    <!-- Head -->
+    <circle cx="100" cy="80" r="32" fill="url(#g)" stroke="rgba(255,255,255,0.15)" stroke-width="2"/>
+    <!-- Shoulders/torso -->
+    <path d="M 40 280 L 50 180 Q 60 140 100 140 Q 140 140 150 180 L 160 280 Z"
+          fill="url(#g)" stroke="rgba(255,255,255,0.15)" stroke-width="2"/>
+    <!-- Subtle highlight -->
+    <ellipse cx="92" cy="72" rx="8" ry="10" fill="rgba(255,255,255,0.08)"/>
+  </svg>`;
+  return 'data:image/svg+xml;utf8,'+encodeURIComponent(svg);
+})();
+function genericPlayerImage(){
+  if(!genericPlayerImage._cache){
+    const img=new Image();
+    img.src=_GENERIC_PLAYER_SVG_URL;
+    genericPlayerImage._cache=img;
+  }
+  return genericPlayerImage._cache;
+}
+
 function setTeamEmblem(el, teamKey, flagEmoji){
   if(!el)return;
   el.style.display='';
-  // Paint emoji fallback synchronously first so we always see something
   el.innerHTML='';
-  el.textContent=flagEmoji||'🏳';
-  if(!teamKey)return;
-  const src='assets/team/'+(teamKey||'').toLowerCase()+'.png';
+  if(!teamKey){
+    el.textContent=flagEmoji||'🏳';
+    return;
+  }
+  const k=String(teamKey).toLowerCase();
+  let isClub=false;
+  try { isClub = !!(CR_CLUBS && CR_CLUBS[k]); } catch(e) { isClub=false; }
+
+  // Default fill: emoji for nationals, SVG badge for clubs (so we always have
+  // a recognisable crest until per-club PNGs exist).
+  if(isClub){
+    try {
+      el.innerHTML = crBadgeSvg(CR_CLUBS[k], 100);
+      const svg=el.querySelector('svg');
+      if(svg){svg.style.width='100%';svg.style.height='100%';}
+    } catch(e) { el.textContent=flagEmoji||'🏳'; }
+  } else {
+    el.textContent=flagEmoji||'🏳';
+  }
+
+  // Try the PNG override; if it exists, replace the SVG/emoji with the image.
+  const src=teamEmblemPath(teamKey);
+  if(!src)return;
   const img=new Image();
   img.onload=()=>{
     el.innerHTML='';
@@ -594,8 +643,38 @@ function setTeamEmblem(el, teamKey, flagEmoji){
     i.style.cssText='width:100%;height:100%;object-fit:contain;display:block;';
     el.appendChild(i);
   };
-  // onerror: do nothing — the emoji is already shown
   img.src=src;
+}
+// Returns the correct emblem PNG path for either a national team or a club.
+// Clubs are identified by being keys of CR_CLUBS; everything else is treated
+// as a national team and uses assets/team/{key}.png.
+// For clubs, the future PNG path is `club{key}.png` (e.g. `clubbarcelona.png`)
+// — keeping it distinct from `barcelona.png` which is a generic placeholder.
+function teamEmblemPath(key){
+  if(!key)return '';
+  const k=String(key).toLowerCase();
+  let isClub=false;
+  try { isClub = !!(CR_CLUBS && CR_CLUBS[k]); } catch(e) { isClub=false; }
+  return isClub ? `assets/career/clubs/club${k}.png` : `assets/team/${k}.png`;
+}
+// Cache for SVG-rasterized club badges so we can draw them on the canvas.
+// crBadgeSvg() returns an SVG string for any CR_CLUBS entry; we wrap that in
+// a data URL and load it as an Image so cx.drawImage() works.
+const _CLUB_SVG_BADGE_CACHE={};
+function clubBadgeImage(clubKey){
+  if(!clubKey)return null;
+  const k=String(clubKey).toLowerCase();
+  if(_CLUB_SVG_BADGE_CACHE[k])return _CLUB_SVG_BADGE_CACHE[k]==='loading'?null:_CLUB_SVG_BADGE_CACHE[k];
+  let club=null;
+  try { club = CR_CLUBS && CR_CLUBS[k]; } catch(e) { return null; }
+  if(!club)return null;
+  _CLUB_SVG_BADGE_CACHE[k]='loading';
+  const svg = crBadgeSvg(club, 200);
+  const img = new Image();
+  img.onload = ()=>{ _CLUB_SVG_BADGE_CACHE[k]=img; };
+  img.onerror = ()=>{ _CLUB_SVG_BADGE_CACHE[k]='err'; };
+  img.src = 'data:image/svg+xml;utf8,'+encodeURIComponent(svg);
+  return null;
 }
 function showSc(id){
   document.querySelectorAll('.screen').forEach(s=>s.classList.remove('active'));
@@ -765,13 +844,24 @@ function calcTeamOvr(team){
   return Math.round(total/starters.length);
 }
 function syncTeamSelections(){
+  if(!DEMO_TEAMS||DEMO_TEAMS.length<2){
+    document.getElementById('kickbtn')?.classList.remove('rdy');
+    return;
+  }
   if(awayIdx===homeIdx)awayIdx=(awayIdx+1)%DEMO_TEAMS.length;
-  selHome=DEMO_TEAMS[homeIdx]; selAway=DEMO_TEAMS[awayIdx]; HT=T[selHome]; AT=T[selAway];
-  document.getElementById('hflag').textContent=HT.flag; document.getElementById('hname').textContent=HT.name.toUpperCase();
-  document.getElementById('aflag').textContent=AT.flag; document.getElementById('aname').textContent=AT.name.toUpperCase();
+  selHome=DEMO_TEAMS[homeIdx]; selAway=DEMO_TEAMS[awayIdx];
+  HT=T[selHome]; AT=T[selAway];
+  if(!HT||!AT){
+    // A team didn't build — gracefully fall back instead of throwing.
+    console.warn('Team data missing',{selHome,selAway,HT:!!HT,AT:!!AT});
+    document.getElementById('kickbtn')?.classList.remove('rdy');
+    return;
+  }
+  document.getElementById('hflag').textContent=HT.flag||''; document.getElementById('hname').textContent=(HT.name||'').toUpperCase();
+  document.getElementById('aflag').textContent=AT.flag||''; document.getElementById('aname').textContent=(AT.name||'').toUpperCase();
   // Team emblems in shields — replace flag content with image
-  setTeamEmblem(document.getElementById('hflag'), selHome, HT.flag);
-  setTeamEmblem(document.getElementById('aflag'), selAway, AT.flag);
+  setTeamEmblem(document.getElementById('hflag'), selHome, HT.flag||'');
+  setTeamEmblem(document.getElementById('aflag'), selAway, AT.flag||'');
   const hOvr=calcTeamOvr(HT);
   const aOvr=calcTeamOvr(AT);
   document.getElementById('hsubhint').textContent='OVR '+hOvr;
@@ -2110,21 +2200,45 @@ function drawT(s){
       if(iC){cx.fill();cx.lineWidth=3*sc;cx.strokeStyle='#ffd54a';}
       else{cx.globalAlpha=iCh?.7:1;cx.fill();cx.lineWidth=2.5*sc;cx.strokeStyle='#ffdd00';}
       cx.stroke();cx.globalAlpha=1;
-      // GK label
-      const img=playerImg(pl);
-      if(img&&img.complete&&img.naturalWidth>0){
+      // GK label — always team emblem (faded) + 'GK' text, never per-player photo on the field
+      const gkEmblemKey = pl.clubKey || ((s==='h') ? (selHome||'') : (selAway||''));
+      const gkEmblemPath = gkEmblemKey ? teamEmblemPath(gkEmblemKey) : null;
+      const gkCacheKey = 'emb_' + (gkEmblemKey || '_');
+      if(gkEmblemPath && !IMG_CACHE[gkCacheKey]){
+        IMG_CACHE[gkCacheKey]='loading';
+        const ei=new Image();
+        ei.onload=()=>{IMG_CACHE[gkCacheKey]=ei;};
+        ei.onerror=()=>{IMG_CACHE[gkCacheKey]='err';};
+        ei.src=gkEmblemPath;
+      }
+      const gkEmblemImg_raw=IMG_CACHE[gkCacheKey];
+      let gkEmblemImg=gkEmblemImg_raw;
+      if((gkEmblemImg==='err' || !gkEmblemImg || gkEmblemImg==='loading') && gkEmblemKey){
+        let isClub=false;
+        try { isClub = !!(CR_CLUBS && CR_CLUBS[gkEmblemKey]); } catch(e) {}
+        if(isClub){
+          const sv=clubBadgeImage(gkEmblemKey);
+          if(sv && sv.complete && sv.naturalWidth>0) gkEmblemImg=sv;
+        }
+      }
+      if(gkEmblemImg && gkEmblemImg!=='err' && gkEmblemImg!=='loading' && gkEmblemImg.complete && gkEmblemImg.naturalWidth>0){
         cx.save();
         cx.beginPath();cx.roundRect(px-hw+sc,py-hw+sc,hw*2-sc*2,hw*2-sc*2,rnd*0.8);cx.clip();
-        cx.drawImage(img,px-hw,py-hw,hw*2,hw*2);
+        cx.globalAlpha=0.78;
+        cx.drawImage(gkEmblemImg,px-hw,py-hw,hw*2,hw*2);
+        cx.globalAlpha=1;
         cx.restore();
         cx.beginPath();cx.roundRect(px-hw,py-hw,hw*2,hw*2,rnd);
         cx.lineWidth=iC?3*sc:2.5*sc;cx.strokeStyle=iC?'#ffd54a':'#ffdd00';cx.stroke();
-      }else{
-        cx.fillStyle='#fff';
-        cx.font=`bold ${Math.round(10*sc)}px Orbitron,sans-serif`;
-        cx.textAlign='center';cx.textBaseline='middle';
-        cx.fillText('GK',px,py+sc);
       }
+      // GK label drawn on top
+      cx.font=`bold ${Math.round(10*sc)}px Orbitron,sans-serif`;
+      cx.textAlign='center';cx.textBaseline='middle';
+      cx.lineWidth=Math.max(2,2.5*sc);
+      cx.strokeStyle='rgba(0,0,0,.75)';
+      cx.strokeText('GK',px,py+sc);
+      cx.fillStyle='#fff';
+      cx.fillText('GK',px,py+sc);
     }else{
       // Field player: circle
       cx.beginPath();cx.arc(px,py,r,0,Math.PI*2);
@@ -2143,46 +2257,50 @@ function drawT(s){
         cx.strokeStyle='rgba(255,255,255,.12)';cx.lineWidth=sc;cx.stroke();
       }
 
-      // Face image or jersey number
-      const img=playerImg(pl);
-      if(img&&img.complete&&img.naturalWidth>0){
+      // ── IN-PITCH RENDER: ALWAYS team emblem + jersey number (white). ──
+      // Portrait files are reserved for the duel scene only, so the field
+      // looks consistent across friendly and career.
+      const emblemKey = pl.clubKey || ((s==='h') ? (selHome||'') : (selAway||''));
+      const emblemPath = emblemKey ? teamEmblemPath(emblemKey) : null;
+      const cacheKey = 'emb_' + (emblemKey || '_');
+      if(emblemPath && !IMG_CACHE[cacheKey]){
+        IMG_CACHE[cacheKey]='loading';
+        const ei=new Image();
+        ei.onload=()=>{IMG_CACHE[cacheKey]=ei;};
+        ei.onerror=()=>{IMG_CACHE[cacheKey]='err';};
+        ei.src=emblemPath;
+      }
+      let emblemImg=IMG_CACHE[cacheKey];
+      // For clubs without a custom PNG yet, fall back to the SVG-rendered crest.
+      if((emblemImg==='err' || !emblemImg || emblemImg==='loading') && emblemKey){
+        let isClub=false;
+        try { isClub = !!(CR_CLUBS && CR_CLUBS[emblemKey]); } catch(e) {}
+        if(isClub){
+          const sv=clubBadgeImage(emblemKey);
+          if(sv && sv.complete && sv.naturalWidth>0) emblemImg=sv;
+        }
+      }
+      if(emblemImg && emblemImg!=='err' && emblemImg!=='loading' && emblemImg.complete && emblemImg.naturalWidth>0){
         cx.save();
         cx.beginPath();cx.arc(px,py,r-sc,0,Math.PI*2);cx.clip();
-        const d=r*2;
-        cx.drawImage(img,px-r,py-r,d,d);
+        // Slightly faded emblem so the number stays readable on top
+        cx.globalAlpha=0.85;
+        cx.drawImage(emblemImg,px-r,py-r,r*2,r*2);
+        cx.globalAlpha=1;
         cx.restore();
         cx.beginPath();cx.arc(px,py,r,0,Math.PI*2);
         cx.lineWidth=iC?3*sc:2*sc;cx.strokeStyle=iC?'#ffd54a':brd;cx.stroke();
-      } else if(pl.clubKey){
-        // Career mode: try club badge image
-        const badgeKey='badge_'+pl.clubKey;
-        if(!IMG_CACHE[badgeKey]){
-          IMG_CACHE[badgeKey]='loading';
-          const bi=new Image();
-          bi.onload=()=>{IMG_CACHE[badgeKey]=bi;};
-          bi.onerror=()=>{IMG_CACHE[badgeKey]='err';};
-          bi.src=`assets/career/clubs/${pl.clubKey}.png`;
-        }
-        const badge=IMG_CACHE[badgeKey];
-        if(badge&&badge!=='err'&&badge!=='loading'&&badge.complete&&badge.naturalWidth>0){
-          cx.save();
-          cx.beginPath();cx.arc(px,py,r-sc,0,Math.PI*2);cx.clip();
-          cx.drawImage(badge,px-r,py-r,r*2,r*2);
-          cx.restore();
-          cx.beginPath();cx.arc(px,py,r,0,Math.PI*2);
-          cx.lineWidth=iC?3*sc:2*sc;cx.strokeStyle=iC?'#ffd54a':brd;cx.stroke();
-        } else {
-          cx.fillStyle=iC?'#06080e':'#fff';
-          cx.font=`bold ${Math.round((iC?13:12)*sc)}px Orbitron,sans-serif`;
-          cx.textAlign='center';cx.textBaseline='middle';
-          cx.fillText(jerseyNum(k,s),px,py+sc);
-        }
-      } else {
-        cx.fillStyle=iC?'#06080e':'#fff';
-        cx.font=`bold ${Math.round((iC?13:12)*sc)}px Orbitron,sans-serif`;
-        cx.textAlign='center';cx.textBaseline='middle';
-        cx.fillText(jerseyNum(k,s),px,py+sc);
       }
+      // Jersey number — always drawn on top, white with subtle outline so
+      // it reads against any emblem behind it.
+      const num=String(jerseyNum(k,s));
+      cx.font=`bold ${Math.round((iC?14:13)*sc)}px Orbitron,sans-serif`;
+      cx.textAlign='center';cx.textBaseline='middle';
+      cx.lineWidth=Math.max(2,2.5*sc);
+      cx.strokeStyle='rgba(0,0,0,.75)';
+      cx.strokeText(num,px,py+sc);
+      cx.fillStyle='#fff';
+      cx.fillText(num,px,py+sc);
     }
 
     // Spirit arc — always shown for both GK and field players
@@ -2671,14 +2789,23 @@ function renderSecondDefender(dk2, ds){
   el.classList.toggle('on-left',defOnLeft);
   el.classList.toggle('on-right',!defOnLeft);
   const lastName=playerLastName(pl)||'';
-  let bg='';
-  if(pl.clubKey){
-    const ln=lastName.replace(/[^a-z0-9]/g,'');
-    const isGK=pl.pos==='GK';
-    bg=isGK?`assets/career/clubs/gk.png`:`assets/career/clubs/${ln}${pl.clubKey}.png`;
-  } else {
-    bg=`assets/players/${lastName}.png`;
-  }
+  // Determine effective club key (clubKey if set in career, otherwise selSide).
+  const effTeam = pl.clubKey || (ds==='h' ? selHome : selAway);
+  let isClub=false;
+  try { isClub = !!(effTeam && CR_CLUBS && CR_CLUBS[effTeam]); } catch(e) {}
+  const isGK = pl.pos==='GK';
+  const ln = lastName.replace(/[^a-z0-9]/g,'');
+  // Build fallback chain. We use an Image() to test load and swap the avatar
+  // backgroundImage as paths resolve.
+  const tryPaths = isGK
+    ? (isClub
+        ? [`assets/career/clubs/${ln}${effTeam}.png`, 'assets/career/clubs/gk.png', _GENERIC_PLAYER_SVG_URL]
+        : ['assets/career/clubs/gk.png', _GENERIC_PLAYER_SVG_URL])
+    : isClub
+      ? [`assets/career/clubs/${ln}${effTeam}.png`, `assets/career/clubs/${effTeam}.png`, _GENERIC_PLAYER_SVG_URL]
+      : [`assets/players/${lastName}.png`, _GENERIC_PLAYER_SVG_URL];
+  // Initial bg = first guess; swap to next on error.
+  const bg = tryPaths[0];
   const tl=ds==='h'?'#2882f0':'#f03030';
   const spMax=pl.pos==='GK'?2000:1500;
   const spPct=Math.round(((pl.spirit||spMax)/spMax)*100);
@@ -2690,6 +2817,23 @@ function renderSecondDefender(dk2, ds){
       <div class="dpd2-ps">${pl.pos}</div>
       <div class="dpd2-energy"><div class="dpd2-energy-fill" style="width:${spPct}%"></div></div>
     </div>`;
+  // Verify load and walk the fallback chain if needed.
+  const av=el.querySelector('.dpd2-av');
+  if(av){
+    let i=0;
+    const tryNext=()=>{
+      if(i>=tryPaths.length)return;
+      const test=new Image();
+      test.onload=()=>{ av.style.backgroundImage=`url('${tryPaths[i]}')`; };
+      test.onerror=()=>{ i++; tryNext(); };
+      test.src=tryPaths[i];
+    };
+    // Test the first path; on error walk forward.
+    const first=new Image();
+    first.onload=()=>{};
+    first.onerror=()=>{ i=1; tryNext(); };
+    first.src=tryPaths[0];
+  }
   el.style.setProperty('--tl',tl);
 }
 
@@ -2714,33 +2858,73 @@ function fCard(role,pl,s,displayRole){
   setTeamEmblem(emblemEl, emblemKey, emblemFlag);
   cardEl.appendChild(emblemEl);
   avEl.classList.remove('mirrored');
-  // Career club portrait: direct path, no waiting for playerImg
-  if(pl&&pl.clubKey){
+  // Determine the effective club key for portrait paths.
+  // Career mode sets pl.clubKey directly. Friendly mode picks clubs from the
+  // cycler — selHome / selAway will be a key of CR_CLUBS in that case.
+  const teamKey = pl?.clubKey || (s==='h' ? selHome : selAway);
+  let isClubTeam=false;
+  try { isClubTeam = !!(teamKey && CR_CLUBS && CR_CLUBS[teamKey]); } catch(e){ isClubTeam=false; }
+  const isGK = pl && pl.pos==='GK';
+
+  // GK: try per-player card first ({lastname}{clubkey}.png for clubs), then
+  // fall back to the universal gk.png placeholder, then to SVG silhouette.
+  if(pl && isGK){
     const ln=(lastName||'').replace(/[^a-z0-9]/g,'');
-    const isGK=pl.pos==='GK';
-    const specific=isGK?`assets/career/clubs/gk.png`:`assets/career/clubs/${ln}${pl.clubKey}.png`;
-    const fallback=isGK?`assets/career/clubs/gk.png`:`assets/career/clubs/${pl.clubKey}.png`;
+    const specific = isClubTeam ? `assets/career/clubs/${ln}${teamKey}.png` : null;
+    const universalGK = 'assets/career/clubs/gk.png';
+    const tryUniversal=()=>{
+      const u=new Image();
+      u.onload=()=>{avEl.style.cssText=`background:url(${universalGK}) center bottom/contain no-repeat;color:transparent`;avEl.textContent='';};
+      u.onerror=()=>{avEl.style.cssText=`background:url(${_GENERIC_PLAYER_SVG_URL}) center bottom/contain no-repeat;color:transparent`;avEl.textContent='';};
+      u.src=universalGK;
+    };
+    if(specific){
+      const ci=new Image();
+      ci.onload=()=>{avEl.style.cssText=`background:url(${specific}) center bottom/contain no-repeat;color:transparent`;avEl.textContent='';};
+      ci.onerror=tryUniversal;
+      ci.src=specific;
+    } else {
+      tryUniversal();
+    }
+    avEl.textContent='';
+  } else if(pl && isClubTeam){
+    // Club outfield: try {lastname}{clubkey}.png → fall back to {clubkey}.png
+    // (the per-club placeholder you already have) → final SVG silhouette.
+    const ln=(lastName||'').replace(/[^a-z0-9]/g,'');
+    const specific=`assets/career/clubs/${ln}${teamKey}.png`;
+    const clubPlaceholder=`assets/career/clubs/${teamKey}.png`;
     const ci=new Image();
     ci.onload=()=>{avEl.style.cssText=`background:url(${specific}) center bottom/contain no-repeat;color:transparent`;avEl.textContent='';};
     ci.onerror=()=>{
       const fb=new Image();
-      fb.onload=()=>{avEl.style.cssText=`background:url(${fallback}) center bottom/contain no-repeat;color:transparent`;avEl.textContent='';};
-      fb.onerror=()=>{avEl.style.cssText=`background:transparent;color:${tf};display:flex;align-items:center;justify-content:center;font-size:clamp(56px,10vw,110px);font-family:'Bebas Neue',sans-serif;opacity:.18`;avEl.textContent=pl.name.split('.').pop()[0];};
-      fb.src=fallback;
+      fb.onload=()=>{avEl.style.cssText=`background:url(${clubPlaceholder}) center bottom/contain no-repeat;color:transparent`;avEl.textContent='';};
+      fb.onerror=()=>{
+        avEl.style.cssText=`background:url(${_GENERIC_PLAYER_SVG_URL}) center bottom/contain no-repeat;color:transparent`;
+        avEl.textContent='';
+      };
+      fb.src=clubPlaceholder;
     };
     ci.src=specific;
     avEl.style.cssText=`background:transparent;color:${tf};display:flex;align-items:center;justify-content:center;font-size:clamp(56px,10vw,110px);font-family:'Bebas Neue',sans-serif;opacity:.18`;
     avEl.textContent=pl.name.split('.').pop()[0];
-  } else if(img&&img.complete&&img.naturalWidth>0){
+  } else if(pl && img && img.complete && img.naturalWidth>0){
+    // National team: try profile/players folder per existing convention
     const _pi=new Image();_pi.src=`assets/profile/${lastName}.png`;
     _pi.onload=()=>{avEl.style.cssText=`background:url(assets/profile/${lastName}.png) center bottom/contain no-repeat;color:transparent`;};
-    _pi.onerror=()=>{avEl.style.cssText=`background:url(assets/players/${lastName}.png) center bottom/contain no-repeat;color:transparent`;};
+    _pi.onerror=()=>{
+      const _pi2=new Image();_pi2.src=`assets/players/${lastName}.png`;
+      _pi2.onload=()=>{avEl.style.cssText=`background:url(assets/players/${lastName}.png) center bottom/contain no-repeat;color:transparent`;};
+      _pi2.onerror=()=>{avEl.style.cssText=`background:url(${_GENERIC_PLAYER_SVG_URL}) center bottom/contain no-repeat;color:transparent`;};
+    };
     avEl.textContent='';
-  } else {
-    avEl.style.cssText=`background:transparent;color:${tf};display:flex;align-items:center;justify-content:center;font-size:clamp(56px,10vw,110px);font-family:'Bebas Neue',sans-serif;opacity:.18`;
-    avEl.textContent=pl?pl.name.split('.').pop()[0]:'?';
+  } else if(pl){
+    avEl.style.cssText=`background:url(${_GENERIC_PLAYER_SVG_URL}) center bottom/contain no-repeat;color:transparent`;
+    avEl.textContent='';
     const rawImg=pl?IMG_CACHE[lastName]:null;
     if(rawImg&&rawImg!=='err'&&!rawImg.complete){rawImg.onload=()=>fCard(role,pl,s,displayRole);}
+  } else {
+    avEl.style.cssText=`background:transparent;color:${tf};display:flex;align-items:center;justify-content:center;font-size:clamp(56px,10vw,110px);font-family:'Bebas Neue',sans-serif;opacity:.18`;
+    avEl.textContent='?';
   }
   document.getElementById(p+'nm').textContent=pl?pl.name.split('.').pop():'—';
   document.getElementById(p+'ps').textContent=pl?pl.pos:'—';document.getElementById(p+'ps').style.color=tl;
@@ -2781,7 +2965,8 @@ const SPECIALS={
   'Victorino':  {l:'Panther Shot',     i:'🐆',c:400},
   'Hino':       {l:'Tornado Shot',     i:'🌪',c:400},
   'Xiao':       {l:'Dragon Shot',      i:'🐉',c:400},
-  'Levi':       {l:'Bullet Shot',      i:'💥',c:400},
+  'Levi':       {l:'Levi Shot',        i:'⚡',c:400},
+  'Rivaul':     {l:'Golden Eagle',     i:'🦅',c:400},
   'Mancuso':    {l:'Fury Shot',        i:'🔴',c:400},
   'Vella':      {l:'Emerald Shot',     i:'💚',c:400},
 };
@@ -4412,19 +4597,42 @@ function buildFormationMenu(){
     card.dataset.slot=slot;
     if(pl){
       const lastName=playerLastName(pl);
-      const img=playerImg(pl);
-      const applyFace=(i)=>{
-        card.style.backgroundImage=`url(assets/players/${lastName}.png)`;
+      // Determine the team this card belongs to (club vs national).
+      const teamKey = pl.clubKey || selHome;
+      let isClubTeam=false;
+      try { isClubTeam = !!(teamKey && CR_CLUBS && CR_CLUBS[teamKey]); } catch(e){ isClubTeam=false; }
+      const isGKSlotPl = pl.pos==='GK';
+
+      // Pick the right specific path AND the right placeholder for this context.
+      // Clubs: assets/career/clubs/{lastname}{clubkey}.png → club placeholder (or gk.png for keepers) → SVG
+      // Nationals: assets/players/{lastname}.png → SVG silhouette (gk.png for keepers)
+      const ln=(lastName||'').replace(/[^a-z0-9]/g,'');
+      const specific = isClubTeam
+        ? `assets/career/clubs/${ln}${teamKey}.png`
+        : `assets/players/${lastName}.png`;
+      const placeholder = isGKSlotPl
+        ? `assets/career/clubs/gk.png`
+        : (isClubTeam ? `assets/career/clubs/${teamKey}.png` : null);
+
+      const applyImg=(url)=>{
+        card.style.backgroundImage=`url(${url})`;
         card.style.backgroundSize='160%';
         card.style.backgroundPosition='center 30%';
         card.style.backgroundRepeat='no-repeat';
       };
-      if(img&&img.complete&&img.naturalWidth>0){
-        applyFace();
-      } else if(img&&img.src){
-        // Image still loading — apply when ready, no full rebuild needed
-        img.addEventListener('load',applyFace,{once:true});
-      }
+      const test=new Image();
+      test.onload =()=>applyImg(specific);
+      test.onerror=()=>{
+        if(placeholder){
+          const p=new Image();
+          p.onload=()=>applyImg(placeholder);
+          p.onerror=()=>applyImg(_GENERIC_PLAYER_SVG_URL);
+          p.src=placeholder;
+        } else {
+          applyImg(_GENERIC_PLAYER_SVG_URL);
+        }
+      };
+      test.src=specific;
     }
 
     // Jersey number top-left
@@ -4597,20 +4805,20 @@ if(window.visualViewport){
 // CAREER MODE ENGINE
 // ═══════════════════════════════════════════════════════
 const CR_CLUBS={
-  barcelona:{name:'FC Barcelona',div:1,ovr:91,star:'Ronaldinho',special:'Miracle Shot',colors:['#a50044','#004d98'],abbr:'FCB'},
-  madrid:{name:'Real Madrid',div:1,ovr:92,star:'Zidane',special:null,colors:['#ffffff','#00529f'],abbr:'RMA'},
-  manutd:{name:'Man United',div:1,ovr:88,star:'Beckham',special:null,colors:['#da291c','#fbe122'],abbr:'MUN'},
+  barcelona:{name:'FC Barcelona',div:1,ovr:91,star:'Messi',special:'Levitating Drive',colors:['#a50044','#004d98'],abbr:'FCB'},
+  madrid:{name:'Real Madrid',div:1,ovr:92,star:'C.Ronaldo',special:null,colors:['#ffffff','#00529f'],abbr:'RMA'},
+  manutd:{name:'Man United',div:1,ovr:88,star:'T.Frisina',special:'Riser Shot',colors:['#da291c','#fbe122'],abbr:'MUN'},
   mancity:{name:'Man City',div:1,ovr:87,star:'De Bruyne',special:null,colors:['#6cabdd','#1c2c5b'],abbr:'MCI'},
   juventus:{name:'Juventus',div:1,ovr:86,star:'Del Piero',special:'Drive Shot',colors:['#000000','#ffffff'],abbr:'JUV'},
-  inter:{name:'Inter Milan',div:1,ovr:85,star:'Ronaldo',special:'Tiger Shot',colors:['#003f8a','#000000'],abbr:'INT'},
-  chelsea:{name:'Chelsea FC',div:1,ovr:84,star:'Lampard',special:null,colors:['#034694','#ffffff'],abbr:'CHE'},
-  napoli:{name:'Napoli',div:1,ovr:83,star:'Maradona',special:'Sky Rocket',colors:['#12a0c7','#ffffff'],abbr:'NAP'},
+  inter:{name:'Inter Milan',div:1,ovr:85,star:'Ibrahimovic',special:null,colors:['#003f8a','#000000'],abbr:'INT'},
+  chelsea:{name:'Chelsea FC',div:1,ovr:84,star:'Drogba',special:null,colors:['#034694','#ffffff'],abbr:'CHE'},
+  napoli:{name:'Napoli',div:1,ovr:83,star:'R.Hino',special:'Tornado Shot',colors:['#12a0c7','#ffffff'],abbr:'NAP'},
   psg:{name:'Paris SG',div:1,ovr:84,star:'Pierre',special:'Eiffel Shot',colors:['#004170','#da291c'],abbr:'PSG'},
-  bayern:{name:'Bayern Munich',div:1,ovr:90,star:'Kahn',special:'Fire Shot',colors:['#dc052d','#0066b2'],abbr:'BAY'},
+  bayern:{name:'Bayern Munich',div:1,ovr:90,star:'S.Levi',special:'Levi Shot',colors:['#dc052d','#0066b2'],abbr:'BAY'},
   ajax:{name:'Ajax',div:2,ovr:78,star:'Robben',special:null,colors:['#d2122e','#ffffff'],abbr:'AJX'},
   feyenoord:{name:'Feyenoord',div:2,ovr:75,star:'Kuyt',special:null,colors:['#cc0000','#000000'],abbr:'FEY'},
   atletico:{name:'Atletico Madrid',div:2,ovr:77,star:'Torres',special:null,colors:['#ce3524','#272e61'],abbr:'ATM'},
-  genoa:{name:'Genoa CFC',div:2,ovr:72,star:'Skuhravy',special:null,colors:['#cc0000','#003087'],abbr:'GEN'},
+  genoa:{name:'Genoa CFC',div:2,ovr:72,star:'M.Mancuso',special:'Fury Shot',colors:['#cc0000','#003087'],abbr:'GEN'},
   hamburg:{name:'SV Hamburg',div:2,ovr:74,star:'K.H.Schneider',special:'Fire Shot',colors:['#0033a0','#ffffff'],abbr:'HSV'},
   tokyo:{name:'FC Tokyo',div:2,ovr:71,star:'T.Ozora',special:'Drive Shot',colors:['#003087','#e60012'],abbr:'FCT'},
   marseille:{name:'Olympique Marseille',div:2,ovr:76,star:'Cantona',special:null,colors:['#2faee0','#ffffff'],abbr:'OM'},
@@ -4625,24 +4833,26 @@ const CR_D1=Object.keys(CR_CLUBS).filter(k=>CR_CLUBS[k].div===1);
 const CR_D2=Object.keys(CR_CLUBS).filter(k=>CR_CLUBS[k].div===2);
 const CR_REP=['UNKNOWN','PROMISING','RESPECTED','ESTABLISHED','ELITE','LEGENDARY'];
 const CR_NAMES={
-  barcelona:['Xavi','Puyol','Pique','Abidal','Alves','Busquets','Iniesta','Keita','Messi','Eto\'o','Henry'],
-  madrid:['Casillas','Ramos','Pepe','Metzelder','Marcelo','Alonso','Gago','Sneijder','Robben','Higuain','Raul'],
-  manutd:['VanderSar','G.Neville','Ferdinand','Vidic','Evra','Carrick','Scholes','Anderson','Nani','Rooney','Giggs'],
-  mancity:['Hart','Richards','Lescott','Kompany','Clichy','Barry','De Bruyne','Silva','Milner','Tevez','Dzeko'],
-  juventus:['Buffon','Barzagli','Bonucci','Chiellini','Grosso','Marchisio','Pirlo','Nedved','Del Piero','Trezeguet','Camoranesi'],
-  inter:['Julio Cesar','Maicon','Lucio','Samuel','Zanetti','Cambiasso','Vieira','Sneijder','Stankovic','Milito','Pandev'],
-  chelsea:['Cech','Bosingwa','Terry','Carvalho','Cole','Ballack','Lampard','Mikel','Drogba','Anelka','Malouda'],
-  napoli:['De Sanctis','Maggio','Cannavaro','Campagnaro','Contini','Gargano','Hamsik','Inler','Lavezzi','Cavani','Callejon'],
-  psg:['Sirigu','Camara','Sakho','Kombouare','Cissse','Makelele','Pastore','Menez','Gameiro','Hoarau','Erdinc'],
-  bayern:['Kahn','Lahm','Demichelis','Van Buyten','Lizarazu','Schweinsteiger','Ballack','Ze Roberto','Ribery','Klose','Makaay'],
-  ajax:['Stekelenburg','Vertonghen','Heitinga','Vermaelen','Van der Wiel','Van der Vaart','Sneijder','Bojan','Babel','Huntelaar','Suarez'],
-  feyenoord:['Timmer','Mathijsen','Loovens','De Guzman','Bosvelt','Kuyt','Kalou','Van Persie','Castelen','Tomasson','Emnes'],
-  atletico:['Aranzubia','Perea','Ujfalusi','Juanito','Filipe Luis','Tiago','Garcia','Seitaridis','Simao','Torres','Forlan'],
-  genoa:['Rubinho','Juric','Moretti','Criscito','Bocchetti','Mesto','Milanetto','Rossi','Palacio','Milito','Sculli'],
-  hamburg:['Rost','Aogo','De Jong','Mathijsen','Boateng','Demel','Jarolim','Van der Vaart','Guerrero','Olic','Petric'],
-  tokyo:['Harakawa','Baba','Enomoto','Naotaka','Hayashi','Fujimoto','Tokita','Miyazawa','Hasebe','Nishizawa','Amano'],
-  marseille:['Mandanda','Taiwo','Bonnart','Cesar','Heinze','Diawara','Valbuena','Koite','Niang','Cisse','Brandao'],
-  bremen:['Wiese','Pasanen','Naldo','Mertesacker','Borowski','Diego','Hunt','Jensen','Almeida','Klose','Hugo'],
+  // Slot order: GK, LB, CB1, CB2, RB, CM1, CM2, CM3, LW, ST, RW
+  // After 11 starters, additional names = bench (reserves get them too).
+  barcelona:['Valdes','Puyol','Pique','Abidal','Alves','Busquets','T.Ozora','Xavi','Iniesta','Rivaul','Messi','Pinto','Mascherano','Adriano','Thiago','Cesc','Pedro','Villa'],
+  madrid:['Casillas','R.Carlos','Pepe','Ramos','Marcelo','Alonso','Z.Zidane','Higuain','Natureza','Raul','C.Ronaldo','Diego Lopez','Albiol','Coentrao','Khedira','Modric','Di Maria','Benzema'],
+  manutd:['VanderSar','Evra','Ferdinand','Vidic','G.Neville','T.Frisina','Scholes','Rooney','Giggs','Anderson','Nani','Lindegaard','Smalling','Fabio','Carrick','Cleverley','Welbeck','Hernandez'],
+  mancity:['Hart','Clichy','Lescott','Kompany','Richards','Barry','De Bruyne','Silva','Milner','Tevez','Dzeko','Pantilimon','Nastasic','Zabaleta','Yaya Toure','Nasri','Aguero','Jovetic'],
+  juventus:['Buffon','S.Gentile','Bonucci','Chiellini','Barzagli','E.Davids','Pirlo','Nedved','Del Piero','K.Hyuga','Camoranesi','Storari','Caceres','Lichtsteiner','Marchisio','Vidal','Quagliarella','Trezeguet'],
+  inter:['Julio Cesar','Maicon','Lucio','Samuel','Zanetti','Cambiasso','S.Aoi','Vieira','R.Ishizaki','Milito','Ibrahimovic','Castellazzi','Ranocchia','Chivu','Stankovic','Sneijder','Pandev','Eto\'o'],
+  chelsea:['Cech','Cole','Terry','Carvalho','Bosingwa','Ballack','Lampard','Mikel','Malouda','Drogba','Anelka','Hilario','Ivanovic','Bertrand','Essien','Ramires','Sturridge','Torres'],
+  napoli:['De Sanctis','Contini','Cannavaro','Campagnaro','Maggio','Gargano','J.Diaz','Hamsik','Lavezzi','R.Hino','Callejon','Rafael','Britos','Dossena','Inler','Insigne','Mertens','Cavani'],
+  psg:['Sirigu','Camara','Sakho','Kombouare','Cissse','Makelele','Pierre','T.Misaki','Mbappe','Hoarau','Neymar','Douchez','Alex','Maxwell','Verratti','Matuidi','Lavezzi','Ibrahimovic'],
+  bayern:['G.Wakabayashi','Lahm','Xiao','Van Buyten','Lizarazu','Schweinsteiger','Ballack','S.Levi','Ribery','K.H.Schneider','Makaay','Kraft','Boateng','Alaba','Kroos','Robben','Mandzukic','Klose'],
+  ajax:['Stekelenburg','Vertonghen','Heitinga','Vermaelen','Van der Wiel','Van der Vaart','Sneijder','Bojan','Babel','Huntelaar','Suarez','Cillessen','Alderweireld','Anita','Eriksen','De Jong','El Hamdaoui','Lukaku'],
+  feyenoord:['Timmer','Mathijsen','Loovens','De Guzman','Bosvelt','Kuyt','Kalou','Van Persie','Castelen','Tomasson','Emnes','Lobont','Bahia','Wijnaldum','Clasie','Vilhena','Schaken','Boetius'],
+  atletico:['Aranzubia','Filipe Luis','Perea','Ujfalusi','Juanito','Tiago','Garcia','Seitaridis','Simao','Torres','Forlan','Courtois','Godin','Insua','Mario Suarez','Koke','Adrian','Falcao'],
+  genoa:['Rubinho','Criscito','Moretti','Bocchetti','Juric','Mesto','Milanetto','Rossi','Palacio','M.Mancuso','Sculli','Frey','Antonelli','Granqvist','Veloso','Kucka','Floccari','Borriello'],
+  hamburg:['Rost','Aogo','De Jong','Mathijsen','Boateng','Demel','Jarolim','Van der Vaart','Guerrero','Olic','Petric','Drobny','Westermann','Tesche','Rincon','Calhanoglu','Beister','Son'],
+  tokyo:['Harakawa','Baba','Enomoto','Naotaka','Hayashi','Fujimoto','Tokita','Miyazawa','Hasebe','Nishizawa','Amano','Gonda','Morishige','Tokunaga','Yonemoto','Lucas','Watanabe','Edu'],
+  marseille:['Mandanda','Taiwo','Bonnart','Cesar','Heinze','Diawara','Valbuena','Koite','Niang','Cisse','Brandao','Andrade','Diarra','Fanni','Cheyrou','Ayew','Remy','Gignac'],
+  bremen:['Wiese','Pasanen','Naldo','Mertesacker','Borowski','Diego','Hunt','Jensen','Almeida','Klose','Hugo','Wolfermann','Prodl','Schmitz','Frings','Marin','Pizarro','Rosenberg'],
 };
 let CAR={active:false,myClub:null,season:1,d1:[...CR_D1],d2:[...CR_D2],d1Fix:[],d2Fix:[],d1Tab:{},d2Tab:{},matchday:0,myResults:[],pendingMatch:null,budget:2000000,reputation:1,trophies:[],formation:'4-3-3'};
 function crMyDiv(){return CR_CLUBS[CAR.myClub]?.div||1;}
@@ -4658,6 +4868,31 @@ function crCalcOvr(pl){if(!pl)return 60;const s=pl.spd||70,p=pl.pwr||70,t=pl.tec
 // ── BUILD CAREER CLUB AS A FULL TEAM OBJECT IN T[] ─────────────────
 // Creates a team in the exact same shape as T.germany etc: {name, flag, p:[18 players], reserves:[7 ids]}
 // Uses the star's name to hit the SPECIALS registry when applicable.
+// Look up a player's stats across all national teams by surname match.
+// E.g. 'Pirlo' → finds 'A.Pirlo' in T.italy and returns their stats.
+// Returns null if no match. Cached across calls.
+const _NATIONAL_PLAYER_INDEX = (()=>{
+  const idx={};
+  try {
+    Object.values(T).forEach(team=>{
+      if(!team||!team.p)return;
+      team.p.forEach(pl=>{
+        // Index by surname lowercased
+        const sur = (pl.name||'').split('.').pop().toLowerCase().trim();
+        if(!sur)return;
+        // Don't overwrite — first match wins (so we don't get duplicates from All Stars)
+        if(!idx[sur]) idx[sur]={...pl};
+      });
+    });
+  } catch(e) {}
+  return idx;
+})();
+function findNationalPlayerStats(name){
+  if(!name)return null;
+  const sur = name.split('.').pop().toLowerCase().trim();
+  return _NATIONAL_PLAYER_INDEX[sur] || null;
+}
+
 function crBuildClubTeam(clubKey){
   if(T[clubKey]&&T[clubKey]._career)return T[clubKey]; // already built
   const club=CR_CLUBS[clubKey];if(!club)return null;
@@ -4692,10 +4927,37 @@ function crBuildClubTeam(clubKey){
   const reserveIds=[];
   LINEUP.forEach((row,i)=>{
     const isStar=row.slot==='ST',isGK=row.pos==='GK';
+    // Pick the name from the roster list. If the roster has fewer entries than
+    // the LINEUP (e.g. only 11 starters provided), fall back to a generic
+    // positional name. NEVER fall back to club.star — that would clone the
+    // star into every empty slot.
+    const rosterName = names[i] || '';
+    const name = rosterName || ('P.'+clubKey.slice(0,3).toUpperCase()+(i+1));
+
+    // ── Try to find this player in the existing national-team data first.
+    // If they exist (e.g. Pirlo, Buffon, Messi, Ozora, Hyuga), copy their
+    // proven stats so the club version actually plays like the national one.
+    const nationalStats = findNationalPlayerStats(name);
+
     const ovr=Math.max(50,base+rng(0,range));
-    const sb=isStar?(tier===1?88:80):ovr;
-    const name=isStar?club.star:(names[i]||'P.'+clubKey.slice(0,3)+(i+1));
-    const pl={
+    const playerIsStar = isStar && (name === club.star || !rosterName);
+    const sb = nationalStats
+      ? Math.max(nationalStats.spd, nationalStats.pwr, nationalStats.tec, nationalStats.def||60)
+      : (playerIsStar ? (tier===1?88:80) : ovr);
+    const pl = nationalStats ? {
+      id:idBase+i,
+      name,
+      pos:row.pos,
+      // Copy the player's exact national-team stats so they feel identical.
+      spd:nationalStats.spd, pwr:nationalStats.pwr, tec:nationalStats.tec, def:nationalStats.def,
+      rar:Math.max(2,nationalStats.rar||2), // career stars at least rar 2
+      jersey:row.jersey,
+      clubKey,
+      morale:70+rng(0,20),
+      injured:false,
+      injuredGames:0,
+      suspended:false
+    } : {
       id:idBase+i,
       name,
       pos:row.pos,
@@ -4711,7 +4973,10 @@ function crBuildClubTeam(clubKey){
       injuredGames:0,
       suspended:false
     };
-    if(isGK){pl.sav=Math.min(98,sb+rng(4,8));pl.ref=Math.min(98,sb+rng(0,5));}
+    if(isGK){
+      if(nationalStats && nationalStats.sav){pl.sav=nationalStats.sav; pl.ref=nationalStats.ref||nationalStats.sav-5;}
+      else {pl.sav=Math.min(98,sb+rng(4,8)); pl.ref=Math.min(98,sb+rng(0,5));}
+    }
     players.push(pl);
     if(row.reserve)reserveIds.push(pl.id);
   });
