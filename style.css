@@ -390,7 +390,7 @@ canvas#C{position:absolute;inset:0;width:100%;height:100%}
 
 /* DUEL */
 /* Duel overlay */
-#duel-ov{position:absolute;inset:0;z-index:20;display:none;flex-direction:column;background:linear-gradient(160deg,rgba(6,12,24,.82) 0%,rgba(4,6,12,.78) 100%),url('assets/wallpaper/duel.png') center/cover no-repeat}
+#duel-ov{position:absolute;inset:0;z-index:20;display:none;flex-direction:column;background:linear-gradient(180deg,rgba(6,12,24,.35) 0%,rgba(4,6,12,.15) 35%,rgba(4,6,12,.55) 100%),url('assets/wallpaper/duel.png') center/cover no-repeat}
 #duel-ov.show{display:flex}
 .da-bg{position:absolute;inset:0;background:repeating-linear-gradient(-45deg,transparent,transparent 4px,rgba(255,255,255,.006) 4px,rgba(255,255,255,.006) 5px);pointer-events:none;z-index:0}
 .dvs{position:absolute;left:50%;top:35%;transform:translate(-50%,-50%);font-family:'Bebas Neue',sans-serif;font-size:clamp(32px,5vw,60px);color:var(--gold);letter-spacing:.06em;filter:drop-shadow(0 0 24px rgba(240,192,64,.7));opacity:0;pointer-events:none;z-index:5}
@@ -427,23 +427,7 @@ canvas#C{position:absolute;inset:0;width:100%;height:100%}
   overflow:hidden;
 }
 .dpwrap::before,.dpwrap::after{
-  content:'';position:absolute;left:50%;top:50%;
-  width:180%;height:300%;
-  transform:translate(-50%,-50%) scale(3);
-  transform-origin:50% 50%;
-  pointer-events:none;mix-blend-mode:screen;opacity:0;z-index:1;
-  animation:duelRush 1.3s linear infinite;will-change:transform,opacity;
-}
-.dpwrap::before{
-  background:repeating-conic-gradient(from 0deg at 50% 50%,rgba(255,255,255,0) 0deg,rgba(255,255,255,0) 2.2deg,rgba(255,255,255,.9) 2.2deg,rgba(255,255,255,.9) 2.9deg);
-  -webkit-mask:radial-gradient(circle at 50% 50%,transparent 0%,transparent 10%,#000 35%,#000 100%);
-          mask:radial-gradient(circle at 50% 50%,transparent 0%,transparent 10%,#000 35%,#000 100%);
-}
-.dpwrap::after{
-  background:repeating-conic-gradient(from 1deg at 50% 50%,rgba(255,255,255,0) 0deg,rgba(255,255,255,0) 3.5deg,rgba(255,255,255,.75) 3.5deg,rgba(255,255,255,.75) 4deg);
-  -webkit-mask:radial-gradient(circle at 50% 50%,transparent 0%,transparent 12%,#000 40%,#000 100%);
-          mask:radial-gradient(circle at 50% 50%,transparent 0%,transparent 12%,#000 40%,#000 100%);
-  animation-delay:-0.65s;
+  content:none;
 }
 @keyframes duelRush{
   0%{transform:translate(-50%,-50%) scale(3);opacity:0}
@@ -512,24 +496,26 @@ canvas#C{position:absolute;inset:0;width:100%;height:100%}
   margin-bottom:6px;text-align:center;flex-shrink:0;position:relative;z-index:6;
 }
 
-/* THE CARD — sits at bottom of wrap; portrait is a sibling above it */
+/* THE CARD — slim transparent pill at bottom; portrait floats above */
 .dpc{
-  width:clamp(160px,24vw,280px);
+  width:clamp(180px,26vw,300px);
   flex:none;
-  border-radius:8px;
-  border:2px solid rgba(255,255,255,.12);
+  border-radius:10px;
+  border:1.5px solid rgba(255,255,255,.18);
   display:flex;flex-direction:column;
   overflow:hidden;
   position:relative;
-  box-shadow:0 8px 40px rgba(0,0,0,.8);
+  background:rgba(8,12,22,.55);
+  backdrop-filter:blur(10px) saturate(1.1);
+  -webkit-backdrop-filter:blur(10px) saturate(1.1);
+  box-shadow:0 6px 24px rgba(0,0,0,.55);
   z-index:2;
 }
-/* diagonal texture */
-.dpc::before{
-  content:'';position:absolute;inset:0;
-  background:repeating-linear-gradient(-45deg,transparent,transparent 5px,rgba(255,255,255,.018) 5px,rgba(255,255,255,.018) 6px);
-  pointer-events:none;z-index:0;
-}
+/* team-colored border accent */
+.dp-card-wrap.atk .dpc{ border-color:rgba(80,170,255,.55); box-shadow:0 6px 24px rgba(0,0,0,.55),0 0 0 1px rgba(80,170,255,.12) inset; }
+.dp-card-wrap:not(.atk) .dpc{ border-color:rgba(255,80,80,.55); box-shadow:0 6px 24px rgba(0,0,0,.55),0 0 0 1px rgba(255,80,80,.12) inset; }
+/* diagonal texture — disabled for clean look */
+.dpc::before{ content:none; }
 /* Team emblem watermark */
 .dp-card-emblem{
   position:absolute;top:50%;left:50%;
@@ -581,17 +567,17 @@ canvas#C{position:absolute;inset:0;width:100%;height:100%}
   content:'';position:absolute;left:50%;bottom:10%;
   width:110%;height:85%;
   transform:translateX(-50%);
-  background:radial-gradient(ellipse at center,rgba(80,170,255,.55) 0%,rgba(80,170,255,.25) 35%,rgba(80,170,255,.08) 60%,transparent 78%);
+  background:radial-gradient(ellipse at center,rgba(80,170,255,.28) 0%,rgba(80,170,255,.12) 35%,transparent 70%);
   pointer-events:none;z-index:0;
-  filter:blur(2px);
+  filter:blur(4px);
 }
 .dp-card-wrap:not(.atk)::before{
   content:'';position:absolute;left:50%;bottom:10%;
   width:110%;height:85%;
   transform:translateX(-50%);
-  background:radial-gradient(ellipse at center,rgba(255,80,80,.55) 0%,rgba(255,80,80,.25) 35%,rgba(255,80,80,.08) 60%,transparent 78%);
+  background:radial-gradient(ellipse at center,rgba(255,80,80,.28) 0%,rgba(255,80,80,.12) 35%,transparent 70%);
   pointer-events:none;z-index:0;
-  filter:blur(2px);
+  filter:blur(4px);
 }
 /* ground shadow that squashes as player lifts */
 .dp-card-wrap::after{
@@ -657,7 +643,7 @@ canvas#C{position:absolute;inset:0;width:100%;height:100%}
 /* INFO PANEL — bottom portion of card */
 .dpc-info{
   flex-shrink:0;
-  background:linear-gradient(0deg,rgba(3,5,12,1) 0%,rgba(3,5,12,.96) 100%);
+  background:linear-gradient(0deg,rgba(3,5,12,.75) 0%,rgba(3,5,12,.45) 100%);
   border-top:1px solid rgba(255,255,255,.08);
   display:flex;flex-direction:column;align-items:center;
   gap:clamp(2px,.3vh,4px);
@@ -704,12 +690,12 @@ canvas#C{position:absolute;inset:0;width:100%;height:100%}
 /* Action bar — broadcast navy */
 .duel-touchline{height:3px;flex-shrink:0;position:relative;z-index:11;background:linear-gradient(90deg,transparent 0%,rgba(255,255,255,.15) 5%,rgba(255,255,255,.85) 20%,#fff 50%,rgba(255,255,255,.85) 80%,rgba(255,255,255,.15) 95%,transparent 100%);box-shadow:0 0 10px rgba(255,255,255,.4),0 0 30px rgba(255,255,255,.1);}
 .duelbar{flex-shrink:0;position:relative;overflow:hidden;padding:clamp(8px,1.4vh,13px) clamp(10px,1.8vw,22px);z-index:10;box-shadow:0 -4px 20px rgba(0,0,0,.4);}
-.duelbar::before{content:'';position:absolute;inset:-36px 0;background:repeating-linear-gradient(0deg,#1A2517 0px,#1A2517 18px,#223020 18px,#223020 36px);animation:duelTurfScroll 1.3s linear infinite;will-change:transform;}
+.duelbar::before{content:'';position:absolute;inset:0;background:linear-gradient(180deg,rgba(4,8,16,.75) 0%,rgba(4,8,16,.92) 100%);}
 @keyframes duelTurfScroll{from{transform:translateY(-36px)}to{transform:translateY(0)}}
-.duelbar::after{content:'';position:absolute;inset:0;background:linear-gradient(180deg,rgba(4,8,16,.85) 0%,rgba(4,8,16,.4) 10%,transparent 28%),radial-gradient(ellipse 70% 120% at 50% -20%,rgba(180,220,140,.13) 0%,rgba(140,190,100,.06) 40%,transparent 70%),radial-gradient(ellipse 100% 100% at 50% 50%,transparent 50%,rgba(0,0,0,.22) 100%);pointer-events:none;}
+.duelbar::after{content:'';position:absolute;inset:0;background:linear-gradient(180deg,transparent 0%,rgba(0,0,0,.22) 100%);pointer-events:none;}
 .dueltop{display:flex;align-items:center;justify-content:space-between;margin-bottom:clamp(4px,.6vh,6px);position:relative;z-index:2;}
 .duelzone{font-family:'Bebas Neue',sans-serif;font-size:clamp(13px,1.8vw,17px);letter-spacing:.1em;color:#fff;background:rgba(0,0,0,.45);border:1px solid rgba(255,255,255,.35);border-radius:3px;padding:2px 8px;text-shadow:0 1px 3px rgba(0,0,0,.8);}
-.dtw{display:flex;align-items:center;gap:6px}
+.dtw{display:flex;align-items:center;gap:10px}
 .dtr{position:relative;width:34px;height:34px;flex-shrink:0}
 .dtr svg{transform:rotate(-90deg)}
 .dtn{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;font-family:'Orbitron',sans-serif;font-size:11px;font-weight:700;color:var(--gold)}
