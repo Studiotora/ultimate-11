@@ -2800,7 +2800,7 @@ function renderSecondDefender(dk2, ds){
   const tryPaths = isGK
     ? (isClub
         ? [`assets/career/clubs/${ln}${effTeam}.png`, 'assets/career/clubs/gk.png', _GENERIC_PLAYER_SVG_URL]
-        : ['assets/career/clubs/gk.png', _GENERIC_PLAYER_SVG_URL])
+        : [`assets/players/${lastName}.png`, 'assets/career/clubs/gk.png', _GENERIC_PLAYER_SVG_URL])
     : isClub
       ? [`assets/career/clubs/${ln}${effTeam}.png`, `assets/career/clubs/${effTeam}.png`, _GENERIC_PLAYER_SVG_URL]
       : [`assets/players/${lastName}.png`, _GENERIC_PLAYER_SVG_URL];
@@ -2866,11 +2866,14 @@ function fCard(role,pl,s,displayRole){
   try { isClubTeam = !!(teamKey && CR_CLUBS && CR_CLUBS[teamKey]); } catch(e){ isClubTeam=false; }
   const isGK = pl && pl.pos==='GK';
 
-  // GK: try per-player card first ({lastname}{clubkey}.png for clubs), then
-  // fall back to the universal gk.png placeholder, then to SVG silhouette.
+  // GK: try per-player card first ({lastname}{clubkey}.png for clubs, or
+  // assets/players/{lastname}.png for nationals), then fall back to the
+  // universal gk.png placeholder, then to SVG silhouette.
   if(pl && isGK){
     const ln=(lastName||'').replace(/[^a-z0-9]/g,'');
-    const specific = isClubTeam ? `assets/career/clubs/${ln}${teamKey}.png` : null;
+    const specific = isClubTeam
+      ? `assets/career/clubs/${ln}${teamKey}.png`
+      : (lastName ? `assets/players/${lastName}.png` : null);
     const universalGK = 'assets/career/clubs/gk.png';
     const tryUniversal=()=>{
       const u=new Image();
@@ -3000,6 +3003,87 @@ function getGKSuper(pl){
 }
 
 
+// ── Action button images ──────────────────────────────────────────────
+const BTN_IMG_MAP = {
+  pass:'pass', dribble:'dribble', shoot:'shoot', 'one-two':'onetwo',
+  tackle:'tackle', intercept:'intercept', block:'block',
+  save:'save', punch:'punch', supersave:'save', special:'shoot',
+  'super-pass':'pass','super-dribble':'dribble','super-one-two':'onetwo',
+  'super-tackle':'tackle','super-intercept':'intercept','super-block':'block'
+};
+function actBtnInner(actionId, costTxt){
+  const img = BTN_IMG_MAP[actionId] || actionId;
+  return '<img class="dact3d-img" style="width:78px;max-width:78px;height:auto;display:block;" src="assets/ui/btn-'+img+'.png" alt=""><span class="dact3d-c">'+costTxt+'</span>';
+}
+function superToggleInner(on){
+  return '<img class="dact3d-img" style="width:78px;max-width:78px;height:auto;display:block;" src="assets/ui/btn-super.png" alt=""><span class="dact3d-c">'+(on?'ON':'OFF')+'</span>';
+}
+
+// Apply/clear selection visuals directly via inline styles (cache-proof)
+const SEL_GLOW = {
+  'dact-atk':'rgba(60,150,255,1)',
+  'dact-atk-2':'rgba(255,148,64,1)',
+  'dact-def':'rgba(255,60,60,1)',
+  'dact-sp':'rgba(255,210,80,1)',
+  'dact-ss':'rgba(80,220,255,1)'
+};
+function _btnType(btn){
+  if(btn.classList.contains('dact-sp'))return'dact-sp';
+  if(btn.classList.contains('dact-ss'))return'dact-ss';
+  if(btn.classList.contains('dact-def'))return'dact-def';
+  return'dact-atk';
+}
+function applySelStyle(btn, mode){
+  const img = btn.querySelector('img.dact3d-img');
+  if(mode==='clear'){
+    if(img){img.style.filter='drop-shadow(0 3px 5px rgba(0,0,0,.55))';img.style.animation='';img.style.transform='';img.style.opacity='';}
+    btn.style.outline='';btn.style.outlineOffset='';btn.style.borderRadius='';
+    btn.style.background='';btn.style.boxShadow='';btn.style.opacity='';
+    return;
+  }
+  const key = mode==='sel2' ? 'dact-atk-2' : _btnType(btn);
+  const c = SEL_GLOW[key] || 'rgba(255,255,255,.95)';
+  if(img){
+    img.style.filter='brightness(1.18) saturate(1.2) drop-shadow(0 3px 5px rgba(0,0,0,.55))';
+    img.style.animation='dactSelPulseJS 1.1s ease-in-out infinite';
+    img.style.opacity='1';
+  }
+  btn.style.outline='3px solid '+c;
+  btn.style.outlineOffset='-2px';
+  btn.style.borderRadius='10px';
+  btn.style.background='';
+  btn.style.boxShadow='';
+  btn.style.opacity='1';
+}
+// Dim sibling buttons (non-selected) for clarity
+function dimSiblings(container){
+  container.querySelectorAll('.dact3d').forEach(b=>{
+    const isSel = b.classList.contains('dact-sel') || b.classList.contains('dact-sel2');
+    const img = b.querySelector('img.dact3d-img');
+    if(isSel){
+      b.style.opacity='1';
+      if(img)img.style.opacity='1';
+    } else {
+      b.style.opacity='.42';
+      if(img)img.style.opacity='.55';
+    }
+  });
+}
+// Reset all dimming
+function clearDim(container){
+  container.querySelectorAll('.dact3d').forEach(b=>{
+    b.style.opacity='';
+    const img=b.querySelector('img.dact3d-img');if(img)img.style.opacity='';
+  });
+}
+// Inject pulse keyframes once (cache-proof — runs from JS at load)
+(function(){
+  if(document.getElementById('dactSelPulseStyle'))return;
+  const s=document.createElement('style');s.id='dactSelPulseStyle';
+  s.textContent='@keyframes dactSelPulseJS{0%,100%{transform:scale(1.10)}50%{transform:scale(1.20)}}';
+  document.head.appendChild(s);
+})();
+
 function bldA(carrier,isShot){
   const sp=carrier?Math.round(carrier.spirit||1500):1500;
   const el=document.getElementById('abtns'),ih=G.D.as==='h';
@@ -3033,7 +3117,7 @@ function bldA(carrier,isShot){
     const tBtn=document.createElement('button');
     const on=!!G.D.atkSuperMode;
     tBtn.className='dact3d dact-sp'+(on?' dact-sel':'');
-    tBtn.innerHTML='<div class="dact3d-face"><span class="dact3d-i">★</span><span class="dact3d-l">SUPER</span><span class="dact3d-c">'+(on?'ON':'OFF')+'</span></div><div class="dact3d-bot"></div>';
+    tBtn.innerHTML=superToggleInner(on);
     tBtn.onclick=()=>{G.D.atkSuperMode=!G.D.atkSuperMode;bldA(carrier,isShot);};
     el.appendChild(tBtn);
   }
@@ -3058,7 +3142,7 @@ function bldA(carrier,isShot){
     const btn=document.createElement('button');
     const tc=useSp?'dact-sp':'dact-atk';
     btn.className='dact3d '+tc+(ok?'':' dact-dis');
-    btn.innerHTML='<div class="dact3d-face"><span class="dact3d-i">'+useIcon+'</span><span class="dact3d-l">'+useLbl+'</span><span class="dact3d-c">'+costTxt+'</span></div><div class="dact3d-bot"></div>';
+    btn.innerHTML=actBtnInner(useId,costTxt);
     if(ok)btn.onclick=()=>selA({id:useId,l:useLbl,i:useIcon,sp:useSp,ot:a.ot},btn);
     el.appendChild(btn);
   });
@@ -3080,7 +3164,7 @@ function bldD(def,ds,isShot){
     const btn=document.createElement('button');
     const tc=a.id==='supersave'?'dact-ss':'dact-def';
     btn.className='dact3d '+tc+(ok?'':' dact-dis');
-    btn.innerHTML='<div class="dact3d-face"><span class="dact3d-i">'+a.i+'</span><span class="dact3d-l">'+a.l+'</span><span class="dact3d-c">'+costTxt+'</span></div><div class="dact3d-bot"></div>';
+    btn.innerHTML=actBtnInner(a.id,costTxt);
     if(ok)btn.onclick=()=>selD(a,btn);
     else btn.disabled=true;
     el.appendChild(btn);
@@ -3098,7 +3182,7 @@ function bldD(def,ds,isShot){
     const tBtn=document.createElement('button');
     const on=!!G.D.defSuperMode;
     tBtn.className='dact3d dact-ss'+(on?' dact-sel':'');
-    tBtn.innerHTML='<div class="dact3d-face"><span class="dact3d-i">★</span><span class="dact3d-l">SUPER</span><span class="dact3d-c">'+(on?'ON':'OFF')+'</span></div><div class="dact3d-bot"></div>';
+    tBtn.innerHTML=superToggleInner(on);
     tBtn.onclick=()=>{G.D.defSuperMode=!G.D.defSuperMode;bldD(def,ds,isShot);};
     el.appendChild(tBtn);
 
@@ -3120,7 +3204,7 @@ function bldD(def,ds,isShot){
       const btn=document.createElement('button');
       const tc=ss?'dact-ss':'dact-def';
       btn.className='dact3d '+tc+(ok?'':' dact-dis');
-      btn.innerHTML='<div class="dact3d-face"><span class="dact3d-i">'+useIcon+'</span><span class="dact3d-l">'+useLbl+'</span><span class="dact3d-c">'+costTxt+'</span></div><div class="dact3d-bot"></div>';
+      btn.innerHTML=actBtnInner(useId,costTxt);
       if(ok)btn.onclick=()=>selD({id:useId,l:useLbl,i:useIcon},btn);
       else btn.disabled=true;
       el.appendChild(btn);
@@ -3134,16 +3218,20 @@ function selA(a,btn){
   // When the match is 2v1 and user has already chosen ak, this click becomes ak2.
   if(G.D.is2v1 && G.D.as==='h' && G.D.ak && !G.D.ak2 && baseAction(a.id)!=='pass' && baseAction(a.id)!=='one-two'){
     G.D.ak2=a.id;
-    document.querySelectorAll('#abtns .dact3d').forEach(b=>b.classList.remove('dact-sel2'));
+    document.querySelectorAll('#abtns .dact3d').forEach(b=>{b.classList.remove('dact-sel2');if(!b.classList.contains('dact-sel'))applySelStyle(b,'clear');});
     btn.classList.add('dact-sel2');
+    applySelStyle(btn,'sel2');
+    dimSiblings(document.getElementById('abtns'));
     // Highlight stage 2 label
     const albl=document.getElementById('albl');if(albl)albl.textContent='ATTACK (vs 2ND)';
     chkRdy();
     return;
   }
   G.D.ak=a.id;G.D.pk=null;G.D.ak2=null;
-  document.querySelectorAll('#abtns .dact3d').forEach(b=>{b.classList.remove('dact-sel');b.classList.remove('dact-sel2');});
+  document.querySelectorAll('#abtns .dact3d').forEach(b=>{b.classList.remove('dact-sel');b.classList.remove('dact-sel2');applySelStyle(b,'clear');});
   btn.classList.add('dact-sel');
+  applySelStyle(btn,'sel');
+  dimSiblings(document.getElementById('abtns'));
   const akB=baseAction(a.id);
   if(akB==='pass'||akB==='one-two'){
     document.getElementById('duel-ov').classList.remove('show'); G.pm=true; document.getElementById('pass-banner').style.display='block';
@@ -3162,7 +3250,7 @@ function selA(a,btn){
     chkRdy();
   }
 }
-function selD(a,btn){btnPop(btn);G.D.defA=a.id;document.querySelectorAll('#dbtns .dact3d').forEach(b=>b.classList.remove('dact-sel'));btn.classList.add('dact-sel');chkRdy();}
+function selD(a,btn){btnPop(btn);G.D.defA=a.id;document.querySelectorAll('#dbtns .dact3d').forEach(b=>{b.classList.remove('dact-sel');applySelStyle(b,'clear');});btn.classList.add('dact-sel');applySelStyle(btn,'sel');dimSiblings(document.getElementById('dbtns'));chkRdy();}
 function chkRdy(){
   const akB=baseAction(G.D.ak||'');
   const needsPk=akB==='pass'||akB==='one-two';
