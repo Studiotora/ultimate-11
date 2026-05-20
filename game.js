@@ -2176,6 +2176,36 @@ function preloadSquadImages(){
   [...Object.values(hSq),...Object.values(aSq)].forEach(pl=>playerImg(pl));
 }
 
+// ── Face-crop cache ────────────────────────────────────────────────
+// Drawing a tiny ~30px circle directly from a full-res portrait every
+// frame produces blurry results because the canvas downscales the entire
+// source rectangle each draw. Instead we pre-render the face crop to a
+// 128px offscreen canvas once per portrait; subsequent frames downscale
+// from 128→30 which looks crisp. Re-uses the same Image object that
+// playerImg() returns.
+const FACE_CROP_CACHE={};
+const FACE_CROP_SIZE=128;
+function getFaceCrop(pl){
+  if(!pl)return null;
+  const img=playerImg(pl);
+  if(!img||!img.complete||!img.naturalWidth)return null;
+  const cacheKey=img.src;
+  const cached=FACE_CROP_CACHE[cacheKey];
+  if(cached)return cached;
+  const off=document.createElement('canvas');
+  off.width=FACE_CROP_SIZE;off.height=FACE_CROP_SIZE;
+  const octx=off.getContext('2d');
+  octx.imageSmoothingEnabled=true;
+  octx.imageSmoothingQuality='high';
+  const iw=img.naturalWidth, ih=img.naturalHeight;
+  const cropSize=Math.min(iw, ih*0.38);
+  const sx=(iw-cropSize)/2;
+  const sy=ih*0.02;
+  octx.drawImage(img, sx, sy, cropSize, cropSize, 0, 0, FACE_CROP_SIZE, FACE_CROP_SIZE);
+  FACE_CROP_CACHE[cacheKey]=off;
+  return off;
+}
+
 const JERSEY={GK:1,LB:3,CB1:5,CB2:6,RB:2,CM1:8,CM2:4,CM3:6,LW:11,ST:9,RW:7};
 function jerseyNum(k,s){const pl=sq(s||'h')[k];return (pl&&pl.jersey)||JERSEY[k]||'?';}
 
@@ -2200,45 +2230,58 @@ function drawT(s){
       if(iC){cx.fill();cx.lineWidth=3*sc;cx.strokeStyle='#ffd54a';}
       else{cx.globalAlpha=iCh?.7:1;cx.fill();cx.lineWidth=2.5*sc;cx.strokeStyle='#ffdd00';}
       cx.stroke();cx.globalAlpha=1;
-      // GK label — always team emblem (faded) + 'GK' text, never per-player photo on the field
-      const gkEmblemKey = pl.clubKey || ((s==='h') ? (selHome||'') : (selAway||''));
-      const gkEmblemPath = gkEmblemKey ? teamEmblemPath(gkEmblemKey) : null;
-      const gkCacheKey = 'emb_' + (gkEmblemKey || '_');
-      if(gkEmblemPath && !IMG_CACHE[gkCacheKey]){
-        IMG_CACHE[gkCacheKey]='loading';
-        const ei=new Image();
-        ei.onload=()=>{IMG_CACHE[gkCacheKey]=ei;};
-        ei.onerror=()=>{IMG_CACHE[gkCacheKey]='err';};
-        ei.src=gkEmblemPath;
-      }
-      const gkEmblemImg_raw=IMG_CACHE[gkCacheKey];
-      let gkEmblemImg=gkEmblemImg_raw;
-      if((gkEmblemImg==='err' || !gkEmblemImg || gkEmblemImg==='loading') && gkEmblemKey){
-        let isClub=false;
-        try { isClub = !!(CR_CLUBS && CR_CLUBS[gkEmblemKey]); } catch(e) {}
-        if(isClub){
-          const sv=clubBadgeImage(gkEmblemKey);
-          if(sv && sv.complete && sv.naturalWidth>0) gkEmblemImg=sv;
-        }
-      }
-      if(gkEmblemImg && gkEmblemImg!=='err' && gkEmblemImg!=='loading' && gkEmblemImg.complete && gkEmblemImg.naturalWidth>0){
+      // GK: try player face first (cropped from full-body portrait), fall back to team emblem.
+      const gkPortraitCrop = getFaceCrop(pl);
+      let gkDrewPortrait = false;
+      if(gkPortraitCrop){
         cx.save();
         cx.beginPath();cx.roundRect(px-hw+sc,py-hw+sc,hw*2-sc*2,hw*2-sc*2,rnd*0.8);cx.clip();
-        cx.globalAlpha=0.78;
-        cx.drawImage(gkEmblemImg,px-hw,py-hw,hw*2,hw*2);
-        cx.globalAlpha=1;
+        cx.drawImage(gkPortraitCrop, px-hw, py-hw, hw*2, hw*2);
         cx.restore();
         cx.beginPath();cx.roundRect(px-hw,py-hw,hw*2,hw*2,rnd);
         cx.lineWidth=iC?3*sc:2.5*sc;cx.strokeStyle=iC?'#ffd54a':'#ffdd00';cx.stroke();
+        gkDrewPortrait=true;
       }
-      // GK label drawn on top
-      cx.font=`bold ${Math.round(10*sc)}px Orbitron,sans-serif`;
+      if(!gkDrewPortrait){
+        const gkEmblemKey = pl.clubKey || ((s==='h') ? (selHome||'') : (selAway||''));
+        const gkEmblemPath = gkEmblemKey ? teamEmblemPath(gkEmblemKey) : null;
+        const gkCacheKey = 'emb_' + (gkEmblemKey || '_');
+        if(gkEmblemPath && !IMG_CACHE[gkCacheKey]){
+          IMG_CACHE[gkCacheKey]='loading';
+          const ei=new Image();
+          ei.onload=()=>{IMG_CACHE[gkCacheKey]=ei;};
+          ei.onerror=()=>{IMG_CACHE[gkCacheKey]='err';};
+          ei.src=gkEmblemPath;
+        }
+        let gkEmblemImg=IMG_CACHE[gkCacheKey];
+        if((gkEmblemImg==='err' || !gkEmblemImg || gkEmblemImg==='loading') && gkEmblemKey){
+          let isClub=false;
+          try { isClub = !!(CR_CLUBS && CR_CLUBS[gkEmblemKey]); } catch(e) {}
+          if(isClub){
+            const sv=clubBadgeImage(gkEmblemKey);
+            if(sv && sv.complete && sv.naturalWidth>0) gkEmblemImg=sv;
+          }
+        }
+        if(gkEmblemImg && gkEmblemImg!=='err' && gkEmblemImg!=='loading' && gkEmblemImg.complete && gkEmblemImg.naturalWidth>0){
+          cx.save();
+          cx.beginPath();cx.roundRect(px-hw+sc,py-hw+sc,hw*2-sc*2,hw*2-sc*2,rnd*0.8);cx.clip();
+          cx.globalAlpha=0.78;
+          cx.drawImage(gkEmblemImg,px-hw,py-hw,hw*2,hw*2);
+          cx.globalAlpha=1;
+          cx.restore();
+          cx.beginPath();cx.roundRect(px-hw,py-hw,hw*2,hw*2,rnd);
+          cx.lineWidth=iC?3*sc:2.5*sc;cx.strokeStyle=iC?'#ffd54a':'#ffdd00';cx.stroke();
+        }
+      }
+      // GK label drawn on top — smaller and tucked at bottom when face is shown.
+      cx.font=`bold ${Math.round((gkDrewPortrait?8:10)*sc)}px Orbitron,sans-serif`;
       cx.textAlign='center';cx.textBaseline='middle';
       cx.lineWidth=Math.max(2,2.5*sc);
-      cx.strokeStyle='rgba(0,0,0,.75)';
-      cx.strokeText('GK',px,py+sc);
+      cx.strokeStyle='rgba(0,0,0,.85)';
+      const gkLabelY = gkDrewPortrait ? (py + hw*0.62) : (py+sc);
+      cx.strokeText('GK',px,gkLabelY);
       cx.fillStyle='#fff';
-      cx.fillText('GK',px,py+sc);
+      cx.fillText('GK',px,gkLabelY);
     }else{
       // Field player: circle
       cx.beginPath();cx.arc(px,py,r,0,Math.PI*2);
@@ -2257,50 +2300,78 @@ function drawT(s){
         cx.strokeStyle='rgba(255,255,255,.12)';cx.lineWidth=sc;cx.stroke();
       }
 
-      // ── IN-PITCH RENDER: ALWAYS team emblem + jersey number (white). ──
-      // Portrait files are reserved for the duel scene only, so the field
-      // looks consistent across friendly and career.
-      const emblemKey = pl.clubKey || ((s==='h') ? (selHome||'') : (selAway||''));
-      const emblemPath = emblemKey ? teamEmblemPath(emblemKey) : null;
-      const cacheKey = 'emb_' + (emblemKey || '_');
-      if(emblemPath && !IMG_CACHE[cacheKey]){
-        IMG_CACHE[cacheKey]='loading';
-        const ei=new Image();
-        ei.onload=()=>{IMG_CACHE[cacheKey]=ei;};
-        ei.onerror=()=>{IMG_CACHE[cacheKey]='err';};
-        ei.src=emblemPath;
-      }
-      let emblemImg=IMG_CACHE[cacheKey];
-      // For clubs without a custom PNG yet, fall back to the SVG-rendered crest.
-      if((emblemImg==='err' || !emblemImg || emblemImg==='loading') && emblemKey){
-        let isClub=false;
-        try { isClub = !!(CR_CLUBS && CR_CLUBS[emblemKey]); } catch(e) {}
-        if(isClub){
-          const sv=clubBadgeImage(emblemKey);
-          if(sv && sv.complete && sv.naturalWidth>0) emblemImg=sv;
-        }
-      }
-      if(emblemImg && emblemImg!=='err' && emblemImg!=='loading' && emblemImg.complete && emblemImg.naturalWidth>0){
+      // ── IN-PITCH RENDER: player face (cropped from full-body portrait). ──
+      // Reuses the same image loaded for the duel scene via playerImg(pl);
+      // we just sample the upper-center region of the source so only the
+      // head/face appears inside the circle. Falls back to team emblem
+      // while the portrait loads or if it fails.
+      const portraitCrop = getFaceCrop(pl);
+      let drewPortrait = false;
+      if(portraitCrop){
         cx.save();
         cx.beginPath();cx.arc(px,py,r-sc,0,Math.PI*2);cx.clip();
-        // Slightly faded emblem so the number stays readable on top
-        cx.globalAlpha=0.85;
-        cx.drawImage(emblemImg,px-r,py-r,r*2,r*2);
-        cx.globalAlpha=1;
+        cx.drawImage(portraitCrop, px-r, py-r, r*2, r*2);
         cx.restore();
         cx.beginPath();cx.arc(px,py,r,0,Math.PI*2);
         cx.lineWidth=iC?3*sc:2*sc;cx.strokeStyle=iC?'#ffd54a':brd;cx.stroke();
+        drewPortrait=true;
       }
-      // Jersey number — always drawn on top, white with subtle outline so
-      // it reads against any emblem behind it.
+      if(!drewPortrait){
+        // Fallback: team emblem (used while portrait loads / if missing).
+        const emblemKey = pl.clubKey || ((s==='h') ? (selHome||'') : (selAway||''));
+        const emblemPath = emblemKey ? teamEmblemPath(emblemKey) : null;
+        const cacheKey = 'emb_' + (emblemKey || '_');
+        if(emblemPath && !IMG_CACHE[cacheKey]){
+          IMG_CACHE[cacheKey]='loading';
+          const ei=new Image();
+          ei.onload=()=>{IMG_CACHE[cacheKey]=ei;};
+          ei.onerror=()=>{IMG_CACHE[cacheKey]='err';};
+          ei.src=emblemPath;
+        }
+        let emblemImg=IMG_CACHE[cacheKey];
+        if((emblemImg==='err' || !emblemImg || emblemImg==='loading') && emblemKey){
+          let isClub=false;
+          try { isClub = !!(CR_CLUBS && CR_CLUBS[emblemKey]); } catch(e) {}
+          if(isClub){
+            const sv=clubBadgeImage(emblemKey);
+            if(sv && sv.complete && sv.naturalWidth>0) emblemImg=sv;
+          }
+        }
+        if(emblemImg && emblemImg!=='err' && emblemImg!=='loading' && emblemImg.complete && emblemImg.naturalWidth>0){
+          cx.save();
+          cx.beginPath();cx.arc(px,py,r-sc,0,Math.PI*2);cx.clip();
+          cx.globalAlpha=0.85;
+          cx.drawImage(emblemImg,px-r,py-r,r*2,r*2);
+          cx.globalAlpha=1;
+          cx.restore();
+          cx.beginPath();cx.arc(px,py,r,0,Math.PI*2);
+          cx.lineWidth=iC?3*sc:2*sc;cx.strokeStyle=iC?'#ffd54a':brd;cx.stroke();
+        }
+      }
+      // Jersey number — always drawn on top.
+      // When showing the player face, render it smaller and tucked at the
+      // bottom so it doesn't cover the face; with the emblem fallback it
+      // stays centered as before.
       const num=String(jerseyNum(k,s));
-      cx.font=`bold ${Math.round((iC?14:13)*sc)}px Orbitron,sans-serif`;
-      cx.textAlign='center';cx.textBaseline='middle';
-      cx.lineWidth=Math.max(2,2.5*sc);
-      cx.strokeStyle='rgba(0,0,0,.75)';
-      cx.strokeText(num,px,py+sc);
-      cx.fillStyle='#fff';
-      cx.fillText(num,px,py+sc);
+      if(drewPortrait){
+        const numSize=Math.round((iC?9:8)*sc);
+        cx.font=`bold ${numSize}px Orbitron,sans-serif`;
+        cx.textAlign='center';cx.textBaseline='middle';
+        const ny=py + r*0.62;
+        cx.lineWidth=Math.max(2,2.5*sc);
+        cx.strokeStyle='rgba(0,0,0,.85)';
+        cx.strokeText(num,px,ny);
+        cx.fillStyle='#fff';
+        cx.fillText(num,px,ny);
+      } else {
+        cx.font=`bold ${Math.round((iC?14:13)*sc)}px Orbitron,sans-serif`;
+        cx.textAlign='center';cx.textBaseline='middle';
+        cx.lineWidth=Math.max(2,2.5*sc);
+        cx.strokeStyle='rgba(0,0,0,.75)';
+        cx.strokeText(num,px,py+sc);
+        cx.fillStyle='#fff';
+        cx.fillText(num,px,py+sc);
+      }
     }
 
     // Spirit arc — always shown for both GK and field players
@@ -4878,11 +4949,15 @@ checkOrientation();
 syncTeamSelections();
 initHomeSlots();
 
-// Canvas resize — handles mobile orientation changes and iOS Safari visual viewport
+// Canvas resize — handles mobile orientation changes and iOS Safari visual viewport.
+// High-quality image smoothing is enabled here so the player-portrait crops drawn
+// on the field don't render with low-quality downscaling artifacts.
 function rsz(){
   const pw=document.querySelector('.mviews');
   if(!pw)return;
   CV.width=pw.clientWidth;CV.height=pw.clientHeight;W=CV.width;H=CV.height;
+  cx.imageSmoothingEnabled=true;
+  cx.imageSmoothingQuality='high';
 }
 window.addEventListener('resize',()=>{rsz();checkOrientation();});
 window.addEventListener('orientationchange',()=>setTimeout(()=>{rsz();checkOrientation();},200));

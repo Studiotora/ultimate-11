@@ -354,20 +354,23 @@ html,body{width:100%;height:100%;height:-webkit-fill-available;overflow:hidden;b
   grid-template-columns:33% 34% 33%;
   align-items:center;
   flex-shrink:0;height:clamp(54px,8vh,72px);
-  background:url('assets/ui/scoreboard.png') no-repeat center top / 100% 100%, linear-gradient(180deg,#0a1628 0%,#071020 100%);
+  background:url('assets/ui/scoreboard.png') no-repeat center top / 100% 100%, #000;
   border-bottom:none;position:relative;overflow:hidden;
 }
 .mhud::after{display:none;}
-/* Team cluster — centered horizontally on its colored banner */
+/* Team cluster — name centered, emblem pinned to outer edge (inside the white slanted box of the scoreboard graphic) */
 .hteam{display:flex;align-items:center;justify-content:center;padding:0 clamp(8px,1.4vw,18px);gap:clamp(6px,1vw,10px);position:relative;height:100%;background:none!important;}
 .hteam.home,.hteam.away{justify-content:center;flex-direction:row;}
 .hteam.away{flex-direction:row-reverse;}
+/* Pin emblems to the outer corners so they land inside the scoreboard graphic's white box */
+.hteam.home .hflag-circle{position:absolute;left:clamp(34px,5.2vw,72px);top:50%;transform:translateY(-50%);margin:0;}
+.hteam.away .hflag-circle{position:absolute;right:clamp(34px,5.2vw,72px);top:50%;transform:translateY(-50%);margin:0;}
 .hflag-circle{width:clamp(28px,4.2vw,38px);height:clamp(28px,4.2vw,38px);border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:clamp(16px,2.6vw,24px);border:2px solid rgba(255,255,255,.3);background:rgba(0,0,0,.3);flex-shrink:0;box-shadow:0 2px 10px rgba(0,0,0,.5)}
-.htn{font-family:'Bebas Neue',sans-serif;font-size:clamp(11px,1.7vw,17px);letter-spacing:.14em;color:#fff;line-height:1;text-shadow:0 1px 3px rgba(0,0,0,.85)}
+.htn{font-family:'Bebas Neue',sans-serif;font-size:clamp(14px,2.1vw,21px);letter-spacing:.14em;color:#fff;line-height:1;text-shadow:0 1px 3px rgba(0,0,0,.85);transform:translateY(-3px);}
 /* Center plate — scores row, then clock, then half */
 .hmid{display:flex;flex-direction:column;align-items:center;justify-content:center;padding:0 clamp(6px,1vw,14px);flex-shrink:0;position:relative;background:none;height:100%;gap:1px;}
 .hmid::before,.hmid::after{display:none;}
-.hscores{display:flex;align-items:center;gap:clamp(8px,1.4vw,16px);line-height:1;}
+.hscores{display:flex;align-items:center;gap:clamp(48px,7vw,90px);line-height:1;transform:translateY(4px);}
 .hsc{font-family:'Orbitron',sans-serif;font-size:clamp(18px,2.6vw,24px);font-weight:900;color:#fff;text-shadow:0 2px 4px rgba(0,0,0,.95);line-height:1;}
 .hsc.sh{text-shadow:0 0 10px rgba(30,114,220,.9),0 2px 4px rgba(0,0,0,.95)}
 .hsc.sa{text-shadow:0 0 10px rgba(220,32,32,.9),0 2px 4px rgba(0,0,0,.95)}
