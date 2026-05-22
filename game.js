@@ -3013,6 +3013,129 @@ function fCard(role,pl,s,displayRole){
   if(rn){rn.textContent=(displayRole||'PLAYER')+' · '+(s==='h'?HT?.name||'HOME':AT?.name||'AWAY');rn.style.color=tl;}
   const se=document.getElementById(p+'st');se.innerHTML='';
   if(pl)[['SPD',gs(pl,'spd')],['DRI',gs(pl,'dri')],['PAS',gs(pl,'pas')],['SHO',gs(pl,'sho')],['DEF',gs(pl,'def')],['POW',gs(pl,'pow')]].forEach(([l,v])=>{const d=document.createElement('div');d.className='dst';d.innerHTML=`<div class="dst-v" style="color:${tl}">${v}</div><div class="dst-l">${l}</div>`;se.appendChild(d);});
+
+  // ── AAA side panel extras (rarity card, skill list, special, smooth stamina) ──
+  // Smooth stamina color: 0 = red → 50 = yellow/green → 100 = cyan
+  if(efEl){
+    const hue = Math.max(0, Math.min(190, Math.round(spPct * 1.9)));
+    const sat = 88, lig = 54;
+    efEl.style.background = `linear-gradient(90deg, hsl(${hue},${sat}%,${lig-6}%), hsl(${Math.min(hue+14,200)},${sat}%,${lig+8}%))`;
+    efEl.style.boxShadow = `0 0 9px hsl(${hue},${sat}%,55%), inset 0 0 4px rgba(255,255,255,.25)`;
+  }
+  if(evEl){
+    const hue = Math.max(0, Math.min(190, Math.round(spPct * 1.9)));
+    evEl.style.color = `hsl(${hue},90%,68%)`;
+  }
+  // Max stamina display (1500 outfield / 2000 GK)
+  const emaxEl=document.getElementById(p+'emax'); if(emaxEl) emaxEl.textContent=maxSp2;
+
+  // Rarity card (UR/SR/R, level, position pill, mini portrait, stars)
+  // Rarity can be 0-4 in this game; clamp safely to avoid String.repeat(-n) crashes.
+  const _rarIdx = Math.max(0, Math.min(4, pl?.rar || 0));
+  const _rarLabels = ['R','SR','UR','LR','WC'];
+  const _starsTotal = 5;
+  const _filled = Math.min(_starsTotal, _rarIdx + 3);
+  const _empty  = Math.max(0, _starsTotal - _filled);
+  const rb=document.getElementById(p+'rb');
+  if(rb) rb.textContent = _rarLabels[_rarIdx] || 'R';
+  const lvEl=document.getElementById(p+'lv'); if(lvEl) lvEl.textContent = pl ? Math.max(50, calcOvr(pl)) : '—';
+  const ps2El=document.getElementById(p+'ps2'); if(ps2El) ps2El.textContent = pl?.pos || '—';
+  const starsEl=document.getElementById(p+'stars');
+  if(starsEl) starsEl.textContent = '★'.repeat(_filled) + '☆'.repeat(_empty);
+  // Mini portrait — compute the URL directly (same as avatar fallback chain)
+  // so it doesn't depend on the avatar's async background having loaded yet.
+  const miniEl=document.getElementById(p+'mini');
+  const spPortEl=document.getElementById(p+'sp-port');
+  if(pl){
+    const _ln  = playerLastName(pl) || '';
+    const _lnK = _ln.replace(/[^a-z0-9]/g,'');
+    const _candidates = isClubTeam
+      ? [`assets/career/clubs/${_lnK}${teamKey}.png`, `assets/career/clubs/${teamKey}.png`, `assets/players/${_ln}.png`, _GENERIC_PLAYER_SVG_URL]
+      : [`assets/players/${_ln}.png`, `assets/profile/${_ln}.png`, _GENERIC_PLAYER_SVG_URL];
+    // Walk the chain — set the first one that loads (test with Image())
+    const setMiniUrls = (url)=>{
+      const u = `url("${url}")`;
+      if(miniEl) miniEl.style.backgroundImage = u;
+      if(spPortEl) spPortEl.style.backgroundImage = u;
+    };
+    setMiniUrls(_candidates[0]);   // optimistic first guess
+    (function tryNext(i){
+      if(i>=_candidates.length) return;
+      const test = new Image();
+      test.onload = ()=>{ setMiniUrls(_candidates[i]); };
+      test.onerror = ()=>{ tryNext(i+1); };
+      test.src = _candidates[i];
+    })(0);
+  } else {
+    if(miniEl) miniEl.style.backgroundImage='';
+    if(spPortEl) spPortEl.style.backgroundImage='';
+  }
+
+  // Skill list — top 4 stats mapped to named skills with grade letters
+  const SKILL_LABELS = {
+    spd:'FLASH STEP', dri:'HIGH SPEED DRIBBLE', pas:'PRECISION PASS',
+    sho:'DIRECT SHOT', def:'STEEL TACKLE', pow:'POWER STRIKE',
+    sav:'GOD HAND', ref:'REFLEX SAVE', tec:'TECHNIQUE', pwr:'POWER',
+  };
+  const SKILL_ICONS = {
+    spd:'⚡', dri:'🌀', pas:'🎯', sho:'⚽', def:'🛡', pow:'💥', sav:'🧤', ref:'✨', tec:'🎨', pwr:'💪',
+  };
+  function _grade(v){
+    if(v>=90) return ['g-s','S'];
+    if(v>=80) return ['g-a','A'];
+    if(v>=70) return ['g-b','B'];
+    if(v>=60) return ['g-c','C'];
+    return ['g-d','D'];
+  }
+  const skillsEl=document.getElementById(p+'skills');
+  if(skillsEl){
+    skillsEl.innerHTML='';
+    if(pl){
+      const statKeys = (pl.pos==='GK')
+        ? ['sav','ref','def','pwr']
+        : ['sho','dri','pas','spd','def','pow'];
+      const ranked = statKeys.map(k=>({k,v:gs(pl,k)})).sort((a,b)=>b.v-a.v).slice(0,4);
+      ranked.forEach(({k,v})=>{
+        const [gc,gl] = _grade(v);
+        const row=document.createElement('div'); row.className='dskill-row';
+        row.innerHTML =
+          `<div class="dskill-icon">${SKILL_ICONS[k]||'•'}</div>`+
+          `<div class="dskill-name">${SKILL_LABELS[k]||k.toUpperCase()}</div>`+
+          `<div class="dskill-grade ${gc}">${gl}</div>`+
+          `<div class="dskill-val">${v}</div>`;
+        skillsEl.appendChild(row);
+      });
+    }
+  }
+
+  // Special skill panel
+  const spNm=document.getElementById(p+'sp-name'),
+        spGr=document.getElementById(p+'sp-grade'),
+        spDc=document.getElementById(p+'sp-desc');
+  const sp = pl ? (isGK ? (typeof getGKSuper==='function'?getGKSuper(pl):null) : (typeof getSpecial==='function'?getSpecial(pl):null)) : null;
+  if(spNm) spNm.textContent = sp ? (sp.l||sp.name||'—') : '—';
+  if(spGr) spGr.textContent = sp ? (sp.generic ? 'B' : 'S') : '';
+  if(spGr) spGr.style.color = sp && sp.generic ? '#44c8ff' : 'var(--gold)';
+  if(spDc){
+    const descs = {
+      'Drive Shot':'A bullet trajectory that bends past keepers.',
+      'Tiger Shot':'Devastating power strike that rattles the net.',
+      'Fire Shot':'A scorching long-range cannon.',
+      'Riser Shot':'Rises sharply over the wall — unstoppable.',
+      'Atomic Shot':'Pure annihilation. The cleanest finish.',
+      'Sky Rocket Volley':'Aerial mastery — impossible angle.',
+      'Wild Eagle Shot':'Soaring strike, sky-bound.',
+      'Slider Shot':'Curves wickedly mid-flight.',
+      'Fantasista Shot':'Genius improvisation, no defending it.',
+      'Power Strike':'A reliable strike honed through countless matches.',
+      'God Hand':'Catches anything within reach.',
+      'SSGK':'World-class reflexes — Wakabayashi territory.',
+      'Iron Wall':'Goal becomes a fortress.',
+      'Colossus':'A giant in the box.',
+      'Super Save':'Pulls off the impossible.',
+    };
+    spDc.textContent = sp ? (descs[sp.l] || 'Signature move that swings the duel.') : '';
+  }
 }
 
 const SPECIALS={
