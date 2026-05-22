@@ -2450,3 +2450,162 @@ html,body{overscroll-behavior:none;}
   border-color:#f0c040 !important;
   animation:pauseBtnPulse 1.4s ease-in-out infinite alternate;
 }
+
+
+/* ═══════════════════════════════════════════════════════════════════
+   AAA duel — MOBILE / PHONE LANDSCAPE
+   Phone in landscape is roughly 800×360–400. Vertical space is the
+   bottleneck. We compress aggressively while keeping it readable.
+   ═══════════════════════════════════════════════════════════════════ */
+
+@media (max-height:500px), (max-width:900px){
+  /* Side panels — narrower, full height, scrollable as fallback */
+  .duel-aaa .dpc{
+    width:clamp(150px,22vw,200px) !important;
+    top:6px !important;
+    bottom:6px !important;
+    border-radius:6px !important;
+    border-width:1.5px !important;
+  }
+  .duel-aaa .atk .dpc{ left:6px !important;}
+  .duel-aaa .dp-card-wrap:not(.atk) .dpc{ right:6px !important;}
+  .duel-aaa .dpc-info{
+    padding:5px 6px !important;
+    gap:4px !important;
+    overflow:hidden !important;
+  }
+
+  /* Rarity card — compact */
+  .dside-rcard{ padding:4px 6px !important; gap:2px 6px !important;}
+  .dside-rar-big{ font-size:18px !important;}
+  .dside-lv{ font-size:9px !important;}
+  .dside-pos-pill{ font-size:9px !important; padding:0 5px !important;}
+  .dside-mini{ height:30px !important;}
+  .dside-stars{ font-size:9px !important; margin-top:-2px;}
+
+  /* Name + position */
+  .duel-aaa .dpnm{ font-size:14px !important;}
+  .duel-aaa .dpps{ font-size:7px !important;}
+
+  /* Stamina */
+  .duel-aaa .dp-energy-lbl{ font-size:9px !important;}
+  .duel-aaa .dp-energy-val{ font-size:9px !important;}
+  .duel-aaa .dp-energy-bar{ height:6px !important;}
+
+  /* Skill list — keep top 3 only */
+  .dside-h{ font-size:9px !important; padding:1px 0 !important; margin-bottom:2px !important;}
+  .dside-skills .dskill-row:nth-child(n+4){ display:none !important;}
+  .dskill-row{ padding:1px 4px !important; gap:5px !important; grid-template-columns:13px 1fr auto auto !important;}
+  .dskill-icon{ font-size:9px !important;}
+  .dskill-name{ font-size:7px !important; letter-spacing:.04em !important;}
+  .dskill-grade{ font-size:11px !important;}
+  .dskill-val{ font-size:7px !important;}
+
+  /* Special — much more compact */
+  .dss-content{ padding:4px 5px !important; gap:2px 5px !important; grid-template-columns:30px 1fr !important;}
+  .dss-portrait{ width:30px !important;}
+  .dss-name{ font-size:10px !important;}
+  .dss-grade{ font-size:12px !important;}
+  .dss-desc{ display:none !important;}  /* hide the description on phones */
+
+  /* Player avatar — pull toward outer edge so panels don't overlap */
+  .duel-aaa .dpav{
+    width:80% !important;
+    height:88% !important;
+  }
+  .duel-aaa .dp-card-wrap.atk .dpav{ left:70% !important;}
+  .duel-aaa .dp-card-wrap:not(.atk) .dpav{ left:30% !important;}
+
+  /* VS sigil — smaller and centered */
+  .duel-aaa .dvs{
+    width:90px !important;
+    height:60px !important;
+    top:35% !important;
+  }
+
+  /* Ball — smaller, slightly lower */
+  .duel-aaa .dp-ball{
+    width:44px !important;
+    height:44px !important;
+    top:76% !important;
+  }
+
+  /* Action bar — tighter padding, smaller buttons */
+  .duel-aaa .duelbar{
+    padding:6px 8px 8px !important;
+  }
+  .duel-aaa .duel-row{
+    gap:6px !important;
+    padding:0 6px !important;
+  }
+  .duel-aaa .dplbl{ display:none !important;}  /* labels eat horizontal room */
+  .duel-aaa .btn-group{ gap:5px !important;}
+  .duel-aaa .dact3d-face{
+    padding:6px 10px !important;
+    min-width:54px !important;
+    gap:1px !important;
+    border-radius:7px 7px 3px 3px !important;
+  }
+  .duel-aaa .dact3d-bot{
+    height:6px !important;
+    transform:translateY(4px) !important;
+  }
+  .duel-aaa .dact3d-l{ font-size:11px !important; letter-spacing:.06em !important;}
+  .duel-aaa .dact3d-img{
+    width:30px !important;
+    max-width:30px !important;
+  }
+  .duel-aaa .dact3d-i{ font-size:13px !important;}
+  .duel-aaa .dact3d-c{ font-size:7px !important; padding:1px 4px !important;}
+
+  /* SUPER toggle separation — tighter on phone */
+  .duel-aaa #abtns .dact3d.dact-sp:first-child,
+  .duel-aaa #dbtns .dact3d.dact-ss:first-child{
+    margin-right:7px !important;
+  }
+  .duel-aaa #abtns .dact3d.dact-sp:first-child::after,
+  .duel-aaa #dbtns .dact3d.dact-ss:first-child::after{
+    right:-3px !important;
+  }
+
+  /* GO button — smaller */
+  .duel-aaa .dcfm{
+    right:8px !important;
+  }
+  .duel-aaa .dcfm-face{
+    padding:7px 12px !important;
+    font-size:13px !important;
+  }
+
+  /* Pause button — much smaller, doesn't crowd action bar */
+  #s-match .pause-btn.aaa-pause{
+    bottom:8px !important;
+    left:8px !important;
+    padding:5px 10px !important;
+    font-size:10px !important;
+    letter-spacing:.12em !important;
+    gap:5px !important;
+    border-width:1.5px !important;
+  }
+  #s-match .pause-btn.aaa-pause .pause-ic{ font-size:11px !important;}
+  #s-match .pause-btn.aaa-pause .pause-lbl{ font-size:11px !important;}
+
+  /* HUD top bar — keep clock readable, shrink team names */
+  .htn{ font-size:11px !important;}
+  .hflag-circle{ width:26px !important; height:26px !important; font-size:14px !important;}
+
+  /* Hide the duelzone pill on tiniest screens (info still shown in di) */
+  .duel-aaa .dueltop{ margin-bottom:3px !important;}
+  .duelzone{ font-size:10px !important; padding:1px 6px !important;}
+  .dtr{ width:24px !important; height:24px !important;}
+  .dtr svg{ width:24px !important; height:24px !important;}
+  .dtn{ font-size:9px !important;}
+  .di{ font-size:8px !important;}
+}
+
+/* Extra-small phones (≤400px height) — hide the skill list to make room */
+@media (max-height:400px){
+  .duel-aaa .dside-skill{ display:none !important;}
+  .duel-aaa .dpc{ width:130px !important;}
+  .dside-mini{ height:24px !important;}
+}
