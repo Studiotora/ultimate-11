@@ -2220,6 +2220,8 @@ function drawT(s){
     const r=(CR+(iC?4:0))*sc;
     const isGK=pl.pos==='GK';
 
+    if(window.PS1_drawSprite && PS1_drawSprite(s,k,pl,px,py,sc,iC,iCh)) return;
+
     if(isGK){
       // GK: rounded square icon — distinct from field players
       const hw=r*1.05; // half-width of square
@@ -2827,6 +2829,7 @@ function opDuel(isShot, committedAk){
   document.getElementById('di').textContent=as==='h'?(G.D.is2v1?'PICK 2 MOVES (30s)':'CHOOSE ATTACK (30s)'):ds==='h'?'CHOOSE DEFENCE (30s)':'AI DUEL';
   document.getElementById('dcfm').classList.remove('rdy'); document.getElementById('duel-res').classList.remove('show');
   document.getElementById('duel-ov').classList.add('show');
+  try{document.getElementById('s-match').classList.add('duel-live');}catch(e){}
   const vs=document.getElementById('dvs');vs.classList.remove('show');void vs.offsetWidth;vs.classList.add('show');
   startCD();
   // Stagger: aiAtk fires first, aiDef fires 200ms later so it can read G.D.ak for RPS counter-pick
@@ -2995,7 +2998,7 @@ function fCard(role,pl,s,displayRole){
     avEl.style.cssText=`background:url(${_GENERIC_PLAYER_SVG_URL}) center bottom/contain no-repeat;color:transparent`;
     avEl.textContent='';
     const rawImg=pl?IMG_CACHE[lastName]:null;
-    if(rawImg&&rawImg!=='err'&&!rawImg.complete){rawImg.onload=()=>fCard(role,pl,s,displayRole);}
+    if(rawImg&&typeof rawImg==='object'&&!rawImg.complete){rawImg.onload=()=>fCard(role,pl,s,displayRole);}
   } else {
     avEl.style.cssText=`background:transparent;color:${tf};display:flex;align-items:center;justify-content:center;font-size:clamp(56px,10vw,110px);font-family:'Bebas Neue',sans-serif;opacity:.18`;
     avEl.textContent='?';
@@ -3039,6 +3042,8 @@ function fCard(role,pl,s,displayRole){
   const rb=document.getElementById(p+'rb');
   if(rb) rb.textContent = _rarLabels[_rarIdx] || 'R';
   const lvEl=document.getElementById(p+'lv'); if(lvEl) lvEl.textContent = pl ? Math.max(50, calcOvr(pl)) : '—';
+  const ovrEl=document.getElementById(p+'ovr');
+  if(ovrEl){ ovrEl.textContent = pl ? Math.max(50, calcOvr(pl)) : '—'; ovrEl.style.color = (s==='h') ? '#44c8ff' : '#ff5252'; }
   const ps2El=document.getElementById(p+'ps2'); if(ps2El) ps2El.textContent = pl?.pos || '—';
   const starsEl=document.getElementById(p+'stars');
   if(starsEl) starsEl.textContent = '★'.repeat(_filled) + '☆'.repeat(_empty);
@@ -3049,23 +3054,26 @@ function fCard(role,pl,s,displayRole){
   if(pl){
     const _ln  = playerLastName(pl) || '';
     const _lnK = _ln.replace(/[^a-z0-9]/g,'');
-    const _candidates = isClubTeam
+    const _baseChain = isClubTeam
       ? [`assets/career/clubs/${_lnK}${teamKey}.png`, `assets/career/clubs/${teamKey}.png`, `assets/players/${_ln}.png`, _GENERIC_PLAYER_SVG_URL]
       : [`assets/players/${_ln}.png`, `assets/profile/${_ln}.png`, _GENERIC_PLAYER_SVG_URL];
-    // Walk the chain — set the first one that loads (test with Image())
-    const setMiniUrls = (url)=>{
-      const u = `url("${url}")`;
-      if(miniEl) miniEl.style.backgroundImage = u;
-      if(spPortEl) spPortEl.style.backgroundImage = u;
+    // Top of card = dedicated PROFILE art; bottom special = dedicated SHOOT art.
+    // Each falls back to the existing portrait chain if the new art isn't present yet.
+    const _profileChain = [`assets/players/profile/${_ln}.png`].concat(_baseChain);
+    const _shootChain    = [`assets/players/shoot/${_ln}.png`].concat(_baseChain);
+    const _loadChain = (elm, chain)=>{
+      if(!elm) return;
+      elm.style.backgroundImage = `url("${chain[0]}")`;
+      (function tryNext(i){
+        if(i>=chain.length) return;
+        const test = new Image();
+        test.onload = ()=>{ elm.style.backgroundImage = `url("${chain[i]}")`; };
+        test.onerror = ()=>{ tryNext(i+1); };
+        test.src = chain[i];
+      })(0);
     };
-    setMiniUrls(_candidates[0]);   // optimistic first guess
-    (function tryNext(i){
-      if(i>=_candidates.length) return;
-      const test = new Image();
-      test.onload = ()=>{ setMiniUrls(_candidates[i]); };
-      test.onerror = ()=>{ tryNext(i+1); };
-      test.src = _candidates[i];
-    })(0);
+    _loadChain(miniEl, _profileChain);
+    _loadChain(spPortEl, _shootChain);
   } else {
     if(miniEl) miniEl.style.backgroundImage='';
     if(spPortEl) spPortEl.style.backgroundImage='';
@@ -3201,9 +3209,9 @@ function getGKSuper(pl){
 const BTN_IMG_MAP = {
   pass:'pass', dribble:'dribble', shoot:'shoot', 'one-two':'onetwo',
   tackle:'tackle', intercept:'intercept', block:'block',
-  save:'save', punch:'punch', supersave:'save', special:'shoot',
-  'super-pass':'pass','super-dribble':'dribble','super-one-two':'onetwo',
-  'super-tackle':'tackle','super-intercept':'intercept','super-block':'block'
+  save:'save', punch:'punch', supersave:'special-save', special:'special-shoot',
+  'super-pass':'special-pass','super-dribble':'special-dribble','super-one-two':'special-onetwo',
+  'super-tackle':'special-tackle','super-intercept':'special-intercept','super-block':'special-block'
 };
 function actBtnInner(actionId, costTxt){
   const img = BTN_IMG_MAP[actionId] || actionId;
@@ -3293,53 +3301,45 @@ function bldA(carrier,isShot){
     lbl.textContent=lblTxt+' — COMMITTED';
     el.appendChild(lbl);chkRdy();return;
   }
-  let acts;
+  // Build NORMAL + SPECIAL action groups — both shown at once, pick any.
+  let normals=[], specials=[];
+  const prog0=(()=>{const cp=PP[G.D.as]&&PP[G.D.as][G.ck];return cp?progressFor(G.D.as,cp):0;})();
+  const hasOneTwo=!isShot && !!bestTeammateFor(G.D.as,G.ck,'one-two');
   if(isShot){
-    acts=[{id:'shoot',l:'Shoot',i:'⚽'}];
+    normals=[{id:'shoot',l:'Shoot',i:'⚽'}];
     const spec=getSpecial(carrier);
-    if(spec)acts.push({id:'special',l:spec.l,i:spec.i,sp:true});
+    if(spec)specials=[{id:'special',l:spec.l,i:spec.i}];
   }else{
-    acts=[{id:'pass',l:'Pass',i:'↑'},{id:'dribble',l:'Dribble',i:'▶'}];
-    const cp=PP[G.D.as][G.ck],prog=cp?progressFor(G.D.as,cp):0;
-    if(prog>.50)acts.push({id:'shoot',l:'Shoot',i:'⚽'});
-    if(bestTeammateFor(G.D.as,G.ck,'one-two'))acts.push({id:'one-two',l:'1-2',i:'↑↑',ot:true});
+    normals=[{id:'pass',l:'Pass',i:'↑'},{id:'dribble',l:'Dribble',i:'▶'}];
+    if(prog0>.50)normals.push({id:'shoot',l:'Shoot',i:'⚽'});
+    if(hasOneTwo)normals.push({id:'one-two',l:'1-2',i:'↑↑',ot:true});
+    specials=[{id:'super-pass'},{id:'super-dribble'}];
+    if(prog0>.50){const spec=getSpecial(carrier);if(spec)specials.push({id:'special',l:spec.l,i:spec.i});}
+    if(hasOneTwo)specials.push({id:'super-one-two',ot:true});
   }
-  // ── SUPER toggle: when ON, base actions are upgraded to their super variant ──
-  // (Not shown for the shot panel — there the existing 'special' button already serves that role.)
-  const showSuperToggle = !isShot;
-  if(showSuperToggle){
-    const tBtn=document.createElement('button');
-    const on=!!G.D.atkSuperMode;
-    tBtn.className='dact3d dact-sp'+(on?' dact-sel':'');
-    tBtn.innerHTML=superToggleInner(on);
-    tBtn.onclick=()=>{G.D.atkSuperMode=!G.D.atkSuperMode;bldA(carrier,isShot);};
-    el.appendChild(tBtn);
-  }
-  acts.forEach(a=>{
-    // When SUPER is on, swap pass/dribble/one-two/shoot for their super variants.
-    let useId=a.id, useLbl=a.l, useIcon=a.i, useSp=a.sp||a.ot;
-    if(G.D.atkSuperMode && !isShot){
-      if(a.id==='pass'){useId='super-pass';}
-      else if(a.id==='dribble'){useId='super-dribble';}
-      else if(a.id==='one-two'){useId='super-one-two';}
-      else if(a.id==='shoot'){useId='special';}
-      const meta=SUPER_NAMES[useId];
-      if(meta){useLbl=meta.l;useIcon=meta.i;useSp=true;}
-      else if(useId==='special'){
-        const spec=getSpecial(carrier);
-        if(spec){useLbl=spec.l;useIcon=spec.i;useSp=true;}
-      }
-    }
-    const cost=(ATK_ACTIONS[useId]||{}).cost||0;
+  const mkBtn=(id,lbl,icon,isSp,ot)=>{
+    const cost=(ATK_ACTIONS[id]||{}).cost||0;
     const ok=sp>=cost;
     const costTxt=cost>0?(ok?'−'+cost+' SP':'⚡ LOW'):'FREE';
     const btn=document.createElement('button');
-    const tc=useSp?'dact-sp':'dact-atk';
-    btn.className='dact3d '+tc+(ok?'':' dact-dis');
-    btn.innerHTML=actBtnInner(useId,costTxt);
-    if(ok)btn.onclick=()=>selA({id:useId,l:useLbl,i:useIcon,sp:useSp,ot:a.ot},btn);
-    el.appendChild(btn);
-  });
+    btn.className='dact3d '+(isSp?'dact-sp':'dact-atk')+(ok?'':' dact-dis');
+    btn.innerHTML=actBtnInner(id,costTxt);
+    if(ok)btn.onclick=()=>selA({id:id,l:lbl,i:icon,sp:isSp,ot:ot},btn);
+    return btn;
+  };
+  const makeMenu=(cls,title,list,isSp)=>{
+    const m=document.createElement('div');m.className='dmenu '+cls;
+    const h=document.createElement('div');h.className='dmenu-h';h.textContent=title;m.appendChild(h);
+    const bb=document.createElement('div');bb.className='dmenu-btns';
+    list.forEach(a=>{
+      let id=a.id,lbl=a.l,icon=a.i;
+      if(isSp){const meta=SUPER_NAMES[id];if(meta){lbl=meta.l;icon=meta.i;}}
+      bb.appendChild(mkBtn(id,lbl,icon,isSp,a.ot));
+    });
+    m.appendChild(bb);return m;
+  };
+  el.appendChild(makeMenu('normal','NORMAL ACTIONS',normals,false));
+  if(specials.length)el.appendChild(makeMenu('special','SPECIAL ACTIONS',specials,true));
 }
 
 function bldD(def,ds,isShot){
@@ -3350,60 +3350,38 @@ function bldD(def,ds,isShot){
   if(!ih)return;
   const defIsGK=def&&def.pos==='GK';
   const sp=def?Math.round(def.spirit||(defIsGK?2000:1500)):(defIsGK?2000:1500);
-
-  const makeDBtn=(a)=>{
-    const cost=(DEF_ACTIONS[a.id]||{}).cost||0;
-    const ok=!a.locked&&sp>=cost;
+  const mkBtn=(id,lbl,icon,isSp,locked)=>{
+    const cost=(DEF_ACTIONS[id]||{}).cost||0;
+    const ok=!locked&&sp>=cost;
     const costTxt=cost>0?(ok?'−'+cost+' SP':'⚡ LOW'):'FREE';
     const btn=document.createElement('button');
-    const tc=a.id==='supersave'?'dact-ss':'dact-def';
-    btn.className='dact3d '+tc+(ok?'':' dact-dis');
-    btn.innerHTML=actBtnInner(a.id,costTxt);
-    if(ok)btn.onclick=()=>selD(a,btn);
-    else btn.disabled=true;
-    el.appendChild(btn);
+    btn.className='dact3d '+(isSp?'dact-ss':'dact-def')+(ok?'':' dact-dis');
+    btn.innerHTML=actBtnInner(id,costTxt);
+    if(ok)btn.onclick=()=>selD({id:id,l:lbl,i:icon},btn);else btn.disabled=true;
+    return btn;
   };
-
+  let normals=[], specials=[];
   if(isShot&&defIsGK){
     const gkSuper=getGKSuper(def);
-    [
-      {id:'save',     l:'Save',  i:'🧤',stat:'SAV'},
-      {id:'punch',    l:'Punch', i:'👊',stat:'POW'},
-      {id:'supersave',l:gkSuper.l,i:gkSuper.i,stat:'SAV★',locked:sp<320},
-    ].forEach(makeDBtn);
-  } else {
-    // SUPER toggle for outfield defence — every player has access to super tackle/intercept/block.
-    const tBtn=document.createElement('button');
-    const on=!!G.D.defSuperMode;
-    tBtn.className='dact3d dact-ss'+(on?' dact-sel':'');
-    tBtn.innerHTML=superToggleInner(on);
-    tBtn.onclick=()=>{G.D.defSuperMode=!G.D.defSuperMode;bldD(def,ds,isShot);};
-    el.appendChild(tBtn);
-
-    const baseList=[
-      {id:'tackle',   l:'Tackle',    i:'🦵',stat:'DEF'},
-      {id:'intercept',l:'Intercept', i:'✋',stat:'PAS'},
-      {id:'block',    l:'Block',     i:'🛡',stat:'DEF'},
-    ];
-    baseList.forEach(a=>{
-      let useId=a.id, useLbl=a.l, useIcon=a.i, ss=false;
-      if(G.D.defSuperMode){
-        useId='super-'+a.id;
-        const meta=SUPER_NAMES[useId];
-        if(meta){useLbl=meta.l;useIcon=meta.i;ss=true;}
-      }
-      const cost=(DEF_ACTIONS[useId]||{}).cost||0;
-      const ok=sp>=cost;
-      const costTxt=cost>0?(ok?'−'+cost+' SP':'⚡ LOW'):'FREE';
-      const btn=document.createElement('button');
-      const tc=ss?'dact-ss':'dact-def';
-      btn.className='dact3d '+tc+(ok?'':' dact-dis');
-      btn.innerHTML=actBtnInner(useId,costTxt);
-      if(ok)btn.onclick=()=>selD({id:useId,l:useLbl,i:useIcon},btn);
-      else btn.disabled=true;
-      el.appendChild(btn);
-    });
+    normals=[{id:'save',l:'Save',i:'🧤'},{id:'punch',l:'Punch',i:'👊'}];
+    specials=[{id:'supersave',l:gkSuper.l,i:gkSuper.i,locked:sp<320}];
+  }else{
+    normals=[{id:'tackle',l:'Tackle',i:'🦵'},{id:'intercept',l:'Intercept',i:'✋'},{id:'block',l:'Block',i:'🛡'}];
+    specials=[{id:'super-tackle'},{id:'super-intercept'},{id:'super-block'}];
   }
+  const makeMenu=(cls,title,list,isSp)=>{
+    const m=document.createElement('div');m.className='dmenu '+cls+' def';
+    const h=document.createElement('div');h.className='dmenu-h';h.textContent=title;m.appendChild(h);
+    const bb=document.createElement('div');bb.className='dmenu-btns';
+    list.forEach(a=>{
+      let id=a.id,lbl=a.l,icon=a.i;
+      if(isSp){const meta=SUPER_NAMES[id];if(meta){lbl=meta.l;icon=meta.i;}}
+      bb.appendChild(mkBtn(id,lbl,icon,isSp,a.locked));
+    });
+    m.appendChild(bb);return m;
+  };
+  el.appendChild(makeMenu('normal','NORMAL ACTIONS',normals,false));
+  if(specials.length)el.appendChild(makeMenu('special','SPECIAL ACTIONS',specials,true));
 }
 
 function selA(a,btn){
@@ -4030,7 +4008,7 @@ function resDuel(){
   },950);
 }
 
-function closeDuel(){document.getElementById('duel-ov').classList.remove('show');document.getElementById('duel-res').classList.remove('show');G.pm=false;document.getElementById('pass-banner').style.display='none';const d2=document.getElementById('dpd2-wrap');if(d2)d2.remove();}
+function closeDuel(){try{document.getElementById('s-match').classList.remove('duel-live');}catch(e){}document.getElementById('duel-ov').classList.remove('show');document.getElementById('duel-res').classList.remove('show');G.pm=false;document.getElementById('pass-banner').style.display='none';const d2=document.getElementById('dpd2-wrap');if(d2)d2.remove();}
 function resume(s,msg){
   closeDuel(); if(msg)say(msg); G.phase='idle'; document.getElementById('passhint').style.display='none';
   // Grace period after duel — no new duel or shot gate can fire for 2.5s

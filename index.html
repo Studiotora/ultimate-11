@@ -11,7 +11,7 @@
 <meta name="theme-color" content="#06080e">
 <title>Ultimate Eleven - Football Strategy Game | Beta</title>
 <meta name="description" content="Ultimate Eleven - A Captain Tsubasa inspired football strategy game with 11 vs 11 gameplay">
-<link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Rajdhani:wght@600;700&family=Orbitron:wght@400;700&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Anton&family=Bebas+Neue&family=Rajdhani:wght@600;700&family=Orbitron:wght@400;700&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="style.css?v=16">
 <style>
 /* CAREER MODE - inline to bypass cache */
@@ -307,6 +307,183 @@
   .hm-nav-label{font-size:13px;}
   #hm-sprite{display:none;}
 }
+
+/* ============================================================
+   AAA HOME MENU v2 — featured panels, profile bar, icon row
+   ============================================================ */
+/* Re-balance the cinematic overlay: darken the LEFT (panels) so the
+   right side shows off the key art. */
+#s-home{background-position:72% 20%;}
+#s-home .hm-overlay{background:
+  linear-gradient(90deg,rgba(2,6,16,.96) 0%,rgba(2,6,16,.82) 36%,rgba(2,6,16,.44) 64%,rgba(2,6,16,.12) 100%),
+  linear-gradient(180deg,rgba(2,6,16,.5) 0%,transparent 20%,transparent 68%,rgba(2,6,16,.96) 100%);}
+.ae-home{position:absolute;inset:0;z-index:10;display:flex;flex-direction:column;font-family:'Rajdhani',sans-serif;}
+/* ---- TOP BAR ---- */
+.ae-top{display:flex;align-items:center;justify-content:space-between;gap:16px;padding:12px 22px;flex-shrink:0;}
+.ae-brand{display:flex;align-items:center;gap:12px;}
+.ae-crest{width:42px;height:42px;flex-shrink:0;display:flex;align-items:center;justify-content:center;font-family:'Bebas Neue',sans-serif;font-size:23px;color:#04060c;background:linear-gradient(150deg,#ffe488,#f0c040 46%,#8a5e0c);border-radius:9px;box-shadow:0 0 22px rgba(240,192,64,.45),inset 0 1px 0 rgba(255,255,255,.6);transform:skewX(-7deg);}
+.ae-crest span{transform:skewX(7deg);display:block;}
+.ae-brand-name{font-family:'Bebas Neue',sans-serif;font-size:clamp(17px,2.1vw,26px);letter-spacing:.18em;color:#fff;line-height:1;text-shadow:0 0 18px rgba(240,192,64,.4);}
+.ae-brand-jp{font-family:'Orbitron',sans-serif;font-size:8px;letter-spacing:.32em;color:rgba(255,255,255,.32);margin-top:3px;}
+.ae-top-right{display:flex;align-items:center;gap:14px;}
+.ae-profile{display:flex;align-items:center;gap:10px;cursor:pointer;padding:5px 8px;border-radius:10px;transition:.15s;}
+.ae-profile:hover{background:rgba(255,255,255,.06);}
+.ae-pf-info{text-align:right;display:flex;flex-direction:column;align-items:flex-end;}
+.ae-pf-name{font-family:'Bebas Neue',sans-serif;font-size:16px;letter-spacing:.1em;color:#fff;line-height:1;}
+.ae-pf-rank{font-family:'Orbitron',sans-serif;font-size:7px;letter-spacing:.16em;color:rgba(255,255,255,.42);margin:3px 0;}
+.ae-xp{width:96px;height:3px;border-radius:2px;background:rgba(255,255,255,.14);overflow:hidden;}
+.ae-xp-fill{height:100%;width:72%;background:linear-gradient(90deg,#f0c040,#ffe488);box-shadow:0 0 8px rgba(240,192,64,.7);}
+.ae-avatar{width:42px;height:42px;border-radius:50%;flex-shrink:0;display:flex;align-items:center;justify-content:center;font-size:20px;background:linear-gradient(135deg,#1a3a6a,#0d1f3a);border:2px solid #f0c040;box-shadow:0 0 14px rgba(240,192,64,.4);position:relative;}
+.ae-online{position:absolute;bottom:1px;right:1px;width:9px;height:9px;border-radius:50%;background:#22c55e;border:2px solid #050b1a;}
+.ae-curr{display:flex;flex-direction:column;gap:5px;padding-left:14px;border-left:1px solid rgba(255,255,255,.1);}
+.ae-curr-row{display:flex;align-items:center;gap:6px;font-family:'Rajdhani',sans-serif;font-weight:700;font-size:13px;color:#fff;}
+.ae-curr-row>span{min-width:42px;}
+.ae-plus{width:18px;height:18px;border-radius:5px;background:rgba(240,192,64,.16);border:1px solid rgba(240,192,64,.4);color:#f0c040;font-size:12px;line-height:1;display:flex;align-items:center;justify-content:center;padding:0;}
+.ae-plus:hover{background:rgba(240,192,64,.3);}
+.ae-icobtn{width:38px;height:38px;border-radius:9px;background:rgba(255,255,255,.05);border:1px solid rgba(255,255,255,.12);display:flex;align-items:center;justify-content:center;}
+.ae-icobtn svg{width:20px;height:20px;fill:none;stroke:rgba(255,255,255,.6);stroke-width:1.8;}
+.ae-icobtn:hover{border-color:var(--gold);background:rgba(240,192,64,.12);}
+.ae-icobtn:hover svg{stroke:var(--gold);}
+/* ---- BODY ---- */
+.ae-body{flex:1;display:flex;gap:18px;padding:2px 22px 2px;min-height:0;}
+.ae-left{width:clamp(360px,42vw,560px);display:flex;flex-direction:column;gap:10px;min-height:0;}
+.ae-panels{flex:1;display:flex;flex-direction:column;align-items:flex-start;gap:10px;min-height:0;}
+.ae-panels .ae-panel:nth-child(1){width:100%}.ae-panels .ae-panel:nth-child(2){width:calc(100% - var(--slant))}.ae-panels .ae-panel:nth-child(3){width:calc(100% - 2 * var(--slant))}.ae-panels .ae-panel:nth-child(4){width:calc(100% - 3 * var(--slant))}
+.ae-panel{position:relative;flex:1;min-height:0;cursor:pointer;text-align:left;display:block;padding:0;border:none;background:var(--ac);
+  --slant:clamp(20px,2.8vw,40px);
+  clip-path:polygon(0 0,100% 0,calc(100% - var(--slant)) 100%,0 100%);
+  filter:drop-shadow(0 0 9px var(--ac)) drop-shadow(0 0 3px var(--ac)) drop-shadow(0 4px 9px rgba(0,0,0,.5));
+  transition:transform .2s cubic-bezier(.16,1,.3,1),filter .2s;animation:aePanelIn .5s both;}
+.ae-panel.ae-hero{flex:1;}
+@keyframes aePanelIn{from{opacity:0;transform:translateX(-26px)}to{opacity:1;transform:translateX(0)}}
+.ae-panels .ae-panel:nth-child(1){animation-delay:.05s}.ae-panels .ae-panel:nth-child(2){animation-delay:.11s}.ae-panels .ae-panel:nth-child(3){animation-delay:.17s}.ae-panels .ae-panel:nth-child(4){animation-delay:.23s}
+.ae-pin{position:absolute;inset:2px;clip-path:polygon(0 0,100% 0,calc(100% - var(--slant)) 100%,0 100%);background:#070c16;overflow:hidden;}
+.ae-panel:hover{transform:translateX(9px);filter:drop-shadow(0 0 22px var(--ac)) drop-shadow(0 0 7px var(--ac)) drop-shadow(0 8px 22px rgba(0,0,0,.55));}
+.ae-part{position:absolute;inset:0;background-size:160% auto;background-position:20% 42%;z-index:0;transition:transform .55s cubic-bezier(.16,1,.3,1);}
+.ae-panel:hover .ae-part{transform:scale(1.07);}
+.ae-pgrad{position:absolute;inset:0;z-index:1;background:linear-gradient(90deg,rgba(6,10,22,.98) 0%,rgba(6,10,22,.93) 34%,rgba(6,10,22,.55) 64%,rgba(6,10,22,.1) 100%);}
+.ae-pcontent{position:relative;z-index:3;height:100%;display:flex;flex-direction:column;justify-content:center;gap:3px;padding:0 22px;}
+.ae-pnum{font-family:'Orbitron',sans-serif;font-size:8px;letter-spacing:.26em;color:var(--ac);opacity:.85;}
+.ae-ptitle{font-family:'Anton',sans-serif;font-weight:400;font-size:clamp(22px,3vw,40px);letter-spacing:.012em;line-height:.88;color:#fff;text-transform:uppercase;transform:skewX(-8deg);transform-origin:left center;text-shadow:3px 3px 0 rgba(0,0,0,.55),0 2px 16px rgba(0,0,0,.7);}
+.ae-hero .ae-ptitle{font-size:clamp(32px,4.6vw,58px);}
+.ae-pjp{font-family:'Orbitron',sans-serif;font-size:8px;letter-spacing:.24em;color:rgba(255,255,255,.4);margin-top:1px;}
+.ae-psub{font-family:'Rajdhani',sans-serif;font-weight:600;font-size:11px;letter-spacing:.1em;color:rgba(255,255,255,.62);margin-top:7px;text-transform:uppercase;}
+.ae-pcta{position:absolute;right:14px;top:50%;transform:translateY(-50%);z-index:4;font-family:'Bebas Neue',sans-serif;font-size:18px;color:var(--ac);opacity:0;transition:.2s;}
+.ae-panel:hover .ae-pcta{opacity:1;right:18px;}
+.ae-badge{position:absolute;top:11px;left:22px;z-index:4;font-family:'Orbitron',sans-serif;font-size:7px;letter-spacing:.2em;padding:3px 7px;border-radius:3px;}
+.ae-badge.new{color:#04060c;background:var(--gold);box-shadow:0 0 12px rgba(240,192,64,.6);}
+.ae-badge.soon{color:rgba(255,255,255,.8);background:rgba(255,255,255,.1);border:1px solid rgba(255,255,255,.22);}
+.ae-panel.ae-soon{cursor:default;}
+.ae-panel.ae-soon .ae-part{filter:grayscale(.5) brightness(.6);}
+.ae-panel.ae-soon:hover{transform:none;filter:drop-shadow(0 0 9px var(--ac)) drop-shadow(0 0 3px var(--ac)) drop-shadow(0 4px 9px rgba(0,0,0,.5));}
+.ae-panel.ae-soon:hover .ae-part{transform:none;}
+/* ---- ICON ROW ---- */
+.ae-icons{display:flex;gap:8px;flex-shrink:0;}
+.ae-ico{flex:1;display:flex;flex-direction:column;align-items:center;gap:6px;padding:10px 6px;background:rgba(8,13,24,.72);border:1px solid rgba(255,255,255,.1);border-radius:10px;cursor:pointer;transition:.15s;}
+.ae-ico svg{width:22px;height:22px;fill:none;stroke:rgba(255,255,255,.6);stroke-width:1.7;}
+.ae-ico span{font-family:'Orbitron',sans-serif;font-size:7px;letter-spacing:.13em;color:rgba(255,255,255,.5);text-align:center;line-height:1.35;}
+.ae-ico:hover{border-color:var(--gold);background:rgba(240,192,64,.1);transform:translateY(-2px);}
+.ae-ico:hover svg{stroke:var(--gold);}
+.ae-ico:hover span{color:var(--gold);}
+.ae-right{flex:1;position:relative;min-height:0;}
+/* ---- BOTTOM BAR ---- */
+.ae-bottom{display:flex;align-items:flex-end;justify-content:space-between;padding:4px 24px 12px;flex-shrink:0;}
+.ae-bl{display:flex;align-items:center;gap:12px;}
+.ae-season{display:flex;align-items:center;gap:7px;font-family:'Orbitron',sans-serif;font-size:8px;letter-spacing:.2em;color:rgba(255,255,255,.5);}
+.ae-season-dot{width:7px;height:7px;border-radius:50%;background:var(--red);box-shadow:0 0 8px var(--red);}
+.ae-hints{display:flex;gap:16px;}
+.ae-hint{display:flex;align-items:center;gap:6px;font-family:'Orbitron',sans-serif;font-size:9px;letter-spacing:.12em;color:rgba(255,255,255,.4);}
+.ae-hint b{display:inline-flex;width:18px;height:18px;align-items:center;justify-content:center;border-radius:50%;background:rgba(255,255,255,.14);color:#fff;font-size:9px;font-family:'Rajdhani',sans-serif;font-weight:700;}
+/* ---- TOAST ---- */
+.ae-toast{position:absolute;left:50%;bottom:84px;transform:translateX(-50%) translateY(18px);z-index:60;background:rgba(6,10,22,.97);border:1px solid var(--gold);border-radius:8px;padding:10px 24px;font-family:'Bebas Neue',sans-serif;font-size:16px;letter-spacing:.12em;color:var(--gold);opacity:0;pointer-events:none;transition:.3s cubic-bezier(.16,1,.3,1);box-shadow:0 10px 34px rgba(0,0,0,.6);}
+.ae-toast.show{opacity:1;transform:translateX(-50%) translateY(0);}
+/* ---- SETTINGS MODAL ---- */
+.ae-modal{display:none;position:absolute;inset:0;z-index:9998;background:rgba(2,6,16,.82);backdrop-filter:blur(10px);-webkit-backdrop-filter:blur(10px);align-items:center;justify-content:center;}
+.ae-modal.show{display:flex;animation:aeFade .2s both;}
+@keyframes aeFade{from{opacity:0}to{opacity:1}}
+.ae-modal-card{width:min(450px,92vw);max-height:88vh;overflow:auto;background:linear-gradient(180deg,#0a1322,#060b16);border:1px solid rgba(240,192,64,.35);border-radius:14px;box-shadow:0 0 50px rgba(0,0,0,.7);animation:aePop .26s cubic-bezier(.16,1,.3,1) both;}
+@keyframes aePop{from{opacity:0;transform:scale(.94) translateY(10px)}to{opacity:1;transform:none}}
+.ae-modal-hd{display:flex;align-items:center;justify-content:space-between;padding:15px 20px;border-bottom:1px solid rgba(255,255,255,.08);position:sticky;top:0;background:#0a1322;}
+.ae-modal-title{font-family:'Bebas Neue',sans-serif;font-size:22px;letter-spacing:.16em;color:var(--gold);}
+.ae-modal-title small{display:block;font-family:'Orbitron',sans-serif;font-size:7px;letter-spacing:.24em;color:#48586a;margin-top:2px;}
+.ae-modal-x{width:30px;height:30px;border-radius:8px;background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.14);color:#fff;font-size:15px;}
+.ae-modal-x:hover{border-color:var(--red);color:var(--red);}
+.ae-modal-body{padding:6px 20px 18px;}
+.ae-set-row{display:flex;align-items:center;justify-content:space-between;gap:14px;padding:13px 2px;border-bottom:1px solid rgba(255,255,255,.06);}
+.ae-set-lbl{display:flex;flex-direction:column;gap:3px;}
+.ae-set-name{font-family:'Bebas Neue',sans-serif;font-size:16px;letter-spacing:.07em;color:#eceff4;}
+.ae-set-desc{font-family:'Orbitron',sans-serif;font-size:7px;letter-spacing:.1em;color:#48586a;}
+.ae-tog{width:46px;height:26px;border-radius:13px;background:rgba(255,255,255,.12);border:1px solid rgba(255,255,255,.18);position:relative;cursor:pointer;transition:.2s;flex-shrink:0;}
+.ae-tog::after{content:'';position:absolute;top:2px;left:2px;width:20px;height:20px;border-radius:50%;background:#fff;transition:.2s;}
+.ae-tog.on{background:var(--gold);border-color:var(--gold);}
+.ae-tog.on::after{left:22px;background:#04060c;}
+.ae-range{width:130px;accent-color:var(--gold);cursor:pointer;}
+.ae-set-btn{padding:8px 16px;border-radius:7px;font-family:'Bebas Neue',sans-serif;font-size:14px;letter-spacing:.1em;cursor:pointer;border:1px solid;}
+.ae-set-btn.danger{color:var(--red);border-color:rgba(220,32,32,.5);background:rgba(220,32,32,.08);}
+.ae-set-btn.danger:hover{background:rgba(220,32,32,.22);}
+.ae-set-btn.ghost{color:#fff;border-color:rgba(255,255,255,.2);background:rgba(255,255,255,.05);}
+.ae-set-btn.ghost:hover{border-color:var(--gold);color:var(--gold);}
+/* ---- responsive ---- */
+@media(max-width:900px){
+  .ae-left{width:54%;}
+  .ae-ptitle{font-size:clamp(17px,3.4vw,24px);}
+  .ae-hero .ae-ptitle{font-size:clamp(22px,4.6vw,30px);}
+  .ae-brand-name{font-size:15px;}
+  .ae-curr,.ae-pf-rank{display:none;}
+  .ae-body{gap:10px;padding:2px 12px;}
+  .ae-top,.ae-bottom{padding-left:12px;padding-right:12px;}
+}
+@media(max-height:470px){
+  #hm-sprite{display:none;}
+  .ae-psub{display:none;}
+  .ae-panel.ae-hero{flex:1;}
+}
+
+/* ============================================================
+   DUEL v2 — floating menus, see-through cards, foot rings
+   ============================================================ */
+#duel-ov.duel-aaa{background:
+  linear-gradient(180deg,rgba(6,12,24,.30) 0%,rgba(4,6,12,.06) 34%,rgba(4,6,12,.40) 100%),
+  url('assets/wallpaper/duel.png') center/cover no-repeat !important;}
+/* see-through info cards */
+.duel-aaa .dpc{background:linear-gradient(180deg,rgba(7,13,26,.46) 0%,rgba(5,8,16,.5) 100%) !important;backdrop-filter:blur(7px) saturate(1.1);-webkit-backdrop-filter:blur(7px) saturate(1.1);}
+/* glowing foot rings under each player */
+.duel-aaa .dp-card-wrap.atk::after,
+.duel-aaa .dp-card-wrap:not(.atk)::after{
+  display:block !important;content:'';position:absolute;left:50%;bottom:5%;
+  width:clamp(84px,11vw,148px);height:clamp(22px,2.9vw,38px);
+  transform:translateX(-50%);border-radius:50%;pointer-events:none;z-index:1;animation:dpRing 2.4s ease-in-out infinite !important;}
+.duel-aaa .dp-card-wrap.atk::after{border:2px solid rgba(70,165,255,.85);box-shadow:0 0 26px rgba(70,165,255,.6),inset 0 0 16px rgba(70,165,255,.4);background:radial-gradient(ellipse at center,rgba(70,165,255,.22),transparent 70%);}
+.duel-aaa .dp-card-wrap:not(.atk)::after{border:2px solid rgba(255,82,82,.85);box-shadow:0 0 26px rgba(255,82,82,.6),inset 0 0 16px rgba(255,82,82,.4);background:radial-gradient(ellipse at center,rgba(255,82,82,.22),transparent 70%);}
+@keyframes dpRing{0%,100%{opacity:.7;transform:translateX(-50%) scale(1)}50%{opacity:1;transform:translateX(-50%) scale(1.06)}}
+/* floating action menus (replace old ATTACK/DEFEND labels) */
+.duel-aaa #albl,.duel-aaa #dlbl{display:none !important;}
+.duel-aaa .duelbar{background:transparent !important;}
+.duel-aaa .duel-row{justify-content:center;gap:clamp(8px,1.4vw,18px);overflow:visible;}
+.duel-aaa .dmenu{display:flex;flex-direction:column;align-items:center;gap:5px;padding:7px 13px 9px;border-radius:13px;border:1.5px solid;background:rgba(8,14,28,.40);backdrop-filter:blur(9px);-webkit-backdrop-filter:blur(9px);}
+.duel-aaa .dmenu.normal{border-color:rgba(64,150,255,.6);box-shadow:0 0 22px rgba(40,120,240,.22),inset 0 0 20px rgba(40,120,240,.08);}
+.duel-aaa .dmenu.special{border-color:rgba(170,90,255,.62);box-shadow:0 0 24px rgba(150,70,255,.3),inset 0 0 20px rgba(150,70,255,.1);}
+.duel-aaa .dmenu-h{font-family:'Orbitron',sans-serif;font-size:clamp(7px,.82vw,9px);letter-spacing:.22em;font-weight:700;}
+.duel-aaa .dmenu.normal .dmenu-h{color:#74b6ff;}
+.duel-aaa .dmenu.special .dmenu-h{color:#c8a2ff;}
+.duel-aaa .dmenu-btns{display:flex;gap:clamp(4px,.6vw,8px);}
+/* profile portrait + colored OVR (replaces rarity / level / stars) */
+.duel-aaa .dside-rcard{display:flex;align-items:center;gap:11px;}
+.duel-aaa .dside-mini{width:clamp(46px,5vw,60px);height:clamp(46px,5vw,60px);border-radius:8px;background-size:cover;background-position:center top;flex-shrink:0;border:1.5px solid rgba(255,255,255,.2);box-shadow:0 2px 8px rgba(0,0,0,.5);}
+.duel-aaa .dside-ovr{display:flex;flex-direction:column;align-items:center;line-height:.85;}
+.duel-aaa .dside-ovr-num{font-family:'Bebas Neue',sans-serif;font-size:clamp(26px,3.2vw,38px);letter-spacing:.02em;text-shadow:0 0 14px currentColor;}
+.duel-aaa .dside-ovr-lbl{font-family:'Orbitron',sans-serif;font-size:7px;letter-spacing:.2em;color:rgba(255,255,255,.5);margin-top:2px;}
+/* shorter info cards — size to content, pushed below the floating score */
+.duel-aaa .dpc{top:clamp(56px,8.5vh,80px) !important;bottom:auto !important;max-height:calc(100% - 130px);}
+.duel-aaa .dpc-info{flex:none !important;}
+/* full-screen field — pitch shows behind the top score banner during a duel */
+#s-match.duel-live .mhud{background:transparent !important;z-index:30;}
+.duel-aaa .dmenu.special .dact3d-img{filter:drop-shadow(0 0 7px rgba(170,90,255,.6)) drop-shadow(0 3px 5px rgba(0,0,0,.55));}
+@media(max-width:900px){
+  .duel-aaa .dmenu{padding:4px 8px 6px;gap:3px;border-radius:9px;}
+  .duel-aaa .dmenu-h{font-size:6px;letter-spacing:.16em;}
+  .duel-aaa .duel-row{gap:8px;}
+}
 </style>
 </head>
 <body>
@@ -355,49 +532,214 @@
   <div class="hm-overlay"></div>
   <div class="hm-scanlines"></div>
   <canvas id="hm-canvas"></canvas>
-  <div class="hm-content">
-    <div class="hm-topbar">
-      <div><div class="hm-logo-text">ULTIMATE ELEVEN</div><div class="hm-logo-jp">アルティメットイレブン</div></div>
-      <div class="hm-profile" onclick="openProfileEdit()" title="Edit profile" style="cursor:pointer;">
-        <div class="hm-profile-info"><div class="hm-profile-name" id="hmProfileName">TSUBASA</div><div class="hm-profile-sub">MANAGER · LVL 47</div></div>
-        <div class="hm-avatar"><span id="hmProfileAvatar">⚽</span><div class="hm-online-dot"></div></div>
-        <div class="hm-currency">
-          <div class="hm-currency-row">🏆 <span>12,840 GP</span></div>
-          <div class="hm-currency-row">💎 <span>340</span></div>
+  <div class="ae-home">
+    <!-- TOP BAR -->
+    <header class="ae-top">
+      <div class="ae-brand">
+        <div class="ae-crest"><span>11</span></div>
+        <div><div class="ae-brand-name">ULTIMATE ELEVEN</div><div class="ae-brand-jp">アルティメットイレブン</div></div>
+      </div>
+      <div class="ae-top-right">
+        <div class="ae-profile" onclick="openProfileEdit()" title="Edit profile">
+          <div class="ae-pf-info">
+            <div class="ae-pf-name" id="hmProfileName">TSUBASA</div>
+            <div class="ae-pf-rank">MANAGER · RANK 47</div>
+            <div class="ae-xp"><div class="ae-xp-fill"></div></div>
+          </div>
+          <div class="ae-avatar"><span id="hmProfileAvatar">⚽</span><div class="ae-online"></div></div>
+        </div>
+        <div class="ae-curr">
+          <div class="ae-curr-row"><span class="ae-curr-ic">🏆</span><span>12,840</span><button class="ae-plus" onclick="aeToast('Store — coming soon')">+</button></div>
+          <div class="ae-curr-row"><span class="ae-curr-ic">💎</span><span>340</span><button class="ae-plus" onclick="aeToast('Store — coming soon')">+</button></div>
+        </div>
+        <button class="ae-icobtn" onclick="openSettings()" title="Settings"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 11-2.83 2.83l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-4 0v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 11-2.83-2.83l.06-.06a1.65 1.65 0 00.33-1.82 1.65 1.65 0 00-1.51-1H3a2 2 0 010-4h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 112.83-2.83l.06.06a1.65 1.65 0 001.82.33H9a1.65 1.65 0 001-1.51V3a2 2 0 014 0v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 112.83 2.83l-.06.06a1.65 1.65 0 00-.33 1.82V9a1.65 1.65 0 001.51 1H21a2 2 0 010 4h-.09a1.65 1.65 0 00-1.51 1z"/></svg></button>
+      </div>
+    </header>
+
+    <!-- BODY -->
+    <div class="ae-body">
+      <div class="ae-left">
+        <div class="ae-panels">
+          <!-- 01 FRIENDLY MATCH (hero) -->
+          <button class="ae-panel ae-hero" style="--ac:var(--gold)" onclick="showSc('s-ts')">
+            <span class="ae-pin">
+              <span class="ae-part" style="background-image:url('assets/home/banners/friendly.png')"></span>
+              <span class="ae-pgrad"></span>
+              <span class="ae-pcontent">
+                <span class="ae-pnum">01 · QUICK PLAY</span>
+                <span class="ae-ptitle">FRIENDLY MATCH</span>
+                <span class="ae-pjp">フレンドリーマッチ</span>
+                <span class="ae-psub">Jump straight into an 11 v 11 kick-off</span>
+              </span>
+              <span class="ae-pcta">▶</span>
+            </span>
+          </button>
+          <!-- 02 TOURNAMENT -->
+          <button class="ae-panel ae-soon" style="--ac:var(--red)" onclick="aeToast('Tournament — coming soon')">
+            <span class="ae-pin">
+              <span class="ae-part" style="background-image:url('assets/home/banners/tournament.png')"></span>
+              <span class="ae-pgrad"></span>
+              <span class="ae-pcontent">
+                <span class="ae-pnum">02 · KNOCKOUT CUP</span>
+                <span class="ae-ptitle">TOURNAMENT</span>
+                <span class="ae-pjp">トーナメント</span>
+              </span>
+            </span>
+            <span class="ae-badge soon">COMING SOON</span>
+          </button>
+          <!-- 03 MASTER LEAGUE -->
+          <button class="ae-panel" style="--ac:var(--sp)" onclick="showSc('s-career-clubs')">
+            <span class="ae-pin">
+              <span class="ae-part" style="background-image:url('assets/home/banners/masterleague.png')"></span>
+              <span class="ae-pgrad"></span>
+              <span class="ae-pcontent">
+                <span class="ae-pnum">03 · MANAGE YOUR CLUB</span>
+                <span class="ae-ptitle">MASTER LEAGUE</span>
+                <span class="ae-pjp">マスターリーグ</span>
+              </span>
+              <span class="ae-pcta">▶</span>
+            </span>
+          </button>
+          <!-- 04 STORY MODE -->
+          <button class="ae-panel ae-soon" style="--ac:#a259ff" onclick="aeToast('Story Mode — coming soon')">
+            <span class="ae-pin">
+              <span class="ae-part" style="background-image:url('assets/home/banners/storymode.png')"></span>
+              <span class="ae-pgrad"></span>
+              <span class="ae-pcontent">
+                <span class="ae-pnum">04 · THE ROAD TO GLORY</span>
+                <span class="ae-ptitle">STORY MODE</span>
+                <span class="ae-pjp">ストーリーモード</span>
+              </span>
+            </span>
+            <span class="ae-badge new">NEW</span>
+          </button>
+        </div>
+        <!-- ICON ROW -->
+        <div class="ae-icons">
+          <button class="ae-ico" onclick="openWorld()"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><path d="M2 12h20M12 2c-3 4-3 12 0 20M12 2c3 4 3 12 0 20"/></svg><span>AROUND<br>THE WORLD</span></button>
+          <button class="ae-ico" onclick="aeToast('Customize — coming soon')"><svg viewBox="0 0 24 24"><path d="M20.38 3.46L16 2a4 4 0 01-8 0L3.62 3.46l2.22 5.42L8 8v13h8V8l2.16.88z"/></svg><span>CUSTOMIZE</span></button>
+          <button class="ae-ico" onclick="openSettings()"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 11-2.83 2.83l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-4 0v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 11-2.83-2.83l.06-.06a1.65 1.65 0 00.33-1.82 1.65 1.65 0 00-1.51-1H3a2 2 0 010-4h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 112.83-2.83l.06.06a1.65 1.65 0 001.82.33H9a1.65 1.65 0 001-1.51V3a2 2 0 014 0v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 112.83 2.83l-.06.06a1.65 1.65 0 00-.33 1.82V9a1.65 1.65 0 001.51 1H21a2 2 0 010 4h-.09a1.65 1.65 0 00-1.51 1z"/></svg><span>SETTINGS</span></button>
         </div>
       </div>
+      <div class="ae-right"></div>
     </div>
-    <div style="flex:1;position:relative;">
-      <nav class="hm-nav">
-        <div class="hm-nav-item hm-active" onclick="hmNav(this);showSc('s-ts')"><span class="hm-nav-icon"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><path d="M12 2 8 7l4 3 4-3z"/><path d="M2.5 9h5l1.5 4-3 3z"/><path d="M21.5 9h-5l-1.5 4 3 3z"/><path d="M8 18l2-4h4l2 4"/></svg></span><span class="hm-nav-label">FRIENDLY MATCH</span><span class="hm-nav-chevron">&#x276F;</span></div>
-        <div class="hm-nav-item locked" onclick="cs()"><span class="hm-nav-icon"><svg viewBox="0 0 24 24"><path d="M6 2h12v8a6 6 0 01-12 0V2z"/><path d="M6 6H3a3 3 0 003 3"/><path d="M18 6h3a3 3 0 01-3 3"/><path d="M12 16v4"/><path d="M8 20h8"/></svg></span><span class="hm-nav-label">TOURNAMENT</span><span class="hm-nav-chevron">&#x276F;</span></div>
-        <div class="hm-nav-item" onclick="hmNav(this);showSc('s-career-clubs')"><span class="hm-nav-icon"><svg viewBox="0 0 24 24"><path d="M12 2L4 6v6c0 5.25 3.5 10.15 8 11.5C17.5 22.15 21 17.25 21 12V6z"/><path d="M9 12l2 2 4-4"/></svg></span><span class="hm-nav-label">MASTER LEAGUE</span><span class="hm-nav-chevron">&#x276F;</span></div>
-        <div class="hm-nav-item locked" onclick="cs()"><span class="hm-nav-icon"><svg viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/><path d="M8 14h4M8 17h8"/></svg></span><span class="hm-nav-label">CAREER</span><span class="hm-nav-chevron">&#x276F;</span></div>
-        <div class="hm-nav-item" onclick="hmNav(this);openWorld()"><span class="hm-nav-icon"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><path d="M2 12h20M12 2c-3 4-3 12 0 20M12 2c3 4 3 12 0 20"/></svg></span><span class="hm-nav-label">AROUND THE WORLD</span><span class="hm-nav-chevron">&#x276F;</span></div>
-        <div class="hm-nav-item locked" onclick="cs()"><span class="hm-nav-icon"><svg viewBox="0 0 24 24"><path d="M20.38 3.46L16 2a4 4 0 01-8 0L3.62 3.46l2.22 5.42L8 8v13h8V8l2.16.88z"/></svg></span><span class="hm-nav-label">CUSTOMIZE</span><span class="hm-nav-chevron">&#x276F;</span></div>
-        <div class="hm-nav-item locked" onclick="cs()"><span class="hm-nav-icon"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 010 2.83 2 2 0 01-2.83 0l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-4 0v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 01-2.83-2.83l.06-.06A1.65 1.65 0 004.68 15a1.65 1.65 0 00-1.51-1H3a2 2 0 010-4h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 012.83-2.83l.06.06A1.65 1.65 0 009 4.68a1.65 1.65 0 001-1.51V3a2 2 0 014 0v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 012.83 2.83l-.06.06A1.65 1.65 0 0019.4 9a1.65 1.65 0 001.51 1H21a2 2 0 010 4h-.09a1.65 1.65 0 00-1.51 1z"/></svg></span><span class="hm-nav-label">SETTINGS</span><span class="hm-nav-chevron">&#x276F;</span></div>
-      </nav>
-    </div>
-    <div class="hm-bottom">
-      <div class="hm-bottom-left">
+
+    <!-- BOTTOM BAR -->
+    <footer class="ae-bottom">
+      <div class="ae-bl">
         <canvas id="hm-sprite" width="100" height="100"></canvas>
-        <div class="hm-logo-stack">
-          <div class="hm-season-badge"><div class="hm-season-dot"></div><span class="hm-season-label">Season 3 · World Cup Arc</span></div>
-          <div class="hm-stats-row">
-            <div class="hm-stat-card"><span class="hm-stat-icon">🏆</span><span class="hm-stat-val">12,840</span><span class="hm-stat-lbl">GP</span></div>
-            <div class="hm-stat-card"><span class="hm-stat-icon">💎</span><span class="hm-stat-val">340</span><span class="hm-stat-lbl">GEMS</span></div>
-            <div class="hm-stat-card"><span class="hm-stat-icon">⚡</span><span class="hm-stat-val">214</span><span class="hm-stat-lbl">WINS</span></div>
+        <div class="ae-season"><span class="ae-season-dot"></span>SEASON 3 · WORLD CUP ARC</div>
+      </div>
+      <div class="ae-hints">
+        <div class="ae-hint"><b>✓</b> SELECT</div>
+        <div class="ae-hint"><b>✕</b> BACK</div>
+      </div>
+    </footer>
+
+    <div class="ae-toast" id="aeToastEl"></div>
+
+    <!-- SETTINGS MODAL -->
+    <div class="ae-modal" id="aeSettings">
+      <div class="ae-modal-card">
+        <div class="ae-modal-hd">
+          <div class="ae-modal-title">SETTINGS<small>環境設定 · OPTIONS</small></div>
+          <button class="ae-modal-x" onclick="closeSettings()">✕</button>
+        </div>
+        <div class="ae-modal-body">
+          <div class="ae-set-row">
+            <div class="ae-set-lbl"><div class="ae-set-name">MASTER VOLUME</div><div class="ae-set-desc">MUSIC & AUDIO LEVEL</div></div>
+            <input type="range" class="ae-range" id="setVol" min="0" max="100" step="1" oninput="setMasterVol(this.value)">
+          </div>
+          <div class="ae-set-row">
+            <div class="ae-set-lbl"><div class="ae-set-name">MENU MUSIC</div><div class="ae-set-desc">PLAY THEME ON THE HOME SCREEN</div></div>
+            <div class="ae-tog" id="togMenuMusic" onclick="toggleMenuMusic()"></div>
+          </div>
+          <div class="ae-set-row">
+            <div class="ae-set-lbl"><div class="ae-set-name">MATCH MUSIC</div><div class="ae-set-desc">SOUNDTRACK DURING GAMES</div></div>
+            <div class="ae-tog" id="togMatchMusic" onclick="toggleMatchMusic()"></div>
+          </div>
+          <div class="ae-set-row">
+            <div class="ae-set-lbl"><div class="ae-set-name">PS1 RETRO FILTER</div><div class="ae-set-desc">DITHER & SCANLINE LOOK IN MATCHES</div></div>
+            <div class="ae-tog" id="togPS1" onclick="togglePS1()"></div>
+          </div>
+          <div class="ae-set-row">
+            <div class="ae-set-lbl"><div class="ae-set-name">PERF OVERLAY</div><div class="ae-set-desc">SHOW SPRITE / FPS DEBUG IN MATCHES</div></div>
+            <div class="ae-tog" id="togDebug" onclick="toggleDebug()"></div>
+          </div>
+          <div class="ae-set-row">
+            <div class="ae-set-lbl"><div class="ae-set-name">FULLSCREEN</div><div class="ae-set-desc">RECOMMENDED FOR LANDSCAPE PLAY</div></div>
+            <button class="ae-set-btn ghost" onclick="toggleFullscreen()">TOGGLE</button>
+          </div>
+          <div class="ae-set-row" style="border-bottom:none;">
+            <div class="ae-set-lbl"><div class="ae-set-name">RESET SAVE DATA</div><div class="ae-set-desc">WIPES CAREER & PROFILE · CANNOT UNDO</div></div>
+            <button class="ae-set-btn danger" onclick="resetSaveData()">RESET</button>
           </div>
         </div>
-      </div>
-      <div class="hm-hints">
-        <div class="hm-hint-item"><span class="hm-hint-key">↑↓</span> NAVIGATE</div>
-        <div class="hm-hint-item"><span class="hm-hint-key">ENTER</span> SELECT</div>
-        <div class="hm-hint-item"><span class="hm-hint-key">ESC</span> BACK</div>
       </div>
     </div>
   </div>
   <audio id="bgMusic" loop><source src="assets/audio/menu.mp3" type="audio/mpeg"></audio>
+
+  <!-- AAA MENU: settings, toast, audio prefs -->
+  <script>
+  (function(){
+    var K='ue_settings_v1';
+    var def={vol:70,menuMusic:true,matchMusic:true,ps1:true,debug:false};
+    var S=load();
+    function load(){try{return Object.assign({},def,JSON.parse(localStorage.getItem(K))||{});}catch(e){return Object.assign({},def);}}
+    function save(){try{localStorage.setItem(K,JSON.stringify(S));}catch(e){}}
+    function matchEls(){return ['matchMusic1','matchMusic2','matchMusic3'].map(function(id){return document.getElementById(id);}).filter(Boolean);}
+    function apply(){
+      var v=Math.max(0,Math.min(1,S.vol/100));
+      var bg=document.getElementById('bgMusic');
+      if(bg){bg.volume=v;bg.muted=!S.menuMusic;}
+      matchEls().forEach(function(a){a.volume=v;a.muted=!S.matchMusic;});
+      if(window.PS1){window.PS1.on=S.ps1;window.PS1.debug=S.debug;}
+    }
+    function setTog(id,on){var e=document.getElementById(id);if(e)e.classList.toggle('on',!!on);}
+    function syncUI(){
+      var sv=document.getElementById('setVol'); if(sv)sv.value=S.vol;
+      setTog('togMenuMusic',S.menuMusic);setTog('togMatchMusic',S.matchMusic);setTog('togPS1',S.ps1);setTog('togDebug',S.debug);
+    }
+    window.openSettings=function(){apply();syncUI();var m=document.getElementById('aeSettings');if(m)m.classList.add('show');};
+    window.closeSettings=function(){var m=document.getElementById('aeSettings');if(m)m.classList.remove('show');};
+    window.setMasterVol=function(v){S.vol=+v;save();apply();};
+    window.toggleMenuMusic=function(){S.menuMusic=!S.menuMusic;save();apply();syncUI();
+      var bg=document.getElementById('bgMusic');
+      if(bg){ if(S.menuMusic&&document.querySelector('#s-home.active')){var p=bg.play();if(p&&p.catch)p.catch(function(){});} else if(!S.menuMusic){bg.pause();} }
+    };
+    window.toggleMatchMusic=function(){S.matchMusic=!S.matchMusic;save();apply();syncUI();};
+    window.togglePS1=function(){S.ps1=!S.ps1;save();apply();syncUI();};
+    window.toggleDebug=function(){S.debug=!S.debug;save();apply();syncUI();};
+    window.toggleFullscreen=function(){
+      try{
+        if(!document.fullscreenElement){var el=document.documentElement;var rq=el.requestFullscreen||el.webkitRequestFullscreen;if(rq){var p=rq.call(el);if(p&&p.catch)p.catch(function(){});}}
+        else{var ex=document.exitFullscreen||document.webkitExitFullscreen;if(ex)ex.call(document);}
+      }catch(e){}
+    };
+    window.resetSaveData=function(){
+      if(!confirm('Reset ALL save data?\nThis wipes your career and profile and cannot be undone.'))return;
+      try{Object.keys(localStorage).forEach(function(k){if(/^(ue_|ue11|career|car_|CAR|ultimate)/i.test(k))localStorage.removeItem(k);});}catch(e){}
+      location.reload();
+    };
+    var tTimer=null;
+    window.aeToast=function(msg){
+      var el=document.getElementById('aeToastEl'); if(!el)return;
+      el.textContent=msg; el.classList.add('show');
+      clearTimeout(tTimer); tTimer=setTimeout(function(){el.classList.remove('show');},1900);
+    };
+    function boot(){
+      // game.js / ps1-mod.js are deferred → guaranteed loaded by DOMContentLoaded.
+      ['startMatchMusic','startMusic','returnToMenuMusic'].forEach(function(fn){
+        var orig=window[fn];
+        if(typeof orig==='function'){window[fn]=function(){var r=orig.apply(this,arguments);setTimeout(apply,30);return r;};}
+      });
+      apply();syncUI();
+    }
+    if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',boot);else boot();
+    document.addEventListener('keydown',function(e){if(e.key==='Escape'){var m=document.getElementById('aeSettings');if(m&&m.classList.contains('show'))closeSettings();}});
+  })();
+  </script>
 
   <!-- PROFILE EDIT MODAL -->
   <div id="hmProfileModal" style="display:none;position:absolute;inset:0;z-index:9999;background:rgba(2,6,20,.85);backdrop-filter:blur(8px);-webkit-backdrop-filter:blur(8px);align-items:center;justify-content:center;">
@@ -668,15 +1010,10 @@
           <div class="dpc" id="dpa-c">
             <div class="dpr" id="dpa-r">SR</div>
             <div class="dpc-info">
-              <!-- Rarity sub-card (UR/SR/R + level + mini portrait + stars) -->
+              <!-- Profile portrait + overall -->
               <div class="dside-rcard">
-                <div class="dside-rar-big" id="dpa-rb">UR</div>
-                <div class="dside-meta">
-                  <span class="dside-lv">Lv.<b id="dpa-lv">99</b></span>
-                  <span class="dside-pos-pill" id="dpa-ps2">FW</span>
-                </div>
                 <div class="dside-mini" id="dpa-mini"></div>
-                <div class="dside-stars" id="dpa-stars">★★★★★</div>
+                <div class="dside-ovr"><b class="dside-ovr-num" id="dpa-ovr">—</b><span class="dside-ovr-lbl">OVR</span></div>
               </div>
 
               <!-- Name + position -->
@@ -725,13 +1062,8 @@
             <div class="dpr" id="dpd-r">SR</div>
             <div class="dpc-info">
               <div class="dside-rcard">
-                <div class="dside-rar-big" id="dpd-rb">UR</div>
-                <div class="dside-meta">
-                  <span class="dside-lv">Lv.<b id="dpd-lv">99</b></span>
-                  <span class="dside-pos-pill" id="dpd-ps2">FW</span>
-                </div>
                 <div class="dside-mini" id="dpd-mini"></div>
-                <div class="dside-stars" id="dpd-stars">★★★★★</div>
+                <div class="dside-ovr"><b class="dside-ovr-num" id="dpd-ovr">—</b><span class="dside-ovr-lbl">OVR</span></div>
               </div>
 
               <div class="dside-namewrap">
@@ -1083,6 +1415,9 @@
     var sc=document.getElementById('hm-sprite');
     if(sc&&!sc._i){sc._i=true;var sx=sc.getContext('2d'),si=new Image(),sf=0;
       si.onload=function(){setInterval(function(){var c=sf%5,r=Math.floor(sf/5)%5;sx.clearRect(0,0,100,100);sx.drawImage(si,c*256,r*256,256,256,0,0,100,100);sf++;},62);};si.src=_S;}
+    // Safety: guarantee nav rows are visible even if the entrance animation
+    // never completes (e.g. rAF throttled in a backgrounded/unpainted frame).
+    setTimeout(function(){document.querySelectorAll('.hm-nav-item').forEach(function(e){e.style.opacity='1';});},1200);
   }
   window.hmNav=function(el){document.querySelectorAll('.hm-nav-item').forEach(function(e){e.classList.remove('hm-active');});el.classList.add('hm-active');};
   document.addEventListener('DOMContentLoaded',function(){
