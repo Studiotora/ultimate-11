@@ -1,93 +1,137 @@
 /* ============================================================
-   PS1-MOD  ·  Ultimate Eleven
-   Drop-in that gives the in-field engine a PSX look WITHOUT
-   touching game logic. Two parts:
-     1) POST-FX  — wraps draw(): low-res nearest upscale + dither
-                   + scanlines + sub-pixel jitter. Works alone.
-     2) SPRITES  — optional low-poly billboards in drawT. Activates
-                   only if assets/ps1/home.png & away.png exist;
-                   otherwise the game keeps its normal disc tokens.
-   Load AFTER game.js:  <script src="ps1-mod.js" defer></script>
-   For sprites, add ONE line inside drawT (see integration note).
-   Toggle live in console:  PS1.on=false / PS1.dither=false ...
+   PS1-MOD  ·  Ultimate Eleven   (v2: anim + perf + no shake)
+   Drop-in PSX look for the in-field engine. Two parts:
+     1) POST-FX  — wraps draw(): low-res nearest upscale + dither.
+     2) SPRITES  — side-profile billboards with a run cycle.
+                   Activates only if assets/ps1/home.png & away.png
+                   exist; otherwise the game keeps its disc tokens.
+   Load AFTER game.js. Add ONE line in drawT (see notes).
+   Console tuning: PS1.on / PS1.res / PS1.dither / PS1.spriteScale
    ============================================================ */
 (function(){
   if(typeof window.draw!=='function'){ console.warn('[PS1] draw() not found — load after game.js'); return; }
 
   const PS1 = window.PS1 = {
-    on:true, dither:true, scanlines:true, jitter:true,
-    res:300,          // internal framebuffer width (lower = chunkier)
-    sprites:true,     // use billboards if sheets are present
-    spriteScale:2.6   // sprite height vs token radius
+    on:true, dither:true, scanlines:true, jitter:false, debug:true,
+    pixelate:false,     // true = heavy PS1 framebuffer crush (blurs the nice sprites); off keeps them crisp
+    res:300,            // internal framebuffer width (lower = chunkier)
+    sprites:true,
+    spriteScale:2.1,    // sprite height vs token radius
+    runFps:11           // run-cycle speed
   };
 
   /* ---------- POST-FX ---------- */
-  const low = document.createElement('canvas');
-  const lctx = low.getContext('2d');
+  const low=document.createElement('canvas'), lctx=low.getContext('2d');
   let dither=null, lw=0, lh=0, jf=0, jx=0, jy=0;
 
+  let dBlock=0;
   function buildDither(block){
-    const t=document.createElement('canvas'); t.width=t.height=block*2;
+    const s=block*2, t=document.createElement('canvas'); t.width=t.height=s;
     const c=t.getContext('2d');
-    c.fillStyle='rgba(255,255,255,.05)'; c.fillRect(0,0,block,block);
-    c.fillStyle='rgba(0,0,0,.05)';       c.fillRect(block,block,block,block);
+    c.fillStyle='rgba(255,255,255,.04)'; c.fillRect(0,0,block,block);
+    c.fillStyle='rgba(0,0,0,.04)';       c.fillRect(block,block,block,block);
+    if(PS1.scanlines){ const lh2=Math.max(1,Math.round(block*0.5));
+      c.fillStyle='rgba(0,0,0,.10)'; c.fillRect(0,0,s,lh2); c.fillRect(0,block,s,lh2); }
     dither=cx.createPattern(t,'repeat');
   }
+  function ensureDither(){ const b=Math.max(2,Math.round(H/360)); if(b!==dBlock){ dBlock=b; buildDither(b); } }
 
   function postfx(){
     if(!W||!H) return;
-    const want=Math.max(64,Math.round(PS1.res));
-    const h=Math.round(want*H/W);
-    if(want!==lw||h!==lh){
-      lw=want; lh=h; low.width=lw; low.height=lh;
-      buildDither(Math.max(2,Math.round(W/lw)));
+    watchEvents();
+    if(PS1.pixelate){                                   // heavy framebuffer crush (off by default)
+      const want=Math.max(64,Math.round(PS1.res)), h=Math.round(want*H/W);
+      if(want!==lw||h!==lh){ lw=want; lh=h; low.width=lw; low.height=lh; }
+      lctx.imageSmoothingEnabled=false; lctx.clearRect(0,0,lw,lh);
+      lctx.drawImage(CV,0,0,W,H,0,0,lw,lh);
+      cx.imageSmoothingEnabled=false;
+      cx.drawImage(low,0,0,lw,lh,0,0,W,H);
     }
-    // downsample current full-res frame
-    lctx.imageSmoothingEnabled=false;
-    lctx.clearRect(0,0,lw,lh);
-    lctx.drawImage(CV,0,0,W,H,0,0,lw,lh);
-    // jitter (PSX vertex-snap shimmer)
-    if(PS1.jitter){ if(++jf>3){jf=0; jx=(Math.random()*3|0)-1; jy=(Math.random()*3|0)-1;} }
-    else { jx=jy=0; }
-    // upscale nearest
-    cx.imageSmoothingEnabled=false;
-    cx.clearRect(0,0,W,H);
-    cx.drawImage(low,0,0,lw,lh, jx,jy,W,H);
+    if(PS1.dither){ ensureDither(); if(dither){ cx.fillStyle=dither; cx.fillRect(0,0,W,H); } }
     cx.imageSmoothingEnabled=true;
-    // dither + scanlines
-    if(PS1.dither&&dither){ cx.save(); cx.globalAlpha=.9; cx.fillStyle=dither; cx.fillRect(0,0,W,H); cx.restore(); }
-    if(PS1.scanlines){
-      cx.save(); cx.globalAlpha=.10; cx.fillStyle='#000';
-      const step=Math.max(2,Math.round(H/lh));
-      for(let y=0;y<H;y+=step) cx.fillRect(0,y,W,1);
+    if(PS1.debug){
+      const now=performance.now(); let run=0,tot=0;
+      for(const id in ST){ tot++; if(now-ST[id].moveT<220)run++; }
+      const fh=SHEETS.h&&SHEETS.h!=='none'?SHEETS.h.frames:'-';
+      const fa=SHEETS.a&&SHEETS.a!=='none'?SHEETS.a.frames:'-';
+      cx.save(); cx.setTransform(1,0,0,1,0,0);
+      cx.fillStyle='rgba(0,0,0,.75)'; cx.fillRect(6,6,250,52);
+      cx.fillStyle='#39ff7a'; cx.font='15px monospace';
+      cx.fillText('PS1 sheets  h:'+fh+'f  a:'+fa+'f',14,26);
+      cx.fillText('tracked:'+tot+'  running:'+run,14,46);
       cx.restore();
     }
   }
 
-  const _origDraw = window.draw;
-  window.draw = function(){ _origDraw(); if(PS1.on) postfx(); };
+  const _origDraw=window.draw;
+  window.draw=function(){ _origDraw(); if(PS1.on) postfx(); };
 
-  /* ---------- SPRITES (optional side-profile billboards) ---------- */
-  // Single side-profile frame per kit, baked with ps1-sprite-baker.html
-  // facing screen-right; the game mirrors it horizontally for left.
+  /* ---------- SPRITES (side profile, run cycle, mirrored) ---------- */
+  // Sheet = horizontal strip baked by ps1-sprite-baker.html:
+  //   frame 0 = idle, frames 1..n = run cycle. Faces screen-right.
+  const ASPECT = 128/192;                 // cell aspect from the baker
   const SHEETS = { h:null, a:null };
   function loadSheet(side,url){
     const im=new Image();
-    im.onload=()=>{ SHEETS[side]={img:im,cw:im.width,ch:im.height}; };
+    im.onload=()=>{ let cw=im.height*ASPECT; let frames=Math.max(1,Math.round(im.width/cw));
+                    SHEETS[side]={img:im, cw:im.width/frames, ch:im.height, frames};
+                    console.log('[PS1] '+side+' sheet loaded:', im.width+'x'+im.height, frames+' frames'); };
     im.onerror=()=>{ SHEETS[side]='none'; };
     im.src=url;
   }
   loadSheet('h','assets/ps1/home.png');
   loadSheet('a','assets/ps1/away.png');
 
-  // derive left/right facing from movement, fall back to attack direction
-  const LAST = new WeakMap();
-  function facingDir(s,p){
-    const prev=LAST.get(p); let d=0;
-    if(prev){ const dx=p.x-prev.x; if(Math.abs(dx)>0.4) d = dx>0?1:-1; }
-    LAST.set(p,{x:p.x,y:p.y});
-    if(d===0) d=(typeof dirFor==='function' && dirFor(s)>0)?1:-1;
-    return d;
+  // sheet layout (combined): idle, run, pass, shoot   [start,count]
+  const LAYOUT={ idle:0, run:[1,6], pass:[7,2], shoot:[9,3] };
+  const ST={}, ACT={};
+  window.PS1_action=(s,k,name)=>{ if(LAYOUT[name]) ACT[s+':'+k]={name,t0:performance.now()}; };
+
+  // auto-detect passes/shots from the game's own state (no game.js edits)
+  let lastCarrier=null, prevKick=false;
+  function watchEvents(){
+    if(typeof G==='undefined'||!G) return;
+    if(G.phase==='moving'&&G.poss&&G.ck) lastCarrier={s:G.poss,k:G.ck};
+    const kicking = (G.phase==='pass_anim');
+    if(kicking&&!prevKick&&lastCarrier){
+      const shot=!!(G._shotTrail||G._shotZone);
+      window.PS1_action(lastCarrier.s,lastCarrier.k, shot?'shoot':'pass');
+    }
+    prevKick=kicking;
+  }
+
+  function state(s,k,p,frames){
+    const id=s+':'+k;
+    const now=performance.now();
+    const prev=ST[id]||{rx:p.x,ry:p.y,dir:0,moveT:-1e9};
+    const ddx=p.x-prev.rx, ddy=p.y-prev.ry;       // displacement from reference point
+    const dist=Math.hypot(ddx,ddy);
+    const thresh=(W||1280)*0.0015;                // accumulate ~a few px before counting a step
+    let rx=prev.rx, ry=prev.ry, dir=prev.dir, moveT=prev.moveT;
+    if(dist>thresh){
+      if(Math.abs(ddx)>thresh*0.4) dir = ddx>0?1:-1;
+      moveT=now; rx=p.x; ry=p.y;                  // reset reference
+    }
+    ST[id]={rx,ry,dir,moveT};
+    if(dir===0) dir=(typeof dirFor==='function'&&dirFor(s)>0)?1:-1;
+    // one-shot pass/shoot animation override
+    const act=ACT[id];
+    if(act){
+      const rng=LAYOUT[act.name], dur=act.name==='shoot'?480:360, el=now-act.t0;
+      if(frames>=rng[0]+rng[1] && el<dur){
+        const fi=Math.min(rng[1]-1, Math.floor(el/dur*rng[1]));
+        return {dir, frame:rng[0]+fi};
+      }
+      delete ACT[id];
+    }
+    const running=(now-moveT)<220;                // recently moving -> run cycle
+    let frame=0;
+    if(frames>1 && running){
+      const fps=PS1.runFps||11, R=LAYOUT.run;
+      const rc=Math.max(1, Math.min(R[1], frames-R[0]));
+      frame = R[0] + (Math.floor(now/1000*fps) % rc);
+    }
+    return {dir,frame};
   }
 
   // Called from drawT. Returns true if it rendered the player (skip default).
@@ -95,51 +139,45 @@
     if(!PS1.on||!PS1.sprites) return false;
     const sh=SHEETS[s];
     if(!sh||sh==='none'||!sh.img.complete) return false;
-    const p = PP[s][k]; if(!p) return false;
+    const p=PP[s][k]; if(!p) return false;
 
     const r=(typeof CR!=='undefined'?CR:13)*sc*(iC?1.15:1);
-    const h=r*2*PS1.spriteScale;
-    const w=h*(sh.cw/sh.ch);
-    const dir=facingDir(s,p);
+    const h=r*2*PS1.spriteScale, w=h*(sh.cw/sh.ch);
+    const st=state(s,k,p,sh.frames);
 
     cx.save();
     cx.globalAlpha=iCh?.6:1;
-    // ground shadow
-    cx.beginPath();cx.ellipse(px,py+2*sc,w*0.28,w*0.13,0,0,Math.PI*2);
-    cx.fillStyle='rgba(0,0,0,.4)';cx.fill();
-    // selection / chaser ring on the ground
+    cx.beginPath(); cx.ellipse(px,py+2*sc,w*0.28,w*0.13,0,0,Math.PI*2);
+    cx.fillStyle='rgba(0,0,0,.4)'; cx.fill();
     if(iC||iCh){
-      cx.beginPath();cx.ellipse(px,py+2*sc,w*0.34,w*0.16,0,0,Math.PI*2);
-      cx.lineWidth=2*sc;cx.strokeStyle=iC?'#ffd54a':(s==='h'?'#2882f0':'#f03030');cx.stroke();
+      cx.beginPath(); cx.ellipse(px,py+2*sc,w*0.34,w*0.16,0,0,Math.PI*2);
+      cx.lineWidth=2*sc; cx.strokeStyle=iC?'#ffd54a':(s==='h'?'#2882f0':'#f03030'); cx.stroke();
     }
-    // billboard (feet anchored at py), mirrored when facing left
     cx.imageSmoothingEnabled=false;
-    const dx=px-w/2, dy=py-h+w*0.12;
-    if(dir<0){ cx.save(); cx.translate(px,0); cx.scale(-1,1); cx.translate(-px,0);
-               cx.drawImage(sh.img,0,0,sh.cw,sh.ch,dx,dy,w,h); cx.restore(); }
-    else     { cx.drawImage(sh.img,0,0,sh.cw,sh.ch,dx,dy,w,h); }
+    const sxc=st.frame*sh.cw, dx=px-w/2, dy=py-h+w*0.12;
+    if(st.dir<0){ cx.save(); cx.translate(px,0); cx.scale(-1,1); cx.translate(-px,0);
+                  cx.drawImage(sh.img,sxc,0,sh.cw,sh.ch,dx,dy,w,h); cx.restore(); }
+    else        { cx.drawImage(sh.img,sxc,0,sh.cw,sh.ch,dx,dy,w,h); }
     cx.imageSmoothingEnabled=true;
 
-    // jersey number tag above head
     if(typeof jerseyNum==='function'){
       const num=String(jerseyNum(k,s));
       cx.font=`bold ${Math.round(9*sc)}px Orbitron,sans-serif`;
-      cx.textAlign='center';cx.textBaseline='middle';
+      cx.textAlign='center'; cx.textBaseline='middle';
       const ny=py-h+w*0.02;
-      cx.lineWidth=Math.max(2,2.5*sc);cx.strokeStyle='rgba(0,0,0,.85)';
-      cx.strokeText(num,px,ny);cx.fillStyle='#fff';cx.fillText(num,px,ny);
+      cx.lineWidth=Math.max(2,2.5*sc); cx.strokeStyle='rgba(0,0,0,.85)';
+      cx.strokeText(num,px,ny); cx.fillStyle='#fff'; cx.fillText(num,px,ny);
     }
-    // spirit arc (around feet)
     const maxSp=pl.pos==='GK'?2000:1500;
     const spArc=Math.max(0,Math.min(1,(pl.spirit||maxSp)/maxSp));
     if(spArc<0.98){
-      cx.beginPath();cx.arc(px,py+2*sc,w*0.36,-Math.PI/2,-Math.PI/2+spArc*Math.PI*2);
+      cx.beginPath(); cx.arc(px,py+2*sc,w*0.36,-Math.PI/2,-Math.PI/2+spArc*Math.PI*2);
       cx.strokeStyle=spArc>0.5?'rgba(68,200,255,.9)':spArc>0.25?'rgba(240,192,64,.9)':'rgba(220,32,32,.9)';
-      cx.lineWidth=2.2*sc;cx.stroke();
+      cx.lineWidth=2.2*sc; cx.stroke();
     }
     cx.restore();
     return true;
   };
 
-  console.log('[PS1] mod active — PS1.on toggles, sheets:', 'assets/ps1/home.png, assets/ps1/away.png');
+  console.log('[PS1] mod v2 active');
 })();
