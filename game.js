@@ -3024,6 +3024,8 @@ function fCard(role,pl,s,displayRole){
   // Card border = team colour, subtle team tint background
   const cardEl=document.getElementById(p+'c');
   cardEl.style.border=`2px solid ${tl}`;
+  const tabEl=document.getElementById(p+'tab');
+  if(tabEl){tabEl.textContent=(s==='h')?'PLAYER 1':'COM';tabEl.style.background=`linear-gradient(90deg,${tl} 0%,${tl}55 55%,transparent 100%)`;}
   cardEl.style.boxShadow=`0 0 28px ${tl}44, 0 8px 40px rgba(0,0,0,.8)`;
   cardEl.style.background=`linear-gradient(160deg,${tf}28 0%,rgba(4,6,14,.97) 45%)`;
   // Portrait — no mirroring, images always shown as supplied
