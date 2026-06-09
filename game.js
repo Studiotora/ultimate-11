@@ -3139,21 +3139,21 @@ function fCard(role,pl,s,displayRole){
   // Max stamina display (1500 outfield / 2000 GK)
   const emaxEl=document.getElementById(p+'emax'); if(emaxEl) emaxEl.textContent=maxSp2;
 
-  // Rarity card (UR/SR/R, level, position pill, mini portrait, stars)
-  // Rarity can be 0-4 in this game; clamp safely to avoid String.repeat(-n) crashes.
-  const _rarIdx = Math.max(0, Math.min(4, pl?.rar || 0));
-  const _rarLabels = ['R','SR','UR','LR','WC'];
-  const _starsTotal = 5;
-  const _filled = Math.min(_starsTotal, _rarIdx + 3);
-  const _empty  = Math.max(0, _starsTotal - _filled);
+  // Stars derive from OVR — rarity/level system removed from the duel card.
+  // 90+ = 5★ · 84+ = 4.5 · 78+ = 4 · 72+ = 3.5 · 66+ = 3 · 60+ = 2.5 · else 2
+  const _ovrV = pl ? Math.max(50, calcOvr(pl)) : 0;
+  const _starsFor=v=>v>=90?5:v>=84?4.5:v>=78?4:v>=72?3.5:v>=66?3:v>=60?2.5:2;
   const rb=document.getElementById(p+'rb');
-  if(rb) rb.textContent = _rarLabels[_rarIdx] || 'R';
-  const lvEl=document.getElementById(p+'lv'); if(lvEl) lvEl.textContent = pl ? Math.max(50, calcOvr(pl)) : '—';
+  if(rb) rb.textContent='';
+  const lvEl=document.getElementById(p+'lv'); if(lvEl) lvEl.textContent='';
   const ovrEl=document.getElementById(p+'ovr');
-  if(ovrEl){ ovrEl.textContent = pl ? Math.max(50, calcOvr(pl)) : '—'; ovrEl.style.color = (s==='h') ? '#44c8ff' : '#ff5252'; }
+  if(ovrEl){ ovrEl.textContent = pl ? _ovrV : '—'; ovrEl.style.color = (s==='h') ? '#44c8ff' : '#ff5252'; }
   const ps2El=document.getElementById(p+'ps2'); if(ps2El) ps2El.textContent = pl?.pos || '—';
   const starsEl=document.getElementById(p+'stars');
-  if(starsEl) starsEl.textContent = '★'.repeat(_filled) + '☆'.repeat(_empty);
+  if(starsEl){
+    const n=_starsFor(_ovrV), full=Math.floor(n), half=n%1?1:0;
+    starsEl.innerHTML='★'.repeat(full)+(half?'<span class="st-half">★</span>':'')+'☆'.repeat(Math.max(0,5-full-half));
+  }
   // Mini portrait — compute the URL directly (same as avatar fallback chain)
   // so it doesn't depend on the avatar's async background having loaded yet.
   const miniEl=document.getElementById(p+'mini');

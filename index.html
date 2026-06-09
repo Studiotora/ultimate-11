@@ -12,7 +12,7 @@
 <title>Ultimate Eleven - Football Strategy Game | Beta</title>
 <meta name="description" content="Ultimate Eleven - A Captain Tsubasa inspired football strategy game with 11 vs 11 gameplay">
 <link href="https://fonts.googleapis.com/css2?family=Anton&family=Bebas+Neue&family=Rajdhani:wght@600;700&family=Orbitron:wght@400;700&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="style.css?v=20">
+<link rel="stylesheet" href="style.css?v=21">
 <style>
 /* CAREER MODE - inline to bypass cache */
 #s-career-clubs{background:radial-gradient(ellipse 80% 50% at 50% 0%,rgba(30,114,220,.08),transparent 60%),#06080e;overflow:hidden;}
@@ -1011,15 +1011,14 @@
             <div class="dpr" id="dpa-r">SR</div>
             <div class="dpc-info">
               <!-- Profile portrait + overall -->
-              <div class="dside-rcard">
-                <div class="dside-mini" id="dpa-mini"></div>
-                <div class="dside-ovr"><b class="dside-ovr-num" id="dpa-ovr">—</b><span class="dside-ovr-lbl">OVR</span></div>
-              </div>
-
-              <!-- Name + position -->
-              <div class="dside-namewrap">
-                <div class="dpnm" id="dpa-nm">—</div>
-                <div class="dpps" id="dpa-ps">—</div>
+              <div class="dch">
+                <div class="dch-id">
+                  <div class="dpps dch-pos" id="dpa-ps">—</div>
+                  <div class="dpnm" id="dpa-nm">—</div>
+                  <div class="dch-stars" id="dpa-stars"></div>
+                  <div class="dside-ovr"><b class="dside-ovr-num" id="dpa-ovr">—</b><span class="dside-ovr-lbl">OVR</span></div>
+                </div>
+                <div class="dside-mini dch-port" id="dpa-mini"></div>
               </div>
 
               <!-- Stamina bar with smooth gradient -->
@@ -1061,14 +1060,14 @@
           <div class="dpc" id="dpd-c">
             <div class="dpr" id="dpd-r">SR</div>
             <div class="dpc-info">
-              <div class="dside-rcard">
-                <div class="dside-mini" id="dpd-mini"></div>
-                <div class="dside-ovr"><b class="dside-ovr-num" id="dpd-ovr">—</b><span class="dside-ovr-lbl">OVR</span></div>
-              </div>
-
-              <div class="dside-namewrap">
-                <div class="dpnm" id="dpd-nm">—</div>
-                <div class="dpps" id="dpd-ps">—</div>
+              <div class="dch">
+                <div class="dch-id">
+                  <div class="dpps dch-pos" id="dpd-ps">—</div>
+                  <div class="dpnm" id="dpd-nm">—</div>
+                  <div class="dch-stars" id="dpd-stars"></div>
+                  <div class="dside-ovr"><b class="dside-ovr-num" id="dpd-ovr">—</b><span class="dside-ovr-lbl">OVR</span></div>
+                </div>
+                <div class="dside-mini dch-port" id="dpd-mini"></div>
               </div>
 
               <div class="dp-energy-wrap">
@@ -1397,7 +1396,7 @@
 </div>
 
 </div><!-- /viewport -->
-<script src="game.js?v=11" defer></script>
+<script src="game.js?v=12" defer></script>
 <script src="ps1-mod.js?v=1" defer></script>
 <script>
 (function(){
