@@ -2808,3 +2808,15 @@ html,body{overscroll-behavior:none;}
 .d2c-sub{font-family:'Orbitron',sans-serif;font-size:7.5px;letter-spacing:.18em;margin-top:2px;}
 /* Old free-floating 2v1 art rules neutralized */
 .dpd2-wrap.on-left,.dpd2-wrap.on-right{all:revert;}
+
+/* ── DUEL CARD V4.3 — the actual clipping fix ──────────────────── */
+/* Base .dpc-info has flex-shrink:0, so it overflowed the fixed-height card
+   and the SPECIAL SKILL panel was clipped outside it. Constrain it properly:
+   info fills the card, stats flex-shrink, special skill always visible. */
+.duel-aaa .dpc-info{
+  flex:1 1 auto !important;
+  min-height:0 !important;
+  align-items:stretch !important;
+}
+.duel-aaa .dside-skill{flex:1 1 auto !important;min-height:0 !important;overflow:hidden !important;}
+.duel-aaa .dside-special{flex:0 0 auto !important;}
