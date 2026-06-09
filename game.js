@@ -706,15 +706,16 @@ function hmHover(mode){
 function shakeScreen(intensity=5, duration=80){
   const vp=document.getElementById('viewport')||document.body;
   const isVP=!!document.getElementById('viewport');
+  const SC=' scale(var(--vp-scale,1))';
   let start=null;
   function step(ts){
     if(!start)start=ts;
     const p=(ts-start)/(duration);
-    if(p>=1){vp.style.transform=isVP?'translate(-50%,-50%)':'';return;}
+    if(p>=1){vp.style.transform=isVP?'translate(-50%,-50%)'+SC:'';return;}
     const fade=1-p;
     const dx=(Math.random()*2-1)*intensity*fade;
     const dy=(Math.random()*2-1)*intensity*fade;
-    vp.style.transform=isVP?`translate(calc(-50% + ${dx}px),calc(-50% + ${dy}px))`:`translate(${dx}px,${dy}px)`;
+    vp.style.transform=isVP?`translate(calc(-50% + ${dx}px),calc(-50% + ${dy}px))`+SC:`translate(${dx}px,${dy}px)`;
     requestAnimationFrame(step);
   }
   requestAnimationFrame(step);
@@ -723,17 +724,17 @@ function shakeScreen(intensity=5, duration=80){
 function goalZoom(){
   const vp=document.getElementById('viewport')||document.body;
   const isVP=!!document.getElementById('viewport');
-  const base=isVP?'translate(-50%,-50%) ':'';
+  const base=isVP?'translate(-50%,-50%) scale(var(--vp-scale,1)) ':'';
   vp.style.transition='transform .18s ease-out';
   vp.style.transform=base+'scale(1.045)';
   setTimeout(()=>{
     vp.style.transition='transform .32s ease-in';
     vp.style.transform=base+'scale(1)';
-    setTimeout(()=>{vp.style.transition='';vp.style.transform=isVP?'translate(-50%,-50%)':'';},320);
+    setTimeout(()=>{vp.style.transition='';vp.style.transform=isVP?'translate(-50%,-50%) scale(var(--vp-scale,1))':'';},320);
   },220);
 }
 
-function impactText(msg, color='#f0c040', size='clamp(18px,3vw,28px)'){
+function impactText(msg, color='#f0c040', size='clamp(18px,38.4px,28px)'){
   const el=document.createElement('div');
   el.textContent=msg;
   el.style.cssText=`
@@ -812,7 +813,7 @@ function showSpecialCutscene(pl,special,callback){
   sc.classList.remove('show');void sc.offsetWidth;sc.classList.add('show');
   say((pl?pl.name.split('.').pop():'')+'— '+(special.l||'Special')+'!');
   shakeScreen(7,100);
-  impactText('⚡ '+(special.l||'SPECIAL SHOT')+'!','#f0c040','clamp(18px,3vw,26px)');
+  impactText('⚡ '+(special.l||'SPECIAL SHOT')+'!','#f0c040','clamp(18px,38.4px,26px)');
   setTimeout(()=>{sc.classList.remove('show');if(callback)callback();},2200);
 }
 let _refTimer=null;
@@ -2991,7 +2992,7 @@ function fCard(role,pl,s,displayRole){
       fb.src=clubPlaceholder;
     };
     ci.src=specific;
-    avEl.style.cssText=`background:transparent;color:${tf};display:flex;align-items:center;justify-content:center;font-size:clamp(56px,10vw,110px);font-family:'Bebas Neue',sans-serif;opacity:.18`;
+    avEl.style.cssText=`background:transparent;color:${tf};display:flex;align-items:center;justify-content:center;font-size:clamp(56px,128px,110px);font-family:'Bebas Neue',sans-serif;opacity:.18`;
     avEl.textContent=pl.name.split('.').pop()[0];
   } else if(pl && img && img.complete && img.naturalWidth>0){
     // National team: try profile/players folder per existing convention
@@ -3009,7 +3010,7 @@ function fCard(role,pl,s,displayRole){
     const rawImg=pl?IMG_CACHE[lastName]:null;
     if(rawImg&&typeof rawImg==='object'&&!rawImg.complete){rawImg.onload=()=>fCard(role,pl,s,displayRole);}
   } else {
-    avEl.style.cssText=`background:transparent;color:${tf};display:flex;align-items:center;justify-content:center;font-size:clamp(56px,10vw,110px);font-family:'Bebas Neue',sans-serif;opacity:.18`;
+    avEl.style.cssText=`background:transparent;color:${tf};display:flex;align-items:center;justify-content:center;font-size:clamp(56px,128px,110px);font-family:'Bebas Neue',sans-serif;opacity:.18`;
     avEl.textContent='?';
   }
   document.getElementById(p+'nm').textContent=pl?pl.name.split('.').pop():'—';
@@ -3960,7 +3961,7 @@ function resDuel(){
       impactText('🎯 SHOT ON TARGET!','#f0c040');
     } else if(defA==='supersave'){
       shakeScreen(6,100);
-      impactText('⭐ SUPER SAVE!','#44b4ff','clamp(20px,3.5vw,32px)');
+      impactText('⭐ SUPER SAVE!','#44b4ff','clamp(20px,44.8px,32px)');
     } else if(defA==='punch'){
       shakeScreen(4,70);
       impactText('👊 PUNCHED CLEAR!','#aaa');
@@ -4038,7 +4039,7 @@ function afGoal(scorer,s,gen){
   showReferee('GOAL!');
   goalZoom();
   shakeScreen(12, 200);
-  impactText('⚽ GOAL!!!', '#f0c040', 'clamp(28px,5vw,52px)');
+  impactText('⚽ GOAL!!!', '#f0c040', 'clamp(28px,64px,52px)');
   setTimeout(()=>{
     Object.values(hSq).forEach(p=>{if(p)p.cooldownUntil=0;}); Object.values(aSq).forEach(p=>{if(p)p.cooldownUntil=0;});
     iPos(); const ns=s==='h'?'a':'h',q=sq(ns),kk=['CM2','CM1','ST'].find(k=>q[k])||Object.keys(q).find(k=>q[k]);
@@ -5058,6 +5059,40 @@ document.addEventListener('webkitfullscreenchange',()=>setTimeout(checkOrientati
 checkOrientation();
 syncTeamSelections();
 initHomeSlots();
+
+// ── FIXED 16:9 VIEWPORT SCALER ───────────────────────────────────
+// Game is laid out at a fixed 1280×720 design resolution and uniformly
+// scaled to fit the real window. Black <body> shows through as bars.
+// Everything is applied INLINE so a stale cached stylesheet can never
+// leave the box unscaled/cropped.
+const VP_DESIGN_W=1280, VP_DESIGN_H=720;
+function fitViewport(){
+  const iw=(window.visualViewport?window.visualViewport.width:window.innerWidth)||window.innerWidth;
+  const ih=(window.visualViewport?window.visualViewport.height:window.innerHeight)||window.innerHeight;
+  const s=Math.min(iw/VP_DESIGN_W, ih/VP_DESIGN_H);
+  document.documentElement.style.setProperty('--vp-scale', s.toFixed(4));
+  const vp=document.getElementById('viewport');
+  if(!vp)return;
+  vp.style.width=VP_DESIGN_W+'px';
+  vp.style.height=VP_DESIGN_H+'px';
+  vp.style.position='fixed';
+  vp.style.top='50%';
+  vp.style.left='50%';
+  vp.style.transformOrigin='center center';
+  // Don't stomp an in-flight shake/zoom transform
+  if(!vp.style.transform||vp.style.transform.indexOf('calc')<0&&vp.style.transform.indexOf('1.045')<0){
+    vp.style.transform='translate(-50%,-50%) scale(var(--vp-scale,1))';
+  }
+  document.body.style.background='#000';
+}
+fitViewport();
+document.addEventListener('DOMContentLoaded',fitViewport);
+window.addEventListener('load',fitViewport);
+window.addEventListener('resize',fitViewport);
+window.addEventListener('orientationchange',()=>setTimeout(fitViewport,200));
+if(window.visualViewport)window.visualViewport.addEventListener('resize',fitViewport);
+document.addEventListener('fullscreenchange',()=>setTimeout(fitViewport,100));
+document.addEventListener('webkitfullscreenchange',()=>setTimeout(fitViewport,100));
 
 // Canvas resize — handles mobile orientation changes and iOS Safari visual viewport.
 // High-quality image smoothing is enabled here so the player-portrait crops drawn
