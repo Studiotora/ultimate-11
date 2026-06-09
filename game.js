@@ -1906,6 +1906,12 @@ function startAnim(){
     if(G.paused){draw();raf=requestAnimationFrame(loop);return;}
     if(G.phase==='moving')tick(dt);
     if(G.phase==='pass_anim'){tickBallTravel(dt);tickPassMotion(dt);}
+    // WATCHDOG — duel phase can never exceed 50s (countdown is 30s).
+    // If a resolution path ever dies, force-recover instead of soft-locking.
+    if(G.phase==='duel'&&G._duelT&&Date.now()-G._duelT>50000){
+      console.warn('duel watchdog fired — force resuming');
+      G._duelT=0;closeDuel();resume(G.poss);
+    }
     if(G.phase==='moving'&&G.ck&&PP[G.poss]&&PP[G.poss][G.ck]){
       const _cp=PP[G.poss][G.ck];
       const _dir=dirFor(G.poss);
@@ -2838,8 +2844,18 @@ function playDuelCutIn(opts,onDone){
     <div class="ci-banner" style="--tc:${atkCol}">${isShot?'GOAL ATTEMPT!!':(zoneTxt||'DUEL')}</div>`;
   host.appendChild(ov);
   const ports=ov.querySelectorAll('.ci-port');
-  _setImgChain(ports[0],_portraitChainFor(atk,as));
-  _setImgChain(ports[1],_portraitChainFor(def,ds));
+  // Preload + decode both portraits BEFORE animating — prevents jank from
+  // image decode happening mid-slam. Cap the wait at 350ms.
+  const loadP=(img,paths)=>new Promise(res=>{
+    let i=0;
+    img.onload=()=>{ (img.decode?img.decode().catch(()=>{}):Promise.resolve()).then(res); };
+    img.onerror=()=>{i++; if(i<paths.length)img.src=paths[i]; else res();};
+    img.src=paths[0];
+  });
+  const ready=Promise.race([
+    Promise.all([loadP(ports[0],_portraitChainFor(atk,as)),loadP(ports[1],_portraitChainFor(def,ds))]),
+    new Promise(r=>setTimeout(r,350))
+  ]);
   // Zoom-punch the frozen field behind the cut-in
   G_zoom=Math.max(G_zoom,1.26);
   const finish=()=>{
@@ -2852,15 +2868,20 @@ function playDuelCutIn(opts,onDone){
   };
   _cutinDone=finish;
   ov.addEventListener('pointerdown',e=>{e.stopPropagation();e.preventDefault();finish();});
-  _cutinTimers.push(setTimeout(()=>ov.classList.add('in'),20));
-  _cutinTimers.push(setTimeout(()=>ov.classList.add('clash'),full?180:120));
-  _cutinTimers.push(setTimeout(finish,full?1250:680));
+  ready.then(()=>{
+    if(!_cutinDone)return;
+    ov.classList.add('in');
+    _cutinTimers.push(setTimeout(()=>ov.classList.add('clash'),full?180:120));
+    _cutinTimers.push(setTimeout(finish,full?1250:680));
+  });
+  // Absolute failsafe regardless of image loading
+  _cutinTimers.push(setTimeout(finish,full?1800:1200));
 }
 
 function opDuel(isShot, committedAk){
   if(!isShot&&(G.phase==='duel'||G.phase==='duel_result'||G.phase==='pass_anim'))return;
   if(isShot){clearInterval(G.di);closeDuel();}
-  G.phase='duel';G.pm=false;document.getElementById('passhint').style.display='none';document.getElementById('pass-banner').style.display='none';
+  G.phase='duel';G.pm=false;G._duelT=Date.now();document.getElementById('passhint').style.display='none';document.getElementById('pass-banner').style.display='none';
   const as=G.poss,ds=as==='h'?'a':'h';
   const carrier=sq(as)[G.ck];const dk=isShot?'GK':(G.chk||Object.keys(sq(ds)).find(k=>sq(ds)[k]));
   const def=sq(ds)[dk];
@@ -3165,11 +3186,11 @@ function fCard(role,pl,s,displayRole){
     if(spPortEl) spPortEl.style.backgroundImage='';
   }
 
-  // Skill list — top 4 stats mapped to named skills with grade letters
+  // Stat list — raw stats with grade letters (was: derived skill names)
   const SKILL_LABELS = {
-    spd:'FLASH STEP', dri:'HIGH SPEED DRIBBLE', pas:'PRECISION PASS',
-    sho:'DIRECT SHOT', def:'STEEL TACKLE', pow:'POWER STRIKE',
-    sav:'GOD HAND', ref:'REFLEX SAVE', tec:'TECHNIQUE', pwr:'POWER',
+    spd:'SPEED', dri:'DRIBBLE', pas:'PASS',
+    sho:'SHOT', def:'DEFENCE', pow:'POWER',
+    sav:'SAVING', ref:'REFLEX', tec:'TECHNIQUE', pwr:'POWER',
   };
   const SKILL_ICONS = {
     spd:'⚡', dri:'🌀', pas:'🎯', sho:'⚽', def:'🛡', pow:'💥', sav:'🧤', ref:'✨', tec:'🎨', pwr:'💪',
@@ -3188,7 +3209,7 @@ function fCard(role,pl,s,displayRole){
       const statKeys = (pl.pos==='GK')
         ? ['sav','ref','def','pwr']
         : ['sho','dri','pas','spd','def','pow'];
-      const ranked = statKeys.map(k=>({k,v:gs(pl,k)})).sort((a,b)=>b.v-a.v).slice(0,4);
+      const ranked = statKeys.map(k=>({k,v:gs(pl,k)})).sort((a,b)=>b.v-a.v);
       ranked.forEach(({k,v})=>{
         const [gc,gl] = _grade(v);
         const row=document.createElement('div'); row.className='dskill-row';
@@ -4072,6 +4093,7 @@ function resDuel(){
   }
   const _gen=G.goalGen;
   setTimeout(()=>{
+    try{
     ro.classList.remove('show');
     if(['shoot','special'].includes(ak)&&win){
       if(G.D.isShot){
@@ -4091,10 +4113,18 @@ function resDuel(){
     else if((ak==='one-two'||ak==='super-one-two')&&win)afOneTwo(as,pk,carrier);
     else if(win)afSucc(as,carrier);
     else afTurn(ds);
+    }catch(err){
+      // RECOVERY: never let a resolution error soft-lock the match
+      console.error('duel outcome error',err);
+      try{
+        if(!win){const winnerKey=G.D.dk;G.poss=ds;G.ck=pickCarrierAfterWin(ds,winnerKey);G.tP++;if(ds==='h')G.hP++;updP();}
+      }catch(e2){}
+      resume(G.poss);
+    }
   },950);
 }
 
-function closeDuel(){killCutIn();try{document.getElementById('s-match').classList.remove('duel-live');}catch(e){}document.getElementById('duel-ov').classList.remove('show');document.getElementById('duel-res').classList.remove('show');G.pm=false;document.getElementById('pass-banner').style.display='none';const d2=document.getElementById('dpd2-wrap');if(d2)d2.remove();}
+function closeDuel(){killCutIn();G._duelT=0;try{Object.values(hSq).forEach(p=>{if(p)p._pending2v1=false;});Object.values(aSq).forEach(p=>{if(p)p._pending2v1=false;});}catch(e){}try{document.getElementById('s-match').classList.remove('duel-live');}catch(e){}document.getElementById('duel-ov').classList.remove('show');document.getElementById('duel-res').classList.remove('show');G.pm=false;document.getElementById('pass-banner').style.display='none';const d2=document.getElementById('dpd2-wrap');if(d2)d2.remove();}
 function resume(s,msg){
   closeDuel(); if(msg)say(msg); G.phase='idle'; document.getElementById('passhint').style.display='none';
   // Grace period after duel — no new duel or shot gate can fire for 2.5s

@@ -2647,3 +2647,94 @@ html,body{overscroll-behavior:none;}
   transition:transform .18s cubic-bezier(.34,1.56,.64,1),opacity .18s ease;}
 #cutin-ov.clash .ci-banner{transform:translate(-50%,0) scale(1);opacity:1;}
 #cutin-ov.out{opacity:0;transition:opacity .22s ease;}
+
+/* ── DUEL CARD V2 + HUD POLISH ──────────────────────────────────── */
+/* Bigger panel */
+.duel-aaa .dpc{width:294px !important;}
+.duel-aaa .atk .dpc{left:14px !important;}
+.duel-aaa .dp-card-wrap:not(.atk) .dpc{right:14px !important;}
+/* Big hero portrait — no tiny box; translucent panel behind it */
+.dside-rcard{
+  grid-template-columns:1fr auto !important;
+  grid-template-rows:auto auto !important;
+  background:linear-gradient(135deg,rgba(255,255,255,.05),rgba(255,255,255,.01)) !important;
+  padding:0 !important;overflow:hidden;
+}
+.dside-mini{
+  grid-column:1/3 !important;grid-row:1 !important;
+  height:158px !important;width:100%;
+  background-size:cover !important;
+  background-position:center 12% !important;
+  border:none !important;border-radius:5px 5px 0 0 !important;
+  opacity:.96;
+  -webkit-mask-image:linear-gradient(180deg,#000 70%,rgba(0,0,0,.55) 100%);
+  mask-image:linear-gradient(180deg,#000 70%,rgba(0,0,0,.55) 100%);
+}
+.dside-ovr{grid-column:2 !important;grid-row:2 !important;display:flex;align-items:baseline;gap:4px;padding:4px 9px;}
+.dside-ovr-num{font-size:30px !important;}
+.dside-stars{grid-column:1/3 !important;grid-row:3 !important;padding:2px 0 5px;}
+/* Stat rows — slightly larger, readable */
+.dskill-row{min-height:21px;}
+.dskill-name{font-size:13px !important;letter-spacing:.08em !important;}
+.dskill-val{font-size:13px !important;}
+.dskill-grade{font-size:13px !important;}
+/* Special skill — rectangular art box on top, name under it */
+.dss-content{display:flex !important;flex-wrap:wrap !important;gap:6px !important;align-items:center;}
+.dss-portrait{
+  flex:0 0 100% !important;width:100% !important;height:62px !important;
+  border-radius:4px !important;border:1px solid rgba(240,192,64,.35) !important;
+  background-size:cover !important;background-position:center 22% !important;
+  background-color:rgba(0,0,0,.4);
+  box-shadow:inset 0 0 22px rgba(0,0,0,.55),0 0 12px rgba(240,192,64,.18);
+}
+.dss-info{flex:1;display:flex;align-items:baseline;gap:8px;}
+.dss-name{font-size:15px !important;}
+.dss-desc{flex:0 0 100%;font-size:10px;opacity:.65;line-height:1.25;}
+/* Action menu headers — readable */
+.dmenu-h{font-size:15px !important;letter-spacing:.2em !important;opacity:.95 !important;}
+/* Pause — centered above the action bar, compact */
+.aaa-pause{
+  left:50% !important;right:auto !important;bottom:176px !important;
+  transform:translateX(-50%);
+  padding:5px 18px !important;
+  background:rgba(8,12,22,.72) !important;
+  border:1px solid rgba(255,255,255,.22) !important;
+  border-radius:5px !important;color:rgba(255,255,255,.85) !important;
+  box-shadow:0 4px 16px rgba(0,0,0,.5);
+  z-index:60;
+}
+.aaa-pause .pause-lbl{font-size:12px !important;letter-spacing:.22em;}
+.aaa-pause .pause-ic{font-size:12px !important;}
+/* Duel countdown — gold ring, stronger number */
+.dtw .dtr{filter:drop-shadow(0 0 10px rgba(240,192,64,.45));}
+#dta{stroke:#ffd24a;stroke-width:3.5;}
+.dtn{
+  font-family:'Bebas Neue',sans-serif !important;
+  font-size:19px !important;color:#ffd970 !important;
+  text-shadow:0 0 12px rgba(240,192,64,.8),0 2px 6px #000 !important;
+}
+.dtn.urg{color:#ff5040 !important;text-shadow:0 0 14px rgba(255,60,40,.9) !important;animation:dtnPulse .5s ease-in-out infinite alternate;}
+@keyframes dtnPulse{from{transform:scale(1)}to{transform:scale(1.18)}}
+/* GO button — gold, alive when ready */
+.dcfm{
+  font-family:'Bebas Neue',sans-serif !important;font-size:22px !important;letter-spacing:.24em !important;
+  padding:10px 30px !important;border-radius:6px !important;
+  background:linear-gradient(165deg,#3a2c08 0%,#181206 100%) !important;
+  border:1.5px solid rgba(240,192,64,.4) !important;color:rgba(240,192,64,.5) !important;
+  transition:all .22s ease !important;
+}
+.dcfm.rdy{
+  background:linear-gradient(165deg,#f6d469 0%,#c9921e 55%,#8a5e0a 100%) !important;
+  color:#1a1206 !important;border-color:#ffe9a8 !important;
+  box-shadow:0 0 26px rgba(240,192,64,.6),inset 0 1px 0 rgba(255,255,255,.55),0 6px 18px rgba(0,0,0,.5) !important;
+  animation:goPulse 1.1s ease-in-out infinite alternate;
+  cursor:pointer;
+}
+@keyframes goPulse{from{box-shadow:0 0 18px rgba(240,192,64,.45),inset 0 1px 0 rgba(255,255,255,.55)}to{box-shadow:0 0 36px rgba(240,192,64,.85),inset 0 1px 0 rgba(255,255,255,.55)}}
+/* 2v1 second card — pushed inside the field, never over the main panel */
+.duel-aaa .dpd2-wrap{opacity:.62 !important;transform:scale(.72) !important;z-index:2 !important;}
+.dpd2-wrap.on-right{right:296px !important;}
+.dpd2-wrap.on-left{left:296px !important;}
+/* Cut-in perf: drop the expensive filter on huge portraits */
+.ci-port{filter:none !important;}
+.ci-half{contain:layout paint;}
