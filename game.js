@@ -1168,6 +1168,14 @@ const CR=17,CDms=2500,CS=()=>W*.00023,DS=()=>W*.00030,IR=()=>W*.022,PC=()=>W*.08
 const MAX_CARRIER_STEP=()=>Math.max(0.25,W*.00048); // carrier — slow deliberate movement
 const MAX_DEF_STEP=()=>Math.max(0.35,W*.00072);     // engager — slightly faster than carrier
 const MAX_OFFBALL_STEP=()=>Math.max(0.3,W*.0007);  // off-ball
+// Stat-aware field speed: SPD stat scales pace, low stamina slows everyone
+function fieldSpdMult(pl){
+  if(!pl)return 1.0;
+  const base=clamp(0.60+(gs(pl,'spd')-60)*0.010,0.70,1.30);
+  const maxSp=pl.pos==='GK'?2000:1500;
+  const fat=clamp(0.88+((pl.spirit||maxSp)/maxSp)*0.12,0.88,1.0);
+  return base*fat;
+}
 function moveTowards(cur,targetX,targetY,ease,maxStep){
   const dx=targetX-cur.x,dy=targetY-cur.y;
   const d=Math.hypot(dx,dy);
@@ -1477,9 +1485,18 @@ function tick(dt=1){
   const dir=dirFor(s);
 
   const mv=carrierAdvanceVector(s,cp);
-  const cs=MAX_CARRIER_STEP()*dt;
-  cp.x=clamp(cp.x+clamp(mv.x*dt,-cs,cs),W*.01,W*.99);
-  cp.y=clamp(cp.y+clamp(mv.y*dt,-cs,cs),H*.03,H*.97);
+  // Vector-magnitude clamp: previous per-axis clamp made diagonals ~41% faster
+  // and silently negated the 3.2× manual boost. SPD stat + stamina now scale pace.
+  const carrierPl=sq(s)[G.ck];
+  const carrMult=fieldSpdMult(carrierPl);
+  const mvMag=Math.hypot(mv.x,mv.y);
+  if(mvMag>0.0001){
+    const capMult=(s==='h')?3.2:1.0;
+    const cap=MAX_CARRIER_STEP()*capMult*carrMult*dt;
+    const step=Math.min(mvMag*dt,cap);
+    cp.x=clamp(cp.x+(mv.x/mvMag)*step,W*.01,W*.99);
+    cp.y=clamp(cp.y+(mv.y/mvMag)*step,H*.03,H*.97);
+  }
   if(G_moveTarget&&Math.hypot(cp.x-G_moveTarget.x,cp.y-G_moveTarget.y)<W*.03)G_moveTarget=null;
   ball.tx=cp.x;ball.ty=cp.y;
 
@@ -1488,7 +1505,7 @@ function tick(dt=1){
     const carrier2=sq(s)[G.ck];
     if(carrier2&&carrier2.pos!=='GK'){
       const engClose=ROLES.engager&&PP[ds][ROLES.engager]&&dist(cp,PP[ds][ROLES.engager])<IR()*2.2;
-      carrier2.spirit=Math.max(0,(carrier2.spirit||1500)-(engClose?0.55:0.18));
+      carrier2.spirit=Math.max(0,(carrier2.spirit||1500)-(engClose?0.55:0.18)*dt);
     }
     ['h','a'].forEach(side=>{
       Object.entries(sq(side)).forEach(([k,pl])=>{
@@ -1498,7 +1515,7 @@ function tick(dt=1){
         const maxSp=isGK?2000:1500;
         // GKs regen slightly slower than outfield players (heavier kit, less running)
         const regen=isGK?0.10:0.12;
-        if((pl.spirit||maxSp)<maxSp) pl.spirit=Math.min(maxSp,(pl.spirit||0)+regen);
+        if((pl.spirit||maxSp)<maxSp) pl.spirit=Math.min(maxSp,(pl.spirit||0)+regen*dt);
       });
     });
   }
@@ -1546,7 +1563,8 @@ function tick(dt=1){
       const dx=targetX-dp2.x,dy=targetY-dp2.y;
       const dd=Math.hypot(dx,dy)||1;
       const pressMult=(G.pressing&&ds==='h')?1.5:1.0;
-      const step=MAX_DEF_STEP()*pressMult*dt;
+      const engPl=sq(ds)[ROLES.engager];
+      const step=MAX_DEF_STEP()*pressMult*fieldSpdMult(engPl)*dt;
       dp2.x=clamp(dp2.x+(dx/dd)*step,W*.01,W*.99);
       dp2.y=clamp(dp2.y+(dy/dd)*step,H*.03,H*.97);
       if(Date.now()>=(G.kickoffUntil||0) && dist(dp2,cp)<IR()){G.chk=ROLES.engager;opDuel(false);return;}
@@ -1558,7 +1576,7 @@ function tick(dt=1){
     if(dp2){
       const dx=cp.x-dp2.x,dy=cp.y-dp2.y;
       const dd=Math.hypot(dx,dy)||1;
-      const step=MAX_DEF_STEP()*0.80*dt;
+      const step=MAX_DEF_STEP()*0.80*fieldSpdMult(sq('h')[ROLES.cover])*dt;
       dp2.x=clamp(dp2.x+(dx/dd)*step,W*.01,W*.99);
       dp2.y=clamp(dp2.y+(dy/dd)*step,H*.03,H*.97);
     }
@@ -1590,10 +1608,10 @@ function moveOffBall(s,ds,dt=1){
   // Speeds
   const DRIFT_SPEED   = W * 0.00020 * dt;
   const ROLE_SPEED    = W * 0.00034 * dt;
-  const SUPPORT_SPEED = W * 0.00042 * dt;
-  const STRIKER_SPEED = W * 0.00058 * dt;
+  const SUPPORT_SPEED = W * 0.00046 * dt;
+  const STRIKER_SPEED = W * 0.00062 * dt;
   const TRACK_SPEED   = W * 0.00048 * dt;
-  function spdMult(pl){return pl?clamp(0.60+(gs(pl,'spd')-60)*0.010,0.70,1.30):1.0;}
+  function spdMult(pl){return fieldSpdMult(pl);}
   function glide(cur,tx,ty,spd,pl){
     const dx=tx-cur.x,dy=ty-cur.y;
     const d=Math.hypot(dx,dy);
@@ -1886,7 +1904,7 @@ function startAnim(){
     _lastFrameTs=ts;
     if(G.paused){draw();raf=requestAnimationFrame(loop);return;}
     if(G.phase==='moving')tick(dt);
-    if(G.phase==='pass_anim'){tickBallTravel(dt);tickPassMotion();}
+    if(G.phase==='pass_anim'){tickBallTravel(dt);tickPassMotion(dt);}
     if(G.phase==='moving'&&G.ck&&PP[G.poss]&&PP[G.poss][G.ck]){
       const _cp=PP[G.poss][G.ck];
       const _dir=dirFor(G.poss);
@@ -2588,22 +2606,11 @@ function passDuration(fx,fy,tx,ty,base){
 }
 let ballTravel={active:false,fx:0,fy:0,tx:0,ty:0,progress:0,duration:60,onArrive:null};
 function animateBallTo(fromX,fromY,toX,toY,onArrive,duration){ballTravel={active:true,fx:fromX,fy:fromY,tx:toX,ty:toY,progress:0,duration:duration||50,onArrive};G.phase='pass_anim';}
-// Keep players moving during a pass — only ball travel is locked, not players
-function tickPassMotion(){
+// Keep players moving during a pass — runs and defensive shape continue at reduced pace
+function tickPassMotion(dt=1){
   if(!G.poss)return;
   const s=G.poss,ds=s==='h'?'a':'h';
-  // During pass: all players hold their current positions gently
-  // They will reposition naturally once movement resumes
-  Object.keys(sq(s)).forEach(k=>{
-    if(!sq(s)[k]||k===G.ck||!PP[s][k])return;
-    const cur=PP[s][k];const p=fp(k,s==='h'?'home':'away',G.half);
-    if(k==='GK'){cur.x+=(p.x*W-cur.x)*.02;cur.y+=(p.y*H-cur.y)*.02;return;}
-  });
-  Object.keys(sq(ds)).forEach(k=>{
-    if(!sq(ds)[k]||!PP[ds][k])return;
-    const cur=PP[ds][k];const p=fp(k,ds==='h'?'home':'away',G.half);
-    if(k==='GK'){cur.x+=(p.x*W-cur.x)*.02;cur.y+=(p.y*H-cur.y)*.02;return;}
-  });
+  if(PP[s]&&PP[s][G.ck]) moveOffBall(s,ds,dt*0.55);
 }
 
 function tickBallTravel(dt=1){
@@ -2708,6 +2715,8 @@ function checkDuelGrace(){
   if(d<IR()*1.6&&d>=IR()*1.0&&!G_duelGrace&&Date.now()>=(G.kickoffUntil||0)){
     G_duelGrace=setTimeout(()=>{
       G_duelGrace=null;
+      const dsNow=G.poss==='h'?'a':'h';
+      if(dsNow!==ds)return; // possession flipped during grace window
       if(G.phase==='moving'&&ROLES.engager&&PP[ds][ROLES.engager]){
         const d2=dist(PP[ds][ROLES.engager],PP[G.poss][G.ck]||{x:-9999,y:-9999});
         if(d2<IR()*1.8){G.chk=ROLES.engager;opDuel(false);}
@@ -3832,14 +3841,14 @@ function calcDefencePower(def,defA,attackAction){
   if(ROLES.cover && sq(G.D.ds||'a')[ROLES.cover]===def) mult*=(1+ENGINE_CONFIG.duel.coverDefenceBonus);
   if(ROLES.blocker && sq(G.D.ds||'a')[ROLES.blocker]===def) mult*=(1+ENGINE_CONFIG.duel.blockerDefenceBonus);
   // BOX-DEFENDER BOOST — defending inside own penalty box = +22% power.
-  // Defensive zone is last 22% of pitch from defender's own goal.
-  // Defender's own goal: home defends bottom (high Y), away defends top (low Y).
+  // Goals sit on the X axis (goalXFor/ownGoalXFor): box = within 22% of own
+  // goal line on X, central band on Y. (Previous check used the wrong axis.)
   const ds=G.D.ds, dk=G.D.dk;
   if(ds&&dk&&PP[ds]&&PP[ds][dk]&&defBase!=='save'&&defBase!=='supersave'&&defBase!=='punch'){
     const dp=PP[ds][dk];
-    // Box: center third on X (0.30-0.70), last 22% of pitch on Y from own goal
-    const inBoxX = dp.x>W*0.30 && dp.x<W*0.70;
-    const inBoxY = ds==='h' ? dp.y>H*0.78 : dp.y<H*0.22;
+    const ownGx=ownGoalXFor(ds);
+    const inBoxX = Math.abs(dp.x-ownGx) < W*0.22;
+    const inBoxY = dp.y>H*0.30 && dp.y<H*0.70;
     if(inBoxX&&inBoxY) mult*=1.22;
   }
   return (sBase+sPhys/2)*mult*spiritMult(def)*rng;
@@ -4034,7 +4043,7 @@ function afGoal(scorer,s,gen){
     Object.values(hSq).forEach(p=>{if(p)p.cooldownUntil=0;}); Object.values(aSq).forEach(p=>{if(p)p.cooldownUntil=0;});
     iPos(); const ns=s==='h'?'a':'h',q=sq(ns),kk=['CM2','CM1','ST'].find(k=>q[k])||Object.keys(q).find(k=>q[k]);
     G.poss=ns; G.ck=kk; G.tP++; if(ns==='h')G.hP++; if(PP[ns][kk]){PP[ns][kk].x=W/2;PP[ns][kk].y=H/2;PT[ns][kk]={x:W/2,y:H/2};}
-    ball.x=W/2;ball.y=H/2;ball.tx=W/2;ball.ty=W/2; ball.ty=H/2; updP(); say(((ns==='h'?HT:AT)?.name||'Team')+' kick off.');
+    ball.x=W/2;ball.y=H/2;ball.tx=W/2;ball.ty=H/2; updP(); say(((ns==='h'?HT:AT)?.name||'Team')+' kick off.');
     showReferee('KICK OFF');
     setTimeout(()=>{G._scoringGoal=false; asnC();G.phase='moving';if(ns==='h')document.getElementById('passhint').style.display='block';},1000);
   },2100);
