@@ -2786,6 +2786,77 @@ function chkInt(fp2,tp,pt){
   return r.interceptor;
 }
 
+// ── CINEMATIC DUEL CUT-IN ──────────────────────────────────────────
+// CT-style pre-duel scene: flash → team-tinted diagonal split → portraits
+// slam in with speed lines → zone banner → reveal the duel UI.
+// Full version for shots / 2v1 / named-special stars; quick for routine duels.
+let _cutinTimers=[],_cutinDone=null;
+function _portraitChainFor(pl,side){
+  const lastName=playerLastName(pl)||'';
+  const ln=lastName.replace(/[^a-z0-9]/g,'');
+  const effTeam=pl&&pl.clubKey?pl.clubKey:(side==='h'?selHome:selAway);
+  let isClub=false;try{isClub=!!(effTeam&&CR_CLUBS&&CR_CLUBS[effTeam]);}catch(e){}
+  const isGK=pl&&pl.pos==='GK';
+  if(isGK){
+    return isClub
+      ?[`assets/career/clubs/${ln}${effTeam}.png`,'assets/career/clubs/gk.png',_GENERIC_PLAYER_SVG_URL]
+      :[`assets/players/${lastName}.png`,'assets/career/clubs/gk.png',_GENERIC_PLAYER_SVG_URL];
+  }
+  return isClub
+    ?[`assets/career/clubs/${ln}${effTeam}.png`,`assets/career/clubs/${effTeam}.png`,_GENERIC_PLAYER_SVG_URL]
+    :[`assets/players/${lastName}.png`,_GENERIC_PLAYER_SVG_URL];
+}
+function _setImgChain(img,paths){let i=0;img.onerror=()=>{i++;if(i<paths.length)img.src=paths[i];};img.src=paths[0];}
+function killCutIn(){
+  _cutinTimers.forEach(clearTimeout);_cutinTimers=[];_cutinDone=null;
+  const ci=document.getElementById('cutin-ov');if(ci)ci.remove();
+}
+function playDuelCutIn(opts,onDone){
+  const {atk,def,as,ds,isShot,is2v1,zoneTxt}=opts;
+  killCutIn();
+  const host=document.getElementById('viewport')||document.body;
+  const ov=document.createElement('div');ov.id='cutin-ov';
+  const star=isShot||is2v1||!!(atk&&Object.keys(SPECIALS).some(k=>(atk.name||'').includes(k)));
+  const full=star;
+  ov.className=full?'full':'quick';
+  const atkCol=as==='h'?'#2882f0':'#f03030';
+  const defCol=ds==='h'?'#2882f0':'#f03030';
+  const nm=p=>p?(p.name||'').toUpperCase():'';
+  ov.innerHTML=`
+    <div class="ci-flash"></div>
+    <div class="ci-half ci-atk" style="--tc:${atkCol}">
+      <div class="ci-lines"></div>
+      <img class="ci-port" alt="">
+      <div class="ci-plate"><div class="ci-name">${nm(atk)}</div><div class="ci-role">ATTACK</div></div>
+    </div>
+    <div class="ci-half ci-def" style="--tc:${defCol}">
+      <div class="ci-lines"></div>
+      <img class="ci-port" alt="">
+      <div class="ci-plate"><div class="ci-name">${nm(def)}</div><div class="ci-role">${isShot?'KEEPER':'DEFENCE'}</div></div>
+    </div>
+    <div class="ci-slash"></div>
+    <div class="ci-banner" style="--tc:${atkCol}">${isShot?'GOAL ATTEMPT!!':(zoneTxt||'DUEL')}</div>`;
+  host.appendChild(ov);
+  const ports=ov.querySelectorAll('.ci-port');
+  _setImgChain(ports[0],_portraitChainFor(atk,as));
+  _setImgChain(ports[1],_portraitChainFor(def,ds));
+  // Zoom-punch the frozen field behind the cut-in
+  G_zoom=Math.max(G_zoom,1.26);
+  const finish=()=>{
+    if(!_cutinDone)return;
+    _cutinDone=null;
+    _cutinTimers.forEach(clearTimeout);_cutinTimers=[];
+    ov.classList.add('out');
+    setTimeout(()=>{if(ov.parentNode)ov.remove();},240);
+    if(onDone)onDone();
+  };
+  _cutinDone=finish;
+  ov.addEventListener('pointerdown',e=>{e.stopPropagation();e.preventDefault();finish();});
+  _cutinTimers.push(setTimeout(()=>ov.classList.add('in'),20));
+  _cutinTimers.push(setTimeout(()=>ov.classList.add('clash'),full?180:120));
+  _cutinTimers.push(setTimeout(finish,full?1250:680));
+}
+
 function opDuel(isShot, committedAk){
   if(!isShot&&(G.phase==='duel'||G.phase==='duel_result'||G.phase==='pass_anim'))return;
   if(isShot){clearInterval(G.di);closeDuel();}
@@ -2838,14 +2909,19 @@ function opDuel(isShot, committedAk){
   if(albl) albl.textContent = (G.D.is2v1 && as==='h' && !isShot) ? 'ATTACK (vs 1ST)' : 'ATTACK';
   document.getElementById('di').textContent=as==='h'?(G.D.is2v1?'PICK 2 MOVES (30s)':'CHOOSE ATTACK (30s)'):ds==='h'?'CHOOSE DEFENCE (30s)':'AI DUEL';
   document.getElementById('dcfm').classList.remove('rdy'); document.getElementById('duel-res').classList.remove('show');
-  document.getElementById('duel-ov').classList.add('show');
-  try{document.getElementById('s-match').classList.add('duel-live');}catch(e){}
-  const vs=document.getElementById('dvs');vs.classList.remove('show');void vs.offsetWidth;vs.classList.add('show');
-  startCD();
-  // Stagger: aiAtk fires first, aiDef fires 200ms later so it can read G.D.ak for RPS counter-pick
-  if(as==='a'&&!G.D.ak) setTimeout(aiAtk, 280);
-  if(as==='a'&&G.D.ak)  setTimeout(()=>{ if(G.D.as==='a'&&G.D.ds==='a') tryRes(); }, 280);
-  if(ds==='a') setTimeout(aiDef, as==='a' ? 490 : 260);
+  const _reveal=()=>{
+    document.getElementById('duel-ov').classList.add('show');
+    try{document.getElementById('s-match').classList.add('duel-live');}catch(e){}
+    const vs=document.getElementById('dvs');vs.classList.remove('show');void vs.offsetWidth;vs.classList.add('show');
+    startCD();
+    // Stagger: aiAtk fires first, aiDef fires 200ms later so it can read G.D.ak for RPS counter-pick
+    if(as==='a'&&!G.D.ak) setTimeout(aiAtk, 280);
+    if(as==='a'&&G.D.ak)  setTimeout(()=>{ if(G.D.as==='a'&&G.D.ds==='a') tryRes(); }, 280);
+    if(ds==='a') setTimeout(aiDef, as==='a' ? 490 : 260);
+  };
+  try{
+    playDuelCutIn({atk:carrier,def,as,ds,isShot,is2v1:G.D.is2v1,zoneTxt},_reveal);
+  }catch(e){killCutIn();_reveal();}
 }
 
 // ── 2v1 SECOND DEFENDER MINI-CARD ─────────────────────────────────
@@ -4018,7 +4094,7 @@ function resDuel(){
   },950);
 }
 
-function closeDuel(){try{document.getElementById('s-match').classList.remove('duel-live');}catch(e){}document.getElementById('duel-ov').classList.remove('show');document.getElementById('duel-res').classList.remove('show');G.pm=false;document.getElementById('pass-banner').style.display='none';const d2=document.getElementById('dpd2-wrap');if(d2)d2.remove();}
+function closeDuel(){killCutIn();try{document.getElementById('s-match').classList.remove('duel-live');}catch(e){}document.getElementById('duel-ov').classList.remove('show');document.getElementById('duel-res').classList.remove('show');G.pm=false;document.getElementById('pass-banner').style.display='none';const d2=document.getElementById('dpd2-wrap');if(d2)d2.remove();}
 function resume(s,msg){
   closeDuel(); if(msg)say(msg); G.phase='idle'; document.getElementById('passhint').style.display='none';
   // Grace period after duel — no new duel or shot gate can fire for 2.5s
