@@ -2770,3 +2770,41 @@ html,body{overscroll-behavior:none;}
   border:1px solid rgba(240,192,64,.4) !important;border-radius:4px !important;
   box-shadow:inset 0 0 14px rgba(0,0,0,.6);
 }
+
+/* ── DUEL CARD V4.2 — full content fits, 2v1 chip in-card ──────── */
+/* Fixed card height: ends just above the zone/timer row, shows everything */
+.duel-aaa .dpc{top:8px !important;bottom:auto !important;height:372px !important;}
+.dc-tab{font-size:11px;padding:3px 12px;}
+.dch{min-height:100px;}
+.dch-port{flex-basis:104px !important;width:104px !important;height:104px !important;background-position:center 10% !important;}
+.dch .dpnm{font-size:22px !important;}
+.dch .dside-ovr-num{font-size:32px !important;}
+.dch-stars{font-size:11px;}
+.duel-aaa .dpc-info{gap:4px !important;padding:6px 9px 8px !important;}
+.duel-aaa .dp-energy-wrap{gap:2px !important;}
+.duel-aaa .dp-energy-lbl,.duel-aaa .dp-energy-val{font-size:11px !important;}
+.dside-h{font-size:12px !important;padding:3px 0 1px !important;}
+.dc-srow,.dskill-row{min-height:17px !important;}
+.dskill-name,.dskill-val,.dskill-grade{font-size:12px !important;}
+.dss-portrait{width:56px !important;height:38px !important;}
+.dss-name{font-size:13px !important;}
+.dss-desc{font-size:8px !important;line-height:1.3 !important;}
+/* 2v1 second-defender chip — lives inside the defender card */
+.dpd2-chip{
+  flex:0 0 auto;display:flex;align-items:center;gap:8px;
+  margin:4px 9px 8px;padding:4px 8px;border-radius:5px;
+  background:rgba(255,255,255,.05);
+  border:1px solid rgba(255,255,255,.25);
+  animation:dpd2chipIn .3s cubic-bezier(.3,1.5,.5,1);
+}
+@keyframes dpd2chipIn{from{transform:translateY(8px);opacity:0}to{transform:none;opacity:1}}
+.d2c-av{
+  flex:0 0 30px;width:30px;height:30px;border-radius:4px;
+  background-size:cover;background-position:center 10%;
+  background-color:rgba(0,0,0,.4);border:1px solid rgba(255,255,255,.15);
+}
+.d2c-info{min-width:0;}
+.d2c-nm{font-family:'Bebas Neue',sans-serif;font-size:14px;letter-spacing:.06em;color:#fff;line-height:1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+.d2c-sub{font-family:'Orbitron',sans-serif;font-size:7.5px;letter-spacing:.18em;margin-top:2px;}
+/* Old free-floating 2v1 art rules neutralized */
+.dpd2-wrap.on-left,.dpd2-wrap.on-right{all:revert;}

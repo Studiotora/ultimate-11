@@ -2949,73 +2949,44 @@ function opDuel(isShot, committedAk){
 // Renders a bigger portrait of the second defender, positioned BEHIND the main defender
 // for a perspective layered feel. Side mirrors the main defender's side.
 function renderSecondDefender(dk2, ds){
+  // V2: compact chip INSIDE the defender's infobox — never overlaps pitch art.
   const existing=document.getElementById('dpd2-wrap');
-  if(!dk2||!sq(ds)[dk2]){if(existing)existing.remove();return;}
+  if(existing)existing.remove();
+  if(!dk2||!sq(ds)[dk2])return;
   const pl=sq(ds)[dk2];
-  const dpwrap=document.querySelector('.dpwrap');
-  if(!dpwrap)return;
-  // Determine which VISUAL side the defender is on.
-  // fCard('a', leftPl, ...) puts whoever is on the left into the .atk card slot.
-  // leftSide = home in 1st half, away in 2nd half. Defender is on the visual left when leftSide===ds.
-  const homeLeft = (G.half===1);
-  const leftSide = homeLeft ? 'h' : 'a';
-  const defOnLeft = (leftSide === ds);
-  let el=existing;
-  if(!el){
-    el=document.createElement('div');
-    el.id='dpd2-wrap';
-    el.className='dpd2-wrap';
-    dpwrap.appendChild(el);
-  }
-  el.classList.toggle('on-left',defOnLeft);
-  el.classList.toggle('on-right',!defOnLeft);
-  const lastName=playerLastName(pl)||'';
-  // Determine effective club key (clubKey if set in career, otherwise selSide).
-  const effTeam = pl.clubKey || (ds==='h' ? selHome : selAway);
-  let isClub=false;
-  try { isClub = !!(effTeam && CR_CLUBS && CR_CLUBS[effTeam]); } catch(e) {}
-  const isGK = pl.pos==='GK';
-  const ln = lastName.replace(/[^a-z0-9]/g,'');
-  // Build fallback chain. We use an Image() to test load and swap the avatar
-  // backgroundImage as paths resolve.
-  const tryPaths = isGK
-    ? (isClub
-        ? [`assets/career/clubs/${ln}${effTeam}.png`, 'assets/career/clubs/gk.png', _GENERIC_PLAYER_SVG_URL]
-        : [`assets/players/${lastName}.png`, 'assets/career/clubs/gk.png', _GENERIC_PLAYER_SVG_URL])
-    : isClub
-      ? [`assets/career/clubs/${ln}${effTeam}.png`, `assets/career/clubs/${effTeam}.png`, _GENERIC_PLAYER_SVG_URL]
-      : [`assets/players/${lastName}.png`, _GENERIC_PLAYER_SVG_URL];
-  // Initial bg = first guess; swap to next on error.
-  const bg = tryPaths[0];
+  // Which visual card belongs to the defending side? Left slot = dpa, right = dpd.
+  const homeLeft=(G.half===1);
+  const leftSide=homeLeft?'h':'a';
+  const defOnLeft=(leftSide===ds);
+  const cardEl=document.getElementById(defOnLeft?'dpa-c':'dpd-c');
+  if(!cardEl)return;
   const tl=ds==='h'?'#2882f0':'#f03030';
-  const spMax=pl.pos==='GK'?2000:1500;
-  const spPct=Math.round(((pl.spirit||spMax)/spMax)*100);
+  const lastName=playerLastName(pl)||'';
+  const ln=lastName.replace(/[^a-z0-9]/g,'');
+  const effTeam=pl.clubKey||(ds==='h'?selHome:selAway);
+  let isClub=false;try{isClub=!!(effTeam&&CR_CLUBS&&CR_CLUBS[effTeam]);}catch(e){}
+  const chain=isClub
+    ?[`assets/players/profile/${ln}.png`,`assets/career/clubs/${ln}${effTeam}.png`,`assets/career/clubs/${effTeam}.png`,_GENERIC_PLAYER_SVG_URL]
+    :[`assets/players/profile/${ln}.png`,`assets/players/${lastName}.png`,_GENERIC_PLAYER_SVG_URL];
+  const el=document.createElement('div');
+  el.id='dpd2-wrap';
+  el.className='dpd2-chip';
+  el.style.borderColor=tl+'77';
   el.innerHTML=`
-    <div class="dpd2-badge">2ND DEFENDER</div>
-    <div class="dpd2-av" style="background-image:url('${bg}')"></div>
-    <div class="dpd2-info">
-      <div class="dpd2-nm">${pl.name}</div>
-      <div class="dpd2-ps">${pl.pos}</div>
-      <div class="dpd2-energy"><div class="dpd2-energy-fill" style="width:${spPct}%"></div></div>
+    <div class="d2c-av"></div>
+    <div class="d2c-info">
+      <div class="d2c-nm">${pl.name}</div>
+      <div class="d2c-sub" style="color:${tl}">2ND DEFENDER · ${pl.pos}</div>
     </div>`;
-  // Verify load and walk the fallback chain if needed.
-  const av=el.querySelector('.dpd2-av');
-  if(av){
-    let i=0;
-    const tryNext=()=>{
-      if(i>=tryPaths.length)return;
-      const test=new Image();
-      test.onload=()=>{ av.style.backgroundImage=`url('${tryPaths[i]}')`; };
-      test.onerror=()=>{ i++; tryNext(); };
-      test.src=tryPaths[i];
-    };
-    // Test the first path; on error walk forward.
-    const first=new Image();
-    first.onload=()=>{};
-    first.onerror=()=>{ i=1; tryNext(); };
-    first.src=tryPaths[0];
-  }
-  el.style.setProperty('--tl',tl);
+  cardEl.appendChild(el);
+  const av=el.querySelector('.d2c-av');
+  (function next(i){
+    if(i>=chain.length)return;
+    const t=new Image();
+    t.onload=()=>{av.style.backgroundImage=`url('${chain[i]}')`;};
+    t.onerror=()=>next(i+1);
+    t.src=chain[i];
+  })(0);
 }
 
 function fCard(role,pl,s,displayRole){
