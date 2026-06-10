@@ -1166,9 +1166,9 @@ function startGame(){
 const CV=document.getElementById('C');const cx=CV.getContext('2d');
 let W=0,H=0,PP={h:{},a:{}},PT={h:{},a:{}},ball={x:0,y:0,tx:0,ty:0},trail=[];
 const CR=17,CDms=2500,CS=()=>W*.00023,DS=()=>W*.00030,IR=()=>W*.022,PC=()=>W*.08;
-const MAX_CARRIER_STEP=()=>Math.max(0.25,W*.00048); // carrier — slow deliberate movement
-const MAX_DEF_STEP=()=>Math.max(0.35,W*.00072);     // engager — slightly faster than carrier
-const MAX_OFFBALL_STEP=()=>Math.max(0.3,W*.0007);  // off-ball
+const MAX_CARRIER_STEP=()=>Math.max(0.22,W*.00038); // carrier — bigger-pitch pacing
+const MAX_DEF_STEP=()=>Math.max(0.30,W*.00058);     // engager — slightly faster than carrier
+const MAX_OFFBALL_STEP=()=>Math.max(0.26,W*.00058);  // off-ball
 // Stat-aware field speed: SPD stat scales pace, low stamina slows everyone
 function fieldSpdMult(pl){
   if(!pl)return 1.0;
@@ -1485,12 +1485,24 @@ function tick(dt=1){
   const cp=PP[s][G.ck];if(!cp)return;
   const dir=dirFor(s);
 
-  // GK carrier is locked to his goal area — never dribbles upfield
+  // GK carrier: locked to his goal area AND must distribute immediately —
+  // the keeper never keeps the ball.
   const _carrPl0=sq(s)[G.ck];
   if(_carrPl0&&_carrPl0.pos==='GK'){
     const gx=ownGoalXFor(s);
     cp.x=clamp(cp.x,Math.min(gx,gx+dirFor(s)*W*0.10),Math.max(gx,gx+dirFor(s)*W*0.10));
     cp.y=clamp(cp.y,H*0.30,H*0.70);
+    if(!G._gkDist){
+      G._gkDist=setTimeout(()=>{
+        G._gkDist=null;
+        const cpl=G.ck&&sq(G.poss)[G.ck];
+        if(G.phase==='moving'&&cpl&&cpl.pos==='GK'){
+          const pk=(typeof bestTeammateFor==='function'?bestTeammateFor(G.poss,G.ck,'pass'):null)
+                   ||validOutfieldKeys(G.poss).find(k=>k!==G.ck);
+          if(pk){say('Keeper throws it out quickly!');afPass(G.poss,pk);}
+        }
+      },650);
+    }
   }
   const mv=carrierAdvanceVector(s,cp);
   // Vector-magnitude clamp: previous per-axis clamp made diagonals ~41% faster
@@ -2640,7 +2652,7 @@ function _updateHudChips(){
     vp.appendChild(wrap);
   }
   const show=G.phase==='moving'&&!G.paused&&G.ck;
-  wrap.style.display=show?'flex':'none';
+  wrap.style.display=show?'block':'none';
   if(!show)return;
   const ds=G.poss==='h'?'a':'h';
   const slots=(G.poss==='h')
@@ -3928,9 +3940,10 @@ function confirmDuel(){
 
 function startCD(){
   clearInterval(G.di);
-  // GK shot duel: human is the attacker, GK (AI) is defender — no human choice needed, resolve quickly
-  const isGKDuel = G.D.isShot && G.D.ds==='a' && G.D.def && G.D.def.pos==='GK';
-  let s = isGKDuel ? 3 : 30;
+  // HARD RULE: a duel resolves ONLY when (a) the timer hits zero or
+  // (b) the player confirms with GO. No quick-resolve special cases.
+  const isGKDuel = false;
+  let s = 30;
   const arc=document.getElementById('dta'),ne=document.getElementById('dtn'),c2=100.53;
   arc.style.strokeDashoffset='0';ne.textContent=isGKDuel?'':String(s);ne.classList.remove('urg');
   G.di=setInterval(()=>{

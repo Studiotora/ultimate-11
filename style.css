@@ -2889,3 +2889,13 @@ html,body{overscroll-behavior:none;}
 .duel-aaa .dside-skills{max-height:104px !important;overflow:hidden !important;}
 /* Cut-in overlay keeps swallowing input while fading (ghost-click guard) */
 #cutin-ov.out{pointer-events:auto;}
+
+/* ── HUD CHIPS V2 — bigger, P1 left / CPU right, top corners ────── */
+#hud-chips{position:absolute;inset:0;display:none;pointer-events:none;z-index:18;}
+#hud-chips .hchip{position:absolute;top:62px;}
+#hc1{left:14px;}
+#hc2{right:14px;flex-direction:row-reverse;}
+#hc2 .hc-t{text-align:right;}
+.hc-av{width:54px !important;height:54px !important;flex:0 0 54px !important;}
+.hc-t b{font-size:19px !important;}
+.hc-t span{font-size:9px !important;}
