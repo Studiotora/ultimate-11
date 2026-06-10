@@ -193,7 +193,7 @@ const demoAssign={};VIS['4-3-3'].forEach((s,i)=>demoAssign[s[0]]=DEMO[i].id);
 const roster=()=>GAME()?getHomeRosterOrdered():DEMO;
 const assign=()=>GAME()?HOME_SLOT_ASSIGN:demoAssign;
 const formName=()=>GAME()?activeHomeFormation:demoForm;
-const byId=pid=>roster().find(p=>p.id===pid)||null;
+const byId=pid=>(pid===null||pid===undefined||pid==='')?null:roster().find(p=>String(p.id)===String(pid))||null;
 const surname=pl=>{if(!pl||!pl.name)return'—';
  try{if(typeof playerLastName==='function')return(playerLastName(pl)||'').toUpperCase()||pl.name.toUpperCase();}catch(e){}
  return(pl.name.split('.').pop()||pl.name).toUpperCase();};
@@ -281,18 +281,21 @@ function swapAllowed(a,b){
  return null;
 }
 function doSwap(a,b){
- const sa=a.dataset.slot,sb=b.dataset.slot,pidA=a.dataset.pid,pidB=b.dataset.pid;
+ const sa=a.dataset.slot,sb=b.dataset.slot;
+ const pa=byId(a.dataset.pid),pb=byId(b.dataset.pid);
+ if(!pa||!pb)return;
  const A=assign();
  if(sa&&sb){const t=A[sa];A[sa]=A[sb];A[sb]=t;}
- else if(sa&&!sb){A[sa]=pidB;syncReserve(pidB,pidA);}
- else if(!sa&&sb){A[sb]=pidA;syncReserve(pidA,pidB);}
- else if(GAME()){const i=HOME_RESERVES.indexOf(pidA),j=HOME_RESERVES.indexOf(pidB);
-  if(i!==-1&&j!==-1){HOME_RESERVES[i]=pidB;HOME_RESERVES[j]=pidA;}}
+ else if(sa&&!sb){A[sa]=pb.id;syncReserve(pb.id,pa.id);}
+ else if(!sa&&sb){A[sb]=pa.id;syncReserve(pa.id,pb.id);}
+ else if(GAME()){const i=HOME_RESERVES.findIndex(x=>String(x)===String(pa.id)),
+  j=HOME_RESERVES.findIndex(x=>String(x)===String(pb.id));
+  if(i!==-1&&j!==-1){HOME_RESERVES[i]=pb.id;HOME_RESERVES[j]=pa.id;}}
  rebuild();toast('SWAPPED');
 }
 function syncReserve(inPid,outPid){ // bench player entered XI → outgoing player takes his reserve seat
  if(!GAME())return;
- const i=HOME_RESERVES.indexOf(inPid);if(i!==-1)HOME_RESERVES[i]=outPid;
+ const i=HOME_RESERVES.findIndex(x=>String(x)===String(inPid));if(i!==-1)HOME_RESERVES[i]=outPid;
 }
 document.addEventListener('pointerdown',e=>{
  if($('uts').style.display!=='block')return;
