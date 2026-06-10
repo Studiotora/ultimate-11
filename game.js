@@ -2568,6 +2568,8 @@ function _updateDpad(show){
   G_dpadEl.querySelector('[data-a="press"]').classList.toggle('dim',atk);
   G_dpadEl.querySelector('[data-a="press"]').classList.toggle('held',G.pressing&&!atk);
 }
+// Heartbeat: pad/joystick visibility can never go stale
+setInterval(()=>{try{_updateJoystickVisibility();}catch(e){}},400);
 if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',_buildJoystick);
 else _buildJoystick();
 

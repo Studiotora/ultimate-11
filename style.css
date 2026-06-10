@@ -2850,3 +2850,12 @@ html,body{overscroll-behavior:none;}
 #dpad .xx{grid-area:xx;border-color:rgba(120,170,255,.6);}   #dpad .xx i{color:#78aaff;}
 #dpad .db:active,#dpad .db.held{transform:scale(.9);background:rgba(240,192,64,.25);border-color:#ffd24a;}
 #dpad .db.dim{opacity:.28;pointer-events:none;}
+
+/* ── FIELD HUD V2 ───────────────────────────────────────────────── */
+/* Old field SHOT button retired — △ on the pad replaces it */
+#fieldShotBtn{display:none !important;}
+/* D-pad sits low, near the thumb */
+#dpad{bottom:22px !important;right:16px !important;}
+/* Belt and braces: special panel can never be display-collapsed */
+.duel-aaa .dside-special{display:flex !important;}
+.duel-aaa .dpc-info{overflow:hidden !important;}
