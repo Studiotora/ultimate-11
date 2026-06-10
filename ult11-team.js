@@ -1,5 +1,8 @@
-// ULT11 TEAM SCREEN — glassmorphism team management (approved mockup port)
-// Call openTeamScreen(cb) to show; START MATCH hides it and runs cb.
+// ULT11 TEAM SCREEN — glassmorphism team management, wired to game.js
+// Replaces the old DREAM TEAM EDIT for friendly flow. Edits write straight
+// into HOME_SLOT_ASSIGN / HOME_RESERVES / activeHomeFormation, so
+// startGame() picks them up natively. Career squad management keeps the
+// original editor (it has reserve editing + career save hooks).
 (function(){
 const st=document.createElement('style');st.textContent=`
 #uts *{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent}
@@ -24,6 +27,18 @@ const st=document.createElement('style');st.textContent=`
 .sbtn b{font-family:'Bebas Neue';font-size:18px;letter-spacing:.12em;display:block}
 .sbtn span{font-size:8px;color:rgba(255,255,255,.55);letter-spacing:.08em}
 .sbtn.on{background:linear-gradient(90deg,#1d54c8,#0e2c66);border-color:#5c9aff}
+/* bottom-left team info */
+#tmInfo{position:absolute;left:18px;bottom:14px;width:220px;z-index:4;display:flex;align-items:center;gap:10px;
+ background:linear-gradient(180deg,rgba(10,20,44,.85),rgba(5,9,20,.85));
+ border:1px solid rgba(80,140,255,.3);border-radius:8px;padding:10px 12px}
+#tm-emb{width:44px;height:44px;border-radius:6px;background:rgba(255,255,255,.05);border:1px solid rgba(120,180,255,.35);
+ display:flex;align-items:center;justify-content:center;font-size:26px;overflow:hidden;flex-shrink:0}
+#tm-emb img,#tm-emb svg{width:100%;height:100%;object-fit:contain}
+#tm-nm{font-family:'Bebas Neue';font-size:17px;letter-spacing:.06em;line-height:1.05}
+#tm-nm small{display:block;font-size:8px;letter-spacing:.25em;color:#7db8ff;font-family:'Orbitron';margin-top:2px}
+#tm-ovr{margin-left:auto;text-align:right}
+#tm-ovr b{font-family:'Bebas Neue';font-size:30px;color:#4ec3ff;text-shadow:0 0 14px rgba(60,160,255,.6);font-weight:400}
+#tm-ovr span{display:block;font-size:7px;letter-spacing:.3em;color:rgba(255,255,255,.55)}
 /* pitch */
 #pitch{position:absolute;left:258px;top:96px;width:560px;height:470px;}
 #pitchbg{position:absolute;inset:0;border-radius:6px;overflow:hidden;opacity:.88;
@@ -103,10 +118,7 @@ function init(){
  const host=document.createElement('div');host.innerHTML=`<div id="uts">
  <div id="top"><div id="logo">ULTIMATE <b>ELEVEN</b></div></div>
  <div class="h1">TEAM FORMATION<small>チーム編成</small></div>
- <div id="frm"><span>FORMATION</span><select id="fsel">
-<option value="433">4-3-3</option><option value="442">4-4-2</option>
-<option value="4132">4-1-3-2</option><option value="352">3-5-2</option>
-<option value="4231">4-2-3-1</option></select></div>
+ <div id="frm"><span>FORMATION</span><select id="fsel"></select></div>
  <div id="side">
   <div class="sbtn on"><b>FORMATION</b><span>Change your formation</span></div>
   <div class="sbtn"><b>TACTICS</b><span>Customise your team tactics</span></div>
@@ -124,168 +136,271 @@ function init(){
  <div class="ab cap" id="b-cap">SELECT CAPTAIN</div><div class="ab" id="b-save">SAVE FORMATION</div>
  <div class="ab gold" id="b-start">START MATCH ▶</div>
 </div>
+<div id="tmInfo"><div id="tm-emb">⚽</div><div id="tm-nm">TEAM<small>HOME · YOU</small></div>
+ <div id="tm-ovr"><b id="tm-ovr-v">—</b><span>OVERALL</span></div></div>
 <div id="toast"></div>
 <div id="swapc"><b id="sw-t">SWAP?</b><div class="ab" id="sw-y">YES</div><div class="ab" id="sw-n">NO</div></div>
-</div>
 </div>`;
  vp.appendChild(host.firstElementChild);
 
+const $=id=>document.getElementById(id);
+const pitch=$('pitch'),bench=$('bench');
 
-const FORMS={
- '433':[['ST',.5,.13],['LW',.18,.22],['RW',.82,.22],['CAM',.5,.38],['CM1',.25,.45],['CM2',.75,.45],['LB',.13,.68],['CB1',.38,.70],['CB2',.62,.70],['RB',.87,.68],['GK',.5,.90]],
- '442':[['ST1',.36,.14],['ST2',.64,.14],['LM',.14,.38],['CM1',.38,.42],['CM2',.62,.42],['RM',.86,.38],['LB',.13,.68],['CB1',.38,.70],['CB2',.62,.70],['RB',.87,.68],['GK',.5,.90]],
- '4132':[['ST1',.38,.13],['ST2',.62,.13],['LM',.16,.32],['CAM',.5,.34],['RM',.84,.32],['DMF',.5,.52],['LB',.13,.68],['CB1',.38,.70],['CB2',.62,.70],['RB',.87,.68],['GK',.5,.90]],
- '352':[['ST1',.38,.13],['ST2',.62,.13],['LWB',.10,.40],['CM1',.32,.42],['CAM',.5,.34],['CM2',.68,.42],['RWB',.90,.40],['CB1',.28,.70],['CB2',.5,.72],['CB3',.72,.70],['GK',.5,.90]],
- '4231':[['ST',.5,.12],['LW',.16,.28],['CAM',.5,.32],['RW',.84,.28],['DM1',.36,.50],['DM2',.64,.50],['LB',.13,.68],['CB1',.38,.70],['CB2',.62,.70],['RB',.87,.68],['GK',.5,.90]]};
-// pseudo-perspective: pitch narrows toward the top
-const perX=(x,y)=>.5+(x-.5)*(.66+.34*y);
-function _realSquad(){
- try{
-  if(typeof hSq==='undefined'||typeof gs!=='function')return null;
-  const out=[];let n=2;
-  Object.keys(hSq).forEach(k=>{const p=hSq[k];if(!p)return;
-   out.push({n:(p.name||k).toUpperCase(),num:p.num||n++,ovr:(typeof calcOvr==='function'?Math.max(50,calcOvr(p)):75),
-    sho:gs(p,'sho'),dri:gs(p,'dri'),pas:gs(p,'pas'),spd:gs(p,'spd'),def:gs(p,'def'),
-    role:p.pos==='GK'?'KEEPER':(p.pos||'PLAYER'),d:p.pos||''});});
-  return out.length>=11?out:null;
- }catch(e){return null;}
+// ── GAME BRIDGE ─────────────────────────────────────────────────
+// game.js exposes (global lexical scope): FORMATIONS, activeHomeFormation,
+// HOME_SLOT_ASSIGN, HOME_RESERVES, HT, selHome, getHomeRosterOrdered,
+// initHomeSlots, autoPickHomeTeam, calcOvr, gs, playerLastName, playerImg,
+// setTeamEmblem, startGame, showSc.
+function GAME(){try{return typeof FORMATIONS!=='undefined'&&typeof HOME_SLOT_ASSIGN!=='undefined'
+ &&typeof HT!=='undefined'&&!!HT&&typeof getHomeRosterOrdered==='function';}catch(e){return false;}}
+
+// Visual layouts (this screen's pseudo-3D pitch), keyed by game.js slot names.
+// Same 11 slot keys for every formation — only coords/labels change.
+const VIS={
+ '4-3-3':[['ST',.50,.13],['LW',.18,.22],['RW',.82,.22],['CM2',.50,.40],['CM1',.25,.46],['CM3',.75,.46],
+  ['LB',.13,.68],['CB1',.38,.70],['CB2',.62,.70],['RB',.87,.68],['GK',.50,.90]],
+ '4-4-2':[['ST',.38,.13],['RW',.62,.13],['CM1',.14,.38],['CM2',.38,.44],['CM3',.62,.44],['LW',.86,.38],
+  ['LB',.13,.68],['CB1',.38,.70],['CB2',.62,.70],['RB',.87,.68],['GK',.50,.90]],
+ '4-1-3-2':[['ST',.38,.13],['RW',.62,.13],['CM2',.16,.32],['CM3',.50,.34],['LW',.84,.32],['CM1',.50,.52],
+  ['LB',.13,.68],['CB1',.38,.70],['CB2',.62,.70],['RB',.87,.68],['GK',.50,.90]],
+ '3-5-2':[['ST',.38,.13],['RW',.62,.13],['RB',.10,.40],['CM1',.32,.42],['CM2',.50,.34],['CM3',.68,.42],['LW',.90,.40],
+  ['LB',.28,.70],['CB1',.50,.72],['CB2',.72,.70],['GK',.50,.90]]};
+const perX=(x,y)=>.5+(x-.5)*(.66+.34*y); // pitch narrows toward the top
+
+// ── DEMO FALLBACK (standalone preview without game.js) ──────────
+const DEMO=[
+{id:'d0',name:'Tsubasa.OZORA',num:10,pos:'ST',sho:93,dri:94,pas:88,spd:92,def:45,role:'ADVANCED FORWARD',d:'Finds space behind defenses, finishes with deadly accuracy.'},
+{id:'d1',name:'Shingo.AOI',num:20,pos:'LW',sho:84,dri:84,pas:80,spd:78,def:60,role:'WINGER',d:'Explosive runs down the flank.'},
+{id:'d2',name:'Shun.NITTA',num:7,pos:'RW',sho:88,dri:80,pas:74,spd:85,def:50,role:'POACHER',d:'Lives on the last shoulder.'},
+{id:'d3',name:'Taro.MISAKI',num:11,pos:'CM',sho:82,dri:90,pas:95,spd:84,def:55,role:'PLAYMAKER',d:'Threads passes nobody else sees.'},
+{id:'d4',name:'Mamoru.IZAWA',num:8,pos:'CM',sho:76,dri:80,pas:84,spd:78,def:68,role:'BOX-TO-BOX',d:'Engine of the midfield.'},
+{id:'d5',name:'Hajime.TAKI',num:6,pos:'CM',sho:72,dri:78,pas:82,spd:80,def:70,role:'CARRILERO',d:'Tireless shuttler.'},
+{id:'d6',name:'Makoto.SODA',num:3,pos:'LB',sho:55,dri:66,pas:70,spd:82,def:84,role:'FULLBACK',d:'Bites into every tackle.'},
+{id:'d7',name:'Ryo.ISHIZAKI',num:4,pos:'CB',sho:50,dri:60,pas:68,spd:74,def:88,role:'STOPPER',d:'Face-block specialist.'},
+{id:'d8',name:'Hiroshi.JITO',num:5,pos:'CB',sho:52,dri:55,pas:66,spd:70,def:91,role:'COLOSSUS',d:'Immovable at the back.'},
+{id:'d9',name:'Hanji.URABE',num:2,pos:'RB',sho:48,dri:62,pas:72,spd:79,def:82,role:'FULLBACK',d:'Overlapping outlet.'},
+{id:'d10',name:'Genzo.WAKABAYASHI',num:1,pos:'GK',sho:30,dri:40,pas:70,spd:75,def:95,role:'SWEEPER KEEPER',d:'Nothing outside the box gets in.'},
+{id:'d11',name:'Kojiro.HYUGA',num:9,pos:'ST',sho:96,dri:85,pas:70,spd:88,def:58,role:'TARGET MAN',d:'Raw power finishing.'},
+{id:'d12',name:'Hikaru.MATSUYAMA',num:14,pos:'CM',sho:78,dri:79,pas:86,spd:81,def:72,role:'CAPTAIN',d:'Heart of the north.'},
+{id:'d13',name:'Takeshi.SAWADA',num:15,pos:'AM',sho:70,dri:76,pas:78,spd:77,def:60,role:'PRODIGY',d:'Young spark off the bench.'},
+{id:'d14',name:'Yuzo.MORISAKI',num:16,pos:'GK',sho:25,dri:35,pas:60,spd:68,def:80,role:'KEEPER',d:'Reliable second GK.'},
+{id:'d15',name:'Kazuo.KISUGI',num:17,pos:'FW',sho:80,dri:74,pas:70,spd:80,def:48,role:'FINISHER',d:'Instinct in the box.'},
+{id:'d16',name:'Koji.TANIGUCHI',num:18,pos:'CM',sho:66,dri:70,pas:72,spd:74,def:64,role:'UTILITY',d:'Covers three roles.'}];
+let demoForm='4-3-3';
+const demoAssign={};VIS['4-3-3'].forEach((s,i)=>demoAssign[s[0]]=DEMO[i].id);
+
+// ── MODEL ACCESSORS ─────────────────────────────────────────────
+const roster=()=>GAME()?getHomeRosterOrdered():DEMO;
+const assign=()=>GAME()?HOME_SLOT_ASSIGN:demoAssign;
+const formName=()=>GAME()?activeHomeFormation:demoForm;
+const byId=pid=>roster().find(p=>p.id===pid)||null;
+const surname=pl=>{if(!pl||!pl.name)return'—';
+ try{if(typeof playerLastName==='function')return(playerLastName(pl)||'').toUpperCase()||pl.name.toUpperCase();}catch(e){}
+ return(pl.name.split('.').pop()||pl.name).toUpperCase();};
+const ovr=pl=>{if(!pl)return 0;
+ try{if(GAME()&&typeof calcOvr==='function')return Math.max(50,calcOvr(pl));}catch(e){}
+ return pl.ovr||Math.round(((pl.sho||60)+(pl.dri||60)+(pl.pas||60)+(pl.spd||60)+(pl.def||60))/5);};
+const stat=(pl,k)=>{try{if(GAME()&&typeof gs==='function')return gs(pl,k);}catch(e){}return pl[k]||50;};
+const slotLabel=slot=>{try{if(GAME())return(FORMATIONS[formName()].labels||{})[slot]||slot;}catch(e){}return slot;};
+const isGK=pl=>!!pl&&pl.pos==='GK';
+
+// portrait chain matching game.js conventions
+function avChain(pl){
+ if(!pl)return[];
+ const ln=(pl.name||'').split('.').pop().toLowerCase().trim();
+ if(pl.clubKey)return[`assets/career/clubs/${ln}${pl.clubKey}.png`,`assets/career/clubs/${pl.clubKey}.png`];
+ return[`assets/players/profile/${ln}.png`,`assets/players/${ln}.png`];
 }
-const SQUAD=_realSquad()||[
-{n:'OZORA',num:10,ovr:93,sho:93,dri:94,pas:88,spd:92,def:45,role:'ADVANCED FORWARD',d:'Finds space behind defenses, finishes with deadly accuracy.'},
-{n:'AOI',num:20,ovr:88,sho:84,dri:84,pas:80,spd:78,def:60,role:'WINGER',d:'Explosive runs down the flank.'},
-{n:'NITTA',num:7,ovr:86,sho:88,dri:80,pas:74,spd:85,def:50,role:'POACHER',d:'Lives on the last shoulder.'},
-{n:'MISAKI',num:11,ovr:91,sho:82,dri:90,pas:95,spd:84,def:55,role:'PLAYMAKER',d:'Threads passes nobody else sees.'},
-{n:'IZAWA',num:8,ovr:84,sho:76,dri:80,pas:84,spd:78,def:68,role:'BOX-TO-BOX',d:'Engine of the midfield.'},
-{n:'TAKI',num:6,ovr:83,sho:72,dri:78,pas:82,spd:80,def:70,role:'CARRILERO',d:'Tireless shuttler.'},
-{n:'SODA',num:3,ovr:81,sho:55,dri:66,pas:70,spd:82,def:84,role:'FULLBACK',d:'Bites into every tackle.'},
-{n:'ISHIZAKI',num:4,ovr:82,sho:50,dri:60,pas:68,spd:74,def:88,role:'STOPPER',d:'Face-block specialist.'},
-{n:'JITO',num:5,ovr:84,sho:52,dri:55,pas:66,spd:70,def:91,role:'COLOSSUS',d:'Immovable at the back.'},
-{n:'URABE',num:2,ovr:80,sho:48,dri:62,pas:72,spd:79,def:82,role:'FULLBACK',d:'Overlapping outlet.'},
-{n:'WAKABAYASHI',num:1,ovr:92,sho:30,dri:40,pas:70,spd:75,def:95,role:'SWEEPER KEEPER',d:'Nothing outside the box gets in.'},
-{n:'HYUGA',num:9,ovr:92,sho:96,dri:85,pas:70,spd:88,def:58,role:'TARGET MAN',d:'Raw power finishing.'},
-{n:'MATSUYAMA',num:14,ovr:85,sho:78,dri:79,pas:86,spd:81,def:72,role:'CAPTAIN',d:'Heart of the north.'},
-{n:'SAWADA',num:15,ovr:79,sho:70,dri:76,pas:78,spd:77,def:60,role:'PRODIGY',d:'Young spark off the bench.'},
-{n:'MORISAKI',num:16,ovr:74,sho:25,dri:35,pas:60,spd:68,def:80,role:'KEEPER',d:'Reliable second GK.'},
-{n:'KISUGI',num:17,ovr:78,sho:80,dri:74,pas:70,spd:80,def:48,role:'FINISHER',d:'Instinct in the box.'},
-{n:'TANIGUCHI',num:18,ovr:76,sho:66,dri:70,pas:72,spd:74,def:64,role:'UTILITY',d:'Covers three roles.'}];
-const pitch=document.getElementById('pitch'),bench=document.getElementById('bench');
-function mkCard(p,pos){
- const el=document.createElement('div');el.className='slot';el.dataset.i=SQUAD.indexOf(p);
- el.innerHTML=`<div class="card${pos==='GK'?' gk':''}"><div class="av"></div>
-  <div class="num">${p.num}</div><div class="ovr">${p.ovr}</div>
-  <div class="nm">${p.n}</div><div class="ps">${pos||'SUB'}</div></div>`;
- const av=el.querySelector('.av'),ln=p.n.toLowerCase();
- const chain=[`assets/players/profile/${ln}.png`,`assets/players/${ln}.png`];
- (function nx(i){if(i>=chain.length){av.style.background='linear-gradient(180deg,rgba(60,138,255,.3),rgba(8,14,30,.8))';return}
-  const t=new Image();t.onload=()=>av.style.backgroundImage=`url('${chain[i]}')`;t.onerror=()=>nx(i+1);t.src=chain[i]})(0);
+function loadAv(el,pl){
+ const chain=avChain(pl);
+ (function nx(i){if(i>=chain.length){el.style.background='linear-gradient(180deg,rgba(60,138,255,.3),rgba(8,14,30,.8))';return}
+  const t=new Image();t.onload=()=>el.style.backgroundImage=`url('${chain[i]}')`;t.onerror=()=>nx(i+1);t.src=chain[i]})(0);
+}
+
+// ── CARDS / RENDER ──────────────────────────────────────────────
+let capPid=null;
+function mkCard(pl,slot,benchNum){
+ const el=document.createElement('div');el.className='slot';
+ el.dataset.pid=pl?pl.id:'';el.dataset.slot=slot||'';
+ const lbl=slot?slotLabel(slot):'SUB';
+ el.innerHTML=`<div class="card${slot==='GK'?' gk':''}"><div class="av"></div>
+  <div class="num">${pl?(pl.num||benchNum||''):''}</div><div class="ovr">${pl?ovr(pl):''}</div>
+  <div class="nm">${pl?surname(pl):'—'}</div><div class="ps">${lbl}</div></div>`;
+ if(pl)loadAv(el.querySelector('.av'),pl);
  return el;
 }
-function placeFormation(key){
- const f=FORMS[key];
- const old=[...pitch.querySelectorAll('.slot')];
- const order=old.length?old.map(el=>+el.dataset.i):f.map((_,i)=>i);
- old.forEach(el=>el.remove());
- f.forEach((s,i)=>{const el=mkCard(SQUAD[order[i]],s[0]);
-  const sc=.8+.45*s[2]; // depth scale: smaller far, bigger near
+function rebuild(){
+ [...pitch.querySelectorAll('.slot')].forEach(e=>e.remove());
+ bench.innerHTML='';
+ const vis=VIS[formName()]||VIS['4-3-3'];
+ const A=assign(),usedIds=new Set();
+ vis.forEach(s=>{
+  const pl=byId(A[s[0]]);if(pl)usedIds.add(pl.id);
+  const el=mkCard(pl,s[0]);
+  const sc=.8+.45*s[2];
   el.style.left=(perX(s[1],s[2])*100)+'%';el.style.top=(s[2]*100)+'%';
   el.style.width=(88*sc)+'px';el.style.height=(104*sc)+'px';
-  el.dataset.pos=s[0];pitch.appendChild(el);});
+  pitch.appendChild(el);});
+ let n=30;
+ roster().filter(p=>!usedIds.has(p.id)).forEach(p=>bench.appendChild(mkCard(p,'',n++)));
+ markCap();updateTeamPanel();
 }
-placeFormation('433');
-document.getElementById('fsel').addEventListener('change',e=>placeFormation(e.target.value));
-SQUAD.slice(11).forEach(p=>bench.appendChild(mkCard(p,'')));
 // detail panel
-const $=id=>document.getElementById(id);
-function showDet(p){$('d-nm').textContent=p.n;$('d-ovr').textContent=p.ovr;
- $('d-ps').textContent=p.role;$('d-rtxt').textContent=p.d;
- $('d-av').style.backgroundImage='';const ln=p.n.toLowerCase();
- const t=new Image();t.onload=()=>$('d-av').style.backgroundImage=`url('assets/players/profile/${ln}.png')`;
- t.src=`assets/players/profile/${ln}.png`;
- $('d-stats').innerHTML=['SHO','DRI','PAS','SPD','DEF'].map(k=>{const v=p[k.toLowerCase()];
+function showDet(pl){if(!pl)return;
+ $('d-nm').textContent=surname(pl);$('d-ovr').textContent=ovr(pl);
+ $('d-ps').textContent=(pl.role||pl.pos||'').toUpperCase();
+ $('d-rtxt').textContent=pl.d||pl.pos||'';
+ $('d-av').style.backgroundImage='';loadAv($('d-av'),pl);
+ $('d-stats').innerHTML=['SHO','DRI','PAS','SPD','DEF'].map(k=>{const v=stat(pl,k.toLowerCase());
   return `<div class="stat"><b>${k}</b><div class="bar"><i style="width:${v}%"></i></div><span>${v}</span></div>`}).join('');
 }
-showDet(SQUAD[0]);
-// ── TAP-TO-SWAP ── tap one player (green), tap another, confirm.
-let selSlot=null,pendA=null,pendB=null;
-const isGKp=i=>SQUAD[i].role.includes('KEEPER');
-document.addEventListener('pointerdown',e=>{
- if(capMode)return; // captain mode has its own capture handler
- const s=e.target.closest('.slot');if(!s)return;
- showDet(SQUAD[+s.dataset.i]);
- if(!selSlot){
-  selSlot=s;s.classList.add('sel');return;
- }
- if(s===selSlot){selSlot.classList.remove('sel');selSlot=null;return;}
- const a=+selSlot.dataset.i,b=+s.dataset.i;
- // GK rules: keepers only swap with keepers; outfielders never enter GK
- if(isGKp(a)!==isGKp(b)){toast('A KEEPER CAN ONLY SWAP WITH A KEEPER');
-  selSlot.classList.remove('sel');selSlot=null;return;}
- pendA=selSlot;pendB=s;s.classList.add('sel');
- document.getElementById('sw-t').textContent='SWAP '+SQUAD[a].n+' ↔ '+SQUAD[b].n+'?';
- document.getElementById('swapc').style.display='block';
-});
-document.getElementById('sw-n').onclick=()=>{
- document.getElementById('swapc').style.display='none';
- [pendA,pendB].forEach(x=>x&&x.classList.remove('sel'));pendA=pendB=null;selSlot=null;};
-document.getElementById('sw-y').onclick=()=>{
- const a=pendA,b=pendB;
- const tH=a.innerHTML,tI=a.dataset.i;
- a.innerHTML=b.innerHTML;a.dataset.i=b.dataset.i;
- b.innerHTML=tH;b.dataset.i=tI;
- const fix=el=>{const ps=el.querySelector('.ps');if(ps)ps.textContent=el.dataset.pos||'SUB';};
- fix(a);fix(b);markCap();
- document.getElementById('swapc').style.display='none';
- [a,b].forEach(x=>x.classList.remove('sel'));pendA=pendB=null;selSlot=null;
- toast('SWAPPED');};
-const toast=m=>{const t=document.getElementById('toast');t.textContent=m;t.style.opacity=1;
+const toast=m=>{const t=$('toast');t.textContent=m;t.style.opacity=1;
  clearTimeout(t._h);t._h=setTimeout(()=>t.style.opacity=0,1600)};
-let capMode=false,capI=0;
-function markCap(){document.querySelectorAll('.capb').forEach(x=>x.remove());
- const s=[...document.querySelectorAll('.slot')].find(e=>+e.dataset.i===capI);
+
+// ── bottom-left team panel ──────────────────────────────────────
+function updateTeamPanel(){
+ const A=assign(),vis=VIS[formName()]||VIS['4-3-3'];
+ const xi=vis.map(s=>byId(A[s[0]])).filter(Boolean).map(ovr);
+ $('tm-ovr-v').textContent=xi.length?Math.round(xi.reduce((a,b)=>a+b,0)/xi.length):'—';
+ if(GAME()){
+  $('tm-nm').innerHTML=(HT.name||'TEAM').toUpperCase()+'<small>HOME · YOU</small>';
+  try{if(typeof setTeamEmblem==='function')setTeamEmblem($('tm-emb'),typeof selHome!=='undefined'?selHome:null,HT.flag||'');
+   else $('tm-emb').textContent=HT.flag||'⚽';}catch(e){$('tm-emb').textContent=HT.flag||'⚽';}
+ }else{$('tm-nm').innerHTML='NIPPON<small>HOME · YOU</small>';$('tm-emb').textContent='🇯🇵';}
+}
+
+// ── TAP-TO-SWAP — writes into HOME_SLOT_ASSIGN / HOME_RESERVES ──
+let selSlot=null,pendA=null,pendB=null;
+function clearSel(){[selSlot,pendA,pendB].forEach(x=>x&&x.classList.remove('sel'));selSlot=pendA=pendB=null;
+ $('swapc').style.display='none';}
+function swapAllowed(a,b){
+ const sa=a.dataset.slot,sb=b.dataset.slot,pa=byId(a.dataset.pid),pb=byId(b.dataset.pid);
+ if(!pa||!pb)return'EMPTY SLOT';
+ if(sa==='GK'||sb==='GK'){if(!(isGK(pa)&&isGK(pb)))return'A KEEPER CAN ONLY SWAP WITH A KEEPER';return null;}
+ if(isGK(pa)||isGK(pb))return'A KEEPER CAN ONLY SWAP WITH A KEEPER';
+ return null;
+}
+function doSwap(a,b){
+ const sa=a.dataset.slot,sb=b.dataset.slot,pidA=a.dataset.pid,pidB=b.dataset.pid;
+ const A=assign();
+ if(sa&&sb){const t=A[sa];A[sa]=A[sb];A[sb]=t;}
+ else if(sa&&!sb){A[sa]=pidB;syncReserve(pidB,pidA);}
+ else if(!sa&&sb){A[sb]=pidA;syncReserve(pidA,pidB);}
+ else if(GAME()){const i=HOME_RESERVES.indexOf(pidA),j=HOME_RESERVES.indexOf(pidB);
+  if(i!==-1&&j!==-1){HOME_RESERVES[i]=pidB;HOME_RESERVES[j]=pidA;}}
+ rebuild();toast('SWAPPED');
+}
+function syncReserve(inPid,outPid){ // bench player entered XI → outgoing player takes his reserve seat
+ if(!GAME())return;
+ const i=HOME_RESERVES.indexOf(inPid);if(i!==-1)HOME_RESERVES[i]=outPid;
+}
+document.addEventListener('pointerdown',e=>{
+ if($('uts').style.display!=='block')return;
+ if(capMode)return;
+ const s=e.target.closest('#uts .slot');if(!s)return;
+ const pl=byId(s.dataset.pid);if(pl)showDet(pl);
+ if(!selSlot){if(!pl)return;selSlot=s;s.classList.add('sel');return;}
+ if(s===selSlot){clearSel();return;}
+ const err=swapAllowed(selSlot,s);
+ if(err){toast(err);clearSel();return;}
+ pendA=selSlot;pendB=s;s.classList.add('sel');
+ $('sw-t').textContent='SWAP '+surname(byId(pendA.dataset.pid))+' ↔ '+surname(byId(pendB.dataset.pid))+'?';
+ $('swapc').style.display='block';
+});
+$('sw-n').onclick=()=>clearSel();
+$('sw-y').onclick=()=>{const a=pendA,b=pendB;clearSel();doSwap(a,b);};
+
+// ── CAPTAIN (cosmetic) ──────────────────────────────────────────
+let capMode=false;
+function markCap(){document.querySelectorAll('#uts .capb').forEach(x=>x.remove());
+ if(!capPid)return;
+ const s=[...document.querySelectorAll('#uts .slot')].find(e=>e.dataset.pid===capPid);
  if(s){const b=document.createElement('div');b.className='capb';b.textContent='C';s.querySelector('.card').appendChild(b)}}
-markCap();
-document.getElementById('b-cap').onclick=e=>{capMode=!capMode;
+$('b-cap').onclick=e=>{capMode=!capMode;
  e.target.classList.toggle('on',capMode);toast(capMode?'TAP A PLAYER TO MAKE CAPTAIN':'CAPTAIN MODE OFF')};
 document.addEventListener('pointerdown',e=>{if(!capMode)return;
- const s=e.target.closest('.slot');if(!s)return;
- e.stopPropagation();capI=+s.dataset.i;capMode=false;document.getElementById('b-cap').classList.remove('on');
- markCap();toast(SQUAD[capI].n+' IS CAPTAIN')},true);
-document.getElementById('b-auto').onclick=()=>{
- const gk=SQUAD.map((p,i)=>[p,i]).filter(x=>x[0].role.includes('KEEPER')).sort((a,b)=>b[0].ovr-a[0].ovr)[0];
- const rest=SQUAD.map((p,i)=>[p,i]).filter(x=>x[1]!==gk[1]).sort((a,b)=>b[0].ovr-a[0].ovr).slice(0,10);
- const order=[...rest.map(x=>x[1]),gk[1]];
- const f=FORMS[document.getElementById('fsel').value];
- [...pitch.querySelectorAll('.slot')].forEach(el=>el.remove());
- f.forEach((s,i)=>{const el=mkCard(SQUAD[order[i]],s[0]);const sc=.8+.45*s[2];
-  el.style.left=(perX(s[1],s[2])*100)+'%';el.style.top=(s[2]*100)+'%';
-  el.style.width=(88*sc)+'px';el.style.height=(104*sc)+'px';el.dataset.pos=s[0];pitch.appendChild(el)});
- markCap();toast('BEST XI SELECTED')};
-document.getElementById('b-save').onclick=()=>toast('FORMATION SAVED');
-document.getElementById('b-back').onclick=()=>toast('← BACK (wired in game)');
-document.getElementById('b-start').onclick=()=>toast('KICK OFF! (wired in game)');
+ const s=e.target.closest('#uts .slot');if(!s||!s.dataset.pid)return;
+ e.stopPropagation();capPid=s.dataset.pid;capMode=false;$('b-cap').classList.remove('on');
+ markCap();toast(surname(byId(capPid))+' IS CAPTAIN')},true);
 
+// ── FORMATION SELECT — drives activeHomeFormation ───────────────
+function syncFsel(){
+ const names=GAME()?Object.keys(FORMATIONS):Object.keys(VIS);
+ $('fsel').innerHTML=names.map(n=>`<option value="${n}">${n}</option>`).join('');
+ $('fsel').value=formName();
+}
+$('fsel').addEventListener('change',e=>{
+ const name=e.target.value;
+ if(GAME()){activeHomeFormation=name;try{initHomeSlots(true);}catch(err){}}
+ else demoForm=name;
+ clearSel();rebuild();
+});
+
+// ── ACTIONS ─────────────────────────────────────────────────────
+$('b-auto').onclick=()=>{
+ if(GAME()&&typeof autoPickHomeTeam==='function'){try{autoPickHomeTeam();}catch(e){}}
+ else{ // demo: best XI by ovr, best GK in goal
+  const gk=DEMO.filter(isGK).sort((a,b)=>ovr(b)-ovr(a))[0];
+  const out=DEMO.filter(p=>!isGK(p)).sort((a,b)=>ovr(b)-ovr(a)).slice(0,10);
+  const vis=VIS[demoForm];let k=0;
+  vis.forEach(s=>{demoAssign[s[0]]=(s[0]==='GK')?gk.id:out[k++].id;});
+ }
+ clearSel();rebuild();toast('BEST XI SELECTED');
+};
+$('b-save').onclick=()=>toast('FORMATION SAVED');
+$('b-back').onclick=()=>{
+ clearSel();$('uts').style.display='none';
+ try{if(typeof showSc==='function')showSc('s-ts');}catch(e){}
+};
+$('b-start').onclick=()=>{
+ clearSel();$('uts').style.display='none';
+ if(window._utsStart){const cb=window._utsStart;window._utsStart=null;cb();return;}
+ try{if(typeof startGame==='function'){startGame();return;}}catch(e){}
+ toast('KICK OFF! (no game engine)');
+};
+
+// ── OPEN ────────────────────────────────────────────────────────
 window.openTeamScreen=function(onStart){
- document.getElementById('uts').style.display='block';
  window._utsStart=onStart||null;
+ if(GAME()){
+  try{
+   // mirror the old openTeamMenu() setup so game state is identical
+   if(HT.formation&&FORMATIONS[HT.formation])activeHomeFormation=HT.formation;
+   HOME_RESERVES=[null,null,null,null,null,null];
+   if(HT.reserves&&HT.reserves.length){
+    const r=HT.p;
+    const gkR=HT.reserves.filter(pid=>{const pl=r.find(x=>x.id===pid);return pl&&pl.pos==='GK';});
+    const fR=HT.reserves.filter(pid=>{const pl=r.find(x=>x.id===pid);return !pl||pl.pos!=='GK';});
+    if(gkR.length)HOME_RESERVES[0]=gkR[0];
+    fR.forEach((pid,i)=>{if(i<5)HOME_RESERVES[i+1]=pid;});
+   }
+   initHomeSlots(true);
+   if(typeof playerImg==='function')HT.p.forEach(pl=>playerImg(pl));
+  }catch(e){}
+ }
+ capPid=null;clearSel();syncFsel();rebuild();
+ const A=assign(),first=byId(A['ST'])||byId(A[Object.keys(A)[0]]);if(first)showDet(first);
+ $('uts').style.display='block';
 };
-document.getElementById('b-start').onclick=()=>{
- document.getElementById('uts').style.display='none';
- if(window._utsStart)window._utsStart();
-};
-document.getElementById('b-back').onclick=()=>{document.getElementById('uts').style.display='none';};
 
 }
 
-// ── ACTIVATION: the new screen fronts the existing team menu ──
-// Flow: match prep → NEW glass screen → START MATCH → original menu
-// (which still applies the real lineup) → kick off. BACK skips out.
+// ── ACTIVATION: replace the friendly team menu for real ─────────
+// TEAM MENU → glass screen. Lineup edits write into HOME_SLOT_ASSIGN
+// live; START MATCH calls startGame() which reads that state natively.
+// Career squad management (G_teamEditorOrigin==='career') keeps the
+// original editor — it has reserve editing + career save hooks.
 setTimeout(()=>{
  if(typeof window.openTeamMenu==='function'&&!window.__utsHooked){
   window.__utsHooked=true;
-  const _old=window.openTeamMenu;
+  window.__utsOldMenu=window.openTeamMenu;
   window.openTeamMenu=function(...a){
-   try{openTeamScreen(()=>_old.apply(window,a));}
-   catch(e){_old.apply(window,a);}
+   try{
+    if(typeof G_teamEditorOrigin!=='undefined'&&G_teamEditorOrigin==='career')
+     return window.__utsOldMenu.apply(window,a);
+    if(typeof selHome!=='undefined'&&(!selHome||!selAway||selHome===selAway))return; // same guard as old menu
+    openTeamScreen();
+   }catch(e){window.__utsOldMenu.apply(window,a);}
   };
  }
 },800);
