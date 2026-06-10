@@ -1037,21 +1037,8 @@ function buildBenchList(){
     bench.appendChild(item);
   });
 }
-function updateSelectedSlotPanel(){
-  const selectedLabel=document.getElementById('selectedSlotLabel');
-  const selectedRole=document.getElementById('selectedSlotRole');
-  const selectedPlayer=document.getElementById('selectedSlotPlayer');
-  if(!selectedLabel)return;
-  const selPlayerObj=getHomeRosterOrdered().find(r=>r.id===HOME_SLOT_ASSIGN[SELECTED_HOME_SLOT]);
-  selectedLabel.textContent=displayPosLabel(SELECTED_HOME_SLOT);
-  selectedRole.textContent=slotFamily(SELECTED_HOME_SLOT);
-  selectedPlayer.textContent=selPlayerObj?selPlayerObj.name+' ('+selPlayerObj.pos+')':'Select player';
-  // Update card highlight without rebuilding
-  document.querySelectorAll('#teamPreviewField .tm-card.v6').forEach(c=>{
-    c.classList.toggle('selected', c.dataset.slot===SELECTED_HOME_SLOT);
-  });
-  buildBenchList();
-}
+// (removed: dead duplicate updateSelectedSlotPanel — shadowed by the real one below)
+
 
 // Full teardown when leaving mid-match / returning to main menu.
 // Kills timers, clears squads, clears pending career match, stops animations.
@@ -1956,7 +1943,7 @@ function startAnim(){
     }
     trail.push({x:ball.x,y:ball.y,a:.6});
     if(trail.length>24)trail.shift();
-    trail.forEach(t=>t.a*=.88);
+    trail.forEach(t=>t.a*=Math.pow(.88,dt));
     _updateJoystickVisibility();
     draw();raf=requestAnimationFrame(loop);
   })(0);
@@ -2853,8 +2840,13 @@ let G_zoom=1.0;
 // Broadcast-style: zoomed on the carrier, leading into movement,
 // clamped to the field. Players render visibly bigger.
 const CAM_BASE=1.70;
-let camX=W/2,camY=H/2,camZ=1.0,_camLX=0,_camLY=0,_camPFX=null,_camPFY=null;
+let camX=W/2,camY=H/2,camZ=1.0,_camLX=0,_camLY=0,_camPFX=null,_camPFY=null,_camTs=0;
 function camUpdate(){
+  // dt-normalized: identical camera feel on 60 / 120 / 144 Hz screens
+  const now=performance.now();
+  const cdt=_camTs?Math.min((now-_camTs)/16.667,3):1;
+  _camTs=now;
+  const k=f=>1-Math.pow(1-f,cdt);
   let fx=W/2,fy=H/2,tz=1.0;
   const cp=(G.ck&&PP[G.poss]&&PP[G.poss][G.ck])?PP[G.poss][G.ck]:null;
   if(G.phase==='moving'&&cp){
@@ -2870,15 +2862,15 @@ function camUpdate(){
   tz=Math.max(tz,G_zoom); // duel zoom-punch still pops through
   // Directional lead: camera looks ahead of where the focus is moving
   if(_camPFX!==null){
-    _camLX+=(clamp((fx-_camPFX)*16,-W*0.07,W*0.07)-_camLX)*0.05;
-    _camLY+=(clamp((fy-_camPFY)*16,-H*0.07,H*0.07)-_camLY)*0.05;
+    _camLX+=(clamp((fx-_camPFX)*16/cdt,-W*0.07,W*0.07)-_camLX)*k(0.05);
+    _camLY+=(clamp((fy-_camPFY)*16/cdt,-H*0.07,H*0.07)-_camLY)*k(0.05);
   }
   _camPFX=fx;_camPFY=fy;
   fx+=_camLX;fy+=_camLY;
-  camZ+=(tz-camZ)*0.05;
+  camZ+=(tz-camZ)*k(0.05);
   const hw=W/(2*camZ),hh=H/(2*camZ);
-  camX+=(clamp(fx,hw,W-hw)-camX)*0.07;
-  camY+=(clamp(fy,hh,H-hh)-camY)*0.07;
+  camX+=(clamp(fx,hw,W-hw)-camX)*k(0.07);
+  camY+=(clamp(fy,hh,H-hh)-camY)*k(0.07);
   camX=clamp(camX,hw,W-hw);camY=clamp(camY,hh,H-hh);
 }
 
@@ -4392,7 +4384,7 @@ function afSave(ds){
     say(outcomeText[outcome]+' — '+outcomeDetail[outcome]);
     if(outcome==='goal'){
       const as=ds==='h'?'a':'h';
-      const _gen=G.goalGen-1;
+      const _gen=G.goalGen; // BUGFIX: -1 made afGoal reject every save-roll goal (ghost goal + freeze)
       setTimeout(()=>{ro.classList.remove('show');afGoal(G.D.carrier,as,_gen);},600);
       return;
     }
@@ -4640,37 +4632,14 @@ function showEventBanner(text,type,duration=2200){
 // ── OFFSIDE CHECK ─────────────────────────────────────────────────
 // Call when attacker receives the ball — checks if they were behind last defender
 function checkOffside(attackSide,slot){
-  if(!G||G.phase!=='moving')return false;
-  const defSide=attackSide==='h'?'a':'h';
-  const attPos=PP[attackSide]?.[slot];
-  if(!attPos)return false;
-  // Find second-last defender (last outfield defender, GK excluded)
-  const defenders=Object.entries(PP[defSide]||{})
-    .filter(([k])=>k!=='GK')
-    .map(([,p])=>p.y)
-    .sort((a,b)=>attackSide==='h'?a-b:b-a); // sort toward attacking goal
-  const lastDef=defenders[0]; // nearest defender to their own goal
-  if(lastDef===undefined)return false;
-  // Attacker offside if ahead of last defender (in direction of attack)
-  const offside=attackSide==='h'?(attPos.y<lastDef):(attPos.y>lastDef);
-  // Only flag in attacking half
-  const inAttHalf=attackSide==='h'?(attPos.y<H/2):(attPos.y>H/2);
-  if(offside&&inAttHalf){
-    showEventBanner('⛳ OFFSIDE','offside');
-    say('Offside! Free kick to '+(defSide==='h'?HT?.name:AT?.name)+'.');
-    // Reset possession to defending team
-    setTimeout(()=>{
-      G.poss=defSide;
-      const dk=Object.keys(sq(defSide)).find(k=>sq(defSide)[k]&&k!=='GK')||Object.keys(sq(defSide))[0];
-      G.ck=dk;G.chk=null;
-      if(PP[defSide]&&PP[defSide][dk]){PP[defSide][dk].x=attPos.x;PP[defSide][dk].y=attPos.y;}
-      ball.x=attPos.x;ball.y=attPos.y;
-      G.kickoffUntil=Date.now()+2000;
-    },800);
-    return true;
-  }
+  // BUGFIX: old version measured the wrong axis (Y) and its phase guard made
+  // it always return false. Delegate to the correct X-axis isOffside().
+  try{
+    if(typeof isOffside==='function')return isOffside(attackSide,slot);
+  }catch(e){}
   return false;
 }
+
 
 // ── FOUL SYSTEM ───────────────────────────────────────────────────
 function rollFoul(defSide,defSlot,attSide){
