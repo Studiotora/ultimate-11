@@ -1492,7 +1492,8 @@ function tick(dt=1){
   const carrMult=fieldSpdMult(carrierPl);
   const mvMag=Math.hypot(mv.x,mv.y);
   if(mvMag>0.0001){
-    const capMult=(s==='h')?3.2:1.0;
+    let capMult=(s==='h')?3.2:1.0;
+    if(s==='h'&&G_sprint)capMult*=1.28; // ✕ sprint held
     const cap=MAX_CARRIER_STEP()*capMult*carrMult*dt;
     const step=Math.min(mvMag*dt,cap);
     cp.x=clamp(cp.x+(mv.x/mvMag)*step,W*.01,W*.99);
@@ -1506,7 +1507,7 @@ function tick(dt=1){
     const carrier2=sq(s)[G.ck];
     if(carrier2&&carrier2.pos!=='GK'){
       const engClose=ROLES.engager&&PP[ds][ROLES.engager]&&dist(cp,PP[ds][ROLES.engager])<IR()*2.2;
-      carrier2.spirit=Math.max(0,(carrier2.spirit||1500)-(engClose?0.55:0.18)*dt);
+      carrier2.spirit=Math.max(0,(carrier2.spirit||1500)-((engClose?0.55:0.18)+((G.poss==='h'&&G_sprint)?0.4:0))*dt);
     }
     ['h','a'].forEach(side=>{
       Object.entries(sq(side)).forEach(([k,pl])=>{
@@ -1559,15 +1560,25 @@ function tick(dt=1){
     }
     const dp2=PP[ds][ROLES.engager];
     if(dp2){
-      const targetX=cp.x-dir*W*.01;
-      const targetY=cp.y;
-      const dx=targetX-dp2.x,dy=targetY-dp2.y;
-      const dd=Math.hypot(dx,dy)||1;
+      // MANUAL DEFENSE STEERING — when the human defends, joystick/WASD
+      // drives the engager directly. AI chase resumes the moment input idles.
+      const manualDef = ds==='h' && (Math.abs(G_inputVec.x)>0.12||Math.abs(G_inputVec.y)>0.12);
+      let ux,uy;
+      if(manualDef){ux=G_inputVec.x;uy=G_inputVec.y;}
+      else{
+        const targetX=cp.x-dir*W*.01;
+        const targetY=cp.y;
+        const dx=targetX-dp2.x,dy=targetY-dp2.y;
+        const dd=Math.hypot(dx,dy)||1;
+        ux=dx/dd;uy=dy/dd;
+      }
       const pressMult=(G.pressing&&ds==='h')?1.5:1.0;
       const engPl=sq(ds)[ROLES.engager];
-      const step=MAX_DEF_STEP()*pressMult*fieldSpdMult(engPl)*dt;
-      dp2.x=clamp(dp2.x+(dx/dd)*step,W*.01,W*.99);
-      dp2.y=clamp(dp2.y+(dy/dd)*step,H*.03,H*.97);
+      const sprintMult=(ds==='h'&&G_sprint)?1.22:1.0;
+      const manualMult=manualDef?1.3:1.0;
+      const step=MAX_DEF_STEP()*pressMult*sprintMult*manualMult*fieldSpdMult(engPl)*dt;
+      dp2.x=clamp(dp2.x+ux*step,W*.01,W*.99);
+      dp2.y=clamp(dp2.y+uy*step,H*.03,H*.97);
       if(Date.now()>=(G.kickoffUntil||0) && dist(dp2,cp)<IR()){G.chk=ROLES.engager;opDuel(false);return;}
     }
   }
@@ -2014,18 +2025,16 @@ function drawTacticalOverlays(){
 
 function draw(){
   cx.clearRect(0,0,W,H);
-  // Draw field image — all markings baked in
+  // ── DYNAMIC CAMERA — follows the action, leads into movement ──
+  camUpdate();
+  cx.save();
+  cx.translate(W/2,H/2);cx.scale(camZ,camZ);cx.translate(-camX,-camY);
+  // Draw field image — all markings baked in (inside the camera, so it zooms too)
   if(FIELD_IMG.complete&&FIELD_IMG.naturalWidth>0){
     cx.drawImage(FIELD_IMG,0,0,W,H);
   }else{
     cx.fillStyle='#1a4020';cx.fillRect(0,0,W,H);
   }
-  // Zoom in on carrier when defender closes — cinematic CT feel
-  const _zcp=G.ck&&PP[G.poss]?PP[G.poss][G.ck]:null;
-  const _zx=_zcp?perspX(_zcp.x,_zcp.y):W/2, _zy=_zcp?perspY(_zcp.y):H/2;
-  if(G_zoom>1.005){cx.save();cx.translate(_zx,_zy);cx.scale(G_zoom,G_zoom);cx.translate(-_zx,-_zy);}
-
-    if(G_zoom>1.005){cx.restore();}
   // ── MOVE TARGET INDICATOR ──────────────────────────────────
   if(G_moveTarget&&G.poss==='h'&&G.phase==='moving'){
     const tx=perspX(G_moveTarget.x,G_moveTarget.y),ty=perspY(G_moveTarget.y);
@@ -2080,6 +2089,7 @@ function draw(){
     cx.beginPath();cx.arc(perspX(t.x,t.y),perspY(t.y),4*tsc,0,Math.PI*2);
     cx.fillStyle=`rgba(255,215,60,${t.a*.5})`;cx.fill();
   });
+  cx.restore(); // end dynamic camera
 }
 
 // ── PLAYER IMAGE CACHE ────────────────────────────────────────────
@@ -2511,12 +2521,52 @@ function _buildJoystick(){
 function _updateJoystickVisibility(){
   if(!G_joyEl)return;
   const isTouch=('ontouchstart' in window)||navigator.maxTouchPoints>0;
-  const show=isTouch && G.phase==='moving' && G.poss==='h' && !G.paused;
+  // Visible whenever the field is live — attack steers the carrier,
+  // defense steers the engager.
+  const show=isTouch && G.phase==='moving' && !G.paused;
   G_joyEl.style.display=show?'block':'none';
   if(!show && G_joyActive){
     G_joyKnob.style.left='50%';G_joyKnob.style.top='50%';
     G_inputVec.x=0;G_inputVec.y=0;G_joyActive=false;
   }
+  _updateDpad(show);
+}
+
+// ── PS-STYLE FACE BUTTONS (right side) ────────────────────────────
+// △ SHOOT · □ PASS · ○ PRESS · ✕ SPRINT (hold)
+// Semi-transparent over the pitch; also the contract for future
+// physical-gamepad mapping on PC/console.
+let G_sprint=false,G_dpadEl=null;
+function _buildDpad(){
+  if(G_dpadEl)return;
+  const w=document.createElement('div');
+  w.id='dpad';
+  w.innerHTML=`
+    <button class="db tri" data-a="shoot"><i>△</i><span>SHOOT</span></button>
+    <button class="db sq"  data-a="pass"><i>□</i><span>PASS</span></button>
+    <button class="db ci"  data-a="press"><i>○</i><span>PRESS</span></button>
+    <button class="db xx"  data-a="sprint"><i>✕</i><span>SPRINT</span></button>`;
+  document.body.appendChild(w);
+  G_dpadEl=w;
+  w.querySelector('[data-a="shoot"]').addEventListener('click',()=>{if(G.poss==='h')manualShot();});
+  w.querySelector('[data-a="pass"]').addEventListener('click',()=>{if(G.poss==='h')togglePassMode();});
+  w.querySelector('[data-a="press"]').addEventListener('click',()=>togglePress());
+  const xb=w.querySelector('[data-a="sprint"]');
+  const on=e=>{e.preventDefault();G_sprint=true;xb.classList.add('held');};
+  const off=()=>{G_sprint=false;xb.classList.remove('held');};
+  xb.addEventListener('touchstart',on,{passive:false});
+  xb.addEventListener('touchend',off);xb.addEventListener('touchcancel',off);
+  xb.addEventListener('mousedown',on);xb.addEventListener('mouseup',off);xb.addEventListener('mouseleave',off);
+}
+function _updateDpad(show){
+  if(!G_dpadEl){if(show)_buildDpad();if(!G_dpadEl)return;}
+  G_dpadEl.style.display=show?'grid':'none';
+  if(!show){G_sprint=false;return;}
+  const atk=G.poss==='h';
+  G_dpadEl.querySelector('[data-a="shoot"]').classList.toggle('dim',!atk);
+  G_dpadEl.querySelector('[data-a="pass"]').classList.toggle('dim',!atk);
+  G_dpadEl.querySelector('[data-a="press"]').classList.toggle('dim',atk);
+  G_dpadEl.querySelector('[data-a="press"]').classList.toggle('held',G.pressing&&!atk);
 }
 if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',_buildJoystick);
 else _buildJoystick();
@@ -2547,8 +2597,11 @@ function togglePassMode(){ if(G.poss!=='h'||G.phase!=='moving'||!G.ck) return; G
 function handleCanvasInput(clientX, clientY){
   if(G.poss!=='h')return;
   const rect=CV.getBoundingClientRect();
-  const mx=(clientX-rect.left)*(W/rect.width);
-  const my=(clientY-rect.top)*(H/rect.height);
+  const mx0=(clientX-rect.left)*(W/rect.width);
+  const my0=(clientY-rect.top)*(H/rect.height);
+  // Invert the dynamic camera so taps land on the right player
+  const mx=(mx0-W/2)/camZ+camX;
+  const my=(my0-H/2)/camZ+camY;
 
   if(G.pm){
     for(const k of Object.keys(hSq)){
@@ -2679,6 +2732,38 @@ function iPas(tk){
 let G_loomingDef=null;
 let G_duelGrace=null;
 let G_zoom=1.0;
+// ── DYNAMIC CAMERA ─────────────────────────────────────────────────
+// Broadcast-style: zoomed on the carrier, leading into movement,
+// clamped to the field. Players render visibly bigger.
+const CAM_BASE=1.40;
+let camX=W/2,camY=H/2,camZ=1.0,_camLX=0,_camLY=0,_camPFX=null,_camPFY=null;
+function camUpdate(){
+  let fx=W/2,fy=H/2,tz=1.0;
+  const cp=(G.ck&&PP[G.poss]&&PP[G.poss][G.ck])?PP[G.poss][G.ck]:null;
+  if(G.phase==='moving'&&cp){
+    tz=CAM_BASE;
+    const d=nearestOpponentDist(G.poss,G.ck);
+    if(d<IR()*1.8)tz+=0.13;else if(d<IR()*3)tz+=0.06;
+    fx=perspX(cp.x,cp.y);fy=perspY(cp.y);
+  }else if(G.phase==='pass_anim'&&typeof ball!=='undefined'){
+    tz=1.22;fx=perspX(ball.x,ball.y);fy=perspY(ball.y);
+  }else if(cp){
+    tz=1.30;fx=perspX(cp.x,cp.y);fy=perspY(cp.y);
+  }
+  tz=Math.max(tz,G_zoom); // duel zoom-punch still pops through
+  // Directional lead: camera looks ahead of where the focus is moving
+  if(_camPFX!==null){
+    _camLX+=(clamp((fx-_camPFX)*16,-W*0.07,W*0.07)-_camLX)*0.05;
+    _camLY+=(clamp((fy-_camPFY)*16,-H*0.07,H*0.07)-_camLY)*0.05;
+  }
+  _camPFX=fx;_camPFY=fy;
+  fx+=_camLX;fy+=_camLY;
+  camZ+=(tz-camZ)*0.05;
+  const hw=W/(2*camZ),hh=H/(2*camZ);
+  camX+=(clamp(fx,hw,W-hw)-camX)*0.07;
+  camY+=(clamp(fy,hh,H-hh)-camY)*0.07;
+  camX=clamp(camX,hw,W-hw);camY=clamp(camY,hh,H-hh);
+}
 
 function updateLoomingAlert(){
   const ds=G.poss==='h'?'a':'h';
@@ -2735,10 +2820,8 @@ function checkDuelGrace(){
 }
 
 function updateZoom(){
-  if(G.phase!=='moving'||!G.ck||!PP[G.poss][G.ck]){G_zoom+=(1.0-G_zoom)*.08;return;}
-  const d=nearestOpponentDist(G.poss,G.ck);
-  const targetZoom=d<IR()*1.8?1.13:d<IR()*3?1.06:1.0;
-  G_zoom+=(targetZoom-G_zoom)*.05;
+  // Duel zoom-punch decay only — base camera zoom lives in camUpdate()
+  G_zoom+=(1.0-G_zoom)*.06;
 }
 
 
