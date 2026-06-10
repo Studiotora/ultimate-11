@@ -1492,7 +1492,7 @@ function tick(dt=1){
   const carrMult=fieldSpdMult(carrierPl);
   const mvMag=Math.hypot(mv.x,mv.y);
   if(mvMag>0.0001){
-    let capMult=(s==='h')?3.2:1.0;
+    let capMult=(s==='h')?3.2:1.45;
     if(s==='h'&&G_sprint)capMult*=1.28; // ✕ sprint held
     const cap=MAX_CARRIER_STEP()*capMult*carrMult*dt;
     const step=Math.min(mvMag*dt,cap);
@@ -2089,7 +2089,57 @@ function draw(){
     cx.beginPath();cx.arc(perspX(t.x,t.y),perspY(t.y),4*tsc,0,Math.PI*2);
     cx.fillStyle=`rgba(255,215,60,${t.a*.5})`;cx.fill();
   });
+  // ── NAME TAGS over carrier + chaser (world space) ──
+  if(G.phase==='moving'||G.phase==='pass_anim'){
+    const carP=(G.ck&&PP[G.poss])?PP[G.poss][G.ck]:null;
+    const carPl=carP?sq(G.poss)[G.ck]:null;
+    if(carP&&carPl)_fieldTag(carP,(carPl.name||'').toUpperCase(),G.poss==='h'?'#4ea0ff':'#ff5050');
+    const ds=G.poss==='h'?'a':'h';
+    const engP=(ROLES.engager&&PP[ds])?PP[ds][ROLES.engager]:null;
+    const engPl=engP?sq(ds)[ROLES.engager]:null;
+    if(engP&&engPl)_fieldTag(engP,(engPl.name||'').toUpperCase(),ds==='h'?'#4ea0ff':'#ff5050');
+  }
   cx.restore(); // end dynamic camera
+  // ── MINI RADAR (screen space, classic bottom strip) ──
+  if(G.phase==='moving'||G.phase==='pass_anim')drawRadar();
+}
+function _fieldTag(p,txt,col){
+  const sx=perspX(p.x,p.y),sy=perspY(p.y),sc=perspScale(p.y);
+  cx.font='700 11px Orbitron';
+  const w=cx.measureText(txt).width+14;
+  cx.fillStyle='rgba(2,4,10,.78)';cx.fillRect(sx-w/2,sy-26*sc-34,w,16);
+  cx.fillStyle=col;cx.fillRect(sx-w/2,sy-26*sc-34,3,16);
+  cx.fillStyle='#fff';cx.textAlign='center';
+  cx.fillText(txt,sx+1,sy-26*sc-22);
+  cx.textAlign='left';
+}
+function drawRadar(){
+  const rw=200,rh=104,rx=(W-rw)/2,ry=H-rh-44;
+  cx.save();
+  cx.globalAlpha=.88;
+  cx.fillStyle='rgba(4,10,6,.62)';cx.fillRect(rx,ry,rw,rh);
+  cx.strokeStyle='rgba(255,255,255,.4)';cx.lineWidth=1.5;cx.strokeRect(rx,ry,rw,rh);
+  cx.beginPath();cx.moveTo(rx+rw/2,ry);cx.lineTo(rx+rw/2,ry+rh);cx.stroke();
+  cx.beginPath();cx.arc(rx+rw/2,ry+rh/2,12,0,Math.PI*2);cx.stroke();
+  const px=x=>rx+(x/W)*rw, py=y=>ry+(y/H)*rh;
+  ['h','a'].forEach(s=>{
+    const col=s==='h'?'#4ea0ff':'#ff5050';
+    Object.keys(PP[s]||{}).forEach(k=>{
+      const p=PP[s][k];if(!p)return;
+      cx.beginPath();cx.arc(px(p.x),py(p.y),2.4,0,Math.PI*2);
+      cx.fillStyle=col;cx.fill();
+    });
+  });
+  if(typeof ball!=='undefined'&&ball){
+    cx.beginPath();cx.arc(px(ball.x),py(ball.y),2.8,0,Math.PI*2);
+    cx.fillStyle='#fff';cx.fill();
+    cx.strokeStyle='#ffd24a';cx.lineWidth=1;cx.stroke();
+  }
+  // current camera window
+  const hw=W/(2*camZ),hh=H/(2*camZ);
+  cx.strokeStyle='rgba(255,210,74,.7)';cx.lineWidth=1;
+  cx.strokeRect(px(camX-hw),py(camY-hh),(2*hw/W)*rw,(2*hh/H)*rh);
+  cx.restore();
 }
 
 // ── PLAYER IMAGE CACHE ────────────────────────────────────────────
@@ -2568,8 +2618,51 @@ function _updateDpad(show){
   G_dpadEl.querySelector('[data-a="press"]').classList.toggle('dim',atk);
   G_dpadEl.querySelector('[data-a="press"]').classList.toggle('held',G.pressing&&!atk);
 }
+// ── FIELD HUD CHIPS — controlled player + opponent (bottom-left) ──
+let _hudKeys='';
+function _updateHudChips(){
+  const vp=document.getElementById('viewport');if(!vp)return;
+  let wrap=document.getElementById('hud-chips');
+  if(!wrap){
+    wrap=document.createElement('div');wrap.id='hud-chips';
+    wrap.innerHTML=`<div class="hchip" id="hc1"><div class="hc-av"></div><div class="hc-t"><b></b><span></span></div></div>
+                    <div class="hchip" id="hc2"><div class="hc-av"></div><div class="hc-t"><b></b><span></span></div></div>`;
+    vp.appendChild(wrap);
+  }
+  const show=G.phase==='moving'&&!G.paused&&G.ck;
+  wrap.style.display=show?'flex':'none';
+  if(!show)return;
+  const ds=G.poss==='h'?'a':'h';
+  const slots=(G.poss==='h')
+    ?[{s:'h',k:G.ck,tag:'CARRIER',col:'#4ea0ff'},{s:'a',k:ROLES.engager,tag:'CHASER',col:'#ff5050'}]
+    :[{s:'h',k:ROLES.engager,tag:'YOU — CHASING',col:'#4ea0ff'},{s:'a',k:G.ck,tag:'CARRIER',col:'#ff5050'}];
+  const sig=slots.map(o=>o.s+':'+o.k).join('|');
+  slots.forEach((o,i)=>{
+    const chip=document.getElementById('hc'+(i+1));
+    const pl=o.k?sq(o.s)[o.k]:null;
+    chip.style.display=pl?'flex':'none';
+    if(!pl)return;
+    chip.style.borderColor=o.col+'aa';
+    chip.querySelector('b').textContent=(pl.name||'').toUpperCase();
+    chip.querySelector('span').textContent=o.tag+' · '+(pl.pos||'');
+    chip.querySelector('span').style.color=o.col;
+    if(sig!==_hudKeys){
+      const av=chip.querySelector('.hc-av');
+      av.style.backgroundImage='none';
+      const chain=_portraitChainFor(pl,o.s);
+      (function next(j){
+        if(j>=chain.length)return;
+        const t=new Image();
+        t.onload=()=>{av.style.backgroundImage=`url('${chain[j]}')`;};
+        t.onerror=()=>next(j+1);
+        t.src=chain[j];
+      })(0);
+    }
+  });
+  _hudKeys=sig;
+}
 // Heartbeat: pad/joystick visibility can never go stale
-setInterval(()=>{try{_updateJoystickVisibility();}catch(e){}},400);
+setInterval(()=>{try{_updateJoystickVisibility();_updateHudChips();}catch(e){}},400);
 if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',_buildJoystick);
 else _buildJoystick();
 
@@ -2737,7 +2830,7 @@ let G_zoom=1.0;
 // ── DYNAMIC CAMERA ─────────────────────────────────────────────────
 // Broadcast-style: zoomed on the carrier, leading into movement,
 // clamped to the field. Players render visibly bigger.
-const CAM_BASE=1.40;
+const CAM_BASE=1.55;
 let camX=W/2,camY=H/2,camZ=1.0,_camLX=0,_camLY=0,_camPFX=null,_camPFY=null;
 function camUpdate(){
   let fx=W/2,fy=H/2,tz=1.0;
@@ -3285,7 +3378,11 @@ function fCard(role,pl,s,displayRole){
   const spNm=document.getElementById(p+'sp-name'),
         spGr=document.getElementById(p+'sp-grade'),
         spDc=document.getElementById(p+'sp-desc');
-  const sp = pl ? (isGK ? (typeof getGKSuper==='function'?getGKSuper(pl):null) : (typeof getSpecial==='function'?getSpecial(pl):null)) : null;
+  let sp = pl ? (isGK ? (typeof getGKSuper==='function'?getGKSuper(pl):null) : (typeof getSpecial==='function'?getSpecial(pl):null)) : null;
+  if(pl && !sp){
+    const _posMoves={ST:'Power Strike',CF:'Power Strike',LW:'Slider Shot',RW:'Slider Shot',OMF:'Drive Shot',CM1:'Twin Drive Pass',CM2:'Twin Drive Pass',DMF:'Iron Tackle',CB1:'Iron Tackle',CB2:'Iron Tackle',LB:'Overlap Cross',RB:'Overlap Cross',GK:'Super Save'};
+    sp={l:_posMoves[pl.pos]||'Power Strike',generic:true};
+  }
   if(spNm) spNm.textContent = sp ? (sp.l||sp.name||'—') : '—';
   if(spGr) spGr.textContent = sp ? (sp.generic ? 'B' : 'S') : '';
   if(spGr) spGr.style.color = sp && sp.generic ? '#44c8ff' : 'var(--gold)';
@@ -3301,6 +3398,8 @@ function fCard(role,pl,s,displayRole){
       'Slider Shot':'Curves wickedly mid-flight.',
       'Fantasista Shot':'Genius improvisation, no defending it.',
       'Power Strike':'A reliable strike honed through countless matches.',
+      'Iron Tackle':'A crunching, perfectly timed challenge.',
+      'Overlap Cross':'A surging run capped by a whipped delivery.',
       'God Hand':'Catches anything within reach.',
       'SSGK':'World-class reflexes — Wakabayashi territory.',
       'Iron Wall':'Goal becomes a fortress.',
