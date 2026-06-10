@@ -275,5 +275,20 @@ document.getElementById('b-start').onclick=()=>{
 document.getElementById('b-back').onclick=()=>{document.getElementById('uts').style.display='none';};
 
 }
+
+// ── ACTIVATION: the new screen fronts the existing team menu ──
+// Flow: match prep → NEW glass screen → START MATCH → original menu
+// (which still applies the real lineup) → kick off. BACK skips out.
+setTimeout(()=>{
+ if(typeof window.openTeamMenu==='function'&&!window.__utsHooked){
+  window.__utsHooked=true;
+  const _old=window.openTeamMenu;
+  window.openTeamMenu=function(...a){
+   try{openTeamScreen(()=>_old.apply(window,a));}
+   catch(e){_old.apply(window,a);}
+  };
+ }
+},800);
+
 if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',init);else init();
 })();
