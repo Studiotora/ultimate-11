@@ -1485,6 +1485,13 @@ function tick(dt=1){
   const cp=PP[s][G.ck];if(!cp)return;
   const dir=dirFor(s);
 
+  // GK carrier is locked to his goal area — never dribbles upfield
+  const _carrPl0=sq(s)[G.ck];
+  if(_carrPl0&&_carrPl0.pos==='GK'){
+    const gx=ownGoalXFor(s);
+    cp.x=clamp(cp.x,Math.min(gx,gx+dirFor(s)*W*0.10),Math.max(gx,gx+dirFor(s)*W*0.10));
+    cp.y=clamp(cp.y,H*0.30,H*0.70);
+  }
   const mv=carrierAdvanceVector(s,cp);
   // Vector-magnitude clamp: previous per-axis clamp made diagonals ~41% faster
   // and silently negated the 3.2× manual boost. SPD stat + stamina now scale pace.
@@ -1492,8 +1499,8 @@ function tick(dt=1){
   const carrMult=fieldSpdMult(carrierPl);
   const mvMag=Math.hypot(mv.x,mv.y);
   if(mvMag>0.0001){
-    let capMult=(s==='h')?3.2:1.45;
-    if(s==='h'&&G_sprint)capMult*=1.28; // ✕ sprint held
+    let capMult=(s==='h')?2.25:1.45;
+    if(s==='h'&&G_sprint)capMult*=1.20; // ✕ sprint held
     const cap=MAX_CARRIER_STEP()*capMult*carrMult*dt;
     const step=Math.min(mvMag*dt,cap);
     cp.x=clamp(cp.x+(mv.x/mvMag)*step,W*.01,W*.99);
@@ -1566,15 +1573,17 @@ function tick(dt=1){
       let ux,uy;
       if(manualDef){ux=G_inputVec.x;uy=G_inputVec.y;}
       else{
-        const targetX=cp.x-dir*W*.01;
-        const targetY=cp.y;
+        // Predictive chase: aim where the carrier is GOING, not where he was
+        const lead=W*0.05;
+        const targetX=cp.x+(G.poss==='h'?G_inputVec.x:dirFor(G.poss))*lead;
+        const targetY=cp.y+(G.poss==='h'?G_inputVec.y*lead:0);
         const dx=targetX-dp2.x,dy=targetY-dp2.y;
         const dd=Math.hypot(dx,dy)||1;
         ux=dx/dd;uy=dy/dd;
       }
       const pressMult=(G.pressing&&ds==='h')?1.5:1.0;
       const engPl=sq(ds)[ROLES.engager];
-      const sprintMult=(ds==='h'&&G_sprint)?1.22:1.0;
+      const sprintMult=(ds==='h'&&G_sprint)?1.22:1.08; // AI chase slightly hotter
       const manualMult=manualDef?1.3:1.0;
       const step=MAX_DEF_STEP()*pressMult*sprintMult*manualMult*fieldSpdMult(engPl)*dt;
       dp2.x=clamp(dp2.x+ux*step,W*.01,W*.99);
@@ -2107,10 +2116,10 @@ function _fieldTag(p,txt,col){
   const sx=perspX(p.x,p.y),sy=perspY(p.y),sc=perspScale(p.y);
   cx.font='700 11px Orbitron';
   const w=cx.measureText(txt).width+14;
-  cx.fillStyle='rgba(2,4,10,.78)';cx.fillRect(sx-w/2,sy-26*sc-34,w,16);
-  cx.fillStyle=col;cx.fillRect(sx-w/2,sy-26*sc-34,3,16);
+  cx.fillStyle='rgba(2,4,10,.78)';cx.fillRect(sx-w/2,sy-48*sc-36,w,16);
+  cx.fillStyle=col;cx.fillRect(sx-w/2,sy-48*sc-36,3,16);
   cx.fillStyle='#fff';cx.textAlign='center';
-  cx.fillText(txt,sx+1,sy-26*sc-22);
+  cx.fillText(txt,sx+1,sy-48*sc-24);
   cx.textAlign='left';
 }
 function drawRadar(){
@@ -2598,9 +2607,10 @@ function _buildDpad(){
     <button class="db xx"  data-a="sprint"><i>✕</i><span>SPRINT</span></button>`;
   document.body.appendChild(w);
   G_dpadEl=w;
-  w.querySelector('[data-a="shoot"]').addEventListener('click',()=>{if(G.poss==='h')manualShot();});
-  w.querySelector('[data-a="pass"]').addEventListener('click',()=>{if(G.poss==='h')togglePassMode();});
-  w.querySelector('[data-a="press"]').addEventListener('click',()=>togglePress());
+  const tap=(sel,fn)=>{const b=w.querySelector(sel);b.addEventListener('pointerdown',e=>{e.preventDefault();e.stopPropagation();fn();},{passive:false});};
+  tap('[data-a="shoot"]',()=>{if(G.poss==='h')manualShot();});
+  tap('[data-a="pass"]',()=>{if(G.poss==='h')togglePassMode();});
+  tap('[data-a="press"]',()=>togglePress());
   const xb=w.querySelector('[data-a="sprint"]');
   const on=e=>{e.preventDefault();G_sprint=true;xb.classList.add('held');};
   const off=()=>{G_sprint=false;xb.classList.remove('held');};
@@ -2830,7 +2840,7 @@ let G_zoom=1.0;
 // ── DYNAMIC CAMERA ─────────────────────────────────────────────────
 // Broadcast-style: zoomed on the carrier, leading into movement,
 // clamped to the field. Players render visibly bigger.
-const CAM_BASE=1.55;
+const CAM_BASE=1.70;
 let camX=W/2,camY=H/2,camZ=1.0,_camLX=0,_camLY=0,_camPFX=null,_camPFY=null;
 function camUpdate(){
   let fx=W/2,fy=H/2,tz=1.0;
@@ -3041,11 +3051,15 @@ function playDuelCutIn(opts,onDone){
     _cutinDone=null;
     _cutinTimers.forEach(clearTimeout);_cutinTimers=[];
     ov.classList.add('out');
-    setTimeout(()=>{if(ov.parentNode)ov.remove();},240);
+    setTimeout(()=>{if(ov.parentNode)ov.remove();},420);
     if(onDone)onDone();
   };
   _cutinDone=finish;
-  ov.addEventListener('pointerdown',e=>{e.stopPropagation();e.preventDefault();finish();});
+  // Skip on release (pointerdown caused ghost-clicks selecting duel actions
+  // underneath); overlay keeps swallowing events while it fades.
+  ov.addEventListener('pointerdown',e=>{e.stopPropagation();e.preventDefault();});
+  ov.addEventListener('pointerup',e=>{e.stopPropagation();e.preventDefault();finish();});
+  ov.addEventListener('click',e=>{e.stopPropagation();e.preventDefault();});
   ready.then(()=>{
     if(!_cutinDone)return;
     ov.classList.add('in');

@@ -2881,3 +2881,11 @@ html,body{overscroll-behavior:none;}
 .hc-t{display:flex;flex-direction:column;gap:1px;}
 .hc-t b{font-family:'Bebas Neue',sans-serif;font-size:15px;letter-spacing:.06em;color:#fff;line-height:1;font-weight:400;}
 .hc-t span{font-family:'Orbitron',sans-serif;font-size:7.5px;letter-spacing:.18em;}
+
+/* ── DUEL CARD V5 — explicit height budget, immune to flex quirks ── */
+.duel-aaa .dpc{height:384px !important;top:8px !important;bottom:auto !important;}
+.duel-aaa .dch{max-height:104px;min-height:104px;}
+.duel-aaa .dp-energy-wrap{max-height:38px;overflow:hidden;}
+.duel-aaa .dside-skills{max-height:104px !important;overflow:hidden !important;}
+/* Cut-in overlay keeps swallowing input while fading (ghost-click guard) */
+#cutin-ov.out{pointer-events:auto;}
