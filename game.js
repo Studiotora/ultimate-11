@@ -3724,12 +3724,18 @@ function weightedPick(items){
 }
 
 function aiAtk(){
+  if(G.phase!=='duel')return; // state safety — duel may have been torn down during a timeout window
   const side=G.D.as,carrier=G.D.carrier,cp=PP[side][G.ck];
   const prog=cp?progressFor(side,cp):.5;
   const pressure=cp?clamp(1-nearestDefenderDistance(side,cp)/(W*(ENGINE_CONFIG.ai.duelPressureRadius)),0,1):0;
   const space=cp?clamp(nearestDefenderDistance(side,cp)/(W*.18),0,1.5):0.5;
   const stage=possessionStage(side,cp);
   const bh=getBehaviorProfile(carrier);
+  // ── TRAILING-SIDE URGENCY ── 2nd half + losing = push for the goal.
+  // Scales with deficit and elapsed time: ~0.5 down one goal mid-half,
+  // → 1.0 deep in the half or two+ goals down. 0 otherwise.
+  const _gd=(side==='h'?G.hG-G.aG:G.aG-G.hG);
+  const urg=(G.half===2&&_gd<0)?clamp((-_gd)*0.45+(1-clamp(G.tL/2400,0,1))*0.4,0,1):0;
   const options=[];
   const canAfford=(id)=> (carrier?.spirit||1500) >= (ATK_ACTIONS[id]?.cost||0);
 
@@ -3738,7 +3744,7 @@ function aiAtk(){
     let passW=1.6 + space*1.8 + (1-pressure)*1.1;
     if(stage==='buildUp') passW += 1.0;
     if(stage==='advance') passW += 0.4;
-    passW *= (bh.passBias||1);
+    passW *= (bh.passBias||1) * (1-urg*0.15);
     options.push({id:'pass',w:passW});
   }
 
@@ -3751,13 +3757,13 @@ function aiAtk(){
   }
 
   const Z=ENGINE_CONFIG.duel.zones;
-  const shotWindow = ENGINE_CONFIG.ai.shotWindowBase - Math.max(0, (bh.longShotBias||1)-1)*0.06;
+  const shotWindow = ENGINE_CONFIG.ai.shotWindowBase - Math.max(0, (bh.longShotBias||1)-1)*0.06 - urg*0.08;
   if((G.D.isShot||prog>shotWindow)&&canAfford('shoot')){
     let shootW=(G.D.isShot?5.0:0.8)+prog*4.5-pressure*1.2;
-    shootW *= (bh.shootBias||1);
+    shootW *= (bh.shootBias||1) * (1+urg*0.55);
     // Zone modifier: heavily discourage long shots unless specialist
     if(prog < Z.longRange){
-      shootW *= (bh.longShotBias||1) * 0.45; // discourage unless longShotBias > 1
+      shootW *= (bh.longShotBias||1) * (0.45+urg*0.25); // discourage unless longShotBias > 1 — or desperate
     } else if(prog < Z.midRange){
       shootW *= 0.80; // slightly hesitant in midrange
     } else if(prog >= Z.boxEdge){
@@ -3766,10 +3772,10 @@ function aiAtk(){
     options.push({id:'shoot',w:shootW});
   }
   const spec=getSpecial(carrier);
-  const specialWindow = ENGINE_CONFIG.ai.specialWindowBase - Math.max(0, (bh.specialBias||1)-1)*0.05;
+  const specialWindow = ENGINE_CONFIG.ai.specialWindowBase - Math.max(0, (bh.specialBias||1)-1)*0.05 - urg*0.06;
   if(spec&&canAfford('special')&&(G.D.isShot||prog>specialWindow)){
     let specW=(G.D.isShot?6.0:1.6)+prog*5.0-pressure*0.6;
-    specW *= (bh.specialBias||1);
+    specW *= (bh.specialBias||1) * (1+urg*0.65);
     // Specials are worth using from any range — they're powerful enough
     if(prog < Z.longRange) specW *= 0.70; // still slightly discouraged
     options.push({id:'special',w:specW});
@@ -3811,13 +3817,14 @@ function aiAtk(){
     if(spec){
       // AI vs AI: play cutscene then resolve. AI vs HUMAN defender: defer to
       // confirmDuel so the cutscene plays AFTER the human picks defence.
-      if(G.D.as==='a'&&G.D.ds==='a'){setTimeout(()=>{if(!G.D.defA)aiDef();showSpecialCutscene(G.D.carrier,spec,()=>resDuel());},200);return;}
+      if(G.D.as==='a'&&G.D.ds==='a'){setTimeout(()=>{if(G.phase!=='duel')return;if(!G.D.defA)aiDef();showSpecialCutscene(G.D.carrier,spec,()=>resDuel());},200);return;}
     }
   }
   if(G.D.as==='a'&&G.D.ds==='a')tryRes();
 }
 
 function aiDef(){
+  if(G.phase!=='duel')return; // state safety — duel may have been torn down during a timeout window
   const def=G.D.def,ds=G.D.ds,as=G.D.as,cp=PP[as][G.ck];
   const prog=cp?progressFor(as,cp):.5;
   const centrality=cp?1-Math.abs(cp.y/H-.5):.5;
@@ -4166,6 +4173,7 @@ function calcDefencePower(def,defA,attackAction){
 }
 
 function resDuel(){
+  if(G.phase!=='duel')return; // state safety — cutscene/timeout callbacks can land after teardown
   if(!G.D.ak&&G.D.as==='h')return;
   if(!G.D.defA&&G.D.ds==='h')return;
   clearInterval(G.di);
