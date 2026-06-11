@@ -16,7 +16,7 @@
     pixelate:false,     // true = heavy PS1 framebuffer crush (blurs the nice sprites); off keeps them crisp
     res:300,            // internal framebuffer width (lower = chunkier)
     sprites:true,
-    spriteScale:2.1,    // sprite height vs token radius
+    spriteScale:1.75,    // sprite height vs token radius
     runFps:11           // run-cycle speed
   };
 
@@ -71,16 +71,33 @@
   //   frame 0 = idle, frames 1..n = run cycle. Faces screen-right.
   const ASPECT = 128/192;                 // cell aspect from the baker
   const SHEETS = { h:null, a:null };
-  function loadSheet(side,url){
-    const im=new Image();
-    im.onload=()=>{ let cw=im.height*ASPECT; let frames=Math.max(1,Math.round(im.width/cw));
-                    SHEETS[side]={img:im, cw:im.width/frames, ch:im.height, frames};
-                    console.log('[PS1] '+side+' sheet loaded:', im.width+'x'+im.height, frames+' frames'); };
-    im.onerror=()=>{ SHEETS[side]='none'; };
-    im.src=url;
+  const _sheetKey = { h:undefined, a:undefined };
+  // Try a chain of URLs; first that loads wins. Old sheet stays visible
+  // until the new one is ready (no flicker on team change).
+  function loadSheet(side,urls){
+    let i=0;
+    const tryNext=()=>{
+      if(i>=urls.length){ if(!SHEETS[side]) SHEETS[side]='none'; return; }
+      const im=new Image(), url=urls[i++];
+      im.onload=()=>{ let cw=im.height*ASPECT; let frames=Math.max(1,Math.round(im.width/cw));
+                      SHEETS[side]={img:im, cw:im.width/frames, ch:im.height, frames};
+                      console.log('[PS1] '+side+' sheet loaded: '+url, im.width+'x'+im.height, frames+' frames'); };
+      im.onerror=tryNext;
+      im.src=url;
+    };
+    tryNext();
   }
-  loadSheet('h','assets/ps1/home.png');
-  loadSheet('a','assets/ps1/away.png');
+  // Per-team sheets: assets/ps1/{teamKey}.png (e.g. japan.png).
+  // Missing file → falls back to home.png / away.png.
+  function syncSheets(){
+    const hk=(typeof selHome!=='undefined'&&selHome)?String(selHome).toLowerCase():null;
+    const ak=(typeof selAway!=='undefined'&&selAway)?String(selAway).toLowerCase():null;
+    if(hk!==_sheetKey.h){ _sheetKey.h=hk;
+      loadSheet('h', hk?['assets/ps1/'+hk+'.png','assets/ps1/home.png']:['assets/ps1/home.png']); }
+    if(ak!==_sheetKey.a){ _sheetKey.a=ak;
+      loadSheet('a', ak?['assets/ps1/'+ak+'.png','assets/ps1/away.png']:['assets/ps1/away.png']); }
+  }
+  syncSheets();
 
   // sheet layout (combined): idle, run, pass, shoot   [start,count]
   const LAYOUT={ idle:0, run:[1,6], pass:[7,2], shoot:[9,3] };
@@ -90,6 +107,7 @@
   // auto-detect passes/shots from the game's own state (no game.js edits)
   let lastCarrier=null, prevKick=false;
   function watchEvents(){
+    syncSheets(); // team selection can change between matches — keep sheets in sync
     if(typeof G==='undefined'||!G) return;
     if(G.phase==='moving'&&G.poss&&G.ck) lastCarrier={s:G.poss,k:G.ck};
     const kicking = (G.phase==='pass_anim');
@@ -146,12 +164,13 @@
     const st=state(s,k,p,sh.frames);
 
     cx.save();
-    cx.globalAlpha=iCh?.6:1;
+    cx.globalAlpha=1; // (was .6 for the chaser — players must never render transparent)
     cx.beginPath(); cx.ellipse(px,py+2*sc,w*0.28,w*0.13,0,0,Math.PI*2);
     cx.fillStyle='rgba(0,0,0,.4)'; cx.fill();
+    // Rings: blue under the carrier, red under the chaser. Nothing else.
     if(iC||iCh){
       cx.beginPath(); cx.ellipse(px,py+2*sc,w*0.34,w*0.16,0,0,Math.PI*2);
-      cx.lineWidth=2*sc; cx.strokeStyle=iC?'#ffd54a':(s==='h'?'#2882f0':'#f03030'); cx.stroke();
+      cx.lineWidth=2*sc; cx.strokeStyle=iC?'#2882f0':'#f03030'; cx.stroke();
     }
     cx.imageSmoothingEnabled=false;
     const sxc=st.frame*sh.cw, dx=px-w/2, dy=py-h+w*0.12;
@@ -167,13 +186,6 @@
       const ny=py-h+w*0.02;
       cx.lineWidth=Math.max(2,2.5*sc); cx.strokeStyle='rgba(0,0,0,.85)';
       cx.strokeText(num,px,ny); cx.fillStyle='#fff'; cx.fillText(num,px,ny);
-    }
-    const maxSp=pl.pos==='GK'?2000:1500;
-    const spArc=Math.max(0,Math.min(1,(pl.spirit||maxSp)/maxSp));
-    if(spArc<0.98){
-      cx.beginPath(); cx.arc(px,py+2*sc,w*0.36,-Math.PI/2,-Math.PI/2+spArc*Math.PI*2);
-      cx.strokeStyle=spArc>0.5?'rgba(68,200,255,.9)':spArc>0.25?'rgba(240,192,64,.9)':'rgba(220,32,32,.9)';
-      cx.lineWidth=2.2*sc; cx.stroke();
     }
     cx.restore();
     return true;

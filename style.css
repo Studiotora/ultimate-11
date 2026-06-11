@@ -2899,3 +2899,28 @@ html,body{overscroll-behavior:none;}
 .hc-av{width:54px !important;height:54px !important;flex:0 0 54px !important;}
 .hc-t b{font-size:19px !important;}
 .hc-t span{font-size:9px !important;}
+
+/* ── DUEL CARD V6 — tall portrait: card top edge → stamina bar ──── */
+/* Portrait freed from the header strip: anchored to the card's right
+   edge, reaching up past the tab to the top border and down over the
+   stamina bar (stamina intentionally overlaps it). */
+.duel-aaa .dch{position:relative;overflow:visible;}
+.duel-aaa .dch-port{
+  position:absolute !important;right:0 !important;top:-22px !important;
+  width:128px !important;height:176px !important;
+  flex:none !important;
+  background-size:contain !important;background-position:right top !important;
+  background-repeat:no-repeat !important;
+  background-color:transparent !important;
+  border:none !important;border-radius:0 !important;
+  box-shadow:none !important;
+  -webkit-mask-image:none !important;
+          mask-image:none !important;
+  z-index:1 !important;
+}
+.duel-aaa .dch-id{padding-right:118px;z-index:2;}
+.duel-aaa .dp-energy-wrap{position:relative;z-index:2;}
+/* stamina numbers must stay readable over the portrait */
+.duel-aaa .dp-energy-val{color:#fff !important;text-shadow:0 1px 3px rgba(0,0,0,.95),0 0 8px rgba(0,0,0,.8) !important;}
+.duel-aaa .ds-stamina-max{color:rgba(255,255,255,.75) !important;}
+.duel-aaa .dp-energy-lbl{color:rgba(255,255,255,.85) !important;text-shadow:0 1px 3px rgba(0,0,0,.95) !important;}

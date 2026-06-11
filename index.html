@@ -12,7 +12,7 @@
 <title>Ultimate Eleven - Football Strategy Game | Beta</title>
 <meta name="description" content="Ultimate Eleven - A Captain Tsubasa inspired football strategy game with 11 vs 11 gameplay">
 <link href="https://fonts.googleapis.com/css2?family=Anton&family=Bebas+Neue&family=Rajdhani:wght@600;700&family=Orbitron:wght@400;700&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="style.css?v=29">
+<link rel="stylesheet" href="style.css?v=30">
 <style>
 /* CAREER MODE - inline to bypass cache */
 #s-career-clubs{background:radial-gradient(ellipse 80% 50% at 50% 0%,rgba(30,114,220,.08),transparent 60%),#06080e;overflow:hidden;}
@@ -473,8 +473,18 @@
 .duel-aaa .dside-ovr{display:flex;flex-direction:column;align-items:center;line-height:.85;}
 .duel-aaa .dside-ovr-num{font-family:'Bebas Neue',sans-serif;font-size:clamp(26px,40.96px,38px);letter-spacing:.02em;text-shadow:0 0 14px currentColor;}
 .duel-aaa .dside-ovr-lbl{font-family:'Orbitron',sans-serif;font-size:7px;letter-spacing:.2em;color:rgba(255,255,255,.5);margin-top:2px;}
-/* shorter info cards — size to content, pushed below the floating score */
-.duel-aaa .dpc{top:clamp(56px,61.2px,80px) !important;bottom:auto !important;max-height:calc(100% - 130px);}
+/* infobox — fixed cap in design px, NO scrollbar, content compacted to fit */
+.duel-aaa .dpc{top:48px !important;bottom:auto !important;height:auto !important;max-height:460px !important;overflow:hidden !important;scrollbar-width:none;}
+.duel-aaa .dpc::-webkit-scrollbar{display:none !important;width:0 !important;}
+.duel-aaa .dpc-info{flex:none !important;padding:8px 10px !important;position:relative;}
+/* portrait layout lives in style.css (DUEL CARD V6) */
+.duel-aaa .dp-energy-wrap{margin:4px 0 !important;}
+.duel-aaa .dside-ovr-num{font-size:30px !important;}
+.duel-aaa .dside-h{font-size:7px !important;margin:3px 0 2px !important;}
+.duel-aaa .dside-skills>*{padding:2px 6px !important;font-size:10px !important;line-height:1.3 !important;}
+.duel-aaa .dside-special{margin-top:4px !important;}
+.duel-aaa .dss-portrait{width:38px !important;height:38px !important;}
+.duel-aaa .dss-desc{font-size:8px !important;line-height:1.35 !important;max-height:34px;overflow:hidden;}
 .duel-aaa .dpc-info{flex:none !important;}
 /* full-screen field — pitch shows behind the top score banner during a duel */
 #s-match.duel-live .mhud{background:transparent !important;z-index:30;}

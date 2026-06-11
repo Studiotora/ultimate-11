@@ -1152,7 +1152,7 @@ function startGame(){
 
 const CV=document.getElementById('C');const cx=CV.getContext('2d');
 let W=0,H=0,PP={h:{},a:{}},PT={h:{},a:{}},ball={x:0,y:0,tx:0,ty:0},trail=[];
-const CR=17,CDms=2500,CS=()=>W*.00023,DS=()=>W*.00030,IR=()=>W*.022,PC=()=>W*.08;
+const CR=13,CDms=2500,CS=()=>W*.00023,DS=()=>W*.00030,IR=()=>W*.022,PC=()=>W*.08;
 const MAX_CARRIER_STEP=()=>Math.max(0.22,W*.00038); // carrier — bigger-pitch pacing
 const MAX_DEF_STEP=()=>Math.max(0.30,W*.00058);     // engager — slightly faster than carrier
 const MAX_OFFBALL_STEP=()=>Math.max(0.26,W*.00058);  // off-ball
@@ -2581,13 +2581,16 @@ function _updateJoystickVisibility(){
   const isTouch=('ontouchstart' in window)||navigator.maxTouchPoints>0;
   // Visible whenever the field is live — attack steers the carrier,
   // defense steers the engager.
-  const show=isTouch && G.phase==='moving' && !G.paused;
+  const live=G.phase==='moving' && !G.paused;
+  const show=isTouch && live;
   G_joyEl.style.display=show?'block':'none';
   if(!show && G_joyActive){
     G_joyKnob.style.left='50%';G_joyKnob.style.top='50%';
     G_inputVec.x=0;G_inputVec.y=0;G_joyActive=false;
   }
-  _updateDpad(show);
+  // Face buttons show on every platform (mouse uses pointerdown);
+  // only the virtual joystick is touch-exclusive.
+  _updateDpad(live);
 }
 
 // ── PS-STYLE FACE BUTTONS (right side) ────────────────────────────
@@ -2838,8 +2841,8 @@ let G_duelGrace=null;
 let G_zoom=1.0;
 // ── DYNAMIC CAMERA ─────────────────────────────────────────────────
 // Broadcast-style: zoomed on the carrier, leading into movement,
-// clamped to the field. Players render visibly bigger.
-const CAM_BASE=1.70;
+// clamped to the field. Pulled back for proper player/field proportions.
+const CAM_BASE=1.50;
 let camX=W/2,camY=H/2,camZ=1.0,_camLX=0,_camLY=0,_camPFX=null,_camPFY=null,_camTs=0;
 function camUpdate(){
   // dt-normalized: identical camera feel on 60 / 120 / 144 Hz screens
@@ -2852,12 +2855,12 @@ function camUpdate(){
   if(G.phase==='moving'&&cp){
     tz=CAM_BASE;
     const d=nearestOpponentDist(G.poss,G.ck);
-    if(d<IR()*1.8)tz+=0.13;else if(d<IR()*3)tz+=0.06;
+    if(d<IR()*1.8)tz+=0.08;else if(d<IR()*3)tz+=0.04;
     fx=perspX(cp.x,cp.y);fy=perspY(cp.y);
   }else if(G.phase==='pass_anim'&&typeof ball!=='undefined'){
-    tz=1.22;fx=perspX(ball.x,ball.y);fy=perspY(ball.y);
+    tz=1.18;fx=perspX(ball.x,ball.y);fy=perspY(ball.y);
   }else if(cp){
-    tz=1.30;fx=perspX(cp.x,cp.y);fy=perspY(cp.y);
+    tz=1.25;fx=perspX(cp.x,cp.y);fy=perspY(cp.y);
   }
   tz=Math.max(tz,G_zoom); // duel zoom-punch still pops through
   // Directional lead: camera looks ahead of where the focus is moving
@@ -3841,8 +3844,8 @@ function aiDef(){
       const cushionFactor=clamp(cushionAfter/600,0.35,1.0); // <200 left → 0.35x; >=800 left → 1.0x
       if(isSpecialShot)              superW=6.0*cushionFactor;
       else if(highRiskShot)          superW=4.2*cushionFactor;
-      else if(attackerIsElite)       superW=2.2*cushionFactor;
-      else if(inBox&&dangerCentral)  superW=1.6*cushionFactor;
+      else if(attackerIsElite)       superW=2.8*cushionFactor;
+      else if(inBox&&dangerCentral)  superW=2.2*cushionFactor;
       else                           superW=0.4*cushionFactor;
     }
     const opts=[
@@ -3850,7 +3853,17 @@ function aiDef(){
       {id:'punch',w:1.2+punchBias},
       {id:'supersave',w:superW},
     ];
-    G.D.defA=weightedPick(opts.filter(o=>o.w>0));
+    // ── SMART KEEPER ────────────────────────────────────────────────
+    // Estimate the incoming shot power; if it would likely beat a plain
+    // save and the GK can afford it, COMMIT to the super save instead of
+    // leaving a dangerous shot to a weighted dice roll.
+    const Z2=ENGINE_CONFIG.duel.zones;
+    const shotZ=prog<Z2.longRange?1.0:prog<Z2.midRange?1.3:prog<Z2.boxEdge?1.6:1.9;
+    const estShot=(gs(G.D.carrier,'sho')+gs(G.D.carrier,'pow')/2)
+      *(isSpecialShot?2.3:shotZ)*spiritMult(G.D.carrier);
+    const estSave=(gs(def,'sav')+gs(def,'ref')/2)*1.80*spiritMult(def);
+    if(canAffordSuper && estShot>estSave*0.92) G.D.defA='supersave';
+    else G.D.defA=weightedPick(opts.filter(o=>o.w>0));
   } else {
     let tackleW=2.0, interceptW=1.8, blockW=1.6;
 
@@ -3906,6 +3919,10 @@ function aiDef(){
     G.D.defA=weightedPick(opts.filter(o=>o.w>0));
   }
   if(G.D.as==='a'&&G.D.ds==='a')tryRes();
+  // Committed attack (e.g. shot carried into the GK duel): the attacker has no
+  // second choice, so once the AI defence picks, resolve after a short beat
+  // instead of letting the 30s timer run out.
+  else if(G.D.ak&&G.D.defA)setTimeout(()=>{try{tryRes();}catch(e){}},1100);
 }
 
 function tryRes(){
@@ -4093,6 +4110,17 @@ function calcAttackPower(carrier,ak,side){
     if((ak==='shoot'||ak==='special')&&_stage==='threat')mAction*=1.10;
     if(ak==='dribble'&&_stage==='advance')mAction*=1.08;
   }
+  // ── DISTANCE HARD CAP for normal shots ───────────────────────────
+  // longShotBias × 1.15 × shootBias stacked up and fully cancelled the
+  // zone penalty — midfield screamers were out-rolling clean saves.
+  // Specials are exempt (they cost 400 SP and are the CT fantasy).
+  if(akBase2==='shoot'){
+    const _cp3=PP[side]&&PP[side][G.ck]?PP[side][G.ck]:null;
+    const _prog3=_cp3?progressFor(side,_cp3):0.5;
+    const _Z3=ENGINE_CONFIG.duel.zones;
+    if(_prog3<_Z3.longRange) mAction=Math.min(mAction,0.95);
+    else if(_prog3<_Z3.midRange) mAction=Math.min(mAction,1.18);
+  }
   const rng=ENGINE_CONFIG.duel.rngMin+Math.random()*(ENGINE_CONFIG.duel.rngMax-ENGINE_CONFIG.duel.rngMin);
   return (sBase+sPhys/2)*mAction*spiritMult(carrier)*rng;
 }
@@ -4194,27 +4222,26 @@ function resDuel(){
   // Only the loser gets cooldown — winner is free to act immediately
   const hW=(as==='h'&&win)||(as==='a'&&!win);
   const rc2=hW?'#20c878':'#dc2020';
-  let badge='SUCCESS!',det='';
+  // Single, clean outcome: SUCCESS (green) when you win the duel,
+  // COUNTERED (red) when you lose. Detail line keeps the context.
+  let badge=hW?'SUCCESS':'COUNTERED',det='';
   // Normalize super variants to their base for outcome routing/labels.
   const akB=baseAction(ak), defAB=baseAction(defA);
   if(akB==='shoot'){
-    if(win){badge=G.D.isShot?'⚽ GOAL!':'🎯 SHOT ON TARGET!';det=carrier?carrier.name+(G.D.isShot?' scores!':' shoots!'):'';}
-    else if(defA==='punch'){badge='PUNCHED!';det=def?def.name+' punches clear!':'';}
-    else{badge='SAVED!';det=def?def.name+' keeps it out!':'';}
+    if(win){det=carrier?carrier.name+(G.D.isShot?' scores!':' shoots!'):'';}
+    else if(defA==='punch'){det=def?def.name+' punches clear!':'';}
+    else{det=def?def.name+' keeps it out!':'';}
   }else if(akB==='pass'||akB==='one-two'){
-    if(win){badge=akB==='one-two'?'ONE-TWO!':'PASS COMPLETE!';det=pk&&sq(as)[pk]?'→ '+sq(as)[pk].name:'';}
-    else{badge=defAB==='intercept'?'INTERCEPTED!':'PASS CUT!';det=def?def.name+' steps in!':'';}
+    if(win){det=pk&&sq(as)[pk]?'→ '+sq(as)[pk].name:'';}
+    else{det=def?def.name+' steps in!':'';}
   }else if(akB==='dribble'){
-    if(win){badge='DRIBBLE!';det=carrier?carrier.name+' beats the press!':'';}
-    else{badge=defAB==='block'?'BLOCKED!':'TACKLED!';det=def?def.name+' wins it!':'';}
+    if(win){det=carrier?carrier.name+' beats the press!':'';}
+    else{det=def?def.name+' wins it!':'';}
   }
   const al={pass:'PASS',dribble:'DRIBBLE',shoot:'SHOOT',special:'SPECIAL','one-two':'ONE-TWO',
     'super-pass':'SUPER PASS','super-dribble':'SUPER DRIBBLE','super-one-two':'SUPER 1-2'};
   const dl={tackle:'TACKLE',intercept:'INTERCEPT',block:'BLOCK',save:'SAVE',punch:'PUNCH',
     supersave:'SUPER SAVE','super-tackle':'SUPER TACKLE','super-intercept':'SUPER INTERCEPT','super-block':'SUPER BLOCK'};
-  const _bRPS=(RPS[akB]&&RPS[akB][defAB])||1.0;
-  if(_bRPS>1.2&&win) badge='⚡ COUNTER! '+badge;
-  else if(_bRPS<0.85&&!win) badge='🛡 COUNTERED! '+badge;
   document.getElementById('rbadge').textContent=badge;
   document.getElementById('rbadge').style.color=rc2;
   document.getElementById('rdet').textContent=det;
@@ -4225,30 +4252,20 @@ function resDuel(){
   ro.classList.add('show');say(badge+(det?' — '+det:''));
 
   // ── IMPACT FEEDBACK ─────────────────────────────────────
+  // Shakes only — the floating texts duplicated the result badge.
   if(akB==='shoot'){
     if(win&&G.D.isShot){
       // Goal — handled in afGoal with full zoom
       shakeScreen(8,120);
     } else if(win){
       shakeScreen(5,80);
-      impactText('🎯 SHOT ON TARGET!','#f0c040');
     } else if(defA==='supersave'){
       shakeScreen(6,100);
-      impactText('⭐ SUPER SAVE!','#44b4ff','clamp(20px,44.8px,32px)');
     } else if(defA==='punch'){
       shakeScreen(4,70);
-      impactText('👊 PUNCHED CLEAR!','#aaa');
     } else {
       shakeScreen(3,60);
-      impactText('🧤 SAVED!','#44b4ff');
     }
-  } else {
-    if(win&&akB==='dribble'){impactText(isSuperAtk(ak)?'💨 FALCON DRIBBLE!':'✨ DRIBBLE!','#f0c040');}
-    else if(win&&akB==='one-two'){impactText(isSuperAtk(ak)?'⚡ LIGHTNING 1-2!':'⚡ ONE-TWO!','#f0c040');}
-    else if(win&&akB==='pass'&&isSuperAtk(ak)){impactText('🎯 THREADING PASS!','#f0c040');}
-    else if(!win&&defAB==='intercept'){impactText(isSuperDef(defA)?'🦅 AERIAL INTERCEPT!':'✋ INTERCEPTED!','#dc2020');}
-    else if(!win&&defAB==='tackle'){impactText(isSuperDef(defA)?'⚔ IRON TACKLE!':'🦵 TACKLED!','#dc2020');}
-    else if(!win&&defAB==='block'){impactText(isSuperDef(defA)?'🛡 IRON WALL!':'🛡 BLOCKED!','#dc2020');}
   }
   const powerDiff=Math.abs(atkPow-defPow);
   if(powerDiff>40){
