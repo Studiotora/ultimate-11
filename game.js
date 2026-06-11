@@ -3862,7 +3862,12 @@ function aiDef(){
     const estShot=(gs(G.D.carrier,'sho')+gs(G.D.carrier,'pow')/2)
       *(isSpecialShot?2.3:shotZ)*spiritMult(G.D.carrier);
     const estSave=(gs(def,'sav')+gs(def,'ref')/2)*1.80*spiritMult(def);
-    if(canAffordSuper && estShot>estSave*0.92) G.D.defA='supersave';
+    // RNG-aware commit: both rolls span rngMin–rngMax, so a shot up to
+    // ~rngMax/rngMin (≈22%) below the save estimate can still win on the
+    // dice. Hard-commit inside that band only if the GK keeps a healthy
+    // stamina cushion (>=300) after the super save.
+    const rngEdge=(ENGINE_CONFIG.duel.rngMax||1.1)/(ENGINE_CONFIG.duel.rngMin||0.9);
+    if(canAffordSuper && (estShot>estSave*0.92 || (estShot*rngEdge>estSave && cushionAfter>=300))) G.D.defA='supersave';
     else G.D.defA=weightedPick(opts.filter(o=>o.w>0));
   } else {
     let tackleW=2.0, interceptW=1.8, blockW=1.6;
@@ -4020,15 +4025,19 @@ const SUPER_NAMES={
   'super-intercept':{l:'Aerial Intercept',i:'🦅'},
   'super-block':   {l:'Iron Wall',       i:'🛡'},
 };
-// B_RPS: attacker's multiplier based on matchup
-// 1.35 = read correctly (was 1.5), 0.78 = read wrong (was 0.6), 1.0 = neutral
-// Softened so wrong reads still punish but don't completely collapse.
+// B_RPS: DEFENCE-side multiplier by matchup (applied in calcDefencePower).
+// 1.35 = defender read the attack correctly (counter), ~0.80 = wrong read,
+// 1.0 = neutral. Counter triangle (matches aiDef pick weights):
+//   intercept > pass / one-two  ·  tackle > dribble  ·  block > shoot / special
+// Special's block counter is softer (1.25) — its 2.50 base mult must still
+// usually win; block is just the "best wrong answer" against it.
+// GK actions (save/punch/supersave) bypass RPS entirely — see isGKAction.
 const RPS={
-  pass:     {tackle:0.78, intercept:1.35, block:1.0,  save:1.0,  punch:1.0, supersave:1.0},
-  dribble:  {tackle:1.35, intercept:0.82, block:1.0,  save:1.0,  punch:1.0, supersave:1.0},
-  'one-two':{tackle:1.35, intercept:0.82, block:1.0,  save:1.0,  punch:1.0, supersave:1.0},
-  shoot:    {tackle:1.0,  intercept:1.0,  block:0.68, save:0.70, punch:1.0, supersave:0.45},
-  special:  {tackle:1.0,  intercept:1.0,  block:0.68, save:0.48, punch:1.15,supersave:0.35},
+  pass:     {tackle:0.78, intercept:1.35, block:1.00},
+  dribble:  {tackle:1.35, intercept:0.82, block:1.00},
+  'one-two':{tackle:0.80, intercept:1.35, block:1.00},
+  shoot:    {tackle:1.00, intercept:1.00, block:1.35},
+  special:  {tackle:1.00, intercept:1.00, block:1.25},
 };
 
 function spiritMult(pl){
