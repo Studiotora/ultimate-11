@@ -2842,7 +2842,7 @@ let G_zoom=1.0;
 // ── DYNAMIC CAMERA ─────────────────────────────────────────────────
 // Broadcast-style: zoomed on the carrier, leading into movement,
 // clamped to the field. Pulled back for proper player/field proportions.
-const CAM_BASE=1.50;
+const CAM_BASE=1.75;
 let camX=W/2,camY=H/2,camZ=1.0,_camLX=0,_camLY=0,_camPFX=null,_camPFY=null,_camTs=0;
 function camUpdate(){
   // dt-normalized: identical camera feel on 60 / 120 / 144 Hz screens
@@ -2858,9 +2858,9 @@ function camUpdate(){
     if(d<IR()*1.8)tz+=0.08;else if(d<IR()*3)tz+=0.04;
     fx=perspX(cp.x,cp.y);fy=perspY(cp.y);
   }else if(G.phase==='pass_anim'&&typeof ball!=='undefined'){
-    tz=1.18;fx=perspX(ball.x,ball.y);fy=perspY(ball.y);
+    tz=1.32;fx=perspX(ball.x,ball.y);fy=perspY(ball.y);
   }else if(cp){
-    tz=1.25;fx=perspX(cp.x,cp.y);fy=perspY(cp.y);
+    tz=1.40;fx=perspX(cp.x,cp.y);fy=perspY(cp.y);
   }
   tz=Math.max(tz,G_zoom); // duel zoom-punch still pops through
   // Directional lead: camera looks ahead of where the focus is moving
