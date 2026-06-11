@@ -1413,9 +1413,27 @@
 </div><!-- /viewport -->
 <!-- ── STORY MODE ─────────────────────────────────────── -->
 <div id="s-story" class="screen">
+  <div class="st-par"><i class="p1"></i><i class="p2"></i><i class="p3"></i><i class="p4"></i><i class="p5"></i></div>
   <div class="cup-wrap">
     <div class="cup-top"><button class="cz-back" onclick="showSc('s-home')">‹ HOME</button><div class="cup-title">STORY · LA NUOVA STELLA</div></div>
     <div id="st-body" class="cup-scroll"></div>
+  </div>
+  <div id="st-alloc" class="st-alloc" style="display:none">
+    <div class="st-al-box">
+      <div class="st-al-head"><span>TRAINING · DISTRIBUTE STAT POINTS</span><button class="st-al-x" onclick="stCloseAlloc()">✕</button></div>
+      <div id="st-alloc-body"></div>
+      <button class="st-begin st-al-done" onclick="stCloseAlloc()">DONE</button>
+    </div>
+  </div>
+  <div id="st-phone" class="st-phone" style="display:none">
+    <div class="st-ph-card">
+      <div class="st-ph-rings"><i></i><i></i><i></i></div>
+      <div class="st-ph-ava"></div>
+      <div class="st-ph-name"></div>
+      <div class="st-ph-sub"></div>
+      <div class="st-ph-feed"></div>
+      <div class="st-ph-hint">TAP ▸</div>
+    </div>
   </div>
   <div id="st-dialog" class="st-dialog" style="display:none">
     <div class="st-lbx top"></div><div class="st-lbx bot"></div>
@@ -1453,7 +1471,7 @@
 <script src="ult11-team.js?v=5" defer></script>
 <script src="ult11-custom.js?v=2" defer></script>
 <script src="ult11-cup.js?v=2" defer></script>
-<script src="ult11-story.js?v=2" defer></script>
+<script src="ult11-story.js?v=4" defer></script>
 <script>
 (function(){
   var _H="assets/home/menu-bg.png";

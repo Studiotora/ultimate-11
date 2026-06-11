@@ -15,7 +15,18 @@
 const KEY='ue_story_v1';
 window.STORY=null;
 function save(){try{localStorage.setItem(KEY,JSON.stringify(STORY));}catch(e){}}
-function load(){try{return JSON.parse(localStorage.getItem(KEY))||null;}catch(e){return null;}}
+function load(){
+  try{
+    const d=JSON.parse(localStorage.getItem(KEY))||null;
+    if(d&&d.hero&&!d.hero.alloc){ // migrate pre-points saves: convert old auto-growth to allocated stats
+      const g=d.hero.level-1,r=d.hero.role;
+      const rates=r==='FW'?{spd:0.8,pwr:1.0,tec:0.9,def:0.25}:{spd:0.7,pwr:0.6,tec:1.0,def:0.5};
+      d.hero.alloc={spd:Math.round(g*rates.spd),pwr:Math.round(g*rates.pwr),tec:Math.round(g*rates.tec),def:Math.round(g*rates.def)};
+      d.hero.points=0;
+    }
+    return d;
+  }catch(e){return null;}
+}
 function wipe(){try{localStorage.removeItem(KEY);}catch(e){} window.STORY=null;}
 
 /* ── SEEDED RNG (stable rosters per club) ─────────────────── */
@@ -108,19 +119,25 @@ function stBuildTeam(key){
   if(typeof window.applyCustomNamesToTeam==='function')window.applyCustomNamesToTeam(key,T[key]);
   return T[key];
 }
-function heroStats(role,lvl){
-  const g=lvl-1;
-  const s=role==='FW'
-    ?{spd:62+g*0.8,pwr:60+g*1.0,tec:58+g*0.9,def:38+g*0.25}
-    :{spd:58+g*0.7,pwr:52+g*0.6,tec:64+g*1.0,def:46+g*0.5};
-  Object.keys(s).forEach(k=>s[k]=Math.min(96,Math.round(s[k])));
-  return s;
+const HERO_BASE={FW:{spd:62,pwr:60,tec:58,def:38},CA:{spd:58,pwr:52,tec:64,def:46}};
+const PTS_PER_LVL=3,STAT_CAP=96;
+function heroStats(H){ // H = STORY.hero (uses allocated points)
+  const b=HERO_BASE[H.role],a=H.alloc||{spd:0,pwr:0,tec:0,def:0};
+  return{spd:Math.min(STAT_CAP,b.spd+(a.spd||0)),pwr:Math.min(STAT_CAP,b.pwr+(a.pwr||0)),
+         tec:Math.min(STAT_CAP,b.tec+(a.tec||0)),def:Math.min(STAT_CAP,b.def+(a.def||0))};
+}
+function rivalStats(role,lvl){ // rival auto-distributes role-weighted, always lvl = hero+1
+  const b={...HERO_BASE[role]},pts=(lvl-1)*PTS_PER_LVL;
+  const w=role==='FW'?['pwr','spd','tec','def']:['tec','spd','def','pwr'];
+  const share=[0.36,0.28,0.24,0.12];
+  w.forEach((k,i)=>b[k]=Math.min(STAT_CAP,Math.round(b[k]+pts*share[i])));
+  return b;
 }
 function injectHero(teamKey,who){ // who: 'hero' | 'rival'
   const t=stBuildTeam(teamKey);if(!t)return;
   const S=STORY.hero,role=who==='hero'?S.role:(S.role==='FW'?'CA':'FW');
   const lvl=who==='hero'?S.level:S.level+1;
-  const slotPos=HERO_SLOT[role],st=heroStats(role,lvl);
+  const slotPos=HERO_SLOT[role],st=who==='hero'?heroStats(S):rivalStats(role,lvl);
   const nm=who==='hero'?S.name:S.rival;
   const idx=t.p.findIndex(p=>p.pos===slotPos&&!p._hero&&!p._rival);
   const old=idx>=0?t.p[idx]:t.p[9];
@@ -169,6 +186,132 @@ function badge(k,s=24){
   return `<span class="uee" style="width:${s}px;height:${s}px"><img src="assets/team/${k}.png" onerror="this.style.display='none';this.nextElementSibling.style.display='flex'"><span class="fb">${fb}</span></span>`;
 }
 
+
+/* ── STAT POINT ALLOCATION ─────────────────────────────────── */
+window.stOpenAlloc=function(){
+  const ov=document.getElementById('st-alloc');if(!ov)return;
+  ov.style.display='flex';stRenderAlloc();
+};
+window.stCloseAlloc=function(){const ov=document.getElementById('st-alloc');if(ov)ov.style.display='none';save();stRender();};
+window.stRenderAlloc=function(){
+  const H=STORY.hero,st=heroStats(H),box=document.getElementById('st-alloc-body');if(!box)return;
+  const row=(k,l,c)=>{
+    const capped=st[k]>=STAT_CAP;
+    return `<div class="st-al-row">
+      <span class="st-al-l">${l}</span>
+      <div class="st-sb big"><i style="width:${st[k]}%;background:${c}"></i></div>
+      <b class="st-al-v">${st[k]}</b>
+      <button class="st-al-plus" ${(!H.points||capped)?'disabled':''} onclick="stSpend('${k}')">＋</button>
+    </div>`;};
+  box.innerHTML=`
+    <div class="st-al-pts">POINTS LEFT <b>${H.points||0}</b></div>
+    ${row('spd','SPD','linear-gradient(90deg,#3c8aff,#7adcff)')}
+    ${row('pwr','PWR','linear-gradient(90deg,#f0552c,#ffb13c)')}
+    ${row('tec','TEC','linear-gradient(90deg,#9a4cff,#d9a6ff)')}
+    ${row('def','DEF','linear-gradient(90deg,#2fae6c,#8ce8a8)')}
+    <div class="st-al-note">Training is permanent — spent points cannot be refunded.</div>`;
+};
+window.stSpend=function(k){
+  const H=STORY.hero;if(!H.points)return;
+  if(heroStats(H)[k]>=STAT_CAP)return;
+  H.alloc[k]=(H.alloc[k]||0)+1;H.points--;save();stRenderAlloc();
+};
+function captainOf(teamKey){
+  const S=STORY;
+  if(S&&teamKey===S.hero.rivalClub)return{name:S.hero.rival,rival:true};
+  if(S&&S.phase==='hs'&&teamKey===S.rivalSchool)return{name:S.hero.rival,rival:true};
+  const t=T[teamKey];if(!t||!t.p)return{name:'The Captain',rival:false};
+  const best=[...t.p].filter(p=>p.pos!=='GK'&&!p._hero&&!p._rival).sort((a,b)=>((b.spd+b.pwr+b.tec)-(a.spd+a.pwr+a.tec)))[0];
+  return{name:best?best.name:'The Captain',rival:false};
+}
+function pick(arr,seed){return arr[seed%arr.length];}
+function preMatchLines(opp,cap){
+  const H=STORY.hero,me=H.name,on=tName(opp);
+  const seed=hash(opp+'_'+(STORY.league?STORY.league.md:STORY.phase)+'_'+H.level);
+  if(cap.rival){
+    return pick([
+      [cap.name+': "Of course it\'s you. The script writes itself."',me+': "Then you already know the ending."',cap.name+': "I\'m one level above you, '+me.split('.').pop()+'. I always will be."',me+': "Levels are numbers. Watch what I do with mine."'],
+      [cap.name+': "I watched your last match. Sloppy first half."',me+': "And I watched yours. You disappear when it matters."',cap.name+': "Then stay until the final whistle. I\'ll show you who disappears."'],
+      [cap.name+': "Genova wasn\'t big enough for both of us. Neither is this league."',me+': "Agreed. Pack your bags."',cap.name+': "Heh. See you out there, rival."']
+    ],seed);
+  }
+  return pick([
+    ['CAPTAIN '+cap.name+' ('+on+'): "So you\'re the kid everyone talks about."',me+': "Talk is cheap. Ninety minutes isn\'t."',cap.name+': "Good answer. Let\'s see if your feet agree."'],
+    [cap.name+' ('+on+'): "We studied your runs all week. There\'s nothing you can surprise us with."',me+': "You studied last week\'s me. I\'m better today."'],
+    [cap.name+' ('+on+'): "This is our house. Keep your head down and it won\'t hurt."',me+': "I came to take three points, not advice."',cap.name+': "Then you\'ll leave with neither."'],
+    [cap.name+' ('+on+'): "One star doesn\'t beat eleven men."',me+': "Right. That\'s why I brought ten friends."'],
+    [cap.name+' ('+on+'): "Heard you train until the lights go out."',me+': "The lights go out. I don\'t."',cap.name+': "...I almost like you, kid. Almost."'],
+    [cap.name+' ('+on+'): "Nervous?"',me+': "Excited. There\'s a difference. You\'ll feel it soon."']
+  ],seed);
+}
+
+/* ── RIVAL PHONE: calls & messages ─────────────────────────── */
+function showPhone(kind,lines,after){ // lines: [{who:'me'|'rv',t}]
+  const ov=document.getElementById('st-phone');if(!ov){if(after)after();return;}
+  const H=STORY.hero;
+  ov.style.display='flex';ov.className='st-phone '+kind;
+  ov.querySelector('.st-ph-name').textContent=H.rival;
+  ov.querySelector('.st-ph-sub').textContent=kind==='call'?'INCOMING CALL · RIVAL':'NEW MESSAGES · RIVAL';
+  const ava=ov.querySelector('.st-ph-ava');ava.innerHTML=heroFace(H.rival);
+  const feed=ov.querySelector('.st-ph-feed');feed.innerHTML='';
+  let i=0;
+  const next=()=>{
+    if(i>=lines.length){
+      ov.querySelector('.st-ph-hint').textContent=kind==='call'?'TAP TO HANG UP':'TAP TO CLOSE';
+      ov.onclick=()=>{ov.style.display='none';ov.onclick=null;if(after)after();stRender();};
+      return;
+    }
+    const L=lines[i++];
+    const b=document.createElement('div');
+    b.className='st-bub '+(L.who==='me'?'me':'rv');
+    b.textContent=L.t;feed.appendChild(b);feed.scrollTop=feed.scrollHeight;
+  };
+  ov.querySelector('.st-ph-hint').textContent='TAP ▸';
+  ov.onclick=next;next();
+}
+function fireBeat(id,kind,lines){
+  STORY.beats=STORY.beats||{};
+  if(STORY.beats[id])return false;
+  STORY.beats[id]=1;save();
+  showPhone(kind,lines,null);
+  return true;
+}
+window.maybeStoryBeat=function maybeStoryBeat(){
+  const S=STORY,H=S.hero,R=H.rival.split('.').pop(),M=H.name.split('.').pop();
+  if(!S||S.pending)return;
+  const L=S.league;
+  if(S.phase==='sb'&&L&&L.md===4)return fireBeat('sb4','msg',[
+    {who:'rv',t:'So the pros let anyone in these days 😏'},
+    {who:'me',t:'Checked the table lately?'},
+    {who:'rv',t:'I only check one row. Mine. One level above yours, as always.'},
+    {who:'me',t:'Enjoy the view. It changes soon.'}]);
+  if(S.phase==='sb'&&L&&L.md===12)return fireBeat('sb12','call',[
+    {who:'rv',t:R+': "Don\'t hang up. I saw your goal on TV today."'},
+    {who:'me',t:M+': "...You called to say that?"'},
+    {who:'rv',t:R+': "I called to say keep going. If you stop now, beating you means nothing."'},
+    {who:'rv',t:R+': "Serie A, '+M+'. Both of us. Then we settle it."'}]);
+  if(S.phase==='sb'&&L&&L.md===L.fix.length-1)return fireBeat('sbEve','msg',[
+    {who:'rv',t:'Last matchday. Scared?'},
+    {who:'me',t:'Counting points. You?'},
+    {who:'rv',t:'Counting the days until I prove I was always better. Don\'t choke.'}]);
+  if(S.phase==='sa'&&L&&L.md===5)return fireBeat('sa5','msg',[
+    {who:'rv',t:'Serie A defenders hit different, huh 🩹'},
+    {who:'me',t:'I like it. They fall harder too.'},
+    {who:'rv',t:'Ha! There he is. See you at the derby.'}]);
+  if(S.phase==='sa'&&L&&L.md===14)return fireBeat('sa14','call',[
+    {who:'rv',t:R+': "The azzurri scouts were in my stand today. Yours too."'},
+    {who:'me',t:M+': "Then we both know what these last matchdays are."'},
+    {who:'rv',t:R+': "Auditions. Don\'t you dare get called up without me."'}]);
+  if(S.phase==='wc'&&S.wc&&S.wc.stage==='sf')return fireBeat('wcsf','msg',[
+    {who:'rv',t:'Semifinal of a WORLD CUP. From our dusty pitch in Genova.'},
+    {who:'me',t:'You watching?'},
+    {who:'rv',t:'Front row. Whole country is. Win it — or I will never let you forget.'}]);
+  if(S.phase==='wc'&&S.wc&&S.wc.stage==='f')return fireBeat('wcf','call',[
+    {who:'rv',t:R+': "No jokes tonight. You carry Genova out there tomorrow."'},
+    {who:'rv',t:R+': "Every kid on every cage pitch. Me included."'},
+    {who:'me',t:M+': "...One level above me, remember?"'},
+    {who:'rv',t:R+': "Not tomorrow. Tomorrow you\'re above everyone. Now sleep."'}]);
+}
 /* ── DIALOGUE ─────────────────────────────────────────────── */
 let DQ=[];
 function talk(title,lines,after){DQ.push({title,lines,after});runDQ();}
@@ -190,7 +333,7 @@ function runDQ(){
 /* ── CREATE / OPEN ────────────────────────────────────────── */
 window.storyOpen=function(){
   const sv=load();
-  if(sv){window.STORY=sv;STORY.pending=null;stRender();showSc('s-story');return;}
+  if(sv){window.STORY=sv;STORY.pending=null;stRender();showSc('s-story');setTimeout(maybeStoryBeat,500);return;}
   window.STORY=null;stRenderCreate();showSc('s-story');
 };
 function stRenderCreate(){
@@ -243,7 +386,7 @@ window.stBegin=function(){
   const mid=shuffle(SCHOOLS.slice(1,7));
   const order=['hs_garibaldi',...mid.slice(0,5),mid[5],'hs_sangiorgio'];
   const qf=[];for(let i=0;i<8;i+=2)qf.push({home:order[i],away:order[i+1],played:false});
-  window.STORY={hero:{name:n1,rival:n2,role,club,rivalClub,level:1,xp:0,goalsSeason:0},
+  window.STORY={hero:{name:n1,rival:n2,role,club,rivalClub,level:1,xp:0,points:0,alloc:{spd:0,pwr:0,tec:0,def:0},goalsSeason:0},
     phase:'hs',hsSchool:'hs_garibaldi',rivalSchool:'hs_sangiorgio',
     hs:{stage:'qf',ko:{qf,sf:null,f:null},alive:true,rivalAlive:true},
     league:null,wc:null,pending:null,seasonB:1,seasonA:0};
@@ -260,7 +403,7 @@ window.stBegin=function(){
 function xpNeed(l){return 70+l*22;}
 function grantXP(amount){
   const H=STORY.hero;H.xp+=amount;let ups=0;
-  while(H.xp>=xpNeed(H.level)){H.xp-=xpNeed(H.level);H.level++;ups++;}
+  while(H.xp>=xpNeed(H.level)){H.xp-=xpNeed(H.level);H.level++;H.points=(H.points||0)+PTS_PER_LVL;ups++;}
   return ups;
 }
 function myFixture(){
@@ -366,7 +509,7 @@ function injectItaly(){
   const t=T.italy;if(!t)return;
   if(!t._origP)t._origP=t.p.map(p=>({...p}));
   t.p=t._origP.map(p=>({...p}));
-  const S=STORY.hero,slotPos=HERO_SLOT[S.role],st=heroStats(S.role,S.level);
+  const S=STORY.hero,slotPos=HERO_SLOT[S.role],st=heroStats(S);
   const idx=t.p.findIndex(p=>p.pos===slotPos);
   const old=t.p[idx>=0?idx:9];
   t.p[idx>=0?idx:9]={...old,id:99901,name:S.name,origName:S.name,spd:st.spd,pwr:st.pwr,tec:st.tec,def:st.def,rar:2,_hero:true};
@@ -377,16 +520,21 @@ window.stPlayNext=function(){
   const mine=S.phase==='hs'?S.hsSchool:S.phase==='wc'?'italy':S.hero.club;
   const opp=m.home===mine?m.away:m.home;
   buildForMatch(mine);buildForMatch(opp);
+  const cap=captainOf(opp);
+  talk('TUNNEL · PRE-MATCH',preMatchLines(opp,cap),()=>stLaunch(m,mine,opp));
+};
+function stLaunch(m,mine,opp){
   selHome=mine;selAway=opp;HT=T[mine];AT=T[opp];
-  S.pending={home:m.home,away:m.away,isHome:m.home===mine};save();
+  STORY.pending={home:m.home,away:m.away,isHome:m.home===mine};save();
   G_teamEditorOrigin='story';
   openTeamMenu();
-};
+}
 window.stSimNext=function(){
   const m=myFixture();
   if(m){const r=simMatch(m.home,m.away);applyMyResult(m,r.hg,r.ag,false);}
   else advanceAll();
   save();stRender();
+  setTimeout(maybeStoryBeat,250);
 };
 function applyMyResult(m,hg,ag,played){
   const S=STORY,mine=S.phase==='hs'?S.hsSchool:S.phase==='wc'?'italy':S.hero.club;
@@ -426,6 +574,7 @@ window.storyOnFullTime=function(engHg,engAg){
   const m=myFixture();STORY.pending=null;
   if(m)applyMyResult(m,hg,ag,true);
   save();stRender();showSc('s-story');
+  setTimeout(maybeStoryBeat,400);
 };
 window.stQuit=function(){if(!confirm('Delete story progress and start over?'))return;wipe();stRenderCreate();};
 
@@ -433,7 +582,7 @@ window.stQuit=function(){if(!confirm('Delete story progress and start over?'))re
 const PHASE_T={hs:'CH.1 · NATIONAL SCHOOLS CUP',sb:'CH.2 · SERIE B',sa:'CH.3 · SERIE A',wc:'CH.4 · WORLD CUP',done:'EPILOGUE'};
 const KO_L={qf:'QUARTER-FINALS',sf:'SEMI-FINALS',f:'FINAL',r16:'ROUND OF 16'};
 function heroCard(){
-  const H=STORY.hero,st=heroStats(H.role,H.level),need=xpNeed(H.level);
+  const H=STORY.hero,st=heroStats(H),need=xpNeed(H.level);
   const bar=Math.min(100,Math.round(100*H.xp/need));
   const teamK=STORY.phase==='hs'?STORY.hsSchool:STORY.phase==='wc'?'italy':H.club;
   const stat=(l,v,c)=>`<div class="st-stat"><span>${l}</span><div class="st-sb"><i style="width:${v}%;background:${c}"></i></div><b>${v}</b></div>`;
@@ -446,6 +595,7 @@ function heroCard(){
       </div>
       <div class="st-h-club">${badge(teamK,22)} ${tName(teamK)}</div>
       <div class="st-xp"><i style="width:${bar}%"></i><span>${H.xp} / ${need} XP</span></div>
+      ${(H.points||0)>0?`<button class="st-allocbtn" onclick="stOpenAlloc()">✦ ${H.points} STAT POINT${H.points>1?'S':''} — TRAIN NOW</button>`:''}
       <div class="st-stats2">
         ${stat('SPD',st.spd,'linear-gradient(90deg,#3c8aff,#7adcff)')}
         ${stat('PWR',st.pwr,'linear-gradient(90deg,#f0552c,#ffb13c)')}
@@ -467,21 +617,22 @@ function matchLine(m){const sc=m.played?`${m.hg}–${m.ag}${m.pens?` <i>(${m.pen
 window.stRender=function(){
   const S=STORY,el=document.getElementById('st-body');if(!el)return;
   if(!S){stRenderCreate();return;}
+  if((S.phase==='sb'||S.phase==='sa')&&!S.league){startLeague(S.phase==='sb'?'B':'A');save();} // self-heal corrupted saves
   let html=`<div class="st-ribbon"><div class="st-rb-num">${({hs:'CH.01',sb:'CH.02',sa:'CH.03',wc:'CH.04',done:'FIN'})[S.phase]||''}</div><div class="st-rb-main"><div class="st-rb-t">${(PHASE_T[S.phase]||'').replace(/^CH\.\d+ · /,'')}</div><div class="st-rb-s">${
     S.phase==='hs'?(S.hs.stage==='done'?'FINISHED':KO_L[S.hs.stage]):
     S.phase==='sb'||S.phase==='sa'?('MATCHDAY '+(S.league.md+1)+' / '+S.league.fix.length+(S.phase==='sb'?' · SEASON '+S.seasonB:' · SEASON '+S.seasonA)):
     S.phase==='wc'?(S.wc.stage==='done'?'FINISHED':KO_L[S.wc.stage]):'STORY COMPLETE'}</div></div></div>`;
-  if(S._last){const L=S._last;html+=`<div class="cup-last">FT &nbsp;${badge(L.home,18)} ${tName(L.home)} <b>${L.hg}–${L.ag}</b> ${tName(L.away)} ${badge(L.away,18)}${L.pens?` <i>(${L.pens[0]}–${L.pens[1]} pens)</i>`:''}${S._lastXP?` &nbsp;·&nbsp; <b class="st-xpg">+${S._lastXP.xp} XP${S._lastXP.ups?' · LEVEL UP! ×'+S._lastXP.ups:''}</b>`:''}</div>`;}
-  html+=heroCard();
+  let right='';
+  if(S._last){const L=S._last;right+=`<div class="cup-last">FT &nbsp;${badge(L.home,18)} ${tName(L.home)} <b>${L.hg}–${L.ag}</b> ${tName(L.away)} ${badge(L.away,18)}${L.pens?` <i>(${L.pens[0]}–${L.pens[1]} pens)</i>`:''}${S._lastXP?` &nbsp;·&nbsp; <b class="st-xpg">+${S._lastXP.xp} XP${S._lastXP.sim?' (SIM)':''}${S._lastXP.ups?' · LEVEL UP! ×'+S._lastXP.ups:''}</b>`:''}</div>`;}
   if(S.phase==='done'){
-    html+=`<div class="cup-champ">${S.wcLost?'🥈':'🏆'}<div><b>${S.hero.name}</b><span>${S.wcLost?'WORLD CUP RUNNER-UP STORY':'WORLD CHAMPION · STORY COMPLETE'}</span></div></div>
+    right+=`<div class="cup-champ">${S.wcLost?'🥈':'🏆'}<div><b>${S.hero.name}</b><span>${S.wcLost?'WORLD CUP RUNNER-UP STORY':'WORLD CHAMPION · STORY COMPLETE'}</span></div></div>
     <div class="cup-btns cup-foot"><button class="cz-b cz-save" onclick="stReplayWC()">🔁 REPLAY WORLD CUP</button><button class="cz-b cz-danger" onclick="stQuit()">NEW STORY</button></div>`;
-    el.innerHTML=html;return;
+    el.innerHTML=html+`<div class="st-grid"><aside class="st-col-l">${heroCard()}</aside><div class="st-col-r">${right}</div></div>`;return;
   }
   const m=myFixture();
   if(m){
     const mineK=S.phase==='hs'?S.hsSchool:S.phase==='wc'?'italy':S.hero.club;
-    html+=`<div class="st-vs">
+    right+=`<div class="st-vs">
       <div class="st-vs-lbl">NEXT MATCH ${m.home===mineK?'· HOME':'· AWAY'}</div>
       <div class="st-vs-row">
         <div class="st-vs-team h">${badge(m.home,52)}<span>${tName(m.home)}</span></div>
@@ -491,15 +642,38 @@ window.stRender=function(){
       <div class="st-vs-btns"><button class="st-play" onclick="stPlayNext()">▶ PLAY MATCH</button><button class="st-sim" onclick="stSimNext()">⏩ SIM · ½ XP</button></div>
     </div>`;
   }else{
-    html+=`<div class="st-vs"><div class="st-vs-lbl">NO FIXTURE THIS ROUND — SIM TO CONTINUE</div>
+    right+=`<div class="st-vs"><div class="st-vs-lbl">NO FIXTURE THIS ROUND — SIM TO CONTINUE</div>
       <div class="st-vs-btns"><button class="st-play" onclick="stSimNext()">⏩ SIM ROUND</button></div></div>`;
   }
-  if(S.phase==='hs'){['qf','sf','f'].forEach(st=>{if(!S.hs.ko[st])return;html+=`<div class="cup-tblw"><div class="cup-tbl-t">${KO_L[st]}</div>${S.hs.ko[st].map(matchLine).join('')}</div>`;});}
-  else if(S.phase==='sb'||S.phase==='sa'){html+=tableHtml('SERIE '+S.league.div+' TABLE',S.league.teams,S.league.tab,S.hero.club);}
-  else if(S.phase==='wc'){['r16','qf','sf','f'].forEach(st=>{if(!S.wc.ko[st])return;html+=`<div class="cup-tblw"><div class="cup-tbl-t">${KO_L[st]}</div>${S.wc.ko[st].map(matchLine).join('')}</div>`;});}
-  html+=`<div class="cup-btns cup-foot"><button class="cz-b cz-danger" onclick="stQuit()">DELETE STORY</button></div>`;
-  el.innerHTML=html;
+  if(S.phase==='hs'){['qf','sf','f'].forEach(st=>{if(!S.hs.ko[st])return;right+=`<div class="cup-tblw"><div class="cup-tbl-t">${KO_L[st]}</div>${S.hs.ko[st].map(matchLine).join('')}</div>`;});}
+  else if(S.phase==='sb'||S.phase==='sa'){right+=tableHtml('SERIE '+S.league.div+' TABLE',S.league.teams,S.league.tab,S.hero.club);}
+  else if(S.phase==='wc'){['r16','qf','sf','f'].forEach(st=>{if(!S.wc.ko[st])return;right+=`<div class="cup-tblw"><div class="cup-tbl-t">${KO_L[st]}</div>${S.wc.ko[st].map(matchLine).join('')}</div>`;});}
+  right+=`<div class="cup-btns cup-foot"><button class="cz-b cz-danger" onclick="stQuit()">DELETE STORY</button></div>`;
+  el.innerHTML=html+`<div class="st-grid"><aside class="st-col-l">${heroCard()}</aside><div class="st-col-r">${right}</div></div>`;
 };
 window.stReplayWC=function(){STORY.wcLost=false;STORY.phase='wc';startWC();save();stRender();};
+
+/* ── PARALLAX (scroll + pointer tilt) ──────────────────────── */
+(function(){
+  let raf=0,sy=0,mx=0,my=0;
+  function apply(){
+    raf=0;
+    const sc=document.getElementById('s-story');if(!sc)return;
+    const L=sc.querySelectorAll('.st-par i');
+    const f=[0.06,0.12,0.20,0.32,0.10];
+    L.forEach((el,i)=>{el.style.transform=`translate3d(${mx*(8+i*7)}px,${(-sy*f[i])+my*(6+i*5)}px,0)`;});
+    sc.style.setProperty('--mx',(50+mx*6)+'%');
+    sc.style.setProperty('--my',(40+my*6)+'%');
+  }
+  function queue(){if(!raf)raf=requestAnimationFrame(apply);}
+  document.addEventListener('scroll',e=>{
+    if(e.target&&e.target.id==='st-body'){sy=e.target.scrollTop;queue();}
+  },true);
+  window.addEventListener('pointermove',e=>{
+    const sc=document.getElementById('s-story');
+    if(!sc||!sc.classList.contains('active'))return;
+    mx=(e.clientX/innerWidth-0.5)*2;my=(e.clientY/innerHeight-0.5)*2;queue();
+  },{passive:true});
+})();
 console.log('[STORY] La Nuova Stella active');
 })();
