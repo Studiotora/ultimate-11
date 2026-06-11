@@ -4344,6 +4344,10 @@ function resDuel(){
   setTimeout(()=>{
     try{
     ro.classList.remove('show');
+    // BUG2 FIX: fouls primarily happen when the defender LUNGES AND MISSES.
+    // Attacker wins vs tackle → 14% foul (free kick / PK to attacker).
+    // Shots are exempt (advantage — the strike proceeds).
+    if(win&&!['shoot','special'].includes(ak)&&G.D.defA==='tackle'&&rollFoul(ds,G.D.dk,as,0.14))return;
     if(['shoot','special'].includes(ak)&&win){
       if(G.D.isShot){
         // Was already a shot duel (vs GK) — score directly
@@ -4358,7 +4362,12 @@ function resDuel(){
         animateBallTo(_cp.x,_cp.y,_gkPos.x,_gkPos.y,()=>{G._shotTrail=false;G.phase='idle';opDuel(true,ak);},40);
       }
     }
-    else if(['shoot','special'].includes(ak)&&!win)afSave(ds);
+    else if(['shoot','special'].includes(ak)&&!win){
+      // BUG1 FIX: afSave only for GK duels. A blocked shot in a FIELD duel
+      // is a turnover — never re-adjudicated by the keeper sequence.
+      if(G.D.isShot)afSave(ds);
+      else afTurn(ds);
+    }
     else if((ak==='pass'||ak==='super-pass')&&win)afPass(as,pk);
     else if((ak==='one-two'||ak==='super-one-two')&&win)afOneTwo(as,pk,carrier);
     else if(win)afSucc(as,carrier);
@@ -4627,7 +4636,7 @@ function afTurn(ns){
   if(ns==='h')G.mom=Math.min(100,G.mom+6); else G.mom=Math.max(0,G.mom-6);
   // Foul check — defender won via tackle/block (not intercept)
   const defA=G.D.defA,attSide=G.D.as,dk=G.D.dk;
-  if((defA==='tackle'||defA==='block')&&rollFoul(ns===attSide?G.D.ds:attSide, dk, attSide))return;
+  if((defA==='tackle'||defA==='block')&&rollFoul(ns===attSide?G.D.ds:attSide, dk, attSide, 0.05))return;
   G_moveTarget=null;G_laneTarget=null; const winnerKey=G.D.dk||null, pk=pickCarrierAfterWin(ns,winnerKey); G.poss=ns; G.ck=pk; G.tP++; if(ns==='h')G.hP++; if(PP[ns][pk]){ball.tx=PP[ns][pk].x;ball.ty=PP[ns][pk].y;} updP();
   const q=sq(ns); resume(ns,(q[pk]?q[pk].name:'Player')+' wins the ball!');
 }
@@ -4801,9 +4810,9 @@ function callOffside(s,tk){
 }
 
 // ── FOUL SYSTEM ───────────────────────────────────────────────────
-function rollFoul(defSide,defSlot,attSide){
-  // 8% chance of foul on tackle
-  if(Math.random()>0.08)return false;
+function rollFoul(defSide,defSlot,attSide,prob){
+  // Foul chance — default 8%, callers can override (attacker-win lunges are higher)
+  if(Math.random()>(prob||0.08))return false;
   const defPl=sq(defSide)[defSlot];
   const defPos=PP[defSide]?.[defSlot];
   if(!defPos)return false;
