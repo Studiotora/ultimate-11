@@ -195,7 +195,7 @@ const assign=()=>GAME()?HOME_SLOT_ASSIGN:demoAssign;
 const formName=()=>GAME()?activeHomeFormation:demoForm;
 const byId=pid=>(pid===null||pid===undefined||pid==='')?null:roster().find(p=>String(p.id)===String(pid))||null;
 const surname=pl=>{if(!pl||!pl.name)return'—';
- try{if(typeof playerLastName==='function')return(playerLastName(pl)||'').toUpperCase()||pl.name.toUpperCase();}catch(e){}
+ // pl.name carries the (possibly custom) display name; playerLastName() is asset-path only
  return(pl.name.split('.').pop()||pl.name).toUpperCase();};
 const ovr=pl=>{if(!pl)return 0;
  try{if(GAME()&&typeof calcOvr==='function')return Math.max(50,calcOvr(pl));}catch(e){}
@@ -207,9 +207,11 @@ const isGK=pl=>!!pl&&pl.pos==='GK';
 // portrait chain matching game.js conventions
 function avChain(pl){
  if(!pl)return[];
- const ln=(pl.name||'').split('.').pop().toLowerCase().trim();
+ const ln=((pl.origName||pl.name)||'').split('.').pop().toLowerCase().trim();
  if(pl.clubKey)return[`assets/career/clubs/${ln}${pl.clubKey}.png`,`assets/career/clubs/${pl.clubKey}.png`];
- return[`assets/players/profile/${ln}.png`,`assets/players/${ln}.png`];
+ const chain=[`assets/players/profile/${ln}.png`,`assets/players/${ln}.png`];
+ try{const tk=(typeof nationalTeamKeyFor==='function')?nationalTeamKeyFor(ln):null;if(tk)chain.push(`assets/players/${tk}.png`);}catch(e){}
+ return chain;
 }
 function loadAv(el,pl){
  const chain=avChain(pl);

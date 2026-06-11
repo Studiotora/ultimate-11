@@ -585,7 +585,7 @@
             </span>
           </button>
           <!-- 02 TOURNAMENT -->
-          <button class="ae-panel ae-soon" style="--ac:var(--red)" onclick="aeToast('Tournament — coming soon')">
+          <button class="ae-panel" style="--ac:var(--red)" onclick="cupOpen()">
             <span class="ae-pin">
               <span class="ae-part" style="background-image:url('assets/home/banners/tournament.png')"></span>
               <span class="ae-pgrad"></span>
@@ -593,9 +593,10 @@
                 <span class="ae-pnum">02 · KNOCKOUT CUP</span>
                 <span class="ae-ptitle">TOURNAMENT</span>
                 <span class="ae-pjp">トーナメント</span>
+                <span class="ae-psub">World Cup · Euro · Champions League</span>
               </span>
+              <span class="ae-pcta">▶</span>
             </span>
-            <span class="ae-badge soon">COMING SOON</span>
           </button>
           <!-- 03 MASTER LEAGUE -->
           <button class="ae-panel" style="--ac:var(--sp)" onclick="showSc('s-career-clubs')">
@@ -627,7 +628,7 @@
         <!-- ICON ROW -->
         <div class="ae-icons">
           <button class="ae-ico" onclick="openWorld()"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><path d="M2 12h20M12 2c-3 4-3 12 0 20M12 2c3 4 3 12 0 20"/></svg><span>AROUND<br>THE WORLD</span></button>
-          <button class="ae-ico" onclick="aeToast('Customize — coming soon')"><svg viewBox="0 0 24 24"><path d="M20.38 3.46L16 2a4 4 0 01-8 0L3.62 3.46l2.22 5.42L8 8v13h8V8l2.16.88z"/></svg><span>CUSTOMIZE</span></button>
+          <button class="ae-ico" onclick="czOpen()"><svg viewBox="0 0 24 24"><path d="M20.38 3.46L16 2a4 4 0 01-8 0L3.62 3.46l2.22 5.42L8 8v13h8V8l2.16.88z"/></svg><span>CUSTOMIZE</span></button>
           <button class="ae-ico" onclick="openSettings()"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 11-2.83 2.83l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-4 0v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 11-2.83-2.83l.06-.06a1.65 1.65 0 00.33-1.82 1.65 1.65 0 00-1.51-1H3a2 2 0 010-4h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 112.83-2.83l.06.06a1.65 1.65 0 001.82.33H9a1.65 1.65 0 001-1.51V3a2 2 0 014 0v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 112.83 2.83l-.06.06a1.65 1.65 0 00-.33 1.82V9a1.65 1.65 0 001.51 1H21a2 2 0 010 4h-.09a1.65 1.65 0 00-1.51 1z"/></svg><span>SETTINGS</span></button>
         </div>
       </div>
@@ -851,14 +852,14 @@
   </div>
   <div class="ts-body">
     <div class="ts-col">
-      <div class="ts-col-lbl red">YOUR TEAM — RED</div>
+      <div class="ts-col-lbl blue">YOUR TEAM — BLUE</div>
       <div class="ts-picker">
         <button class="ts-nav left" onclick="cycleTeam('home',-1)">◀</button>
         <div class="ts-sel-strip big" id="h-sel-strip">
-          <div class="ts-shield" style="--sc:var(--red)">
+          <div class="ts-shield" style="--sc:var(--blue)">
             <div class="ts-shield-flag" id="hflag">?</div>
           </div>
-          <div class="ts-sel-name-lbl" id="hname" style="color:var(--red)">SELECT</div>
+          <div class="ts-sel-name-lbl" id="hname" style="color:var(--blue)">SELECT</div>
           <div class="ts-sel-hint">HOME · YOU</div>
           <div class="ts-subhint" id="hsubhint"></div>
         </div>
@@ -871,14 +872,14 @@
       <button class="kick-btn" id="kickbtn" onclick="openTeamMenu()">TEAM MENU →</button>
     </div>
     <div class="ts-col">
-      <div class="ts-col-lbl blue">OPPONENT — BLUE</div>
+      <div class="ts-col-lbl red">OPPONENT — RED</div>
       <div class="ts-picker">
         <button class="ts-nav left" onclick="cycleTeam('away',-1)">◀</button>
         <div class="ts-sel-strip big" id="a-sel-strip">
           <div class="ts-shield">
             <div class="ts-shield-flag" id="aflag">?</div>
           </div>
-          <div class="ts-sel-name-lbl" id="aname" style="color:var(--blue)">SELECT</div>
+          <div class="ts-sel-name-lbl" id="aname" style="color:var(--red)">SELECT</div>
           <div class="ts-sel-hint">AWAY · CPU</div>
           <div class="ts-subhint" id="asubhint"></div>
         </div>
@@ -1408,9 +1409,32 @@
 </div>
 
 </div><!-- /viewport -->
-<script src="game.js?v=20" defer></script>
+<!-- ── TOURNAMENT ─────────────────────────────────────── -->
+<div id="s-cup" class="screen">
+  <div class="cup-wrap">
+    <div class="cup-top"><button class="cz-back" onclick="showSc('s-home')">‹ HOME</button><div class="cup-title">TOURNAMENT MODE</div></div>
+    <div id="cup-body" class="cup-scroll"></div>
+  </div>
+</div>
+
+<!-- ── CUSTOMIZE ──────────────────────────────────────── -->
+<div id="s-custom" class="screen">
+  <div class="cz-wrap">
+    <div class="cup-top"><button class="cz-back" onclick="showSc('s-home')">‹ HOME</button><div class="cup-title">CUSTOMIZE · EDIT NAMES</div>
+      <div class="cz-tabs"><button class="cz-tab on" data-t="nations" onclick="czSetTab('nations')">NATIONS</button><button class="cz-tab" data-t="clubs" onclick="czSetTab('clubs')">CLUBS</button></div>
+    </div>
+    <div class="cz-cols">
+      <div id="cz-list" class="cz-list"></div>
+      <div id="cz-edit" class="cz-editor"></div>
+    </div>
+  </div>
+</div>
+
+<script src="game.js?v=22" defer></script>
 <script src="ps1-mod.js?v=1" defer></script>
-<script src="ult11-team.js?v=2" defer></script>
+<script src="ult11-team.js?v=4" defer></script>
+<script src="ult11-custom.js?v=2" defer></script>
+<script src="ult11-cup.js?v=2" defer></script>
 <script>
 (function(){
   var _H="assets/home/menu-bg.png";

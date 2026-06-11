@@ -213,7 +213,7 @@ html,body{width:100%;height:100%;height:-webkit-fill-available;overflow:hidden;b
 .ts-col-lbl.blue{color:var(--blue);border:1px solid rgba(30,114,220,.3);background:rgba(30,114,220,.06)}
 /* Broadcast-style selection strip — shield badge */
 .ts-sel-strip{display:flex;flex-direction:column;align-items:center;gap:4px;width:100%;flex-shrink:0}
-.ts-shield{width:clamp(52px,102.4px,72px);height:clamp(58px,115.2px,80px);position:relative;display:flex;align-items:center;justify-content:center;flex-direction:column;gap:2px}
+.ts-shield{width:clamp(72px,14vw,118px);height:clamp(80px,15.6vw,132px);position:relative;display:flex;align-items:center;justify-content:center;flex-direction:column;gap:2px}
 .ts-shield::before{content:'';position:absolute;inset:0;clip-path:polygon(50% 0%,100% 15%,100% 65%,50% 100%,0% 65%,0% 15%);background:linear-gradient(160deg,#1a3060 0%,#0a1628 100%);border:0}
 .ts-shield-emblem{position:absolute;inset:4px;width:calc(100% - 8px);height:calc(100% - 8px);object-fit:contain;z-index:2;}
 .ts-shield-flag{
@@ -224,8 +224,8 @@ html,body{width:100%;height:100%;height:-webkit-fill-available;overflow:hidden;b
 }
 .ts-shield-flag img{width:100%;height:100%;object-fit:contain;display:block;}
 .ts-shield-name{font-family:'Bebas Neue',sans-serif;font-size:clamp(8px,14.08px,11px);letter-spacing:.1em;position:relative;z-index:1;text-align:center}
-.ts-sel-name-lbl{font-family:'Bebas Neue',sans-serif;font-size:clamp(11px,20.48px,16px);letter-spacing:.1em}
-.ts-sel-hint{font-family:'Orbitron',sans-serif;font-size:clamp(7px,11.52px,8px);letter-spacing:.2em;color:var(--dim)}
+.ts-sel-name-lbl{font-family:'Bebas Neue',sans-serif;font-size:clamp(16px,2.6vw,26px);letter-spacing:.1em}
+.ts-sel-hint{font-family:'Orbitron',sans-serif;font-size:clamp(8px,1.1vw,11px);letter-spacing:.2em;color:var(--dim)}
 .ts-subhint{font-family:'Orbitron',sans-serif;font-size:clamp(16px,25.6px,22px);font-weight:700;letter-spacing:.1em;color:var(--gold);text-align:center;text-shadow:0 0 14px rgba(240,192,64,.6)}
 /* VS center — bold broadcast style */
 .ts-vs-big{font-family:'Bebas Neue',sans-serif;font-size:clamp(28px,64px,52px);
@@ -258,7 +258,7 @@ html,body{width:100%;height:100%;height:-webkit-fill-available;overflow:hidden;b
 .ts-nav{position:absolute;top:50%;transform:translateY(-50%);width:46px;height:46px;border-radius:50%;border:1px solid rgba(255,255,255,.18);background:rgba(7,16,30,.96);color:#fff;font-family:"Orbitron",sans-serif;font-size:18px;cursor:pointer;z-index:3;box-shadow:0 6px 18px rgba(0,0,0,.45)}
 .ts-nav.left{left:4px}.ts-nav.right{right:4px}
 .ts-nav:hover{border-color:var(--gold);color:var(--gold)}
-.ts-sel-strip.big{min-height:190px;width:100%;max-width:250px;justify-content:center;gap:10px;padding:14px 12px;border:1px solid rgba(255,255,255,.08);border-radius:10px;background:rgba(7,16,30,.72)}
+.ts-sel-strip.big{min-height:250px;width:100%;max-width:330px;justify-content:center;gap:12px;padding:20px 16px;border:1px solid rgba(255,255,255,.08);border-radius:10px;background:rgba(7,16,30,.72)}
 
 #s-team{background:linear-gradient(160deg,rgba(6,14,30,.82) 0%,rgba(4,8,14,.72) 100%),url('assets/wallpaper/teamedit.png') center/cover no-repeat;overflow:hidden}
 #s-team.active{flex-direction:column}
@@ -2924,3 +2924,94 @@ html,body{overscroll-behavior:none;}
 .duel-aaa .dp-energy-val{color:#fff !important;text-shadow:0 1px 3px rgba(0,0,0,.95),0 0 8px rgba(0,0,0,.8) !important;}
 .duel-aaa .ds-stamina-max{color:rgba(255,255,255,.75) !important;}
 .duel-aaa .dp-energy-lbl{color:rgba(255,255,255,.85) !important;text-shadow:0 1px 3px rgba(0,0,0,.95) !important;}
+
+/* ════ TOURNAMENT + CUSTOMIZE (ult11-cup / ult11-custom) ════ */
+#s-cup{background:linear-gradient(rgba(7,11,20,.78),rgba(7,11,20,.92)),url('assets/home/cup-bg.png') center/cover no-repeat,radial-gradient(120% 120% at 50% 0%,#101c30 0%,#070b14 70%);}
+#s-custom{background:linear-gradient(rgba(7,11,20,.78),rgba(7,11,20,.92)),url('assets/home/custom-bg.png') center/cover no-repeat,radial-gradient(120% 120% at 50% 0%,#101c30 0%,#070b14 70%);}
+.cup-wrap,.cz-wrap{display:flex;flex-direction:column;height:100%;width:100%;max-width:1100px;margin:0 auto;padding:max(8px,env(safe-area-inset-top)) 12px 8px;box-sizing:border-box;}
+.cup-top{display:flex;align-items:center;gap:12px;padding:6px 0 10px;border-bottom:1px solid rgba(120,160,255,.18);flex-wrap:wrap;}
+.cup-title{font-family:'Bebas Neue',sans-serif;font-size:clamp(20px,3.4vw,30px);letter-spacing:2px;color:#eaf2ff;text-shadow:0 0 14px rgba(80,140,255,.45);}
+.cz-back{background:rgba(40,70,120,.35);border:1px solid rgba(120,160,255,.35);color:#cfe0ff;font-family:'Bebas Neue',sans-serif;letter-spacing:1px;font-size:15px;padding:6px 14px;border-radius:8px;cursor:pointer;}
+.cz-back:active{transform:scale(.96);}
+.cup-scroll{flex:1;overflow-y:auto;padding:10px 2px 24px;-webkit-overflow-scrolling:touch;}
+/* competition select */
+.cup-sec-t{font-family:'Bebas Neue',sans-serif;letter-spacing:2px;font-size:18px;color:#9fb8e8;margin:8px 0;}
+.cup-comps{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:12px;}
+.cup-comp{position:relative;display:flex;flex-direction:column;align-items:flex-start;gap:4px;padding:18px 16px;border-radius:14px;cursor:pointer;color:#fff;background:linear-gradient(160deg,rgba(255,255,255,.07),rgba(0,0,0,.35));border:1px solid color-mix(in srgb,var(--cc) 55%,transparent);box-shadow:0 0 18px -6px var(--cc);}
+.cup-comp b{font-size:26px;}
+.cup-comp span{font-family:'Bebas Neue',sans-serif;font-size:24px;letter-spacing:2px;color:var(--cc);}
+.cup-comp i{font-style:normal;font-size:11px;color:#b9c8e6;}
+.cup-comp:active{transform:scale(.97);}
+/* pick team grid + customize team list */
+.cup-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:8px;margin-top:6px;}
+.cup-item,.cz-item{display:flex;align-items:center;gap:8px;padding:8px 10px;border-radius:10px;background:rgba(255,255,255,.05);border:1px solid rgba(130,170,255,.22);color:#e7efff;font-size:13px;cursor:pointer;text-align:left;}
+.cup-item b{margin-left:auto;font-family:'Bebas Neue',sans-serif;color:#ffd24a;font-size:15px;}
+.cup-item:active,.cz-item:active{transform:scale(.97);}
+.cup-flag,.cz-flag{font-size:18px;line-height:1;}
+/* hub */
+.cup-head{display:flex;align-items:baseline;gap:14px;flex-wrap:wrap;margin:4px 0 8px;}
+.cup-comp-t{font-family:'Bebas Neue',sans-serif;font-size:26px;letter-spacing:2px;color:#ffd24a;}
+.cup-stage{font-family:'Bebas Neue',sans-serif;font-size:16px;letter-spacing:1.5px;color:#8fb0e8;}
+.cup-last{background:rgba(60,200,120,.12);border:1px solid rgba(60,200,120,.4);border-radius:10px;padding:8px 12px;font-size:13px;color:#dff5e8;margin-bottom:10px;display:flex;align-items:center;gap:6px;flex-wrap:wrap;}
+.cup-next{background:linear-gradient(160deg,rgba(40,90,180,.25),rgba(10,16,30,.6));border:1px solid rgba(120,170,255,.35);border-radius:14px;padding:14px;margin-bottom:14px;}
+.cup-next-t{font-family:'Bebas Neue',sans-serif;letter-spacing:2px;font-size:14px;color:#9fc0ff;margin-bottom:8px;}
+.cup-next-vs{display:flex;align-items:center;gap:10px;flex-wrap:wrap;font-family:'Bebas Neue',sans-serif;font-size:clamp(17px,2.6vw,24px);letter-spacing:1px;color:#fff;margin-bottom:12px;}
+.cup-next-vs b{color:#ffd24a;font-size:.85em;}
+.cup-btns{display:flex;gap:10px;flex-wrap:wrap;}
+.cup-foot{margin-top:18px;}
+/* tables + match lines */
+.cup-tblw{background:rgba(8,14,28,.65);border:1px solid rgba(110,150,230,.22);border-radius:12px;padding:10px 12px;margin-bottom:12px;overflow-x:auto;}
+.cup-tbl-t{font-family:'Bebas Neue',sans-serif;letter-spacing:2px;font-size:15px;color:#9fb8e8;margin-bottom:6px;}
+.cup-tbl{width:100%;border-collapse:collapse;font-size:12px;color:#dfe9ff;min-width:340px;}
+.cup-tbl th{font-family:'Bebas Neue',sans-serif;letter-spacing:1px;font-weight:400;color:#7f97c4;text-align:right;padding:3px 6px;border-bottom:1px solid rgba(120,160,255,.2);}
+.cup-tbl th:first-child{text-align:left;}
+.cup-tbl td{padding:4px 6px;text-align:right;border-bottom:1px solid rgba(120,160,255,.08);}
+.cup-tbl td.tt{text-align:left;display:flex;align-items:center;gap:6px;white-space:nowrap;}
+.cup-tbl td.pt{font-weight:700;color:#ffd24a;}
+.cup-tbl tr.me td{background:rgba(70,130,255,.14);}
+.cup-mline{display:flex;align-items:center;gap:8px;padding:5px 4px;font-size:12.5px;color:#e2ecff;border-bottom:1px solid rgba(120,160,255,.08);}
+.cup-mline .l,.cup-mline .r{flex:1;display:flex;align-items:center;gap:5px;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+.cup-mline .r{justify-content:flex-end;}
+.cup-mline b{color:#ffd24a;font-family:'Bebas Neue',sans-serif;font-size:15px;letter-spacing:1px;min-width:48px;text-align:center;}
+.cup-mline.up b{color:#7f97c4;}
+.cup-mline i{font-style:normal;font-size:10px;color:#9fb8e8;}
+.cup-champ{display:flex;align-items:center;gap:14px;font-size:34px;background:linear-gradient(160deg,rgba(255,210,74,.18),rgba(20,16,4,.6));border:1px solid rgba(255,210,74,.5);border-radius:14px;padding:16px;margin-bottom:14px;}
+.cup-champ b{display:block;font-family:'Bebas Neue',sans-serif;font-size:26px;letter-spacing:2px;color:#ffd24a;}
+.cup-champ span{display:block;font-size:12px;letter-spacing:2px;color:#cdb86a;}
+/* customize layout */
+.cz-tabs{margin-left:auto;display:flex;gap:6px;}
+.cz-tab{background:rgba(255,255,255,.06);border:1px solid rgba(130,170,255,.25);color:#9fb8e8;font-family:'Bebas Neue',sans-serif;letter-spacing:1.5px;font-size:14px;padding:6px 14px;border-radius:8px;cursor:pointer;}
+.cz-tab.on{background:rgba(70,130,255,.28);color:#fff;border-color:rgba(140,180,255,.6);}
+.cz-cols{flex:1;display:flex;gap:12px;min-height:0;padding-top:10px;}
+.cz-list{width:min(260px,38%);overflow-y:auto;display:flex;flex-direction:column;gap:6px;padding-bottom:20px;-webkit-overflow-scrolling:touch;}
+.cz-item{position:relative;}
+.cz-item.on{background:rgba(70,130,255,.25);border-color:rgba(150,190,255,.6);}
+.cz-dot{position:absolute;right:8px;width:7px;height:7px;border-radius:50%;background:#ffd24a;box-shadow:0 0 6px #ffd24a;}
+.cz-editor{flex:1;overflow-y:auto;background:rgba(8,14,28,.6);border:1px solid rgba(110,150,230,.22);border-radius:12px;padding:12px;-webkit-overflow-scrolling:touch;}
+.cz-hint{height:100%;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;font-family:'Bebas Neue',sans-serif;letter-spacing:2px;color:#5d77a6;font-size:18px;gap:8px;}
+.cz-hint span{font-family:inherit;font-size:12px;letter-spacing:1px;color:#46598022;color:#46639a;max-width:340px;}
+.cz-ed-head{display:flex;align-items:center;gap:10px;margin-bottom:10px;}
+.cz-in{flex:1;background:rgba(255,255,255,.06);border:1px solid rgba(130,170,255,.3);border-radius:8px;color:#fff;font-size:13px;padding:7px 10px;outline:none;min-width:0;}
+.cz-in:focus{border-color:#6ea4ff;box-shadow:0 0 8px rgba(110,164,255,.35);}
+.cz-in::placeholder{color:#6b80a8;}
+.cz-in-team{font-family:'Bebas Neue',sans-serif;font-size:18px;letter-spacing:1px;}
+.cz-rows{display:flex;flex-direction:column;gap:6px;}
+.cz-row{display:flex;align-items:center;gap:8px;}
+.cz-pos{width:44px;text-align:center;font-family:'Bebas Neue',sans-serif;font-size:13px;letter-spacing:1px;color:#8fb0e8;background:rgba(70,110,200,.18);border-radius:6px;padding:5px 0;flex:none;}
+.cz-btns{display:flex;gap:10px;flex-wrap:wrap;margin-top:14px;position:sticky;bottom:0;background:linear-gradient(180deg,transparent,rgba(8,14,28,.95) 30%);padding-top:10px;}
+.cz-b{background:rgba(255,255,255,.07);border:1px solid rgba(130,170,255,.35);color:#dfe9ff;font-family:'Bebas Neue',sans-serif;letter-spacing:1.5px;font-size:15px;padding:9px 18px;border-radius:9px;cursor:pointer;}
+.cz-b:active{transform:scale(.96);}
+.cz-save{background:linear-gradient(160deg,#2e7ae0,#1b4fa0);border-color:#5e9aff;color:#fff;box-shadow:0 0 14px -4px #3c8aff;}
+.cz-danger{border-color:rgba(255,90,90,.5);color:#ff9d9d;}
+@media (max-width:740px){
+  .cz-cols{flex-direction:column;}
+  .cz-list{width:100%;max-height:34%;flex-direction:row;flex-wrap:nowrap;overflow-x:auto;overflow-y:hidden;}
+  .cz-item{flex:none;}
+  .cz-tabs{margin-left:0;width:100%;}
+}
+
+/* png emblem badges in customize + tournament lists */
+.uee{display:inline-flex;align-items:center;justify-content:center;width:26px;height:26px;flex:none;}
+.uee img{width:100%;height:100%;object-fit:contain;display:block;}
+.uee .fb{display:none;align-items:center;justify-content:center;width:100%;height:100%;font-size:17px;line-height:1;}
+.uee svg{width:100%;height:100%;}

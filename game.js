@@ -634,18 +634,22 @@ function setTeamEmblem(el, teamKey, flagEmoji){
     el.textContent=flagEmoji||'🏳';
   }
 
-  // Try the PNG override; if it exists, replace the SVG/emoji with the image.
-  const src=teamEmblemPath(teamKey);
-  if(!src)return;
-  const img=new Image();
-  img.onload=()=>{
-    el.innerHTML='';
-    const i=document.createElement('img');
-    i.src=src;i.alt='';
-    i.style.cssText='width:100%;height:100%;object-fit:contain;display:block;';
-    el.appendChild(i);
-  };
-  img.src=src;
+  // Try the PNG override(s); first that exists replaces the SVG/emoji.
+  // Clubs: assets/team/{key}.png (same path as nationals) → legacy assets/career/clubs/club{key}.png
+  const srcs=isClub?[`assets/team/${k}.png`,`assets/career/clubs/club${k}.png`]:[`assets/team/${k}.png`];
+  (function tryEmblem(i){
+    if(i>=srcs.length)return;
+    const img=new Image();
+    img.onload=()=>{
+      el.innerHTML='';
+      const im=document.createElement('img');
+      im.src=srcs[i];im.alt='';
+      im.style.cssText='width:100%;height:100%;object-fit:contain;display:block;';
+      el.appendChild(im);
+    };
+    img.onerror=()=>tryEmblem(i+1);
+    img.src=srcs[i];
+  })(0);
 }
 // Returns the correct emblem PNG path for either a national team or a club.
 // Clubs are identified by being keys of CR_CLUBS; everything else is treated
@@ -810,7 +814,7 @@ function showSpecialCutscene(pl,special,callback){
   const sc=document.getElementById('special-cutscene');
   if(!sc){if(callback)callback();return;}
   const faceEl=document.getElementById('sc-face');
-  const lastName=pl?pl.name.split('.').pop().toLowerCase().trim():null;
+  const lastName=pl?(pl.origName||pl.name).split('.').pop().toLowerCase().trim():null;
   faceEl.innerHTML=lastName?`<img src="assets/cutscene/${lastName}.png" alt="" draggable="false">`:'';
   sc.classList.remove('show');void sc.offsetWidth;sc.classList.add('show');
   say((pl?pl.name.split('.').pop():'')+'— '+(special.l||'Special')+'!');
@@ -1056,6 +1060,7 @@ function exitToMenu(){
   const ph=document.getElementById('passhint');if(ph)ph.style.display='none';
   // Abandon career match without saving the score (counts as not played)
   if(CAR.pendingMatch){CAR.pendingMatch=null;}
+  if(window.CUP&&window.CUP.pending){window.CUP.pending=null;}
   // Clear roster/team-editor state so a fresh friendly match doesn't inherit career squads
   HOME_SLOT_ASSIGN={};HOME_RESERVES=[null,null,null,null,null,null];
   G_teamEditorOrigin=null;
@@ -1074,6 +1079,13 @@ function teamEditorBack(){
     G_teamEditorOrigin=null;
     showSc('s-career-hub');
     if(typeof crRenderHub==='function')crRenderHub();
+    return;
+  }
+  if(G_teamEditorOrigin==='cup'){
+    G_teamEditorOrigin=null;
+    if(window.CUP)window.CUP.pending=null;
+    if(typeof cupRenderHub==='function')cupRenderHub();
+    showSc('s-cup');
     return;
   }
   G_teamEditorOrigin=null;
@@ -2196,7 +2208,7 @@ const CR_IMG_CACHE={};
 
 function crPortraitUrl(pl,clubKey){
   if(!pl||!clubKey)return null;
-  const lastName=pl.name?pl.name.split('.').pop().toLowerCase().trim().replace(/[^a-z0-9]/g,''):'';
+  const lastName=(pl.origName||pl.name)?(pl.origName||pl.name).split('.').pop().toLowerCase().trim().replace(/[^a-z0-9]/g,''):'';
   const specific=`assets/career/clubs/${lastName}${clubKey}.png`;
   const fallback=`assets/career/clubs/${clubKey}.png`;
   return{specific,fallback};
@@ -2231,7 +2243,7 @@ function crPlayerSvg(pl,clubKey,size=38){
 // Returns an <img> tag with src=specific, onerror fallback to club, then SVG
 function crPortraitHtml(pl,clubKey,size=38){
   if(!pl||!clubKey)return crPlayerSvg(pl,clubKey,size);
-  const lastName=pl.name?pl.name.split('.').pop().toLowerCase().trim().replace(/[^a-z0-9]/g,''):'';
+  const lastName=(pl.origName||pl.name)?(pl.origName||pl.name).split('.').pop().toLowerCase().trim().replace(/[^a-z0-9]/g,''):'';
   const specific=`assets/career/clubs/${lastName}${clubKey}.png`;
   const fallback=`assets/career/clubs/${clubKey}.png`;
   const svgFallback=crPlayerSvg(pl,clubKey,size).replace(/'/g,"\\'").replace(/"/g,'&quot;');
@@ -2240,8 +2252,8 @@ function crPortraitHtml(pl,clubKey,size=38){
 }
 
 function playerLastName(pl){
-  if(!pl||!pl.name)return null;
-  return pl.name.split('.').pop().toLowerCase().trim();
+  if(!pl||!(pl.origName||pl.name))return null;
+  return (pl.origName||pl.name).split('.').pop().toLowerCase().trim();
 }
 
 function playerImg(pl){
@@ -2289,11 +2301,20 @@ function playerImg(pl){
   const key=playerLastName(pl);
   if(!key)return null;
   if(IMG_CACHE[key]==='err')return null;
-  if(IMG_CACHE[key])return IMG_CACHE[key]==='loading'?null:IMG_CACHE[key];
+  if(IMG_CACHE[key])return (IMG_CACHE[key]==='loading'||IMG_CACHE[key]==='loading2')?null:IMG_CACHE[key];
   IMG_CACHE[key]='loading';
   const img=new Image();
   img.onload=()=>{IMG_CACHE[key]=img;};
-  img.onerror=()=>{IMG_CACHE[key]='err';};
+  img.onerror=()=>{
+    const tk=(typeof nationalTeamKeyFor==='function')?nationalTeamKeyFor(key):null;
+    if(tk){
+      IMG_CACHE[key]='loading2';
+      const fb=new Image();
+      fb.onload=()=>{IMG_CACHE[key]=fb;};
+      fb.onerror=()=>{IMG_CACHE[key]='err';};
+      fb.src=`assets/players/${tk}.png`;
+    } else IMG_CACHE[key]='err';
+  };
   img.src=`assets/players/${key}.png`;
   return null;
 }
@@ -2929,7 +2950,7 @@ function updateLoomingAlert(){
         const lastName=playerLastName(def);
         const img=playerImg(def);
         el.innerHTML=(img&&img.complete&&img.naturalWidth>0)
-          ?'<img src="assets/players/'+lastName+'.png" class="looming-face"><span>'+nm+'</span>'
+          ?'<img src="'+img.src+'" class="looming-face"><span>'+nm+'</span>'
           :'<span class="looming-icon">⚠</span><span>'+nm+'</span>';
         el.classList.add('show');
       }
@@ -3041,7 +3062,7 @@ function _portraitChainFor(pl,side){
   }
   return isClub
     ?[`assets/career/clubs/${ln}${effTeam}.png`,`assets/career/clubs/${effTeam}.png`,_GENERIC_PLAYER_SVG_URL]
-    :[`assets/players/${lastName}.png`,_GENERIC_PLAYER_SVG_URL];
+    :[`assets/players/${lastName}.png`,`assets/players/${effTeam}.png`,_GENERIC_PLAYER_SVG_URL];
 }
 function _setImgChain(img,paths){let i=0;img.onerror=()=>{i++;if(i<paths.length)img.src=paths[i];};img.src=paths[0];}
 function killCutIn(){
@@ -3202,7 +3223,7 @@ function renderSecondDefender(dk2, ds){
   let isClub=false;try{isClub=!!(effTeam&&CR_CLUBS&&CR_CLUBS[effTeam]);}catch(e){}
   const chain=isClub
     ?[`assets/players/profile/${ln}.png`,`assets/career/clubs/${ln}${effTeam}.png`,`assets/career/clubs/${effTeam}.png`,_GENERIC_PLAYER_SVG_URL]
-    :[`assets/players/profile/${ln}.png`,`assets/players/${lastName}.png`,_GENERIC_PLAYER_SVG_URL];
+    :[`assets/players/profile/${ln}.png`,`assets/players/${lastName}.png`,`assets/players/${effTeam}.png`,_GENERIC_PLAYER_SVG_URL];
   const el=document.createElement('div');
   el.id='dpd2-wrap';
   el.className='dpd2-chip';
@@ -3306,7 +3327,11 @@ function fCard(role,pl,s,displayRole){
     _pi.onerror=()=>{
       const _pi2=new Image();_pi2.src=`assets/players/${lastName}.png`;
       _pi2.onload=()=>{avEl.style.cssText=`background:url(assets/players/${lastName}.png) center bottom/contain no-repeat;color:transparent`;};
-      _pi2.onerror=()=>{avEl.style.cssText=`background:url(${_GENERIC_PLAYER_SVG_URL}) center bottom/contain no-repeat;color:transparent`;};
+      _pi2.onerror=()=>{
+        const _pi3=new Image();_pi3.src=`assets/players/${teamKey}.png`;
+        _pi3.onload=()=>{avEl.style.cssText=`background:url(assets/players/${teamKey}.png) center bottom/contain no-repeat;color:transparent`;};
+        _pi3.onerror=()=>{avEl.style.cssText=`background:url(${_GENERIC_PLAYER_SVG_URL}) center bottom/contain no-repeat;color:transparent`;};
+      };
     };
     avEl.textContent='';
   } else if(pl){
@@ -3371,7 +3396,7 @@ function fCard(role,pl,s,displayRole){
     const _lnK = _ln.replace(/[^a-z0-9]/g,'');
     const _baseChain = isClubTeam
       ? [`assets/career/clubs/${_lnK}${teamKey}.png`, `assets/career/clubs/${teamKey}.png`, `assets/players/${_ln}.png`, _GENERIC_PLAYER_SVG_URL]
-      : [`assets/players/${_ln}.png`, `assets/profile/${_ln}.png`, _GENERIC_PLAYER_SVG_URL];
+      : [`assets/players/${_ln}.png`, `assets/profile/${_ln}.png`, `assets/players/${teamKey}.png`, _GENERIC_PLAYER_SVG_URL];
     // Top of card = dedicated PROFILE art; bottom special = dedicated SHOOT art.
     // Each falls back to the existing portrait chain if the new art isn't present yet.
     const _profileChain = [`assets/players/profile/${_ln}.png`].concat(_baseChain);
@@ -5004,6 +5029,9 @@ function goFull(){
   clearInterval(G.mt);clearInterval(G.di);G.phase='idle';closeDuel();
   document.getElementById('passhint').style.display='none';
   stopMatchMusic();
+  if(typeof window.cupOnFullTime==='function'&&window.CUP&&window.CUP.pending){
+    window.cupOnFullTime(G.hG,G.aG);returnToMenuMusic();return;
+  }
   if(CAR.active&&CAR.pendingMatch){
     const pm=CAR.pendingMatch;
     // Engine ran user as "home" regardless of fixture. Map G.hG/aG back to real home/away.
@@ -5117,7 +5145,7 @@ function buildReserves(){
       const img=playerImg(pl);
       const lastName=playerLastName(pl);
       if(img&&img.complete&&img.naturalWidth>0){
-        face.style.backgroundImage=`url(assets/players/${lastName}.png)`;
+        face.style.backgroundImage=`url(${img.src})`;
         face.style.backgroundSize='130%';
         face.style.backgroundPosition='center 35%';
       } else {
@@ -5266,7 +5294,7 @@ function buildFaceEl(pl, cls){
   const img=playerImg(pl);
   const lastName=playerLastName(pl);
   if(img&&img.complete&&img.naturalWidth>0){
-    el.style.backgroundImage=`url(assets/players/${lastName}.png)`;
+    el.style.backgroundImage=`url(${img.src})`;
     el.style.backgroundSize='130%';
     el.style.backgroundPosition='center 35%';
     el.style.backgroundRepeat='no-repeat';
@@ -5332,7 +5360,7 @@ function buildFormationMenu(){
         : `assets/players/${lastName}.png`;
       const placeholder = isGKSlotPl
         ? `assets/career/clubs/gk.png`
-        : (isClubTeam ? `assets/career/clubs/${teamKey}.png` : null);
+        : (isClubTeam ? `assets/career/clubs/${teamKey}.png` : `assets/players/${teamKey}.png`);
 
       const applyImg=(url)=>{
         card.style.backgroundImage=`url(${url})`;
@@ -5650,6 +5678,24 @@ function findNationalPlayerStats(name){
   const sur = name.split('.').pop().toLowerCase().trim();
   return _NATIONAL_PLAYER_INDEX[sur] || null;
 }
+// Surname -> national team key (e.g. 'gakpo' -> 'netherlands'); first match wins.
+const _NATIONAL_TEAM_KEY_INDEX = (()=>{
+  const idx={};
+  try {
+    Object.entries(T).forEach(([key,team])=>{
+      if(!team||!team.p)return;
+      team.p.forEach(pl=>{
+        const sur=(pl.name||'').split('.').pop().toLowerCase().trim();
+        if(sur&&!idx[sur]) idx[sur]=key;
+      });
+    });
+  } catch(e) {}
+  return idx;
+})();
+function nationalTeamKeyFor(lastName){
+  if(!lastName)return null;
+  return _NATIONAL_TEAM_KEY_INDEX[String(lastName).toLowerCase().trim()]||null;
+}
 
 function crBuildClubTeam(clubKey){
   if(T[clubKey]&&T[clubKey]._career)return T[clubKey]; // already built
@@ -5735,12 +5781,14 @@ function crBuildClubTeam(clubKey){
       if(nationalStats && nationalStats.sav){pl.sav=nationalStats.sav; pl.ref=nationalStats.ref||nationalStats.sav-5;}
       else {pl.sav=Math.min(98,sb+rng(4,8)); pl.ref=Math.min(98,sb+rng(0,5));}
     }
+    pl.origName=name; // asset paths always resolve from the original name
     players.push(pl);
     if(row.reserve)reserveIds.push(pl.id);
   });
   // Pick a formation; default 4-3-3
   const formation='4-3-3';
   T[clubKey]={name:club.name,flag:club.abbr||'?',p:players,reserves:reserveIds,formation,_career:true};
+  if(typeof window!=='undefined'&&typeof window.applyCustomNamesToTeam==='function')window.applyCustomNamesToTeam(clubKey,T[clubKey]);
   return T[clubKey];
 }
 
