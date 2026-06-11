@@ -1557,8 +1557,9 @@ function tick(dt=1){
   const centrality=1-Math.abs(cp.y/H-.5);
   const shotGate=progress>.88 && centrality>.35;
   if(shotGate&&G.phase==='moving'&&Date.now()>=(G.kickoffUntil||0)&&!G._scoringGoal){
-    G.phase='pass_anim';
     clearInterval(G.di);
+    if(rollShotMiss(s)){shotMissed(s);return;}
+    G.phase='pass_anim';
     const _gkPos2=PP[ds]&&PP[ds]['GK']?PP[ds]['GK']:{x:goalXFor(s),y:H*.5};
     G._shotTrail=true;
     animateBallTo(cp.x,cp.y,_gkPos2.x,_gkPos2.y,()=>{G._shotTrail=false;G.phase='idle';opDuel(true);},45);
@@ -2716,8 +2717,10 @@ function manualShot(){
   if(G.poss!=='h'||G.phase!=='moving'||!G.ck||G._scoringGoal)return;
   G_moveTarget=null;
   const _cpM=PP.h[G.ck]; if(!_cpM)return;
+  clearInterval(G.di);
+  if(rollShotMiss('h')){shotMissed('h');return;}
   const _gkPosM=PP.a&&PP.a['GK']?PP.a['GK']:{x:goalXFor('h'),y:H*.5};
-  G.phase='pass_anim'; clearInterval(G.di);
+  G.phase='pass_anim';
   G._shotTrail=true;
   shakeScreen(4,60);
   animateBallTo(_cpM.x,_cpM.y,_gkPosM.x,_gkPosM.y,()=>{
@@ -2765,7 +2768,7 @@ function handleCanvasInput(clientX, clientY){
     const sx=perspX(p.x,p.y),sy=perspY(p.y);
     const sc=perspScale(p.y);
     if(Math.hypot(sx-mx,sy-my)<(CR+14)*sc){
-      if(isOffside('h',k)){say('OFFSIDE! '+hSq[k].name+' is beyond the line.');return;}
+      if(isOffside('h',k)){callOffside('h',k);return;} // flag goes up after the ball is played — real turnover
       iPas(k);return;
     }
   }
@@ -4350,6 +4353,7 @@ function resDuel(){
         const _ds=as==='h'?'a':'h';
         const _gkPos=PP[_ds]&&PP[_ds]['GK']?PP[_ds]['GK']:{x:goalXFor(as),y:H*.5};
         const _cp=PP[as][G.ck]||_gkPos;
+        if(rollShotMiss(as,ak)){shotMissed(as);return;}
         G._shotTrail=true;
         animateBallTo(_cp.x,_cp.y,_gkPos.x,_gkPos.y,()=>{G._shotTrail=false;G.phase='idle';opDuel(true,ak);},40);
       }
@@ -4559,7 +4563,7 @@ function afPass(s,tk){
   }
   const receiverName=q[tk]?q[tk].name:'Teammate';
   // Offside check before completing pass
-  if(checkOffside(s,tk))return;
+  if(checkOffside(s,tk)){callOffside(s,tk);return;}
   setC(tk,s); if(PP[s][tk]){ball.tx=PP[s][tk].x;ball.ty=PP[s][tk].y;} G_moveTarget=null;G_laneTarget=null; resume(s,receiverName+' receives!');
 }
 
@@ -4711,6 +4715,91 @@ function checkOffside(attackSide,slot){
 }
 
 
+// ── SHOT ACCURACY (#10) ────────────────────────────────────────────
+// Shots can now miss the target entirely → goal-kick restart. Probability
+// scales with distance, angle and pressure; finishing stat reduces it.
+// Specials never miss (400 SP — the CT fantasy stays intact).
+function rollShotMiss(side,committed){
+  if(committed==='special')return false;
+  const cp=PP[side]&&PP[side][G.ck], pl=sq(side)[G.ck];
+  if(!cp||!pl)return false;
+  const prog=progressFor(side,cp), cent=1-Math.abs(cp.y/H-.5);
+  const pressure=clamp(1-nearestDefenderDistance(side,cp)/(W*ENGINE_CONFIG.ai.duelPressureRadius),0,1);
+  const Z=ENGINE_CONFIG.duel.zones;
+  let p=0.04;
+  if(prog<Z.longRange)p+=0.16; else if(prog<Z.midRange)p+=0.08; else if(prog<Z.boxEdge)p+=0.03;
+  p+=(1-cent)*0.12+pressure*0.08;
+  p*=clamp(1.35-gs(pl,'sho')/100,0.55,1.10);
+  return Math.random()<p;
+}
+function shotMissed(side){
+  const ds=side==='h'?'a':'h';
+  const cp=PP[side]&&PP[side][G.ck], pl=sq(side)[G.ck];
+  if(typeof closeDuel==='function')closeDuel(); // reachable from the duel-result path
+  if(!cp){resume(side,'Play on.');return;}
+  G.shots++;updH();
+  clearInterval(G.di);
+  G.phase='pass_anim';G._shotTrail=true;
+  const ph=document.getElementById('passhint');if(ph)ph.style.display='none';
+  // Ball flies past the post — outside the central goal-mouth band
+  const tx=clamp(goalXFor(side)+dirFor(side)*W*0.045,W*0.005,W*0.995);
+  const ty=Math.random()<0.5?H*(0.10+Math.random()*0.16):H*(0.74+Math.random()*0.16);
+  say((pl?pl.name:'Shot')+' drags it WIDE!');
+  showEventBanner('WIDE!','foul',1800);
+  animateBallTo(cp.x,cp.y,tx,ty,()=>{G._shotTrail=false;goalKickRestart(ds);},45);
+}
+function goalKickRestart(ds){
+  // Minimal goal kick: keeper collects, short stoppage, then the existing
+  // GK quick-throw logic in tick() distributes (GK carrier is supported there).
+  const gen=G.goalGen;
+  if(ds==='h')G.hP++; else G.tP++;
+  G.poss=ds;G.ck='GK';G.chk=null;G_moveTarget=null;G_laneTarget=null;
+  const gp=PP[ds]&&PP[ds].GK?PP[ds].GK:{x:ownGoalXFor(ds),y:H*.5};
+  ball.x=gp.x;ball.y=gp.y;ball.tx=gp.x;ball.ty=gp.y;
+  updP();G.phase='idle';
+  showReferee('GOAL KICK');
+  G.kickoffUntil=Date.now()+1400;
+  setTimeout(()=>{if(G.goalGen!==gen)return;asnC();G.phase='moving';},1200);
+}
+
+// ── OFFSIDE EVENT (#3) ─────────────────────────────────────────────
+// The flag goes up AFTER the ball is played: pass travels, whistle, banner,
+// turnover to the defending side at the spot. Replaces the silent pre-block
+// (human) and the dead return in afPass that could hang the match (AI).
+function callOffside(s,tk){
+  const ds=s==='h'?'a':'h';
+  const fp2=PP[s]&&PP[s][G.ck], tp=PP[s]&&PP[s][tk], pl=sq(s)[tk];
+  const gen=G.goalGen;
+  if(typeof closeDuel==='function')closeDuel();
+  if(!fp2||!tp){resume(ds,'Play on.');return;}
+  clearInterval(G.di);
+  G.phase='pass_anim';G.pm=false;
+  const ph=document.getElementById('passhint');if(ph)ph.style.display='none';
+  const pb=document.getElementById('pass-banner');if(pb)pb.style.display='none';
+  animateBallTo(fp2.x,fp2.y,tp.x,tp.y,()=>{
+    if(G.goalGen!==gen)return;
+    showEventBanner('\u{1F6A9} OFFSIDE','foul',2400);
+    showReferee('OFFSIDE');
+    say((pl?pl.name:'Receiver')+' caught offside!');
+    if(ds==='h')G.hP++; else G.tP++;
+    G.poss=ds;G.chk=null;G_moveTarget=null;G_laneTarget=null;
+    // Nearest defending outfielder takes the free kick from the spot
+    const q=sq(ds);let bk=null,bd=Infinity;
+    Object.keys(q).forEach(k=>{if(!q[k]||k==='GK'||!PP[ds][k])return;const d=Math.hypot(PP[ds][k].x-tp.x,PP[ds][k].y-tp.y);if(d<bd){bd=d;bk=k;}});
+    bk=bk||Object.keys(q).find(k=>q[k]);
+    G.ck=bk;
+    if(PP[ds][bk]){PP[ds][bk].x=tp.x;PP[ds][bk].y=tp.y;}
+    ball.x=tp.x;ball.y=tp.y;ball.tx=tp.x;ball.ty=tp.y;
+    updP();G.phase='idle';
+    G.kickoffUntil=Date.now()+1600;
+    setTimeout(()=>{
+      if(G.goalGen!==gen)return;
+      asnC();G.phase='moving';
+      if(ds==='h'){const ph2=document.getElementById('passhint');if(ph2)ph2.style.display='block';}
+    },1300);
+  },passDuration(fp2.x,fp2.y,tp.x,tp.y,26));
+}
+
 // ── FOUL SYSTEM ───────────────────────────────────────────────────
 function rollFoul(defSide,defSlot,attSide){
   // 8% chance of foul on tackle
@@ -4718,7 +4807,11 @@ function rollFoul(defSide,defSlot,attSide){
   const defPl=sq(defSide)[defSlot];
   const defPos=PP[defSide]?.[defSlot];
   if(!defPos)return false;
-  const inBox=defSide==='h'?(defPos.x>W*.35&&defPos.x<W*.65&&defPos.y>H*.75):(defPos.x>W*.35&&defPos.x<W*.65&&defPos.y<H*.25);
+  // Box is on the X axis (goals at goalXFor) — within 20% of own goal line,
+  // central Y band. Same convention as the box-defender duel boost.
+  const ownGx=ownGoalXFor(defSide);
+  const inBox=Math.abs(defPos.x-ownGx)<W*0.20 && defPos.y>H*0.30 && defPos.y<H*0.70;
+  const _fgen=G.goalGen;
   const isPK=inBox&&Math.random()<0.4;
   const foulName=defPl?defPl.name.split('.').pop():'Defender';
   if(isPK){
@@ -4740,6 +4833,7 @@ function rollFoul(defSide,defSlot,attSide){
   showFreeKickPause(isPK?'PENALTY!':'FREE KICK',foulName, isPK?3500:3200);
   // Award possession to attacking team at foul position after the pause
   setTimeout(()=>{
+    if(G.goalGen!==_fgen)return; // state safety — match may have been torn down
     G.poss=attSide;
     // Find the nearest attacking field player (not GK) to take the free kick
     const attQ=sq(attSide);
@@ -4757,11 +4851,29 @@ function rollFoul(defSide,defSlot,attSide){
     G.ck=ak;G.chk=null;G_moveTarget=null;G_laneTarget=null;
     if(PP[attSide]&&PP[attSide][ak]){PP[attSide][ak].x=defPos.x;PP[attSide][ak].y=defPos.y;}
     ball.x=defPos.x;ball.y=defPos.y;ball.tx=defPos.x;ball.ty=defPos.y;
-    // Penalty: place ball at penalty spot
+    // PENALTY (#2): spot sits in front of the goal on the X axis (was Y —
+    // the old spot was on the sideline), then a REAL shot duel vs the GK.
     if(isPK){
-      const pSpotY=attSide==='h'?H*.12:H*.88;
-      ball.x=W/2;ball.y=pSpotY;ball.tx=W/2;ball.ty=pSpotY;
-      if(PP[attSide][ak]){PP[attSide][ak].x=W/2;PP[attSide][ak].y=pSpotY;}
+      const pdir=dirFor(attSide);
+      const spotX=goalXFor(attSide)-pdir*W*0.115, spotY=H*0.5;
+      ball.x=spotX;ball.y=spotY;ball.tx=spotX;ball.ty=spotY;
+      if(PP[attSide][ak]){PP[attSide][ak].x=spotX;PP[attSide][ak].y=spotY;}
+      // Clear the area — defenders pushed behind the ball, zero pressure on the kick
+      Object.keys(sq(defSide)).forEach(k2=>{
+        const dp2=PP[defSide]&&PP[defSide][k2];
+        if(!dp2||k2==='GK')return;
+        if(Math.hypot(dp2.x-spotX,dp2.y-spotY)<W*0.15){
+          dp2.x=clamp(spotX-pdir*W*(0.17+Math.random()*0.05),W*.02,W*.98);
+          dp2.y=clamp(spotY+(Math.random()-.5)*H*0.5,H*.08,H*.92);
+        }
+      });
+      updP();
+      setTimeout(()=>{
+        if(G.goalGen!==_fgen)return;
+        G.phase='idle';
+        opDuel(true); // shooter (human or AI) picks the strike; GK answers
+      },900);
+      return;
     }
     updP();
     // Resume play
