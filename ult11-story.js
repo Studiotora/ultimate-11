@@ -125,7 +125,7 @@ function injectHero(teamKey,who){ // who: 'hero' | 'rival'
   const idx=t.p.findIndex(p=>p.pos===slotPos&&!p._hero&&!p._rival);
   const old=idx>=0?t.p[idx]:t.p[9];
   const pl={...old,id:who==='hero'?99901:99902,name:nm,origName:nm,
-    spd:st.spd,pwr:st.pwr,tec:st.tec,def:st.def,rar:3,
+    spd:st.spd,pwr:st.pwr,tec:st.tec,def:st.def,rar:2,
     jersey:role==='FW'?9:10,clubKey:ST_CLUBS[teamKey]||CR_CLUBS[teamKey]?teamKey:undefined};
   pl[who==='hero'?'_hero':'_rival']=true;
   // remove any previous copy of this character anywhere in the team, then place
@@ -158,6 +158,11 @@ function pts(r){return r.w*3+r.d;}
 function sortKeys(keys,tab){return[...keys].sort((x,y)=>pts(tab[y])-pts(tab[x])||(tab[y].gf-tab[y].ga)-(tab[x].gf-tab[x].ga)||tab[y].gf-tab[x].gf||(x<y?-1:1));}
 function singleRR(teams){return crMakeFixtures(teams).slice(0,teams.length-1);}
 function tName(k){return (T[k]&&T[k].name)||(ST_CLUBS[k]&&ST_CLUBS[k].name)||(CR_CLUBS[k]&&CR_CLUBS[k].name)||k;}
+function heroFace(name,cls){
+  const ln=String(name||'').split('.').pop().toLowerCase().trim().replace(/[^a-z0-9]/g,'');
+  const gen=(typeof _GENERIC_PLAYER_SVG_URL!=='undefined')?_GENERIC_PLAYER_SVG_URL:'';
+  return `<span class="st-face ${cls||''}"><img src="assets/players/${ln}.png" onerror="this.onerror=null;this.src='${gen}'"></span>`;
+}
 function badge(k,s=24){
   const def=ST_CLUBS[k]||CR_CLUBS[k];
   const fb=def&&typeof crBadgeSvg==='function'?crBadgeSvg(def,s):((T[k]&&T[k].flag)||'🏳');
@@ -175,6 +180,8 @@ function runDQ(){
   let i=0;
   const t=ov.querySelector('.st-dlg-t'),b=ov.querySelector('.st-dlg-b');
   t.textContent=d.title;
+  const f=document.getElementById('st-dlg-face');
+  if(f&&STORY&&STORY.hero)f.innerHTML=heroFace(STORY.hero.name);
   const show=()=>{b.textContent=d.lines[i];};
   show();
   ov.onclick=()=>{i++;if(i<d.lines.length){show();}else{ov.dataset.busy='0';ov.onclick=null;if(d.after)d.after();runDQ();if(!DQ.length){ov.style.display='none';stRender();}}};
@@ -189,22 +196,44 @@ window.storyOpen=function(){
 function stRenderCreate(){
   const el=document.getElementById('st-body');if(!el)return;
   el.innerHTML=`
-  <div class="st-create">
-    <div class="st-ch-t">LA NUOVA STELLA · CHOOSE YOUR PATH</div>
-    <div class="st-roles">
-      <button class="st-role" data-r="FW" onclick="stPickRole('FW')"><b>FW</b><span>STRIKER</span><i>Pure goalscorer. Pace & power.<br>Destination: <u>GENOA CFC</u></i></button>
-      <button class="st-role" data-r="CA" onclick="stPickRole('CA')"><b>CA</b><span>PLAYMAKER</span><i>Creative engine. Technique & vision.<br>Destination: <u>SAMPDORIA</u></i></button>
+  <div class="st-cine">
+    <div class="st-cine-head">
+      <span class="st-jp">ラ・ヌオーヴァ・ステッラ</span>
+      <h1>LA NUOVA STELLA</h1>
+      <span class="st-tag">FROM A SCHOOL PITCH IN GENOVA · TO THE TOP OF THE WORLD</span>
     </div>
-    <div class="st-names">
-      <label>YOUR NAME <input id="st-n1" class="cz-in" maxlength="18" placeholder="e.g. L.Moretti"></label>
-      <label>RIVAL'S NAME <input id="st-n2" class="cz-in" maxlength="18" placeholder="e.g. D.Falco"></label>
+    <div class="st-roles2">
+      <button class="st-rp fw" data-r="FW" onclick="stPickRole('FW')">
+        <span class="st-rp-bg"></span>
+        <span class="st-rp-in">
+          <span class="st-rp-pos">FW</span>
+          <span class="st-rp-name">IL BOMBER</span>
+          <span class="st-rp-sub">STRIKER · PACE & POWER</span>
+          <span class="st-rp-dest">${badge('genoa',30)} GENOA CFC · SERIE B</span>
+        </span>
+        <span class="st-rp-check">SELECTED ▮</span>
+      </button>
+      <button class="st-rp ca" data-r="CA" onclick="stPickRole('CA')">
+        <span class="st-rp-bg"></span>
+        <span class="st-rp-in">
+          <span class="st-rp-pos">CA</span>
+          <span class="st-rp-name">IL REGISTA</span>
+          <span class="st-rp-sub">PLAYMAKER · TECHNIQUE & VISION</span>
+          <span class="st-rp-dest">${badge('sampdoria',30)} SAMPDORIA · SERIE B</span>
+        </span>
+        <span class="st-rp-check">SELECTED ▮</span>
+      </button>
     </div>
-    <button class="cz-b cz-save st-go" onclick="stBegin()">▶ BEGIN STORY</button>
+    <div class="st-namesbox">
+      <div class="st-nb-row"><span class="st-nb-l">YOUR NAME</span><input id="st-n1" maxlength="18" placeholder="L.Moretti"></div>
+      <div class="st-nb-row rival"><span class="st-nb-l">RIVAL'S NAME</span><input id="st-n2" maxlength="18" placeholder="D.Falco"></div>
+    </div>
+    <button class="st-begin" onclick="stBegin()"><span>▶ BEGIN STORY</span></button>
   </div>`;
   window._stRole='FW';stMarkRole();
 }
 window.stPickRole=function(r){window._stRole=r;stMarkRole();};
-function stMarkRole(){document.querySelectorAll('.st-role').forEach(b=>b.classList.toggle('on',b.dataset.r===window._stRole));}
+function stMarkRole(){document.querySelectorAll('.st-rp').forEach(b=>b.classList.toggle('on',b.dataset.r===window._stRole));}
 window.stBegin=function(){
   const n1=(document.getElementById('st-n1').value||'').trim()||'L.Moretti';
   const n2=(document.getElementById('st-n2').value||'').trim()||'D.Falco';
@@ -340,7 +369,7 @@ function injectItaly(){
   const S=STORY.hero,slotPos=HERO_SLOT[S.role],st=heroStats(S.role,S.level);
   const idx=t.p.findIndex(p=>p.pos===slotPos);
   const old=t.p[idx>=0?idx:9];
-  t.p[idx>=0?idx:9]={...old,id:99901,name:S.name,origName:S.name,spd:st.spd,pwr:st.pwr,tec:st.tec,def:st.def,rar:3,_hero:true};
+  t.p[idx>=0?idx:9]={...old,id:99901,name:S.name,origName:S.name,spd:st.spd,pwr:st.pwr,tec:st.tec,def:st.def,rar:2,_hero:true};
 }
 window.stPlayNext=function(){
   const m=myFixture();if(!m)return;
@@ -405,15 +434,30 @@ const PHASE_T={hs:'CH.1 · NATIONAL SCHOOLS CUP',sb:'CH.2 · SERIE B',sa:'CH.3 �
 const KO_L={qf:'QUARTER-FINALS',sf:'SEMI-FINALS',f:'FINAL',r16:'ROUND OF 16'};
 function heroCard(){
   const H=STORY.hero,st=heroStats(H.role,H.level),need=xpNeed(H.level);
-  const bar=Math.round(100*H.xp/need);
-  const stat=(l,v)=>`<div class="st-stat"><span>${l}</span><div class="st-sb"><i style="width:${v}%"></i></div><b>${v}</b></div>`;
-  return `<div class="st-hero">
-    <div class="st-h-top">${badge(STORY.phase==='hs'?STORY.hsSchool:STORY.phase==='wc'?'italy':H.club,34)}
-      <div><div class="st-h-name">${H.name}</div><div class="st-h-sub">${H.role==='FW'?'STRIKER':'PLAYMAKER'} · ${tName(STORY.phase==='hs'?STORY.hsSchool:STORY.phase==='wc'?'italy':H.club)}</div></div>
-      <div class="st-lv">LV <b>${H.level}</b></div></div>
-    <div class="st-xp"><i style="width:${bar}%"></i><span>${H.xp} / ${need} XP</span></div>
-    ${stat('SPD',st.spd)}${stat('PWR',st.pwr)}${stat('TEC',st.tec)}${stat('DEF',st.def)}
-    <div class="st-rival">RIVAL · ${H.rival} — LV ${H.level+1} · ${tName(STORY.phase==='hs'?STORY.rivalSchool:H.rivalClub)}</div>
+  const bar=Math.min(100,Math.round(100*H.xp/need));
+  const teamK=STORY.phase==='hs'?STORY.hsSchool:STORY.phase==='wc'?'italy':H.club;
+  const stat=(l,v,c)=>`<div class="st-stat"><span>${l}</span><div class="st-sb"><i style="width:${v}%;background:${c}"></i></div><b>${v}</b></div>`;
+  return `<div class="st-hero2">
+    <div class="st-h-port">${heroFace(H.name)}<span class="st-lvhex">LV<b>${H.level}</b></span></div>
+    <div class="st-h-main">
+      <div class="st-h-row1">
+        <div class="st-h-name">${H.name}</div>
+        <div class="st-h-role ${H.role==='FW'?'fw':'ca'}">${H.role==='FW'?'IL BOMBER · FW':'IL REGISTA · CA'}</div>
+      </div>
+      <div class="st-h-club">${badge(teamK,22)} ${tName(teamK)}</div>
+      <div class="st-xp"><i style="width:${bar}%"></i><span>${H.xp} / ${need} XP</span></div>
+      <div class="st-stats2">
+        ${stat('SPD',st.spd,'linear-gradient(90deg,#3c8aff,#7adcff)')}
+        ${stat('PWR',st.pwr,'linear-gradient(90deg,#f0552c,#ffb13c)')}
+        ${stat('TEC',st.tec,'linear-gradient(90deg,#9a4cff,#d9a6ff)')}
+        ${stat('DEF',st.def,'linear-gradient(90deg,#2fae6c,#8ce8a8)')}
+      </div>
+    </div>
+    <div class="st-h-rival">
+      <span class="st-rv-tag">RIVAL</span>
+      ${heroFace(H.rival,'sm')}
+      <div class="st-rv-info"><b>${H.rival}</b><span>LV ${H.level+1} · ${tName(STORY.phase==='hs'?STORY.rivalSchool:H.rivalClub)}</span></div>
+    </div>
   </div>`;
 }
 function rowHtml(k,r,hl){return `<tr class="${hl?'me':''}"><td class="tt">${badge(k,18)}<span>${tName(k)}</span></td><td>${r.p}</td><td>${r.w}</td><td>${r.d}</td><td>${r.l}</td><td>${r.gf-r.ga>0?'+':''}${r.gf-r.ga}</td><td class="pt">${pts(r)}</td></tr>`;}
@@ -423,10 +467,10 @@ function matchLine(m){const sc=m.played?`${m.hg}–${m.ag}${m.pens?` <i>(${m.pen
 window.stRender=function(){
   const S=STORY,el=document.getElementById('st-body');if(!el)return;
   if(!S){stRenderCreate();return;}
-  let html=`<div class="cup-head"><div class="cup-comp-t">${PHASE_T[S.phase]||''}</div><div class="cup-stage">${
+  let html=`<div class="st-ribbon"><div class="st-rb-num">${({hs:'CH.01',sb:'CH.02',sa:'CH.03',wc:'CH.04',done:'FIN'})[S.phase]||''}</div><div class="st-rb-main"><div class="st-rb-t">${(PHASE_T[S.phase]||'').replace(/^CH\.\d+ · /,'')}</div><div class="st-rb-s">${
     S.phase==='hs'?(S.hs.stage==='done'?'FINISHED':KO_L[S.hs.stage]):
     S.phase==='sb'||S.phase==='sa'?('MATCHDAY '+(S.league.md+1)+' / '+S.league.fix.length+(S.phase==='sb'?' · SEASON '+S.seasonB:' · SEASON '+S.seasonA)):
-    S.phase==='wc'?(S.wc.stage==='done'?'FINISHED':KO_L[S.wc.stage]):'STORY COMPLETE'}</div></div>`;
+    S.phase==='wc'?(S.wc.stage==='done'?'FINISHED':KO_L[S.wc.stage]):'STORY COMPLETE'}</div></div></div>`;
   if(S._last){const L=S._last;html+=`<div class="cup-last">FT &nbsp;${badge(L.home,18)} ${tName(L.home)} <b>${L.hg}–${L.ag}</b> ${tName(L.away)} ${badge(L.away,18)}${L.pens?` <i>(${L.pens[0]}–${L.pens[1]} pens)</i>`:''}${S._lastXP?` &nbsp;·&nbsp; <b class="st-xpg">+${S._lastXP.xp} XP${S._lastXP.ups?' · LEVEL UP! ×'+S._lastXP.ups:''}</b>`:''}</div>`;}
   html+=heroCard();
   if(S.phase==='done'){
@@ -436,12 +480,19 @@ window.stRender=function(){
   }
   const m=myFixture();
   if(m){
-    html+=`<div class="cup-next"><div class="cup-next-t">MY NEXT MATCH ${m.home===(S.phase==='hs'?S.hsSchool:S.phase==='wc'?'italy':S.hero.club)?'· HOME':'· AWAY'}</div>
-      <div class="cup-next-vs">${badge(m.home,30)}<span>${tName(m.home)}</span><b>VS</b><span>${tName(m.away)}</span>${badge(m.away,30)}</div>
-      <div class="cup-btns"><button class="cz-b cz-save" onclick="stPlayNext()">▶ PLAY MATCH</button><button class="cz-b" onclick="stSimNext()">⏩ SIM (½ XP)</button></div></div>`;
+    const mineK=S.phase==='hs'?S.hsSchool:S.phase==='wc'?'italy':S.hero.club;
+    html+=`<div class="st-vs">
+      <div class="st-vs-lbl">NEXT MATCH ${m.home===mineK?'· HOME':'· AWAY'}</div>
+      <div class="st-vs-row">
+        <div class="st-vs-team h">${badge(m.home,52)}<span>${tName(m.home)}</span></div>
+        <div class="st-vs-mid">VS</div>
+        <div class="st-vs-team a">${badge(m.away,52)}<span>${tName(m.away)}</span></div>
+      </div>
+      <div class="st-vs-btns"><button class="st-play" onclick="stPlayNext()">▶ PLAY MATCH</button><button class="st-sim" onclick="stSimNext()">⏩ SIM · ½ XP</button></div>
+    </div>`;
   }else{
-    html+=`<div class="cup-next"><div class="cup-next-t">NO FIXTURE THIS ROUND — SIM TO CONTINUE</div>
-      <div class="cup-btns"><button class="cz-b cz-save" onclick="stSimNext()">⏩ SIM ROUND</button></div></div>`;
+    html+=`<div class="st-vs"><div class="st-vs-lbl">NO FIXTURE THIS ROUND — SIM TO CONTINUE</div>
+      <div class="st-vs-btns"><button class="st-play" onclick="stSimNext()">⏩ SIM ROUND</button></div></div>`;
   }
   if(S.phase==='hs'){['qf','sf','f'].forEach(st=>{if(!S.hs.ko[st])return;html+=`<div class="cup-tblw"><div class="cup-tbl-t">${KO_L[st]}</div>${S.hs.ko[st].map(matchLine).join('')}</div>`;});}
   else if(S.phase==='sb'||S.phase==='sa'){html+=tableHtml('SERIE '+S.league.div+' TABLE',S.league.teams,S.league.tab,S.hero.club);}

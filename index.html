@@ -1417,7 +1417,14 @@
     <div class="cup-top"><button class="cz-back" onclick="showSc('s-home')">‹ HOME</button><div class="cup-title">STORY · LA NUOVA STELLA</div></div>
     <div id="st-body" class="cup-scroll"></div>
   </div>
-  <div id="st-dialog" class="st-dialog" style="display:none"><div class="st-dlg-box"><div class="st-dlg-t"></div><div class="st-dlg-b"></div><div class="st-dlg-hint">TAP TO CONTINUE ▸</div></div></div>
+  <div id="st-dialog" class="st-dialog" style="display:none">
+    <div class="st-lbx top"></div><div class="st-lbx bot"></div>
+    <div class="st-dlg-box">
+      <div class="st-dlg-plate"><span class="st-dlg-t"></span></div>
+      <div class="st-dlg-inner"><div id="st-dlg-face" class="st-dlg-face"></div><div class="st-dlg-b"></div></div>
+      <div class="st-dlg-hint">TAP TO CONTINUE ▸</div>
+    </div>
+  </div>
 </div>
 
 <!-- ── TOURNAMENT ─────────────────────────────────────── -->
@@ -1443,10 +1450,10 @@
 
 <script src="game.js?v=23" defer></script>
 <script src="ps1-mod.js?v=1" defer></script>
-<script src="ult11-team.js?v=4" defer></script>
+<script src="ult11-team.js?v=5" defer></script>
 <script src="ult11-custom.js?v=2" defer></script>
 <script src="ult11-cup.js?v=2" defer></script>
-<script src="ult11-story.js?v=1" defer></script>
+<script src="ult11-story.js?v=2" defer></script>
 <script>
 (function(){
   var _H="assets/home/menu-bg.png";
