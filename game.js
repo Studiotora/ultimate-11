@@ -503,7 +503,9 @@ function applyTeamBehaviorProfiles(){
     (team.p||[]).forEach(pl=>{
       const named=PLAYER_ARCHETYPES[pl.name]||{};
       const statOverride=STAR_STAT_OVERRIDES[pl.name]||{};
-      pl.behavior={...DEFAULT_BEHAVIOR_PROFILE,...named};
+      // Team-level tactical identity (optional team.style, e.g. {passBias:1.15})
+      // sits under named archetypes — stars keep their personality.
+      pl.behavior={...DEFAULT_BEHAVIOR_PROFILE,...(team.style||{}),...named};
       Object.assign(pl,statOverride);
     });
   });
@@ -1228,6 +1230,19 @@ function goalXFor(side){return dirFor(side)>0?W*.93:W*.07;}
 function ownGoalXFor(side){return dirFor(side)>0?W*.07:W*.93;}
 function progressFor(side,p){return dirFor(side)>0?(p.x/W):(1-p.x/W);}
 function getBehaviorProfile(pl){return {...DEFAULT_BEHAVIOR_PROFILE,...((pl&&pl.behavior)||{})};}
+// ── TEAM TACTICAL STANCE ──────────────────────────────────────────
+// One number per side, derived from score + half + clock:
+//   +1 = all-out chase (trailing late)   0 = balanced   −0.8 = protect the lead.
+// Consumed by aiAtk/aiDef (duel weights), moveOffBall (line height),
+// and tick() (CPU auto-press). Single source of truth — no parallel systems.
+function teamStance(side){
+  const gd=(side==='h'?G.hG-G.aG:G.aG-G.hG);
+  if(G.half!==2)return 0;
+  const late=1-clamp((G.tL||0)/2400,0,1);            // 0 start of 2nd half → 1 at FT
+  if(gd<0)return clamp((-gd)*0.45+late*0.4,0,1);     // trailing → push
+  if(gd>0&&late>0.4)return -clamp(gd*0.3+(late-0.4)*0.5,0,0.8); // leading late → protect
+  return 0;
+}
 function possessionStage(side,cp){
   const prog=cp?progressFor(side,cp):0;
   if(prog<ENGINE_CONFIG.stages.buildUp)return 'buildUp';
@@ -1294,14 +1309,15 @@ function bestTeammateFor(side,carrierKey,mode='pass'){
   const carrier=PP[side][carrierKey];
   const carrierPl=sq(side)[carrierKey];
   const carrierBh=getBehaviorProfile(carrierPl);
-  const riskTolerance=clamp(0.92 + ((carrierBh.passBias||1)-1)*0.55 + ((carrierBh.pressResistance||1)-1)*0.25,0.75,1.25);
+  const _st=teamStance(side); // chasing → riskier, more vertical targets
+  const riskTolerance=clamp(0.92 + ((carrierBh.passBias||1)-1)*0.55 + ((carrierBh.pressResistance||1)-1)*0.25 + Math.max(0,_st)*0.10,0.75,1.35);
   ks.forEach(k=>{
     const p=PP[side][k];if(!p)return;
     const pl=sq(side)[k];
     const bh=getBehaviorProfile(pl);
     let score=openPassLaneScore(side,carrierKey,k)*riskTolerance;
     const prog=progressFor(side,p);
-    score+=prog*2.6;
+    score+=prog*(2.6 + Math.max(0,_st)*1.2 - Math.max(0,-_st)*0.8); // stance: chase values forward targets, protect values safe ones
     score+=zo(k)==='att'?1.2:zo(k)==='mid'?.7:.25;
     const d=Math.hypot(carrier.x-p.x,carrier.y-p.y);
     if(mode==='one-two'){
@@ -1580,7 +1596,8 @@ function tick(dt=1){
         const dd=Math.hypot(dx,dy)||1;
         ux=dx/dd;uy=dy/dd;
       }
-      const pressMult=(G.pressing&&ds==='h')?1.5:1.0;
+      const cpuPress=ds==='a'&&teamStance('a')>0.55; // trailing CPU presses on its own
+      const pressMult=((G.pressing&&ds==='h')||cpuPress)?1.5:1.0;
       const engPl=sq(ds)[ROLES.engager];
       const sprintMult=(ds==='h'&&G_sprint)?1.22:1.08; // AI chase slightly hotter
       const manualMult=manualDef?1.3:1.0;
@@ -1590,13 +1607,15 @@ function tick(dt=1){
       if(Date.now()>=(G.kickoffUntil||0) && dist(dp2,cp)<IR()){G.chk=ROLES.engager;opDuel(false);return;}
     }
   }
-  // PRESS: second player (cover) also sprints toward carrier
-  if(G.pressing&&ds==='h'&&ROLES.cover&&!ocd('h',ROLES.cover)){
-    const dp2=PP.h[ROLES.cover];
+  // PRESS: second player (cover) also sprints toward carrier.
+  // Human via the PRESS button; CPU automatically when trailing hard.
+  const _covPress=(G.pressing&&ds==='h')||(ds==='a'&&teamStance('a')>0.55);
+  if(_covPress&&ROLES.cover&&!ocd(ds,ROLES.cover)){
+    const dp2=PP[ds][ROLES.cover];
     if(dp2){
       const dx=cp.x-dp2.x,dy=cp.y-dp2.y;
       const dd=Math.hypot(dx,dy)||1;
-      const step=MAX_DEF_STEP()*0.80*fieldSpdMult(sq('h')[ROLES.cover])*dt;
+      const step=MAX_DEF_STEP()*0.80*fieldSpdMult(sq(ds)[ROLES.cover])*dt;
       dp2.x=clamp(dp2.x+(dx/dd)*step,W*.01,W*.99);
       dp2.y=clamp(dp2.y+(dy/dd)*step,H*.03,H*.97);
     }
@@ -1622,6 +1641,7 @@ function tick(dt=1){
 function moveOffBall(s,ds,dt=1){
   const cp=PP[s][G.ck]; if(!cp)return;
   const dir=dirFor(s);
+  const stA=teamStance(s); // attacking side stance: + push line up, − sit deeper
   const carrierProg=progressFor(s,cp);
   const threatLevel=clamp((carrierProg-.30)/.45,0,1);
 
@@ -1679,7 +1699,7 @@ function moveOffBall(s,ds,dt=1){
       let tx,ty=p.y*H; // keep horizontal lane from formation
       if(isStriker){
         // Striker leads the line — pushes high when carrier advances
-        const offset = carrierProg<0.4 ? W*0.14 : carrierProg<0.7 ? W*0.22 : W*0.28;
+        const offset = (carrierProg<0.4 ? W*0.14 : carrierProg<0.7 ? W*0.22 : W*0.28) + Math.max(0,stA)*W*0.04;
         tx = aheadOf(cp.x, offset);
         tx = dir>0 ? clamp(tx, halfwayX, W*0.92) : clamp(tx, W*0.08, halfwayX);
         // When carrier is in final third, make a diagonal run into the box
@@ -1737,10 +1757,11 @@ function moveOffBall(s,ds,dt=1){
         glide(cur,dir>0?clamp(tx,W*.40,W*.85):clamp(tx,W*.15,W*.60),ty,SUPPORT_SPEED*0.85,pl);
         return;
       }
-      // Normal: hold defensive line based on carrier progress, never past halfway
-      const lineProg = clamp(carrierProg - 0.35, 0.08, 0.42);
+      // Normal: hold defensive line based on carrier progress. Stance shifts
+      // the whole line: chasing pushes past halfway, protecting drops deep.
+      const lineProg = clamp(carrierProg - 0.35 + stA*0.06, 0.06, 0.50);
       const tx = (dir>0 ? lineProg : 1-lineProg) * W;
-      const cap = dir>0 ? W*0.48 : W*0.52;
+      const cap = dir>0 ? W*(0.48+stA*0.07) : W*(0.52-stA*0.07);
       const final = dir>0 ? Math.min(tx, cap) : Math.max(tx, cap);
       const ty = p.y*H;
       glide(cur,final,ty,DRIFT_SPEED*1.2,pl);
@@ -1750,6 +1771,12 @@ function moveOffBall(s,ds,dt=1){
 
   // ── DEFENDING TEAM ────────────────────────────────────────────
   const ddir = dirFor(ds); // defenders attack the OTHER way
+  // Stance for the defending side: bunker = protecting a lead (drop deep,
+  // tighter goal-side marking); chase = trailing (defend higher).
+  const stD=teamStance(ds);
+  const bunker=Math.max(0,-stD), dchase=Math.max(0,stD);
+  // Shared defensive-line height — mids tether to this so the block stays compact.
+  const defLineProg=clamp(carrierProg-0.20 - bunker*0.06 + dchase*0.04, 0.06, 0.40);
   const assignedDefs=new Set([ROLES.engager,ROLES.cover,ROLES.blocker]);
   const freeAtk=validOutfieldKeys(s).filter(k=>k!==G.ck);
 
@@ -1837,8 +1864,8 @@ function moveOffBall(s,ds,dt=1){
           glide(cur,tx,ty,TRACK_SPEED*1.15,pl);
           return;
         }
-        // Stay goal-side of the attacker
-        const goalSideBias = 0.18 + threatLevel*0.12;
+        // Stay goal-side of the attacker — bunkering teams sag toward goal (zonal feel)
+        const goalSideBias = 0.18 + threatLevel*0.12 + bunker*0.15;
         const tx=lerp(tgt.x,dgx,goalSideBias);
         const ty=lerp(tgt.y,H*0.5,0.08);
         glide(cur,tx,ty,TRACK_SPEED*0.9,pl);
@@ -1850,16 +1877,22 @@ function moveOffBall(s,ds,dt=1){
     const zone=zo(k);
     let tx=p.x*W, ty=p.y*H;
     if(zone==='def'){
-      // Defensive line compacts toward carrier side, never past halfway
-      const lineProg = clamp(carrierProg - 0.20, 0.08, 0.38);
-      tx = (ddir>0 ? lineProg : 1-lineProg) * W;
+      // Defensive line uses the shared stance-aware height
+      tx = (ddir>0 ? defLineProg : 1-defLineProg) * W;
       // Ball-side shift
       ty = lerp(p.y*H, cp.y, 0.18);
+      // ELASTIC ANCHORING: if the engager is a fellow defender who stepped
+      // out, tuck toward his vacated formation slot to cover the hole.
+      if(ROLES.engager&&zo(ROLES.engager)==='def'){
+        const ep=fp(ROLES.engager,ds==='h'?'home':'away',G.half);
+        ty=lerp(ty,ep.y*H,0.25);
+      }
       const cap = ddir>0 ? W*0.48 : W*0.52;
       tx = ddir>0 ? Math.min(tx,cap) : Math.max(tx,cap);
     } else if(zone==='mid'){
-      // Midfield line drops if carrier in their half
-      const lineProg = clamp(carrierProg - 0.05, 0.28, 0.62);
+      // Midfield line TETHERED to the defensive line (compact block):
+      // never more than ~0.26 prog ahead of it, drops deeper when bunkering.
+      const lineProg = clamp(carrierProg - 0.05 - bunker*0.08, defLineProg+0.06, defLineProg+0.26);
       tx = (ddir>0 ? lineProg : 1-lineProg) * W;
       ty = lerp(p.y*H, cp.y, 0.12);
     } else {
@@ -3731,11 +3764,10 @@ function aiAtk(){
   const space=cp?clamp(nearestDefenderDistance(side,cp)/(W*.18),0,1.5):0.5;
   const stage=possessionStage(side,cp);
   const bh=getBehaviorProfile(carrier);
-  // ── TRAILING-SIDE URGENCY ── 2nd half + losing = push for the goal.
-  // Scales with deficit and elapsed time: ~0.5 down one goal mid-half,
-  // → 1.0 deep in the half or two+ goals down. 0 otherwise.
-  const _gd=(side==='h'?G.hG-G.aG:G.aG-G.hG);
-  const urg=(G.half===2&&_gd<0)?clamp((-_gd)*0.45+(1-clamp(G.tL/2400,0,1))*0.4,0,1):0;
+  // ── TEAM STANCE ── urgency (trailing) and protect (leading late) both
+  // come from teamStance() so duels, movement and pressing stay in sync.
+  const st=teamStance(side);
+  const urg=Math.max(0,st), prot=Math.max(0,-st);
   const options=[];
   const canAfford=(id)=> (carrier?.spirit||1500) >= (ATK_ACTIONS[id]?.cost||0);
 
@@ -3744,7 +3776,7 @@ function aiAtk(){
     let passW=1.6 + space*1.8 + (1-pressure)*1.1;
     if(stage==='buildUp') passW += 1.0;
     if(stage==='advance') passW += 0.4;
-    passW *= (bh.passBias||1) * (1-urg*0.15);
+    passW *= (bh.passBias||1) * (1-urg*0.15+prot*0.25); // protecting a lead → keep the ball
     options.push({id:'pass',w:passW});
   }
 
@@ -3752,7 +3784,7 @@ function aiAtk(){
     const spdBonus=carrier?((carrier.spd||70)-70)/30:0;
     let dribbleW=1.4+space*2.8+spdBonus*1.2+prog*0.8;
     if(stage==='advance') dribbleW += 0.5;
-    dribbleW *= (bh.dribbleBias||1) * (1 + Math.max(0, (bh.pressResistance||1)-1)*pressure*0.35);
+    dribbleW *= (bh.dribbleBias||1) * (1 + Math.max(0, (bh.pressResistance||1)-1)*pressure*0.35) * (1-prot*0.15);
     options.push({id:'dribble',w:dribbleW});
   }
 
@@ -3760,7 +3792,7 @@ function aiAtk(){
   const shotWindow = ENGINE_CONFIG.ai.shotWindowBase - Math.max(0, (bh.longShotBias||1)-1)*0.06 - urg*0.08;
   if((G.D.isShot||prog>shotWindow)&&canAfford('shoot')){
     let shootW=(G.D.isShot?5.0:0.8)+prog*4.5-pressure*1.2;
-    shootW *= (bh.shootBias||1) * (1+urg*0.55);
+    shootW *= (bh.shootBias||1) * (1+urg*0.55-prot*0.20);
     // Zone modifier: heavily discourage long shots unless specialist
     if(prog < Z.longRange){
       shootW *= (bh.longShotBias||1) * (0.45+urg*0.25); // discourage unless longShotBias > 1 — or desperate
@@ -3899,6 +3931,10 @@ function aiDef(){
     interceptW+=(prog>.45?0.6:0);
 
     const aggr=(bh.defensiveAggression||1);
+    // Team stance: chasing → win the ball back hard; protecting → contain/block.
+    const stD=teamStance(ds);
+    if(stD>0){tackleW*=1+stD*0.25;interceptW*=1+stD*0.20;}
+    else if(stD<0){blockW*=1-stD*0.20;tackleW*=1+stD*0.10;}
     tackleW*=aggr;
     blockW*=0.95 + (aggr-1)*0.35;
     interceptW*=1.05 - (aggr-1)*0.2;
