@@ -612,7 +612,7 @@
             </span>
           </button>
           <!-- 04 STORY MODE -->
-          <button class="ae-panel ae-soon" style="--ac:#a259ff" onclick="aeToast('Story Mode — coming soon')">
+          <button class="ae-panel" style="--ac:#a259ff" onclick="storyOpen()">
             <span class="ae-pin">
               <span class="ae-part" style="background-image:url('assets/home/banners/storymode.png')"></span>
               <span class="ae-pgrad"></span>
@@ -620,7 +620,9 @@
                 <span class="ae-pnum">04 · THE ROAD TO GLORY</span>
                 <span class="ae-ptitle">STORY MODE</span>
                 <span class="ae-pjp">ストーリーモード</span>
+                <span class="ae-psub">La Nuova Stella — from school pitch to World Cup</span>
               </span>
+              <span class="ae-pcta">▶</span>
             </span>
             <span class="ae-badge new">NEW</span>
           </button>
@@ -1409,6 +1411,15 @@
 </div>
 
 </div><!-- /viewport -->
+<!-- ── STORY MODE ─────────────────────────────────────── -->
+<div id="s-story" class="screen">
+  <div class="cup-wrap">
+    <div class="cup-top"><button class="cz-back" onclick="showSc('s-home')">‹ HOME</button><div class="cup-title">STORY · LA NUOVA STELLA</div></div>
+    <div id="st-body" class="cup-scroll"></div>
+  </div>
+  <div id="st-dialog" class="st-dialog" style="display:none"><div class="st-dlg-box"><div class="st-dlg-t"></div><div class="st-dlg-b"></div><div class="st-dlg-hint">TAP TO CONTINUE ▸</div></div></div>
+</div>
+
 <!-- ── TOURNAMENT ─────────────────────────────────────── -->
 <div id="s-cup" class="screen">
   <div class="cup-wrap">
@@ -1430,11 +1441,12 @@
   </div>
 </div>
 
-<script src="game.js?v=22" defer></script>
+<script src="game.js?v=23" defer></script>
 <script src="ps1-mod.js?v=1" defer></script>
 <script src="ult11-team.js?v=4" defer></script>
 <script src="ult11-custom.js?v=2" defer></script>
 <script src="ult11-cup.js?v=2" defer></script>
+<script src="ult11-story.js?v=1" defer></script>
 <script>
 (function(){
   var _H="assets/home/menu-bg.png";

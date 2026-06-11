@@ -3015,3 +3015,41 @@ html,body{overscroll-behavior:none;}
 .uee img{width:100%;height:100%;object-fit:contain;display:block;}
 .uee .fb{display:none;align-items:center;justify-content:center;width:100%;height:100%;font-size:17px;line-height:1;}
 .uee svg{width:100%;height:100%;}
+
+/* ════ STORY MODE ════ */
+#s-story{background:linear-gradient(rgba(7,11,20,.78),rgba(7,11,20,.92)),url('assets/home/story-bg.png') center/cover no-repeat,radial-gradient(120% 120% at 50% 0%,#1a1030 0%,#070b14 70%);}
+.st-create{max-width:640px;margin:0 auto;display:flex;flex-direction:column;gap:16px;padding-top:10px;}
+.st-ch-t{font-family:'Bebas Neue',sans-serif;font-size:clamp(20px,3vw,28px);letter-spacing:2px;color:#d9b8ff;text-align:center;text-shadow:0 0 16px rgba(162,89,255,.5);}
+.st-roles{display:grid;grid-template-columns:1fr 1fr;gap:12px;}
+.st-role{display:flex;flex-direction:column;gap:6px;padding:16px;border-radius:14px;cursor:pointer;text-align:left;background:rgba(255,255,255,.05);border:1px solid rgba(162,89,255,.3);color:#e8ddff;}
+.st-role b{font-family:'Bebas Neue',sans-serif;font-size:30px;letter-spacing:2px;color:#c89bff;}
+.st-role span{font-family:'Bebas Neue',sans-serif;font-size:16px;letter-spacing:2px;color:#fff;}
+.st-role i{font-style:normal;font-size:11px;color:#b6a6d8;line-height:1.5;}
+.st-role.on{background:rgba(162,89,255,.22);border-color:#b06cff;box-shadow:0 0 18px -4px #a259ff;}
+.st-names{display:flex;flex-direction:column;gap:10px;}
+.st-names label{display:flex;align-items:center;gap:10px;font-family:'Bebas Neue',sans-serif;letter-spacing:1.5px;font-size:14px;color:#b6a6d8;}
+.st-names label input{flex:1;}
+.st-go{align-self:center;font-size:18px;padding:12px 30px;}
+.st-hero{background:linear-gradient(160deg,rgba(90,45,160,.3),rgba(10,8,22,.7));border:1px solid rgba(162,89,255,.4);border-radius:14px;padding:12px 14px;margin-bottom:14px;}
+.st-h-top{display:flex;align-items:center;gap:10px;margin-bottom:8px;}
+.st-h-name{font-family:'Bebas Neue',sans-serif;font-size:22px;letter-spacing:1.5px;color:#fff;}
+.st-h-sub{font-size:11px;color:#b6a6d8;letter-spacing:1px;}
+.st-lv{margin-left:auto;font-family:'Bebas Neue',sans-serif;letter-spacing:1px;font-size:15px;color:#c89bff;}
+.st-lv b{font-size:26px;color:#ffd24a;}
+.st-xp{position:relative;height:14px;border-radius:7px;background:rgba(255,255,255,.08);overflow:hidden;margin-bottom:10px;}
+.st-xp i{position:absolute;inset:0 auto 0 0;background:linear-gradient(90deg,#7b3fe0,#c89bff);border-radius:7px;}
+.st-xp span{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;font-size:9.5px;letter-spacing:1px;color:#fff;font-family:'Orbitron',sans-serif;}
+.st-stat{display:flex;align-items:center;gap:8px;margin:3px 0;font-family:'Bebas Neue',sans-serif;letter-spacing:1px;font-size:13px;color:#cdbdf0;}
+.st-stat span{width:34px;}
+.st-stat b{width:26px;text-align:right;color:#fff;}
+.st-sb{flex:1;height:7px;border-radius:4px;background:rgba(255,255,255,.08);overflow:hidden;}
+.st-sb i{display:block;height:100%;background:linear-gradient(90deg,#3c8aff,#7adcff);border-radius:4px;}
+.st-rival{margin-top:8px;padding-top:8px;border-top:1px dashed rgba(162,89,255,.3);font-size:11px;letter-spacing:1px;color:#ff9d9d;font-family:'Orbitron',sans-serif;}
+.st-xpg{color:#ffd24a;}
+.st-dialog{position:absolute;inset:0;z-index:60;display:flex;align-items:flex-end;justify-content:center;background:rgba(2,4,10,.55);cursor:pointer;}
+.st-dlg-box{width:min(760px,94%);margin-bottom:max(18px,env(safe-area-inset-bottom));background:linear-gradient(160deg,rgba(26,16,48,.96),rgba(8,6,18,.96));border:1px solid rgba(162,89,255,.55);border-radius:14px;padding:14px 18px 12px;box-shadow:0 0 30px -8px #a259ff;}
+.st-dlg-t{font-family:'Bebas Neue',sans-serif;letter-spacing:2px;font-size:16px;color:#c89bff;margin-bottom:6px;}
+.st-dlg-b{font-size:14px;line-height:1.6;color:#efe8ff;min-height:44px;}
+.st-dlg-hint{text-align:right;font-size:9px;letter-spacing:2px;color:#7d6aa8;font-family:'Orbitron',sans-serif;margin-top:6px;animation:stblink 1.2s infinite;}
+@keyframes stblink{50%{opacity:.3}}
+@media (max-width:740px){.st-roles{grid-template-columns:1fr;}}

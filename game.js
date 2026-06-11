@@ -619,14 +619,14 @@ function setTeamEmblem(el, teamKey, flagEmoji){
     return;
   }
   const k=String(teamKey).toLowerCase();
-  let isClub=false;
-  try { isClub = !!(CR_CLUBS && CR_CLUBS[k]); } catch(e) { isClub=false; }
+  let isClub=false, clubDef=null;
+  try { clubDef=(CR_CLUBS&&CR_CLUBS[k])||(window.ST_CLUBS&&window.ST_CLUBS[k])||null; isClub=!!clubDef; } catch(e) { isClub=false; }
 
   // Default fill: emoji for nationals, SVG badge for clubs (so we always have
   // a recognisable crest until per-club PNGs exist).
   if(isClub){
     try {
-      el.innerHTML = crBadgeSvg(CR_CLUBS[k], 100);
+      el.innerHTML = crBadgeSvg(clubDef, 100);
       const svg=el.querySelector('svg');
       if(svg){svg.style.width='100%';svg.style.height='100%';}
     } catch(e) { el.textContent=flagEmoji||'🏳'; }
@@ -1061,6 +1061,7 @@ function exitToMenu(){
   // Abandon career match without saving the score (counts as not played)
   if(CAR.pendingMatch){CAR.pendingMatch=null;}
   if(window.CUP&&window.CUP.pending){window.CUP.pending=null;}
+  if(window.STORY&&window.STORY.pending){window.STORY.pending=null;}
   // Clear roster/team-editor state so a fresh friendly match doesn't inherit career squads
   HOME_SLOT_ASSIGN={};HOME_RESERVES=[null,null,null,null,null,null];
   G_teamEditorOrigin=null;
@@ -1079,6 +1080,13 @@ function teamEditorBack(){
     G_teamEditorOrigin=null;
     showSc('s-career-hub');
     if(typeof crRenderHub==='function')crRenderHub();
+    return;
+  }
+  if(G_teamEditorOrigin==='story'){
+    G_teamEditorOrigin=null;
+    if(window.STORY)window.STORY.pending=null;
+    if(typeof stRender==='function')stRender();
+    showSc('s-story');
     return;
   }
   if(G_teamEditorOrigin==='cup'){
@@ -5029,6 +5037,9 @@ function goFull(){
   clearInterval(G.mt);clearInterval(G.di);G.phase='idle';closeDuel();
   document.getElementById('passhint').style.display='none';
   stopMatchMusic();
+  if(typeof window.storyOnFullTime==='function'&&window.STORY&&window.STORY.pending){
+    window.storyOnFullTime(G.hG,G.aG);returnToMenuMusic();return;
+  }
   if(typeof window.cupOnFullTime==='function'&&window.CUP&&window.CUP.pending){
     window.cupOnFullTime(G.hG,G.aG);returnToMenuMusic();return;
   }
