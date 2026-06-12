@@ -190,8 +190,7 @@ function charFace(who,cls){
   const gen=(typeof _GENERIC_PLAYER_SVG_URL!=='undefined')?_GENERIC_PLAYER_SVG_URL:'';
   if(!H)return `<span class="st-face ${cls||''}"><img src="${gen}"></span>`;
   const role=who==='rival'?(H.role==='FW'?'CA':'FW'):H.role;
-  // rival never makes the national team — his art stays at his club in WC chapters
-  const phase=(who==='rival'&&(STORY.phase==='wc'||STORY.phase==='done'))?'sb':STORY.phase;
+  const phase=STORY.phase==='fr3'?'sb':STORY.phase==='fr4'?'wc':STORY.phase; // friendlies map to club/ita art
   const nm=who==='rival'?H.rival:H.name;
   const ln=String(nm||'').split('.').pop().toLowerCase().trim().replace(/[^a-z0-9]/g,'');
   const chain=[`assets/players/hero-${role.toLowerCase()}-${charCtx(role,phase)}.png`,`assets/players/${ln}.png`,gen].join('|');
@@ -208,6 +207,108 @@ function badge(k,s=24){
 }
 
 
+
+/* ════ DEV FLAG · ★ REMOVE FOR RELEASE ════ */
+window.UE_DEV=true; // shows the "DEV SKIP · WIN" button in the story hub
+
+/* ── VN DIALOGUE ENGINE (story-script.js scenes) ───────────── */
+let VNJOBS=[],VNsc=null,VNi=0,VNtyping=null;
+function vnTok(t){
+  const H=STORY.hero;
+  const map={'{HERO}':(H.name||'').split('.').pop().toUpperCase(),
+    '{RIVAL}':(H.rival||'').split('.').pop().toUpperCase(),
+    '{CLUB}':tName(H.club).toUpperCase(),'{RIVALCLUB}':tName(H.rivalClub).toUpperCase()};
+  const al=(window.STORY_ALIAS&&STORY_ALIAS[H.role])||{};
+  const nm=k=>{const id=al[k];return (id&&STORY_CAST[id])?STORY_CAST[id].name:'';};
+  map['{COACH}']=nm('coach-club');map['{CAPT}']=nm('captain-club');map['{GK}']=nm('gk-club');map['{OPPCAPT}']=nm('captain-opp');
+  Object.entries(map).forEach(([k,v])=>{t=t.split(k).join(v);});
+  return t;
+}
+function vnResolve(who){
+  if(who==='hero')return{id:'hero',name:vnTok('{HERO}')};
+  if(who==='rival')return{id:'rival',name:vnTok('{RIVAL}')};
+  const al=(window.STORY_ALIAS&&STORY_ALIAS[STORY.hero.role])||{};
+  const id=al[who]||who;
+  const c=window.STORY_CAST&&STORY_CAST[id];
+  return{id,name:c?vnTok(c.name):who.toUpperCase()};
+}
+function vnPlay(keys,after){
+  if(!window.STORY_SCRIPT){if(after)after();stRender();return;}
+  VNJOBS.push({keys:Array.isArray(keys)?[...keys]:[keys],after});
+  if(!VNsc)vnNextScene();
+}
+function vnNextScene(){
+  const ov=document.getElementById('st-vn');
+  const job=VNJOBS[0];
+  if(!job){VNsc=null;if(ov)ov.style.display='none';stRender();return;}
+  const k=job.keys.shift();
+  if(k===undefined){VNJOBS.shift();const f=job.after;if(f)f();vnNextScene();return;}
+  let sc=STORY_SCRIPT[k];
+  if(Array.isArray(sc))sc={title:'PRE-PARTITA',lines:sc[Math.floor(Math.random()*sc.length)]};
+  if(!sc||!ov){vnNextScene();return;}
+  VNsc=sc;VNi=0;ov.style.display='block';
+  ov.querySelector('.st-vn-title').textContent=vnTok(sc.title);
+  ov.querySelector('#st-vn-prog').innerHTML=sc.lines.map(()=>'<i></i>').join('');
+  vnShowLine();
+}
+function vnShowLine(){
+  const ov=document.getElementById('st-vn'),L=VNsc.lines[VNi],me=L.who==='hero';
+  const who=vnResolve(L.who);
+  ov.querySelector('#st-vn-hero').className='st-vn-port l '+(me?'lit':'dim');
+  const other=ov.querySelector('#st-vn-other');
+  other.className='st-vn-port r '+(me?'dim':'lit');
+  // hero portrait via the fixed art slots; rival likewise; others from cast folder
+  ov.querySelector('#st-vn-hero').innerHTML=charFace('hero');
+  if(!me){
+    if(who.id==='rival')other.innerHTML=charFace('rival');
+    else if(other.dataset.cur!==who.id){
+      other.dataset.cur=who.id;
+      const gen=(typeof _GENERIC_PLAYER_SVG_URL!=='undefined')?_GENERIC_PLAYER_SVG_URL:'';
+      other.innerHTML=`<span class="st-face"><img src="assets/story/cast/${who.id}.png" onerror="this.onerror=null;this.src='${gen}'"></span>`;
+    }
+  }
+  const plate=ov.querySelector('.st-vn-plate');
+  plate.textContent=who.name;
+  plate.classList.toggle('right',!me);
+  const full=vnTok(L.text),el=ov.querySelector('.st-vn-text');
+  clearInterval(VNtyping);el.textContent='';el.dataset.full=full;
+  let i=0;VNtyping=setInterval(()=>{el.textContent=full.slice(0,++i);if(i>=full.length)clearInterval(VNtyping);},14);
+  [...ov.querySelectorAll('#st-vn-prog i')].forEach((p,n)=>p.className=n<=VNi?'on':'');
+}
+window.vnAdvance=function(){
+  const ov=document.getElementById('st-vn');if(!VNsc||!ov)return;
+  const el=ov.querySelector('.st-vn-text');
+  if(el.textContent!==el.dataset.full){clearInterval(VNtyping);el.textContent=el.dataset.full;return;}
+  if(VNi<VNsc.lines.length-1){VNi++;vnShowLine();}
+  else vnNextScene();
+};
+
+/* scene routing */
+function preSceneFor(m){
+  const S=STORY;
+  if(S.phase==='hs'){
+    if(S.hs.stage==='qf')return['ch1_pre_qf'];
+    if(S.hs.stage==='sf')return['ch1_pre_sf'];
+    if(S.hs.stage==='f')return['ch1_final_locker','ch1_pre_final'];
+  }
+  if(S.phase==='fr3')return['ch3_friendly_pre'];
+  if(S.phase==='fr4')return['ch4_friendly_pre'];
+  if(S.phase==='wc'){
+    if(S.wc.stage==='sf')return['ch4_semi_pre'];
+    if(S.wc.stage==='f')return['ch4_final_pre'];
+    return['generic_pre_ita'];
+  }
+  const opp=m.home===S.hero.club?m.away:m.home;
+  if(opp===S.hero.rivalClub)return['ch2_derby_pre'];
+  if(S.phase==='sb'&&S.league.md===0)return['ch2_pre_md1'];
+  return['generic_pre'];
+}
+function postSceneFor(m,won){
+  const S=STORY;
+  if(S.phase==='hs'&&S.hs.stage==='qf'&&won)return['ch1_post_qf_win'];
+  if((S.phase==='sb'||S.phase==='sa')&&(m.home===S.hero.rivalClub||m.away===S.hero.rivalClub))return['ch2_derby_post'];
+  return null;
+}
 /* ── STAT POINT ALLOCATION ─────────────────────────────────── */
 window.stOpenAlloc=function(){
   const ov=document.getElementById('st-alloc');if(!ov)return;
@@ -412,11 +513,7 @@ window.stBegin=function(){
     hs:{stage:'qf',ko:{qf,sf:null,f:null},alive:true,rivalAlive:true},
     league:null,wc:null,pending:null,seasonB:1,seasonA:0};
   save();
-  talk('SPRING · GENOVA',[
-    'Last year of high school. One tournament left before real life begins.',
-    n1+' ('+role+') of Liceo Garibaldi has one dream: Serie A, the Azzurri, the World Cup.',
-    'Across the city, '+n2+' of Istituto San Giorgio chases the same dream — one step ahead, always.',
-    'The National Schools Cup starts now. Show them who you are.']);
+  vnPlay(['ch1_intro']);
   stRender();
 };
 
@@ -432,6 +529,9 @@ function myFixture(){
   if(S.phase==='hs'){
     const rd=S.hs.ko[S.hs.stage];if(!rd)return null;
     return rd.find(m=>!m.played&&(m.home===S.hsSchool||m.away===S.hsSchool))||null;
+  }
+  if(S.phase==='fr3'||S.phase==='fr4'){
+    return (S.friendly&&!S.friendly.m.played)?S.friendly.m:null;
   }
   if(S.phase==='sb'||S.phase==='sa'){
     const L=S.league;if(!L||L.md>=L.fix.length)return null;
@@ -477,14 +577,19 @@ function endOfRound(){
   if(S.phase==='hs'){
     if(S.hs.stage!=='done')return;
     const won=S.hs.champion===S.hsSchool;
-    talk('THE SCOUT',[
-      won?'CHAMPIONS! Liceo Garibaldi lift the National Schools Cup!':'The cup run is over — but the performances did not go unnoticed.',
-      'A man in a grey coat approaches after the final whistle.',
-      '"'+H.name+'. I work for '+tName(H.club)+'. Serie B. We want you."',
-      'Meanwhile '+H.rival+' signs for '+tName(H.rivalClub)+'. The rivalry moves to the pros.',
-      'CHAPTER 2 — SERIE B. Goal: promotion to Serie A.'],()=>{
-        S.phase='sb';startLeague('B');injectHero(H.club,'hero');injectHero(H.rivalClub,'rival');save();stRender();
-      });
+    vnPlay([won?'ch1_post_final_win':'ch1_post_final_loss','ch1_scout','ch2_arrival','ch2_training'],()=>{
+      S.phase='sb';startLeague('B');injectHero(H.club,'hero');injectHero(H.rivalClub,'rival');save();
+    });
+    return;
+  }
+  if(S.phase==='fr3'){
+    if(!S.friendly||!S.friendly.m.played)return;
+    vnPlay(['ch3_press'],()=>{S.phase='sa';S.seasonA++;startLeague('A');S.friendly=null;save();});
+    return;
+  }
+  if(S.phase==='fr4'){
+    if(!S.friendly||!S.friendly.m.played)return;
+    vnPlay(['ch4_wc_open'],()=>{S.phase='wc';startWC();S.friendly=null;save();});
     return;
   }
   if(S.phase==='sb'||S.phase==='sa'){
@@ -492,13 +597,13 @@ function endOfRound(){
     const order=sortKeys(L.teams,L.tab),pos=order.indexOf(H.club)+1;
     if(S.phase==='sb'){
       if(pos<=2){
-        talk('PROMOZIONE!',[tName(H.club)+' finish #'+pos+' — SERIE A, here we come!','Somehow, '+H.rival+' drags '+tName(H.rivalClub)+' up as well. Of course he does.','CHAPTER 3 — SERIE A. Goal: top 4 and the eyes of the national coach.'],()=>{S.phase='sa';S.seasonA++;startLeague('A');save();stRender();});
+        vnPlay(['ch2_promotion','ch3_arrival'],()=>{S.phase='fr3';S.friendly={opp:'holland',m:{home:H.club,away:'holland',played:false}};save();});
       }else{
         talk('SEASON OVER',['#'+pos+' is not enough. Promotion slipped away.','"Again," you tell the mirror. "One more season."'],()=>{S.seasonB++;startLeague('B');save();stRender();});
       }
     }else{
       if(pos<=4){
-        talk('LA CHIAMATA',['#'+pos+' in Serie A. The phone rings — it is the AZZURRI head coach.','"'+H.name+', pack your bags. The World Cup squad has your name on it."','FINAL CHAPTER — THE WORLD CUP. 16 nations. One trophy.'],()=>{S.phase='wc';startWC();save();stRender();});
+        vnPlay(['ch3_callup','ch4_ritiro'],()=>{S.phase='fr4';S.friendly={opp:'argentina',m:{home:'italy',away:'argentina',played:false}};save();});
       }else{
         talk('SEASON OVER',['#'+pos+'. Good — not good enough for the national team.','Another season. Louder this time.'],()=>{S.seasonA++;startLeague('A');save();stRender();});
       }
@@ -507,9 +612,9 @@ function endOfRound(){
   }
   if(S.phase==='wc'&&S.wc.stage==='done'){
     if(S.wc.champion==='italy'){
-      talk('CAMPIONI DEL MONDO',['ITALY ARE WORLD CHAMPIONS!','From a school pitch in Genova to the top of the world.','Even '+H.rival+' is smiling. "Next time," he says, "I lift it first."','THE END — LV '+H.level+' · thank you for playing LA NUOVA STELLA.'],()=>{S.phase='done';save();stRender();});
+      vnPlay(['ch4_final_win'],()=>{S.phase='done';save();});
     }else{
-      talk('SO CLOSE',['The dream dies at the hands of '+tName(S.wc.champion)+'.','The coach grips your shoulder: "We go again in four years. Stay ready."'],()=>{S.phase='done';S.wcLost=true;save();stRender();});
+      vnPlay(['ch4_final_loss'],()=>{S.phase='done';S.wcLost=true;save();});
     }
   }
 }
@@ -518,6 +623,7 @@ function endOfRound(){
 function buildForMatch(k){
   if(STORY.phase==='hs'){stBuildTeam(k);if(k===STORY.hsSchool)injectHeroSchool('hero');if(k===STORY.rivalSchool)injectHeroSchool('rival');return;}
   if(k==='italy'){injectItaly();return;}
+  if(T[k]&&!T[k]._story&&!CR_CLUBS[k]&&!ST_CLUBS[k])return; // plain national opponent (friendlies)
   stBuildTeam(k);
   if(k===STORY.hero.club)injectHero(k,'hero');
   if(k===STORY.hero.rivalClub)injectHero(k,'rival');
@@ -534,15 +640,30 @@ function injectItaly(){
   const idx=t.p.findIndex(p=>p.pos===slotPos);
   const old=t.p[idx>=0?idx:9];
   t.p[idx>=0?idx:9]={...old,id:99901,name:S.name,origName:S.name,spd:st.spd,pwr:st.pwr,tec:st.tec,def:st.def,rar:2,_hero:true};
+  // CH.4: the rival is called up too — rivals become teammates
+  const rRole=S.role==='FW'?'CA':'FW',rSlot=HERO_SLOT[rRole],rst=rivalStats(rRole,S.level+1);
+  const ri=t.p.findIndex(p=>p.pos===rSlot&&!p._hero);
+  const rOld=t.p[ri>=0?ri:7];
+  t.p[ri>=0?ri:7]={...rOld,id:99902,name:S.rival,origName:S.rival,spd:rst.spd,pwr:rst.pwr,tec:rst.tec,def:rst.def,rar:2,_rival:true};
 }
 window.stPlayNext=function(){
   const m=myFixture();if(!m)return;
   const S=STORY;
-  const mine=S.phase==='hs'?S.hsSchool:S.phase==='wc'?'italy':S.hero.club;
+  const mine=S.phase==='hs'?S.hsSchool:(S.phase==='wc'||S.phase==='fr4')?'italy':S.hero.club;
   const opp=m.home===mine?m.away:m.home;
   buildForMatch(mine);buildForMatch(opp);
-  const cap=captainOf(opp);
-  talk('TUNNEL · PRE-MATCH',preMatchLines(opp,cap),()=>stLaunch(m,mine,opp));
+  vnPlay(preSceneFor(m),()=>stLaunch(m,mine,opp));
+};
+/* ★ DEV ONLY — REMOVE FOR RELEASE: instantly win the next match with full XP */
+window.stDevSkip=function(){
+  if(!window.UE_DEV)return;
+  const m=myFixture();if(!m){stSimNext();return;}
+  const S=STORY,mine=S.phase==='hs'?S.hsSchool:(S.phase==='wc'||S.phase==='fr4')?'italy':S.hero.club;
+  const hg=m.home===mine?3:1,ag=m.home===mine?1:3;
+  const post=postSceneFor(m,true);
+  applyMyResult(m,hg,ag,true);
+  if(post)vnPlay(post);
+  save();stRender();setTimeout(maybeStoryBeat,250);
 };
 function stLaunch(m,mine,opp){
   selHome=mine;selAway=opp;HT=T[mine];AT=T[opp];
@@ -558,7 +679,7 @@ window.stSimNext=function(){
   setTimeout(maybeStoryBeat,250);
 };
 function applyMyResult(m,hg,ag,played){
-  const S=STORY,mine=S.phase==='hs'?S.hsSchool:S.phase==='wc'?'italy':S.hero.club;
+  const S=STORY,mine=S.phase==='hs'?S.hsSchool:(S.phase==='wc'||S.phase==='fr4')?'italy':S.hero.club;
   m.hg=hg;m.ag=ag;m.played=true;
   const isKO=S.phase==='hs'||S.phase==='wc';
   if(isKO&&hg===ag)m.pens=pens();
@@ -577,6 +698,7 @@ function applyMyResult(m,hg,ag,played){
 }
 function advanceAll(){
   const S=STORY;
+  if(S.phase==='fr3'||S.phase==='fr4'){endOfRound();return;}
   if(S.phase==='hs'){if(S.hs.stage!=='done')advanceKO(S.hs.ko,['qf','sf','f']);S.hs.alive=isAlive(S.hsSchool,S.hs);S.hs.rivalAlive=isAlive(S.rivalSchool,S.hs);endOfRound();return;}
   if(S.phase==='sb'||S.phase==='sa'){
     const L=S.league,rd=L.fix[L.md];
@@ -593,19 +715,25 @@ window.storyOnFullTime=function(engHg,engAg){
   const p=STORY.pending;if(!p)return;
   const hg=p.isHome?engHg:engAg,ag=p.isHome?engAg:engHg;
   const m=myFixture();STORY.pending=null;
-  if(m)applyMyResult(m,hg,ag,true);
+  if(m){
+    const mine=STORY.phase==='hs'?STORY.hsSchool:(STORY.phase==='wc'||STORY.phase==='fr4')?'italy':STORY.hero.club;
+    const won=(m.home===mine?hg:ag)>(m.home===mine?ag:hg);
+    const post=postSceneFor(m,won);
+    applyMyResult(m,hg,ag,true);
+    if(post)vnPlay(post);
+  }
   save();stRender();showSc('s-story');
   setTimeout(maybeStoryBeat,400);
 };
 window.stQuit=function(){if(!confirm('Delete story progress and start over?'))return;wipe();stRenderCreate();};
 
 /* ── RENDER ───────────────────────────────────────────────── */
-const PHASE_T={hs:'CH.1 · NATIONAL SCHOOLS CUP',sb:'CH.2 · SERIE B',sa:'CH.3 · SERIE A',wc:'CH.4 · WORLD CUP',done:'EPILOGUE'};
+const PHASE_T={hs:'CH.1 · NATIONAL SCHOOLS CUP',sb:'CH.2 · SERIE B',fr3:'CH.3 · AMICHEVOLE INTERNAZIONALE',sa:'CH.3 · SERIE A',fr4:'CH.4 · RITIRO AZZURRO',wc:'CH.4 · WORLD CUP',done:'EPILOGUE'};
 const KO_L={qf:'QUARTER-FINALS',sf:'SEMI-FINALS',f:'FINAL',r16:'ROUND OF 16'};
 function heroCard(){
   const H=STORY.hero,st=heroStats(H),need=xpNeed(H.level);
   const bar=Math.min(100,Math.round(100*H.xp/need));
-  const teamK=STORY.phase==='hs'?STORY.hsSchool:STORY.phase==='wc'?'italy':H.club;
+  const teamK=STORY.phase==='hs'?STORY.hsSchool:(STORY.phase==='wc'||STORY.phase==='fr4')?'italy':H.club;
   const stat=(l,v,c)=>`<div class="st-stat"><span>${l}</span><div class="st-sb"><i style="width:${v}%;background:${c}"></i></div><b>${v}</b></div>`;
   return `<div class="st-hero2">
     <div class="st-h-port">${heroFace(H.name)}<span class="st-lvhex">LV<b>${H.level}</b></span></div>
@@ -639,9 +767,11 @@ window.stRender=function(){
   const S=STORY,el=document.getElementById('st-body');if(!el)return;
   if(!S){stRenderCreate();return;}
   if((S.phase==='sb'||S.phase==='sa')&&!S.league){startLeague(S.phase==='sb'?'B':'A');save();} // self-heal corrupted saves
-  let html=`<div class="st-ribbon"><div class="st-rb-num">${({hs:'CH.01',sb:'CH.02',sa:'CH.03',wc:'CH.04',done:'FIN'})[S.phase]||''}</div><div class="st-rb-main"><div class="st-rb-t">${(PHASE_T[S.phase]||'').replace(/^CH\.\d+ · /,'')}</div><div class="st-rb-s">${
+  if((S.phase==='fr3'||S.phase==='fr4')&&!S.friendly){S.friendly={opp:S.phase==='fr3'?'holland':'argentina',m:{home:S.phase==='fr3'?S.hero.club:'italy',away:S.phase==='fr3'?'holland':'argentina',played:false}};save();}
+  let html=`<div class="st-ribbon"><div class="st-rb-num">${({hs:'CH.01',sb:'CH.02',fr3:'CH.03',sa:'CH.03',fr4:'CH.04',wc:'CH.04',done:'FIN'})[S.phase]||''}</div><div class="st-rb-main"><div class="st-rb-t">${(PHASE_T[S.phase]||'').replace(/^CH\.\d+ · /,'')}</div><div class="st-rb-s">${
     S.phase==='hs'?(S.hs.stage==='done'?'FINISHED':KO_L[S.hs.stage]):
     S.phase==='sb'||S.phase==='sa'?('MATCHDAY '+(S.league.md+1)+' / '+S.league.fix.length+(S.phase==='sb'?' · SEASON '+S.seasonB:' · SEASON '+S.seasonA)):
+    S.phase==='fr3'||S.phase==='fr4'?'AMICHEVOLE · '+tName(S.friendly?S.friendly.opp:'').toUpperCase():
     S.phase==='wc'?(S.wc.stage==='done'?'FINISHED':KO_L[S.wc.stage]):'STORY COMPLETE'}</div></div></div>`;
   let right='';
   if(S._last){const L=S._last;right+=`<div class="cup-last">FT &nbsp;${badge(L.home,18)} ${tName(L.home)} <b>${L.hg}–${L.ag}</b> ${tName(L.away)} ${badge(L.away,18)}${L.pens?` <i>(${L.pens[0]}–${L.pens[1]} pens)</i>`:''}${S._lastXP?` &nbsp;·&nbsp; <b class="st-xpg">+${S._lastXP.xp} XP${S._lastXP.sim?' (SIM)':''}${S._lastXP.ups?' · LEVEL UP! ×'+S._lastXP.ups:''}</b>`:''}</div>`;}
@@ -652,7 +782,7 @@ window.stRender=function(){
   }
   const m=myFixture();
   if(m){
-    const mineK=S.phase==='hs'?S.hsSchool:S.phase==='wc'?'italy':S.hero.club;
+    const mineK=S.phase==='hs'?S.hsSchool:(S.phase==='wc'||S.phase==='fr4')?'italy':S.hero.club;
     right+=`<div class="st-vs">
       <div class="st-vs-lbl">NEXT MATCH ${m.home===mineK?'· HOME':'· AWAY'}</div>
       <div class="st-vs-row">
@@ -660,7 +790,7 @@ window.stRender=function(){
         <div class="st-vs-mid">VS</div>
         <div class="st-vs-team a">${badge(m.away,52)}<span>${tName(m.away)}</span></div>
       </div>
-      <div class="st-vs-btns"><button class="st-play" onclick="stPlayNext()">▶ PLAY MATCH</button><button class="st-sim" onclick="stSimNext()">⏩ SIM · ½ XP</button></div>
+      <div class="st-vs-btns"><button class="st-play" onclick="stPlayNext()">▶ PLAY MATCH</button><button class="st-sim" onclick="stSimNext()">⏩ SIM · ½ XP</button>${window.UE_DEV?'<button class="st-sim st-dev" onclick="stDevSkip()">🛠 DEV SKIP · WIN</button>':''}</div>
     </div>`;
   }else{
     right+=`<div class="st-vs"><div class="st-vs-lbl">NO FIXTURE THIS ROUND — SIM TO CONTINUE</div>

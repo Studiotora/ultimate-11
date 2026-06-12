@@ -3277,3 +3277,29 @@ html,body{overscroll-behavior:none;}
 }
 .st-vs-team.a{justify-content:flex-start;}
 .st-vs-row{justify-content:space-between;}
+
+/* ════ STORY · VN DIALOGUE OVERLAY ════ */
+.st-vn{position:absolute;inset:0;z-index:80;cursor:pointer;}
+.st-vn-bg{position:absolute;inset:0;background:url('assets/story/dialog-bg.png') center/cover no-repeat,radial-gradient(95% 80% at 50% 35%,#1b1226 0%,#0c0814 55%,#05040a 100%);}
+.st-vn-bg::after{content:'';position:absolute;inset:0;background:linear-gradient(rgba(4,3,8,.55),transparent 28%,transparent 58%,rgba(4,3,8,.92));}
+.st-vn-lbx{position:absolute;left:0;right:0;height:6.5%;background:#000;z-index:3;}
+.st-vn-lbx.t{top:0}.st-vn-lbx.b{bottom:0}
+.st-vn-port{position:absolute;bottom:0;height:78%;width:34%;z-index:2;display:flex;align-items:flex-end;justify-content:center;transition:filter .35s,transform .35s;}
+.st-vn-port .st-face{height:100%;width:auto;max-width:100%;}
+.st-vn-port .st-face img{height:100%;width:auto;max-width:100%;object-fit:contain;object-position:bottom;filter:drop-shadow(0 0 26px rgba(0,0,0,.85));}
+.st-vn-port.l{left:2%;}
+.st-vn-port.r{right:2%;transform:scaleX(-1);}
+.st-vn-port.dim{filter:brightness(.32) saturate(.45);transform:scale(.97);}
+.st-vn-port.r.dim{transform:scaleX(-1) scale(.97);}
+.st-vn-port.lit::after{content:'';position:absolute;inset:auto 12% 0;height:60%;z-index:-1;background:radial-gradient(60% 80% at 50% 100%,rgba(162,110,255,.22),transparent 70%);}
+.st-vn-title{position:absolute;top:9%;left:50%;transform:translateX(-50%);z-index:4;font-family:'Bebas Neue',sans-serif;letter-spacing:3px;font-size:clamp(14px,2.2vw,24px);color:#fff;background:rgba(0,0,0,.7);border:1px solid rgba(255,255,255,.22);padding:6px 26px;clip-path:polygon(2% 0,100% 0,98% 100%,0 100%);white-space:nowrap;}
+.st-vn-box{position:absolute;left:8%;right:8%;bottom:9.5%;z-index:5;background:linear-gradient(165deg,rgba(14,10,20,.96),rgba(6,4,10,.97));border:1px solid rgba(255,210,74,.55);clip-path:polygon(.6% 0,100% 0,99.4% 100%,0 100%);padding:clamp(14px,2.4vh,26px) clamp(16px,2.4vw,34px) 12px;min-height:18%;box-shadow:0 0 40px -10px rgba(255,200,70,.45);}
+.st-vn-plate{position:absolute;top:-14px;left:24px;background:linear-gradient(180deg,#ffe27a,#e0a92e);clip-path:polygon(3% 0,100% 0,97% 100%,0 100%);padding:4px 20px;font-family:'Bebas Neue',sans-serif;letter-spacing:2px;font-size:clamp(13px,1.8vw,18px);color:#1a1404;transition:left .25s,right .25s;}
+.st-vn-plate.right{left:auto;right:24px;}
+.st-vn-text{font-size:clamp(13px,2.4vh,18px);line-height:1.55;color:#f4eef6;min-height:3.2em;}
+.st-vn-hint{text-align:right;font-family:'Orbitron',sans-serif;font-size:9px;letter-spacing:2.5px;color:#9b93a4;margin-top:6px;animation:stblink 1.2s infinite;}
+.st-vn-prog{position:absolute;left:22px;bottom:8px;display:flex;gap:5px;}
+.st-vn-prog i{width:16px;height:3px;background:#3a3342;}
+.st-vn-prog i.on{background:#ffd24a;box-shadow:0 0 6px rgba(255,210,74,.8);}
+/* ★ dev-only button — remove with UE_DEV for release */
+.st-dev{border-color:rgba(255,80,80,.8)!important;color:#ff9d9d!important;border-style:dashed!important;}
