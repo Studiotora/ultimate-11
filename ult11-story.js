@@ -175,10 +175,31 @@ function pts(r){return r.w*3+r.d;}
 function sortKeys(keys,tab){return[...keys].sort((x,y)=>pts(tab[y])-pts(tab[x])||(tab[y].gf-tab[y].ga)-(tab[x].gf-tab[x].ga)||tab[y].gf-tab[x].gf||(x<y?-1:1));}
 function singleRR(teams){return crMakeFixtures(teams).slice(0,teams.length-1);}
 function tName(k){return (T[k]&&T[k].name)||(ST_CLUBS[k]&&ST_CLUBS[k].name)||(CR_CLUBS[k]&&CR_CLUBS[k].name)||k;}
-function heroFace(name,cls){
-  const ln=String(name||'').split('.').pop().toLowerCase().trim().replace(/[^a-z0-9]/g,'');
+// Fixed art slots so portraits work regardless of the chosen name:
+//   assets/players/hero-{fw|ca}-school.png  · high-school chapter
+//   assets/players/hero-fw-genoa.png / hero-ca-doria.png · club chapters
+//   assets/players/hero-{fw|ca}-ita.png     · world cup & epilogue
+// Falls back to assets/players/{chosenlastname}.png, then the silhouette.
+function charCtx(role,phase){
+  if(phase==='hs')return 'school';
+  if(phase==='wc'||phase==='done')return 'ita';
+  return role==='FW'?'genoa':'doria';
+}
+function charFace(who,cls){
+  const H=STORY&&STORY.hero;
   const gen=(typeof _GENERIC_PLAYER_SVG_URL!=='undefined')?_GENERIC_PLAYER_SVG_URL:'';
-  return `<span class="st-face ${cls||''}"><img src="assets/players/${ln}.png" onerror="this.onerror=null;this.src='${gen}'"></span>`;
+  if(!H)return `<span class="st-face ${cls||''}"><img src="${gen}"></span>`;
+  const role=who==='rival'?(H.role==='FW'?'CA':'FW'):H.role;
+  // rival never makes the national team — his art stays at his club in WC chapters
+  const phase=(who==='rival'&&(STORY.phase==='wc'||STORY.phase==='done'))?'sb':STORY.phase;
+  const nm=who==='rival'?H.rival:H.name;
+  const ln=String(nm||'').split('.').pop().toLowerCase().trim().replace(/[^a-z0-9]/g,'');
+  const chain=[`assets/players/hero-${role.toLowerCase()}-${charCtx(role,phase)}.png`,`assets/players/${ln}.png`,gen].join('|');
+  return `<span class="st-face ${cls||''}"><img src="${chain.split('|')[0]}" data-c="${chain.split('|').slice(1).join('|')}" onerror="const d=(this.dataset.c||'').split('|').filter(Boolean);if(d.length){this.src=d.shift();this.dataset.c=d.join('|');}else{this.onerror=null;}"></span>`;
+}
+function heroFace(name,cls){ // legacy signature → route by name match
+  if(STORY&&STORY.hero&&name===STORY.hero.rival)return charFace('rival',cls);
+  return charFace('hero',cls);
 }
 function badge(k,s=24){
   const def=ST_CLUBS[k]||CR_CLUBS[k];

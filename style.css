@@ -3262,10 +3262,18 @@ html,body{overscroll-behavior:none;}
   .st-rp{min-height:230px;}
   .st-namesbox{grid-template-columns:1fr 1fr;}
 }
-/* portrait / narrow: collapse the dashboard back to one column */
-@media (max-width:860px){
+/* only true portrait/narrow collapses the dashboard (landscape phones keep the grid) */
+@media (max-width:680px){
   .st-grid{grid-template-columns:1fr;}
   .st-col-l{position:static;}
   .st-grid .st-hero2{grid-template-columns:84px 1fr;}
   .st-grid .st-h-port{min-height:110px;}
 }
+/* landscape phones: tighter side column + balanced VS layout */
+@media (min-width:681px) and (max-width:1000px){
+  .st-grid{grid-template-columns:minmax(250px,290px) 1fr;gap:12px;}
+  .st-h-name{font-size:22px;}
+  .st-vs-row{gap:6px;}
+}
+.st-vs-team.a{justify-content:flex-start;}
+.st-vs-row{justify-content:space-between;}
