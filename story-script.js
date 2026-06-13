@@ -46,7 +46,7 @@ ch1_intro:{title:'CAPITOLO 1 · PRIMAVERA, GENOVA',lines:[
  {who:'hero',text:'Allora faremo in modo che non la tocchino mai.'}]},
 ch1_pre_qf:{title:'QUARTI · SPOGLIATOIO',lines:[
  {who:'gk-school',text:'Ragazzi... se mi fanno gol su punizione di nuovo, io cambio sport. Giuro. Pallanuoto.'},
- {who:'captain-school',text:'Tognoli, l\'anno scorso hai parato un rigore con la faccia. Sei il nostro muro.'},
+ {who:'captain-school',text:'{SCHOOLGK}, l\'anno scorso hai parato un rigore con la faccia. Sei il nostro muro.'},
  {who:'gk-school',text:'Era la faccia o il palo? Non l\'ho mai capito.'},
  {who:'hero',text:'Oggi non ti serve la faccia. Oggi la palla resta dall\'altra parte del campo. Promesso.'},
  {who:'coach-school',text:'Belle parole. Ora dimostrale. ANDIAMO!'}]},
@@ -61,10 +61,10 @@ ch1_pre_sf:{title:'SEMIFINALE · TUNNEL',lines:[
  {who:'hero',text:'Allora vinciamolo insieme, questo torneo. Te lo devo.'},
  {who:'captain-school',text:'Me lo devi eccome. Andiamo.'}]},
 ch1_final_locker:{title:'FINALE · IL SAN GIORGIO',lines:[
- {who:'captain-sgiorgio',text:'Liceo Garibaldi. Vi aspettavamo. {RIVAL} non parla d\'altro da una settimana.'},
- {who:'hero',text:'Mauro. Dicono che il vostro San Giorgio non abbia ancora subito un gol in tutto il torneo.'},
+ {who:'captain-sgiorgio',text:'{SCHOOL}. Vi aspettavamo. {RIVAL} non parla d\'altro da una settimana.'},
+ {who:'hero',text:'{RIVALSCHOOLCAPT}. Dicono che la vostra {RIVALSCHOOL} non abbia ancora subito un gol in tutto il torneo.'},
  {who:'captain-sgiorgio',text:'E resterà così. Abbiamo studiato ogni tua giocata. Ogni singola.'},
- {who:'coach-sgiorgio',text:'Mauro! Dentro. Non si parla col nemico prima della battaglia.'},
+ {who:'coach-sgiorgio',text:'{RIVALSCHOOLCAPT}! Dentro. Non si parla col nemico prima della battaglia.'},
  {who:'hero',text:'...Hanno paura. Bene. Significa che ci rispettano.'}]},
 ch1_pre_final:{title:'FINALE · TE E ME',lines:[
  {who:'rival',text:'Eccoci, {HERO}. Tutta Genova in una partita. Te e me. Come sui campetti.'},
@@ -86,7 +86,7 @@ ch1_scout:{title:'L\'UOMO COL CAPPOTTO GRIGIO',lines:[
  {who:'hero',text:'Osservatore... di chi?'},
  {who:'scout',text:'Del {CLUB}. Serie B. Squadra vera, stadio vero, tifosi che non perdonano. Vogliamo farti firmare.'},
  {who:'hero',text:'Io... sì. SÌ. Dove devo firmare? Posso firmare adesso?'},
- {who:'scout',text:'Ah, i giovani. Prima una cosa: anche il San Giorgio ha avuto visite. Il tuo amico {RIVAL} firma per il {RIVALCLUB}.'},
+ {who:'scout',text:'Ah, i giovani. Prima una cosa: anche la {RIVALSCHOOL} ha avuto visite. Il tuo amico {RIVAL} firma per il {RIVALCLUB}.'},
  {who:'hero',text:'...Certo che firma. Non sarebbe divertente, altrimenti.'},
  {who:'scout',text:'Benvenuto nel calcio vero, ragazzo. La Serie B ti aspetta.'}]},
 

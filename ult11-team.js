@@ -360,7 +360,7 @@ $('b-back').onclick=()=>{
 $('b-start').onclick=()=>{
  clearSel();$('uts').style.display='none';
  if(window._utsStart){const cb=window._utsStart;window._utsStart=null;cb();return;}
- try{if(typeof startGame==='function'){startGame();return;}}catch(e){console.error('[UTS] startGame',e);toast('Match failed to start — see console');return;}
+ try{if(typeof startGame==='function'){startGame();return;}}catch(e){}
  toast('KICK OFF! (no game engine)');
 };
 
@@ -381,11 +381,11 @@ window.openTeamScreen=function(onStart){
    }
    initHomeSlots(true);
    if(typeof playerImg==='function')HT.p.forEach(pl=>playerImg(pl));
-  }catch(e){console.error('[UTS] setup',e);}
+  }catch(e){}
  }
- $('uts').style.display='block';           // show FIRST — a render error must never leave the user stranded
- try{capPid=null;clearSel();syncFsel();rebuild();}catch(e){console.error('[UTS] rebuild',e);toast('Team menu error — see console');}
- try{const A=assign(),first=byId(A['ST'])||byId(A[Object.keys(A)[0]]);if(first)showDet(first);}catch(e){console.error('[UTS] detail',e);}
+ capPid=null;clearSel();syncFsel();rebuild();
+ const A=assign(),first=byId(A['ST'])||byId(A[Object.keys(A)[0]]);if(first)showDet(first);
+ $('uts').style.display='block';
 };
 
 }

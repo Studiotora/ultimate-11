@@ -64,7 +64,7 @@ window.cupOpen=function(){
 };
 window.cupChoose=function(comp){
   // team picker
-  const keys=comp==='ucl'?Object.keys(CR_CLUBS):comp==='euro'?EURO_NATIONS:Object.keys(T).filter(k=>!T[k]._career&&!T[k]._story);
+  const keys=comp==='ucl'?Object.keys(CR_CLUBS):comp==='euro'?EURO_NATIONS:Object.keys(T).filter(k=>!T[k]._career);
   const el=document.getElementById('cup-body');
   el.innerHTML=`<div class="cup-sec-t">${COMP_NAME[comp]} — PICK YOUR TEAM</div>
     <div class="cup-grid">${keys.map(k=>`<button class="cup-item" onclick="cupStart('${comp}','${k}')">${badge(k)}<span>${tName(k)}</span><b>${teamOvr(k)}</b></button>`).join('')}</div>
@@ -76,7 +76,7 @@ window.cupStart=function(comp,my){
     const teams=shuffle(Object.keys(CR_CLUBS));
     C.league={teams,tab:newTab(teams),fix:crMakeFixtures(teams),round:0};
   }else{
-    const pool=shuffle(comp==='euro'?[...EURO_NATIONS]:Object.keys(T).filter(k=>!T[k]._career&&!T[k]._story));
+    const pool=shuffle(comp==='euro'?[...EURO_NATIONS]:Object.keys(T).filter(k=>!T[k]._career));
     const gN=comp==='euro'?4:6,letters='ABCDEF';
     C.groups=[];C.round=0;C.stage='groups';
     for(let g=0;g<gN;g++){const t=pool.slice(g*4,g*4+4);C.groups.push({name:letters[g],teams:t,tab:newTab(t),fix:groupFix(t)});}

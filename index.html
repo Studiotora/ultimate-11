@@ -11,7 +11,7 @@
 <meta name="theme-color" content="#06080e">
 <title>Ultimate Eleven - Football Strategy Game | Beta</title>
 <meta name="description" content="Ultimate Eleven - A Captain Tsubasa inspired football strategy game with 11 vs 11 gameplay">
-<link href="https://fonts.googleapis.com/css2?family=Anton&family=Bebas+Neue&family=Rajdhani:wght@600;700&family=Orbitron:wght@400;700&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Anton&family=Barlow+Condensed:ital,wght@0,500;0,600;0,700;0,800;1,700;1,800&family=Permanent+Marker&family=Bebas+Neue&family=Rajdhani:wght@600;700&family=Orbitron:wght@400;700&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="style.css?v=30">
 <style>
 /* CAREER MODE - inline to bypass cache */
@@ -1413,11 +1413,7 @@
 </div><!-- /viewport -->
 <!-- ── STORY MODE ─────────────────────────────────────── -->
 <div id="s-story" class="screen">
-  <div class="st-par"><i class="p1"></i><i class="p2"></i><i class="p3"></i><i class="p4"></i><i class="p5"></i></div>
-  <div class="cup-wrap">
-    <div class="cup-top"><button class="cz-back" onclick="showSc('s-home')">‹ HOME</button><div class="cup-title">STORY · LA NUOVA STELLA</div></div>
-    <div id="st-body" class="cup-scroll"></div>
-  </div>
+  <div id="st-scaler"><div id="st-body"></div></div>
   <div id="st-alloc" class="st-alloc" style="display:none">
     <div class="st-al-box">
       <div class="st-al-head"><span>TRAINING · DISTRIBUTE STAT POINTS</span><button class="st-al-x" onclick="stCloseAlloc()">✕</button></div>
@@ -1485,7 +1481,7 @@
 <script src="ult11-custom.js?v=2" defer></script>
 <script src="ult11-cup.js?v=2" defer></script>
 <script src="story-script.js?v=1" defer></script>
-<script src="ult11-story.js?v=6" defer></script>
+<script src="ult11-story.js?v=7" defer></script>
 <script>
 (function(){
   var _H="assets/home/menu-bg.png";

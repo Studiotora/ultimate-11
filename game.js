@@ -660,7 +660,7 @@ function teamEmblemPath(key){
   if(!key)return '';
   const k=String(key).toLowerCase();
   let isClub=false;
-  try { isClub = !!(CR_CLUBS && CR_CLUBS[k]); } catch(e) { isClub=false; }
+  try { isClub = !!(k && ((CR_CLUBS&&CR_CLUBS[k])||(window.ST_CLUBS&&window.ST_CLUBS[k]))); } catch(e) { isClub=false; }
   return isClub ? `assets/career/clubs/club${k}.png` : `assets/team/${k}.png`;
 }
 // Cache for SVG-rasterized club badges so we can draw them on the canvas.
@@ -2414,7 +2414,7 @@ function drawT(s){
         let gkEmblemImg=IMG_CACHE[gkCacheKey];
         if((gkEmblemImg==='err' || !gkEmblemImg || gkEmblemImg==='loading') && gkEmblemKey){
           let isClub=false;
-          try { isClub = !!(CR_CLUBS && CR_CLUBS[gkEmblemKey]); } catch(e) {}
+          try { isClub = !!(gkEmblemKey && ((CR_CLUBS&&CR_CLUBS[gkEmblemKey])||(window.ST_CLUBS&&window.ST_CLUBS[gkEmblemKey]))); } catch(e) {}
           if(isClub){
             const sv=clubBadgeImage(gkEmblemKey);
             if(sv && sv.complete && sv.naturalWidth>0) gkEmblemImg=sv;
@@ -2489,7 +2489,7 @@ function drawT(s){
         let emblemImg=IMG_CACHE[cacheKey];
         if((emblemImg==='err' || !emblemImg || emblemImg==='loading') && emblemKey){
           let isClub=false;
-          try { isClub = !!(CR_CLUBS && CR_CLUBS[emblemKey]); } catch(e) {}
+          try { isClub = !!(emblemKey && ((CR_CLUBS&&CR_CLUBS[emblemKey])||(window.ST_CLUBS&&window.ST_CLUBS[emblemKey]))); } catch(e) {}
           if(isClub){
             const sv=clubBadgeImage(emblemKey);
             if(sv && sv.complete && sv.naturalWidth>0) emblemImg=sv;
@@ -3057,20 +3057,39 @@ function chkInt(fp2,tp,pt){
 // slam in with speed lines → zone banner → reveal the duel UI.
 // Full version for shots / 2v1 / named-special stars; quick for routine duels.
 let _cutinTimers=[],_cutinDone=null;
+
+/* ── STORY HERO/RIVAL fixed duel-card path ──────────────────
+   pl._hero / pl._rival are set by ult11-story.js.
+   Paths (fixed regardless of typed name):
+     assets/career/clubs/hero_{fw|ca}_{school|genoa|doria|italy}.png
+     assets/career/clubs/rival_{fw|ca}_{school|genoa|doria|italy}.png   */
+function _storyHeroCardPath(pl){
+  try{
+    if(!pl||(!pl._hero&&!pl._rival))return null;
+    var S=window.STORY;if(!S||!S.hero)return null;
+    var who=pl._hero?'hero':'rival';
+    var role=(who==='hero'?S.hero.role:(S.hero.role==='FW'?'CA':'FW')).toLowerCase();
+    var ph=S.phase==='fr3'?'sb':S.phase==='fr4'?'wc':S.phase;
+    var ctx=(ph==='hs')?'school':(ph==='wc'||ph==='done')?'italy':(role==='fw'?'genoa':'doria');
+    return 'assets/career/clubs/'+who+'_'+role+'_'+ctx+'.png';
+  }catch(e){return null;}
+}
+
 function _portraitChainFor(pl,side){
   const lastName=playerLastName(pl)||'';
   const ln=lastName.replace(/[^a-z0-9]/g,'');
   const effTeam=pl&&pl.clubKey?pl.clubKey:(side==='h'?selHome:selAway);
-  let isClub=false;try{isClub=!!(effTeam&&CR_CLUBS&&CR_CLUBS[effTeam]);}catch(e){}
+  let isClub=false;try{isClub=!!(effTeam&&((CR_CLUBS&&CR_CLUBS[effTeam])||(window.ST_CLUBS&&window.ST_CLUBS[effTeam])));}catch(e){}
   const isGK=pl&&pl.pos==='GK';
+  const _pre=_hp?[_hp]:[];
   if(isGK){
-    return isClub
+    return _pre.concat(isClub
       ?[`assets/career/clubs/${ln}${effTeam}.png`,'assets/career/clubs/gk.png',_GENERIC_PLAYER_SVG_URL]
-      :[`assets/players/${lastName}.png`,'assets/career/clubs/gk.png',_GENERIC_PLAYER_SVG_URL];
+      :[`assets/players/${lastName}.png`,'assets/career/clubs/gk.png',_GENERIC_PLAYER_SVG_URL]);
   }
-  return isClub
+  return _pre.concat(isClub
     ?[`assets/career/clubs/${ln}${effTeam}.png`,`assets/career/clubs/${effTeam}.png`,_GENERIC_PLAYER_SVG_URL]
-    :[`assets/players/${lastName}.png`,`assets/players/${effTeam}.png`,_GENERIC_PLAYER_SVG_URL];
+    :[`assets/players/${lastName}.png`,`assets/players/${effTeam}.png`,_GENERIC_PLAYER_SVG_URL]);
 }
 function _setImgChain(img,paths){let i=0;img.onerror=()=>{i++;if(i<paths.length)img.src=paths[i];};img.src=paths[0];}
 function killCutIn(){
@@ -3228,10 +3247,11 @@ function renderSecondDefender(dk2, ds){
   const lastName=playerLastName(pl)||'';
   const ln=lastName.replace(/[^a-z0-9]/g,'');
   const effTeam=pl.clubKey||(ds==='h'?selHome:selAway);
-  let isClub=false;try{isClub=!!(effTeam&&CR_CLUBS&&CR_CLUBS[effTeam]);}catch(e){}
-  const chain=isClub
+  let isClub=false;try{isClub=!!(effTeam&&((CR_CLUBS&&CR_CLUBS[effTeam])||(window.ST_CLUBS&&window.ST_CLUBS[effTeam])));}catch(e){}
+  const _hp2=_storyHeroCardPath(pl);
+  const chain=(_hp2?[_hp2]:[]).concat(isClub
     ?[`assets/players/profile/${ln}.png`,`assets/career/clubs/${ln}${effTeam}.png`,`assets/career/clubs/${effTeam}.png`,_GENERIC_PLAYER_SVG_URL]
-    :[`assets/players/profile/${ln}.png`,`assets/players/${lastName}.png`,`assets/players/${effTeam}.png`,_GENERIC_PLAYER_SVG_URL];
+    :[`assets/players/profile/${ln}.png`,`assets/players/${lastName}.png`,`assets/players/${effTeam}.png`,_GENERIC_PLAYER_SVG_URL]);
   const el=document.createElement('div');
   el.id='dpd2-wrap';
   el.className='dpd2-chip';
@@ -3281,17 +3301,18 @@ function fCard(role,pl,s,displayRole){
   // cycler — selHome / selAway will be a key of CR_CLUBS in that case.
   const teamKey = pl?.clubKey || (s==='h' ? selHome : selAway);
   let isClubTeam=false;
-  try { isClubTeam = !!(teamKey && CR_CLUBS && CR_CLUBS[teamKey]); } catch(e){ isClubTeam=false; }
+  try { isClubTeam = !!(teamKey && ((CR_CLUBS&&CR_CLUBS[teamKey])||(window.ST_CLUBS&&window.ST_CLUBS[teamKey]))); } catch(e){ isClubTeam=false; }
   const isGK = pl && pl.pos==='GK';
 
   // GK: try per-player card first ({lastname}{clubkey}.png for clubs, or
   // assets/players/{lastname}.png for nationals), then fall back to the
   // universal gk.png placeholder, then to SVG silhouette.
+  const _hpMain=_storyHeroCardPath(pl);
   if(pl && isGK){
     const ln=(lastName||'').replace(/[^a-z0-9]/g,'');
-    const specific = isClubTeam
+    const specific = _hpMain || (isClubTeam
       ? `assets/career/clubs/${ln}${teamKey}.png`
-      : (lastName ? `assets/players/${lastName}.png` : null);
+      : (lastName ? `assets/players/${lastName}.png` : null));
     const universalGK = 'assets/career/clubs/gk.png';
     const tryUniversal=()=>{
       const u=new Image();
@@ -3308,12 +3329,11 @@ function fCard(role,pl,s,displayRole){
       tryUniversal();
     }
     avEl.textContent='';
-  } else if(pl && isClubTeam){
-    // Club outfield: try {lastname}{clubkey}.png → fall back to {clubkey}.png
-    // (the per-club placeholder you already have) → final SVG silhouette.
+  } else if(pl && (isClubTeam||_hpMain)){
+    // Club outfield (or story hero/rival): hero path first if present, then {lastname}{clubkey}.png → club placeholder → SVG.
     const ln=(lastName||'').replace(/[^a-z0-9]/g,'');
-    const specific=`assets/career/clubs/${ln}${teamKey}.png`;
-    const clubPlaceholder=`assets/career/clubs/${teamKey}.png`;
+    const specific=_hpMain||`assets/career/clubs/${ln}${teamKey}.png`;
+    const clubPlaceholder=isClubTeam?`assets/career/clubs/${teamKey}.png`:`assets/players/${lastName}.png`;
     const ci=new Image();
     ci.onload=()=>{avEl.style.cssText=`background:url(${specific}) center bottom/contain no-repeat;color:transparent`;avEl.textContent='';};
     ci.onerror=()=>{
@@ -3402,9 +3422,10 @@ function fCard(role,pl,s,displayRole){
   if(pl){
     const _ln  = playerLastName(pl) || '';
     const _lnK = _ln.replace(/[^a-z0-9]/g,'');
-    const _baseChain = isClubTeam
+    const _hpMini=_storyHeroCardPath(pl);
+    const _baseChain = (_hpMini?[_hpMini]:[]).concat(isClubTeam
       ? [`assets/career/clubs/${_lnK}${teamKey}.png`, `assets/career/clubs/${teamKey}.png`, `assets/players/${_ln}.png`, _GENERIC_PLAYER_SVG_URL]
-      : [`assets/players/${_ln}.png`, `assets/profile/${_ln}.png`, `assets/players/${teamKey}.png`, _GENERIC_PLAYER_SVG_URL];
+      : [`assets/players/${_ln}.png`, `assets/profile/${_ln}.png`, `assets/players/${teamKey}.png`, _GENERIC_PLAYER_SVG_URL]);
     // Top of card = dedicated PROFILE art; bottom special = dedicated SHOOT art.
     // Each falls back to the existing portrait chain if the new art isn't present yet.
     const _profileChain = [`assets/players/profile/${_ln}.png`].concat(_baseChain);
@@ -5359,16 +5380,17 @@ function buildFormationMenu(){
       // Determine the team this card belongs to (club vs national).
       const teamKey = pl.clubKey || selHome;
       let isClubTeam=false;
-      try { isClubTeam = !!(teamKey && CR_CLUBS && CR_CLUBS[teamKey]); } catch(e){ isClubTeam=false; }
+      try { isClubTeam = !!(teamKey && ((CR_CLUBS&&CR_CLUBS[teamKey])||(window.ST_CLUBS&&window.ST_CLUBS[teamKey]))); } catch(e){ isClubTeam=false; }
       const isGKSlotPl = pl.pos==='GK';
 
       // Pick the right specific path AND the right placeholder for this context.
       // Clubs: assets/career/clubs/{lastname}{clubkey}.png → club placeholder (or gk.png for keepers) → SVG
       // Nationals: assets/players/{lastname}.png → SVG silhouette (gk.png for keepers)
       const ln=(lastName||'').replace(/[^a-z0-9]/g,'');
-      const specific = isClubTeam
+      const _hpForm=_storyHeroCardPath(pl);
+      const specific = _hpForm || (isClubTeam
         ? `assets/career/clubs/${ln}${teamKey}.png`
-        : `assets/players/${lastName}.png`;
+        : `assets/players/${lastName}.png`);
       const placeholder = isGKSlotPl
         ? `assets/career/clubs/gk.png`
         : (isClubTeam ? `assets/career/clubs/${teamKey}.png` : `assets/players/${teamKey}.png`);

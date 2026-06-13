@@ -1,0 +1,188 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>LA NUOVA STELLA · Edit Character</title>
+<link href="https://fonts.googleapis.com/css2?family=Anton&family=Barlow+Condensed:ital,wght@0,500;0,600;0,800;1,700;1,800&family=Permanent+Marker&display=swap" rel="stylesheet">
+<style>
+/* EDIT CHARACTER · spend EXP DISPONIBILI on attributes (50 EXP = +1, cap 99)
+   Art slots: assets/story/hub-bg.png · assets/story/char-hub.png
+   Fonts are placeholders — to be swapped later. */
+*{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+html,body{height:100%;background:#000;overflow:hidden;font-family:'Barlow Condensed',sans-serif;color:#fff}
+#scaler{position:fixed;left:50%;top:50%;width:1920px;height:1080px;transform-origin:center;background:#070508;
+ --ac:#e22531;--ac2:#ff3b47;--acL:#ff5b66;--deep:#c01024;--deep2:#7d0c18;--dark:#7a0a14;--glow:255,40,55;--bgA:#3a1d22;--bgB:#1a0d12}
+#scaler.ca{--ac:#2f6fe0;--ac2:#4f8dff;--acL:#7ea9ff;--deep:#1241c0;--deep2:#0c2c7d;--dark:#0a2a7a;--glow:70,130,255;--bgA:#101d3a;--bgB:#0a1124}
+.stage{position:absolute;inset:0;overflow:hidden}
+.bg{position:absolute;inset:0;background:url('assets/story/hub-bg.png') center/cover no-repeat,
+ radial-gradient(95% 80% at 52% 30%,var(--bgA) 0%,var(--bgB) 45%,#070508 100%)}
+.bg::after{content:'';position:absolute;inset:0;background:
+ linear-gradient(90deg,rgba(5,3,6,.92) 0%,rgba(5,3,6,.5) 26%,transparent 44%,transparent 56%,rgba(5,3,6,.86) 72%,rgba(5,3,6,.95) 100%),
+ linear-gradient(rgba(5,3,6,.4),transparent 25%,transparent 70%,rgba(5,3,6,.85))}
+.char{position:absolute;left:660px;bottom:0;height:980px;max-width:560px;object-fit:contain;object-position:bottom;z-index:2;filter:drop-shadow(0 0 30px rgba(0,0,0,.85))}
+.char.fb{display:none;width:380px;align-items:flex-end;justify-content:center}
+.char.fb i{display:block;width:330px;height:880px;background:radial-gradient(60% 24% at 50% 9%,#241620 0 30%,transparent 31%),linear-gradient(#2a161e,#120a10);clip-path:polygon(38% 0,62% 0,66% 11%,88% 18%,94% 100%,6% 100%,12% 18%,34% 11%);opacity:.9}
+
+/* header */
+.brand{position:absolute;left:44px;top:30px;z-index:5}
+.brand h1{font-family:'Permanent Marker',cursive;font-size:54px;line-height:1;text-shadow:3px 3px 0 #000}
+.brand .ul{width:300px;height:4px;background:linear-gradient(90deg,var(--ac),transparent);margin:10px 0 8px}
+.brand .mode{font-weight:800;letter-spacing:4px;font-size:18px;color:#e8e2ec}
+.brand .mode b{color:var(--ac2)}
+
+/* hero ident (left) */
+.ident{position:absolute;left:44px;top:240px;z-index:5;width:380px}
+.ident .nm{font-family:'Permanent Marker',cursive;font-size:46px;line-height:1;text-shadow:2px 2px 0 #000}
+.ident .rl{display:inline-block;margin-top:12px;font-style:italic;font-weight:800;font-size:22px;letter-spacing:1px;color:#fff;background:var(--deep);padding:6px 20px;clip-path:polygon(4% 0,100% 0,96% 100%,0 100%)}
+.ident .lvrow{margin-top:26px;display:flex;align-items:baseline;gap:14px}
+.ident .lvrow .lv{font-style:italic;font-weight:800;font-size:24px}
+.ident .lvrow .lv b{font-family:'Anton';font-size:50px;margin-left:6px}
+.expbar{height:9px;background:#241d28;margin:10px 0 6px;position:relative;width:340px}
+.expbar i{position:absolute;inset:0 auto 0 0;background:linear-gradient(90deg,var(--dark),var(--ac2));box-shadow:0 0 10px rgba(var(--glow),.7)}
+.ident .expt{font-weight:800;letter-spacing:1px;font-size:16px;color:#cfc6d4}
+/* available pool */
+.pool{position:absolute;left:44px;top:520px;z-index:5}
+.pool .t{font-style:italic;font-weight:800;color:#ffce3c;letter-spacing:2px;font-size:22px}
+.pool .v{display:flex;align-items:center;gap:14px;font-family:'Anton';font-size:64px;color:#ffce3c;text-shadow:0 0 18px rgba(255,200,60,.55)}
+.pool .chip{font-family:'Barlow Condensed';font-weight:800;font-size:16px;color:#1a1404;background:linear-gradient(180deg,#ffd96a,#d8a51f);padding:7px 11px;clip-path:polygon(25% 0,75% 0,100% 50%,75% 100%,25% 100%,0 50%)}
+.pool .cost{margin-top:8px;font-weight:700;letter-spacing:1px;font-size:15px;color:#b9aec2}
+.pool .cost b{color:#ffce3c}
+
+/* back button */
+.backbtn{position:absolute;left:44px;top:920px;z-index:5;display:flex;align-items:center;gap:14px;padding:14px 24px;width:300px;border:1px solid rgba(255,255,255,.16);cursor:pointer;clip-path:polygon(2.5% 0,100% 0,97.5% 100%,0 100%);background:linear-gradient(160deg,rgba(28,22,30,.92),rgba(12,9,14,.95))}
+.backbtn:active{transform:scale(.97)}
+.backbtn b{font-style:italic;font-weight:800;font-size:22px;letter-spacing:1px}
+.backbtn span{font-weight:700;letter-spacing:2px;font-size:12px;color:#cfc6d4;display:block}
+
+/* ═══ RIGHT · attribute editor ═══ */
+.edit{position:absolute;left:1080px;top:120px;width:800px;z-index:5}
+.edit .et{font-style:italic;font-weight:800;font-size:38px;letter-spacing:1px}
+.edit .es{font-weight:800;letter-spacing:3px;font-size:15px;color:var(--ac2);margin-bottom:18px}
+.erow{display:grid;grid-template-columns:170px 1fr 64px 56px 56px;align-items:center;gap:14px;height:74px;margin-bottom:12px;padding:0 20px;background:linear-gradient(100deg,rgba(22,18,26,.94),rgba(10,8,13,.95));border:1px solid rgba(255,255,255,.12);clip-path:polygon(.8% 0,100% 0,99.2% 100%,0 100%)}
+.erow span{font-weight:800;letter-spacing:1px;font-size:21px}
+.ebar{height:9px;background:#241d28;position:relative}
+.ebar i{position:absolute;inset:0 auto 0 0;background:linear-gradient(90deg,var(--dark),var(--ac));box-shadow:0 0 8px rgba(var(--glow),.55);transition:width .15s}
+.ebar u{position:absolute;inset:0 auto 0 0;background:rgba(255,206,60,.85);mix-blend-mode:screen;transition:width .15s,left .15s}
+.erow .val{font-family:'Anton';font-size:30px;text-align:right}
+.erow .val em{font-style:normal;color:#ffce3c}
+.ebtn{width:52px;height:52px;border:none;cursor:pointer;font-family:'Anton';font-size:26px;color:#fff;clip-path:polygon(12% 0,88% 0,100% 50%,88% 100%,12% 100%,0 50%);background:linear-gradient(180deg,#2c2433,#16111c);border:1px solid rgba(255,255,255,.2);transition:transform .1s}
+.ebtn.plus{background:linear-gradient(180deg,var(--ac),var(--deep2));box-shadow:0 0 14px -2px rgba(var(--glow),.8)}
+.ebtn:disabled{opacity:.22;cursor:default}
+.ebtn:not(:disabled):active{transform:scale(.88)}
+/* confirm bar */
+.cbar{display:flex;gap:18px;margin-top:18px}
+.cbtn{flex:none;display:flex;align-items:center;gap:12px;border:none;cursor:pointer;font-family:'Barlow Condensed';font-style:italic;font-weight:800;font-size:26px;letter-spacing:2px;padding:12px 36px;clip-path:polygon(3% 0,100% 0,97% 100%,0 100%)}
+.cbtn.ok{background:linear-gradient(180deg,#ffd96a,#d8a51f);color:#1a1404;box-shadow:0 0 24px -4px rgba(255,200,70,.8)}
+.cbtn.rst{background:linear-gradient(160deg,rgba(28,22,30,.95),rgba(12,9,14,.95));color:#fff;border:1px solid rgba(255,255,255,.25)}
+.cbtn:active{transform:scale(.95)}
+.cbtn:disabled{opacity:.35;cursor:default;transform:none}
+
+.foot{position:absolute;left:0;right:0;bottom:0;height:50px;display:flex;gap:40px;align-items:center;padding:0 30px;font-weight:700;letter-spacing:2px;font-size:16px;color:#dfe6f5;background:linear-gradient(transparent,rgba(0,0,0,.7));z-index:6}
+.glyph{display:inline-flex;width:26px;height:26px;border-radius:50%;border:2px solid currentColor;align-items:center;justify-content:center;margin-right:9px;font-size:14px;font-weight:900}
+.g-x{color:#7ea0ff}.g-o{color:#ff5b66}.g-s{color:#e98bd7}
+.g-s .in{width:12px;height:12px;border:2px solid currentColor;border-radius:2px}
+.sep{opacity:.3}
+</style>
+</head>
+<body>
+<div id="scaler">
+<div class="stage">
+  <div class="bg"></div>
+  <img class="char" src="assets/story/char-hub.png" onerror="this.style.display='none';this.nextElementSibling.style.display='flex'">
+  <span class="char fb"><i></i></span>
+
+  <div class="brand"><h1>EDIT CHARACTER</h1><div class="ul"></div><div class="mode">MODIFICA <b>GIOCATORE</b></div></div>
+
+  <div class="ident">
+    <div class="nm" id="i-name">L. MORETTI</div>
+    <div class="rl" id="i-role">IL REGISTA · CA</div>
+    <div class="lvrow"><span class="lv">LV.<b id="i-lv">12</b></span></div>
+    <div class="expbar"><i id="i-expbar"></i></div>
+    <div class="expt" id="i-expt">EXP 2.450 / 4.800</div>
+  </div>
+
+  <div class="pool">
+    <div class="t">EXP DISPONIBILI</div>
+    <div class="v"><span id="i-pool">850</span> <span class="chip">EXP</span></div>
+    <div class="cost">COSTO POTENZIAMENTO: <b>50 EXP</b> = +1 · MAX 99</div>
+  </div>
+
+  <div class="backbtn" onclick="goBack()"><span style="font-size:22px">↩</span><div><b>GO BACK</b><span>TORNA AL MENU STORIA</span></div></div>
+
+  <div class="edit">
+    <div class="et">POTENZIAMENTO ATTRIBUTI</div>
+    <div class="es" id="e-sub">SPENDI EXP PER MIGLIORARE IL TUO GIOCATORE</div>
+    <div id="rows"></div>
+    <div class="cbar">
+      <button class="cbtn ok" id="b-ok" onclick="confirmAll()">✕ CONFERMA</button>
+      <button class="cbtn rst" id="b-rst" onclick="resetPending()">▢ RESET</button>
+    </div>
+  </div>
+
+  <div class="foot">
+    <span><span class="glyph g-x">✕</span>CONFERMA</span><span class="sep">|</span>
+    <span><span class="glyph g-o">◯</span>INDIETRO</span><span class="sep">|</span>
+    <span><span class="glyph g-s"><span class="in"></span></span>RESET</span>
+  </div>
+</div>
+</div>
+
+<script>
+function fit(){const k=Math.min(innerWidth/1920,innerHeight/1080);document.getElementById('scaler').style.transform=`translate(-50%,-50%) scale(${k})`;}
+addEventListener('resize',fit);fit();
+
+const MK='ue_story_mock',COST=50,CAP=99;
+function loadState(){
+  try{const d=JSON.parse(localStorage.getItem(MK));if(d&&d.attrs)return d;}catch(e){}
+  const d={role:'ca',nome:'Luca',cognome:'Moretti',sopra:'',level:12,exp:2450,expNext:4800,expAvail:850,
+    attrs:{TECNICA:88,PASSAGGIO:94,VISIONE:96,TIRO:70,VELOCITÀ:79,FISICO:72,CONTROLLO:91}};
+  localStorage.setItem(MK,JSON.stringify(d));return d;
+}
+const ST=loadState();
+if(ST.role==='ca')document.getElementById('scaler').classList.add('ca');
+document.getElementById('i-name').textContent=((ST.nome||'')[0]?ST.nome[0]+'. ':'')+(ST.cognome||'').toUpperCase()+(ST.sopra?' “'+ST.sopra.toUpperCase()+'”':'');
+document.getElementById('i-role').textContent=ST.role==='fw'?'IL BOMBER · FW':'IL REGISTA · CA';
+document.getElementById('i-lv').textContent=ST.level;
+document.getElementById('i-expbar').style.width=Math.min(100,Math.round(100*ST.exp/ST.expNext))+'%';
+document.getElementById('i-expt').textContent='EXP '+ST.exp.toLocaleString('it-IT')+' / '+ST.expNext.toLocaleString('it-IT');
+
+/* pending model: spend within the session, commit on CONFERMA */
+const pend={}; Object.keys(ST.attrs).forEach(k=>pend[k]=0);
+const spent=()=>Object.values(pend).reduce((a,b)=>a+b,0)*COST;
+const poolLeft=()=>ST.expAvail-spent();
+
+function render(){
+  document.getElementById('i-pool').textContent=poolLeft();
+  document.getElementById('rows').innerHTML=Object.entries(ST.attrs).map(([k,v])=>{
+    const nv=v+pend[k];
+    return `<div class="erow">
+      <span>${k}</span>
+      <div class="ebar"><i style="width:${v}%"></i><u style="left:${v}%;width:${pend[k]}%"></u></div>
+      <div class="val">${v}${pend[k]?`<em>+${pend[k]}</em>`:''}</div>
+      <button class="ebtn" ${pend[k]<=0?'disabled':''} onclick="mod('${k}',-1)">−</button>
+      <button class="ebtn plus" ${(poolLeft()<COST||nv>=CAP)?'disabled':''} onclick="mod('${k}',1)">＋</button>
+    </div>`;
+  }).join('');
+  const any=spent()>0;
+  document.getElementById('b-ok').disabled=!any;
+  document.getElementById('b-rst').disabled=!any;
+}
+function mod(k,d){
+  if(d>0&&(poolLeft()<COST||ST.attrs[k]+pend[k]>=CAP))return;
+  if(d<0&&pend[k]<=0)return;
+  pend[k]+=d;render();
+}
+function resetPending(){Object.keys(pend).forEach(k=>pend[k]=0);render();}
+function confirmAll(){
+  if(spent()<=0)return;
+  Object.keys(pend).forEach(k=>{ST.attrs[k]=Math.min(CAP,ST.attrs[k]+pend[k]);});
+  ST.expAvail=poolLeft();
+  localStorage.setItem(MK,JSON.stringify(ST));
+  location.href='story-hub.html';
+}
+function goBack(){location.href='story-hub.html';}
+render();
+</script>
+</body>
+</html>

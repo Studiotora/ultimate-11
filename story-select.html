@@ -1,0 +1,262 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>LA NUOVA STELLA · Character Selection</title>
+<link href="https://fonts.googleapis.com/css2?family=Anton&family=Barlow+Condensed:ital,wght@0,600;0,800;1,700;1,800&family=Permanent+Marker&display=swap" rel="stylesheet">
+<style>
+/* ════════════════════════════════════════════════════════════
+   CHARACTER SELECTION · standalone mockup
+   Art slots (drop PNGs at these exact paths):
+     assets/story/char-fw.png        right-facing FW character (red side)
+     assets/story/char-ca.png        left-facing CA character (blue side)
+     assets/story/bg-red.png         red-side stadium backdrop
+     assets/story/bg-blue.png        blue-side stadium backdrop
+     assets/story/name-silhouette.png  left silhouette in NAME CREATION
+     assets/story/jersey-back.png    jersey back preview (TUO NOME 10)
+     assets/story/start-art.png      sunset player art in START panel
+     assets/team/genoa.png           Genoa crest   (same path the game uses)
+     assets/team/sampdoria.png       Sampdoria crest
+   Every slot has a CSS fallback so the page works with zero assets.
+   ════════════════════════════════════════════════════════════ */
+*{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+html,body{height:100%;background:#000;overflow:hidden;font-family:'Barlow Condensed',sans-serif;color:#fff}
+/* ════ FIXED 16:9 CANVAS · designed at 1920×1080, uniformly scaled ════ */
+#scaler{position:fixed;left:50%;top:50%;width:1920px;height:1080px;transform-origin:center;background:#04060c}
+.stage{position:absolute;inset:0;display:grid;grid-template-rows:1fr 290px 56px;overflow:hidden}
+
+/* ── TOP · diagonal split panels ─────────────────────────── */
+.split{position:relative;min-height:0}
+.half{position:absolute;inset:0;overflow:hidden;cursor:pointer;transition:filter .25s}
+.half.dim{filter:saturate(.35) brightness(.55)}
+.half.fw{clip-path:polygon(0 0,56% 0,44% 100%,0 100%)}
+.half.ca{clip-path:polygon(56% 0,100% 0,100% 100%,44% 100%)}
+.half .bg{position:absolute;inset:0;background-size:cover;background-position:center}
+.half.fw .bg{background-image:url('assets/story/bg-red.png'),radial-gradient(120% 130% at 18% 25%,#5b0a12 0%,#2a050b 45%,#0b0307 100%)}
+.half.ca .bg{background-image:url('assets/story/bg-blue.png'),radial-gradient(120% 130% at 82% 25%,#0a2f7a 0%,#071536 45%,#03060f 100%)}
+.half .bg::after{content:'';position:absolute;inset:0;background:
+ radial-gradient(2px 2px at 18% 30%,rgba(255,255,255,.5),transparent 60%),
+ radial-gradient(1.5px 1.5px at 70% 18%,rgba(255,255,255,.45),transparent 60%),
+ radial-gradient(2px 2px at 45% 60%,rgba(255,255,255,.3),transparent 60%),
+ radial-gradient(1.5px 1.5px at 85% 50%,rgba(255,255,255,.4),transparent 60%);
+ animation:flicker 4s linear infinite}
+@keyframes flicker{50%{opacity:.4}}
+.half.fw::before{content:'';position:absolute;inset:0;background:linear-gradient(115deg,transparent 30%,rgba(255,40,40,.16) 42%,transparent 55%)}
+.half.ca::before{content:'';position:absolute;inset:0;background:linear-gradient(-115deg,transparent 30%,rgba(60,130,255,.16) 42%,transparent 55%)}
+/* character art */
+.char{position:absolute;bottom:0;height:700px;width:auto;max-width:760px;object-fit:contain;object-position:bottom;filter:drop-shadow(0 0 26px rgba(0,0,0,.8))}
+.fw .char{left:48%;transform:translateX(-58%)}
+.ca .char{left:52%;transform:translateX(-42%)}
+.char.fb{display:none;align-items:flex-end;justify-content:center;width:340px;height:700px}
+.char.fb i{display:block;width:300px;height:620px;background:radial-gradient(60% 30% at 50% 12%,#1c2640 0 30%,transparent 31%),linear-gradient(#16203a,#0a101f);clip-path:polygon(38% 0,62% 0,66% 14%,86% 22%,92% 100%,8% 100%,14% 22%,34% 14%);opacity:.85}
+
+/* VS slash divider */
+.vsline{position:absolute;left:50%;top:-6%;height:115%;width:8px;background:linear-gradient(#fff0,#ffffffd9 30%,#ffffffd9 70%,#fff0);transform:translateX(-50%) rotate(6.4deg);filter:drop-shadow(0 0 14px rgba(255,255,255,.8));z-index:5}
+.vs{position:absolute;left:50%;top:26%;transform:translate(-50%,-50%) rotate(-6deg);z-index:6;font-family:'Permanent Marker',cursive;font-size:96px;color:#fff;text-shadow:0 0 22px rgba(255,255,255,.65),4px 4px 0 rgba(0,0,0,.55)}
+
+/* title block */
+.title{position:absolute;top:34px;left:52px;z-index:7;line-height:.86}
+.title .l1,.title .l2{font-family:'Permanent Marker',cursive;letter-spacing:1px}
+.title .l1{font-size:72px;color:#fff;text-shadow:3px 3px 0 #000,0 0 18px rgba(255,255,255,.3)}
+.title .l2{font-size:50px;color:#e22531;transform:rotate(-3deg);display:inline-block;text-shadow:2px 2px 0 #000}
+.title .slash{position:absolute;left:-6%;top:-22%;width:130%;height:150%;z-index:-1;background:linear-gradient(105deg,transparent 38%,rgba(190,20,30,.85) 48%,rgba(120,8,16,.9) 55%,transparent 66%);clip-path:polygon(0 30%,100% 0,86% 70%,8% 92%);filter:blur(1px)}
+.subpick{position:absolute;top:230px;left:56px;z-index:7;font-weight:800;letter-spacing:3px;font-size:18px}
+.subpick b{display:block;color:#ff3b47;font-size:1.3em}
+
+/* role cards */
+.role{position:absolute;z-index:6;width:430px;display:flex;flex-direction:column;gap:8px}
+.role.fw{left:108px;top:280px;align-items:flex-start;text-align:left}
+.role.ca{right:96px;top:260px;align-items:flex-end;text-align:right}
+.crest{width:124px;height:150px;position:relative}
+.role.fw .crest{margin-left:24px}
+.crest img{width:100%;height:100%;object-fit:contain;filter:drop-shadow(0 6px 14px rgba(0,0,0,.7))}
+.crest .fb{position:absolute;inset:0;display:none;clip-path:polygon(0 0,100% 0,100% 70%,50% 100%,0 70%)}
+.crest.gen .fb{background:linear-gradient(180deg,#c01024 50%,#0b2a6b 50%)}
+.crest.sam .fb{background:linear-gradient(180deg,#0b2a6b 42%,#fff 42% 50%,#c01024 50% 58%,#0b2a6b 58%)}
+.rname{font-style:italic;font-weight:800;font-size:42px;letter-spacing:1px;text-shadow:2px 2px 0 rgba(0,0,0,.6)}
+.rpos{font-style:italic;font-weight:800;font-size:52px;line-height:.9}
+.role.fw .rpos{color:#ff5b66;text-shadow:0 0 16px rgba(255,60,70,.8)}
+.role.ca .rpos{color:#4f8dff;text-shadow:0 0 16px rgba(70,130,255,.8)}
+.rclub{font-weight:800;letter-spacing:2px;font-size:22px;padding:5px 22px;margin-top:4px}
+.role.fw .rclub{background:#c01024;clip-path:polygon(0 0,100% 0,94% 100%,0 100%)}
+.role.ca .rclub{background:#1241c0;clip-path:polygon(6% 0,100% 0,100% 100%,0 100%)}
+.stats{margin-top:16px;display:flex;flex-direction:column;gap:7px;font-weight:800;letter-spacing:1px;font-size:16px}
+.srow{display:flex;align-items:center;gap:12px}
+.role.ca .srow{flex-direction:row-reverse}
+.srow span{width:110px}
+.role.ca .srow span{text-align:right}
+.segs{display:flex;gap:4px}
+.segs i{width:17px;height:15px;background:#262b36;box-shadow:inset 0 0 0 1px rgba(0,0,0,.5)}
+.role.fw .segs i.on{background:linear-gradient(180deg,#ff4250,#b40e1e);box-shadow:0 0 6px rgba(255,50,60,.6)}
+.role.ca .segs i.on{background:linear-gradient(180deg,#4f8dff,#1241c0);box-shadow:0 0 6px rgba(70,130,255,.6)}
+
+/* side arrows */
+.arrow{position:absolute;top:42%;z-index:8;font-size:66px;font-weight:900;cursor:pointer;user-select:none;line-height:1;font-family:'Anton';transition:transform .12s}
+.arrow:active{transform:scale(.85)}
+.arrow.l{left:22px;color:#fff;text-shadow:0 0 14px #ff3b47,2px 2px 0 #7a0a14}
+.arrow.r{right:22px;color:#fff;text-shadow:0 0 14px #4f8dff,2px 2px 0 #0a2a7a}
+
+/* ── BOTTOM ROW (fixed 290px) ─────────────────────────────── */
+.bottom{display:grid;grid-template-columns:1.15fr 1fr;gap:18px;padding:14px 22px 6px;z-index:9}
+.panel{position:relative;border:1px solid rgba(120,150,220,.35);border-radius:6px;overflow:hidden;background:linear-gradient(160deg,rgba(16,24,48,.92),rgba(6,9,20,.95));clip-path:polygon(0 0,100% 0,99% 100%,1% 100%);padding:16px 22px}
+.panel::after{content:'';position:absolute;inset:0;pointer-events:none;background:linear-gradient(115deg,transparent 60%,rgba(120,160,255,.06) 75%,transparent 90%)}
+.ptitle{display:inline-block;font-family:'Permanent Marker',cursive;font-size:26px;letter-spacing:1px;padding-bottom:2px;border-bottom:3px solid #c01024;text-shadow:2px 2px 0 #000;margin-bottom:12px}
+.namegrid{display:grid;grid-template-columns:130px 1fr 170px;gap:18px;align-items:stretch}
+.sil{position:relative;background:linear-gradient(#0d1530,#070b18);border:1px solid rgba(120,150,220,.25)}
+.sil img,.jersey img{width:100%;height:100%;object-fit:cover}
+.sil .fb,.jersey .fb{position:absolute;inset:0;display:none;align-items:flex-end;justify-content:center}
+.sil .fb i{width:70%;height:80%;background:linear-gradient(#15203c,#0a101f);clip-path:polygon(38% 0,62% 0,66% 14%,86% 22%,92% 100%,8% 100%,14% 22%,34% 14%);opacity:.8}
+.fields{display:flex;flex-direction:column;gap:7px;justify-content:center}
+.fields label{font-weight:800;letter-spacing:2px;font-size:13px;color:#aebadd}
+.fields input{background:#0a0f1f;border:1px solid rgba(120,150,220,.4);color:#fff;font-family:'Barlow Condensed';font-weight:600;font-size:18px;letter-spacing:1px;padding:7px 14px;outline:none;clip-path:polygon(0 0,100% 0,99% 100%,1% 100%)}
+.fields input:focus{border-color:#4f8dff;box-shadow:0 0 10px rgba(70,130,255,.4)}
+.fields input::placeholder{color:#5b6890}
+.jersey{position:relative;background:linear-gradient(#0d1530,#070b18);border:1px solid rgba(120,150,220,.25);display:flex;align-items:center;justify-content:center}
+.jersey .fb{display:none;flex-direction:column;align-items:center;justify-content:center;gap:2px}
+.jersey .fb b{font-family:'Anton';font-size:18px;letter-spacing:3px;color:#cfe0ff}
+.jersey .fb u{font-family:'Anton';font-size:86px;text-decoration:none;color:#fff;text-shadow:0 0 16px rgba(120,170,255,.7)}
+.startp{display:flex;flex-direction:column;justify-content:center;gap:8px;position:relative}
+.startart{position:absolute;right:0;top:0;bottom:0;width:42%;z-index:0}
+.startp>*:not(.startart){position:relative;z-index:1}
+.startart img{width:100%;height:100%;object-fit:cover;object-position:center;mask-image:linear-gradient(90deg,transparent,#000 35%)}
+.startart .fb{position:absolute;inset:0;display:none;background:linear-gradient(90deg,transparent,#2a1c08 40%),radial-gradient(60% 50% at 70% 80%,#ffb13c33,transparent)}
+.skick{font-weight:800;letter-spacing:4px;color:#4f8dff;font-size:17px}
+.sname{font-family:'Permanent Marker',cursive;font-size:58px;line-height:.95;color:#fff;text-shadow:3px 3px 0 #000,0 0 24px rgba(255,210,80,.35);white-space:nowrap}
+.sname::after{content:'★';color:#ffce3c;font-size:.5em;margin-left:10px;text-shadow:0 0 14px #ffce3c}
+.ssub{font-weight:700;letter-spacing:2px;font-size:15px;color:#cdd6ef;max-width:60%}
+.startbtn{margin-top:8px;align-self:flex-start;display:flex;align-items:center;gap:14px;border:none;cursor:pointer;background:linear-gradient(180deg,#ffd96a,#d8a51f);color:#1a1404;font-family:'Barlow Condensed';font-style:italic;font-weight:800;font-size:30px;letter-spacing:2px;padding:10px 38px 10px 20px;clip-path:polygon(0 0,100% 0,96% 100%,4% 100%);box-shadow:0 0 26px -4px rgba(255,200,70,.8);transition:transform .12s}
+.startbtn:active{transform:scale(.95)}
+.startbtn .ball{width:38px;height:38px;border-radius:50%;background:#10101a;display:flex;align-items:center;justify-content:center;color:#ffd96a;font-size:20px}
+
+/* ── FOOTER (fixed 56px) ──────────────────────────────────── */
+.foot{display:flex;gap:40px;align-items:center;padding:0 26px;font-weight:700;letter-spacing:2px;font-size:16px;color:#dfe6f5}
+.glyph{display:inline-flex;width:26px;height:26px;border-radius:50%;border:2px solid currentColor;align-items:center;justify-content:center;margin-right:9px;font-size:14px;font-weight:900}
+.g-x{color:#7ea0ff}.g-o{color:#ff5b66}.g-s{color:#e98bd7}
+.g-s .in{width:12px;height:12px;border:2px solid currentColor;border-radius:2px}
+.sep{opacity:.3}
+</style>
+</head>
+<body>
+<div id="scaler">
+<div class="stage">
+
+  <!-- ════ SPLIT SELECT ════ -->
+  <div class="split">
+    <div class="half fw" id="h-fw" onclick="pick('fw')">
+      <div class="bg"></div>
+      <img class="char" src="assets/story/char-fw.png" onerror="this.style.display='none';this.nextElementSibling.style.display='flex'">
+      <span class="char fb"><i></i></span>
+      <div class="role fw">
+        <div class="crest gen"><img src="assets/team/genoa.png" onerror="this.style.display='none';this.nextElementSibling.style.display='block'"><span class="fb"></span></div>
+        <div class="rname">IL BOMBER</div>
+        <div class="rpos">FW</div>
+        <div class="rclub">GENOA</div>
+        <div class="stats">
+          <div class="srow"><span>POTENZA</span><div class="segs" data-v="8"></div></div>
+          <div class="srow"><span>VELOCITÀ</span><div class="segs" data-v="7"></div></div>
+          <div class="srow"><span>TIRO</span><div class="segs" data-v="8"></div></div>
+          <div class="srow"><span>FISICO</span><div class="segs" data-v="6"></div></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="half ca" id="h-ca" onclick="pick('ca')">
+      <div class="bg"></div>
+      <img class="char" src="assets/story/char-ca.png" onerror="this.style.display='none';this.nextElementSibling.style.display='flex'">
+      <span class="char fb"><i></i></span>
+      <div class="role ca">
+        <div class="crest sam"><img src="assets/team/sampdoria.png" onerror="this.style.display='none';this.nextElementSibling.style.display='block'"><span class="fb"></span></div>
+        <div class="rname">IL REGISTA</div>
+        <div class="rpos">CA</div>
+        <div class="rclub">SAMPDORIA</div>
+        <div class="stats">
+          <div class="srow"><span>TECNICA</span><div class="segs" data-v="8"></div></div>
+          <div class="srow"><span>PASSAGGIO</span><div class="segs" data-v="8"></div></div>
+          <div class="srow"><span>VISIONE</span><div class="segs" data-v="7"></div></div>
+          <div class="srow"><span>CONTROLLO</span><div class="segs" data-v="7"></div></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="vsline"></div>
+    <div class="vs">VS</div>
+
+    <div class="title"><span class="slash"></span><div class="l1">CHARACTER</div><div class="l2">SELECTION</div></div>
+    <div class="subpick">SCEGLI IL TUO<b>GIOCATORE</b></div>
+
+    <div class="arrow l" onclick="pick('fw')">❮</div>
+    <div class="arrow r" onclick="pick('ca')">❯</div>
+  </div>
+
+  <!-- ════ BOTTOM PANELS ════ -->
+  <div class="bottom">
+    <div class="panel">
+      <div class="ptitle">NAME CREATION</div>
+      <div class="namegrid">
+        <div class="sil"><img src="assets/story/name-silhouette.png" onerror="this.style.display='none';this.nextElementSibling.style.display='flex'"><span class="fb"><i></i></span></div>
+        <div class="fields">
+          <label>NOME</label><input id="f-nome" maxlength="14" placeholder="Inserisci il nome">
+          <label>COGNOME</label><input id="f-cognome" maxlength="14" placeholder="Inserisci il cognome">
+          <label>SOPRANNOME</label><input id="f-sopra" maxlength="14" placeholder="Inserisci il soprannome (opzionale)">
+        </div>
+        <div class="jersey"><img src="assets/story/jersey-back.png" onerror="this.style.display='none';this.nextElementSibling.style.display='flex'"><span class="fb"><b id="j-name">TUO NOME</b><u id="j-num">10</u></span></div>
+      </div>
+    </div>
+
+    <div class="panel startp">
+      <div class="startart"><img src="assets/story/start-art.png" onerror="this.style.display='none';this.nextElementSibling.style.display='block'"><span class="fb"></span></div>
+      <div class="skick">INIZIA LA TUA CARRIERA</div>
+      <div class="sname">LA NUOVA STELLA</div>
+      <div class="ssub">DALL'ANONIMATO ALLA GLORIA.<br>IL CAMPO È IL TUO PALCOSCENICO.</div>
+      <button class="startbtn" onclick="startStory()"><span class="ball">⚽</span> START STORY MODE</button>
+    </div>
+  </div>
+
+  <!-- ════ FOOTER ════ -->
+  <div class="foot">
+    <span><span class="glyph g-x">✕</span>CONFERMA</span><span class="sep">|</span>
+    <span><span class="glyph g-o">◯</span>INDIETRO</span><span class="sep">|</span>
+    <span><span class="glyph g-s"><span class="in"></span></span>CASUALE</span>
+  </div>
+</div>
+</div>
+
+<script>
+// uniform scale of the fixed 1920×1080 canvas (letterboxed)
+function fit(){const k=Math.min(innerWidth/1920,innerHeight/1080);const sc=document.getElementById("scaler");sc.style.transform=`translate(-50%,-50%) scale(${k})`;}
+addEventListener("resize",fit);fit();
+
+// segmented bars
+document.querySelectorAll('.segs').forEach(s=>{
+  const v=+s.dataset.v||0;
+  for(let i=0;i<10;i++){const b=document.createElement('i');if(i<v)b.classList.add('on');s.appendChild(b);}
+});
+// selection
+let sel='fw';
+function pick(r){sel=r;
+  document.getElementById('h-fw').classList.toggle('dim',r!=='fw');
+  document.getElementById('h-ca').classList.toggle('dim',r!=='ca');
+  document.getElementById('j-num').textContent=r==='fw'?'9':'10';
+}
+pick('fw');
+// jersey preview follows surname/nickname
+['f-cognome','f-sopra'].forEach(id=>document.getElementById(id).addEventListener('input',()=>{
+  const n=document.getElementById('f-sopra').value.trim()||document.getElementById('f-cognome').value.trim();
+  document.getElementById('j-name').textContent=(n||'TUO NOME').toUpperCase();
+}));
+const MK='ue_story_mock';
+function startStory(){
+  const nome=document.getElementById('f-nome').value.trim()||'Luca';
+  const cognome=document.getElementById('f-cognome').value.trim()||'Moretti';
+  const sopra=document.getElementById('f-sopra').value.trim();
+  // per-role attribute sets + theme
+  const attrs=sel==='fw'
+    ?{POTENZA:92,VELOCITÀ:90,TIRO:94,FISICO:85,TECNICA:78,DRIBBLING:84,FREDDEZZA:88}
+    :{TECNICA:88,PASSAGGIO:94,VISIONE:96,TIRO:70,VELOCITÀ:79,FISICO:72,CONTROLLO:91};
+  localStorage.setItem(MK,JSON.stringify({role:sel,nome,cognome,sopra,level:12,exp:2450,expNext:4800,expAvail:850,attrs}));
+  location.href='story-hub.html';
+}
+</script>
+</body>
+</html>

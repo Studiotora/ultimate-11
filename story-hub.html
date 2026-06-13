@@ -1,0 +1,310 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>LA NUOVA STELLA · Story Hub</title>
+<link href="https://fonts.googleapis.com/css2?family=Anton&family=Barlow+Condensed:ital,wght@0,500;0,600;0,800;1,700;1,800&family=Permanent+Marker&display=swap" rel="stylesheet">
+<style>
+/* ════════════════════════════════════════════════════════════
+   STORY HUB · fixed 1920×1080 canvas, uniformly scaled
+   Art slots (drop PNGs at these exact paths):
+     assets/story/hub-bg.png          full-screen background scene
+     assets/story/char-hub.png        center character (full height)
+     assets/team/hs_garibaldi.png     hero school crest (game convention)
+     assets/team/{schoolkey}.png      opponent crests
+     assets/story/vs-pitch.png        PROSSIMA PARTITA panel backdrop
+   NOTE: fonts are placeholders — to be swapped later.
+   ════════════════════════════════════════════════════════════ */
+*{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+html,body{height:100%;background:#000;overflow:hidden;font-family:'Barlow Condensed',sans-serif;color:#fff}
+#scaler{position:fixed;left:50%;top:50%;width:1920px;height:1080px;transform-origin:center;background:#070508;
+ --ac:#e22531;--ac2:#ff3b47;--acL:#ff5b66;--deep:#c01024;--deep2:#7d0c18;--dark:#7a0a14;--glow:255,40,55;--bgA:#3a1d22;--bgB:#1a0d12}
+#scaler.ca{--ac:#2f6fe0;--ac2:#4f8dff;--acL:#7ea9ff;--deep:#1241c0;--deep2:#0c2c7d;--dark:#0a2a7a;--glow:70,130,255;--bgA:#101d3a;--bgB:#0a1124}
+.stage{position:absolute;inset:0;overflow:hidden}
+
+/* background scene */
+.bg{position:absolute;inset:0;background:url('assets/story/hub-bg.png') center/cover no-repeat,
+ radial-gradient(95% 80% at 52% 30%,var(--bgA) 0%,var(--bgB) 45%,#070508 100%)}
+.bg::after{content:'';position:absolute;inset:0;background:
+ linear-gradient(90deg,rgba(5,3,6,.92) 0%,rgba(5,3,6,.55) 20%,transparent 38%,transparent 60%,rgba(5,3,6,.78) 78%,rgba(5,3,6,.94) 100%),
+ linear-gradient(rgba(5,3,6,.35),transparent 25%,transparent 70%,rgba(5,3,6,.85))}
+
+/* center character */
+.char{position:absolute;left:560px;bottom:0;height:1010px;width:auto;max-width:560px;object-fit:contain;object-position:bottom;z-index:2;filter:drop-shadow(0 0 30px rgba(0,0,0,.85))}
+.char.fb{display:none;width:380px;align-items:flex-end;justify-content:center}
+.char.fb i{display:block;width:330px;height:900px;background:radial-gradient(60% 24% at 50% 9%,#241620 0 30%,transparent 31%),linear-gradient(#2a161e,#120a10);clip-path:polygon(38% 0,62% 0,66% 11%,88% 18%,94% 100%,6% 100%,12% 18%,34% 11%);opacity:.9}
+
+/* ═══ LEFT COLUMN ═══ */
+.brand{position:absolute;left:44px;top:30px;z-index:5}
+.brand h1{font-family:'Permanent Marker',cursive;font-size:62px;line-height:1;letter-spacing:1px;text-shadow:3px 3px 0 #000}
+.brand h1::after{content:'★';color:#ffce3c;font-size:.45em;margin-left:10px;vertical-align:middle;text-shadow:0 0 14px #ffce3c}
+.brand .ul{width:300px;height:4px;background:linear-gradient(90deg,var(--ac),transparent);margin:10px 0 8px}
+.brand .mode{font-weight:800;letter-spacing:4px;font-size:20px}
+
+.chapter{position:absolute;left:44px;top:182px;z-index:5;display:flex;gap:18px;align-items:flex-start;width:330px}
+.crest-big{width:104px;height:128px;position:relative;flex:none}
+.crest-big img{width:100%;height:100%;object-fit:contain;filter:drop-shadow(0 6px 16px rgba(0,0,0,.8))}
+.crest-fb{position:absolute;inset:0;display:none;clip-path:polygon(0 0,100% 0,100% 72%,50% 100%,0 72%);background:linear-gradient(160deg,#5a0e14,#2c060a);border:0;align-items:center;justify-content:center}
+.crest-fb b{font-family:'Anton';font-size:44px;color:#e8c34f;text-shadow:0 2px 6px #000}
+.chapter .txt .cap{font-style:italic;font-weight:800;color:var(--ac2);letter-spacing:2px;font-size:19px}
+.chapter .txt h2{font-family:'Permanent Marker',cursive;font-size:33px;line-height:1.05;margin:2px 0;text-shadow:2px 2px 0 #000}
+.chapter .txt .dream{font-weight:800;letter-spacing:1px;color:var(--ac2);font-size:17px;margin-bottom:6px}
+.chapter .txt p{font-weight:500;font-size:16px;line-height:1.35;color:#d9d3dc}
+
+/* menu buttons */
+.menu{position:absolute;left:38px;top:392px;z-index:5;display:flex;flex-direction:column;gap:16px;width:330px}
+.mbtn{position:relative;display:flex;align-items:center;gap:16px;padding:16px 20px;border:1px solid rgba(255,255,255,.14);cursor:pointer;clip-path:polygon(2.5% 0,100% 0,97.5% 100%,0 100%);background:linear-gradient(160deg,rgba(28,22,30,.92),rgba(12,9,14,.95));transition:transform .12s}
+.mbtn:active{transform:scale(.97)}
+.mbtn.hot{background:linear-gradient(100deg,var(--deep) 0%,var(--deep2) 60%,var(--dark) 100%);border-color:var(--acL);box-shadow:0 0 24px -6px rgba(var(--glow),.8)}
+.mbtn .ic{width:40px;height:40px;border-radius:50%;background:rgba(0,0,0,.4);display:flex;align-items:center;justify-content:center;font-size:20px;flex:none}
+.mbtn .tt b{display:block;font-style:italic;font-weight:800;font-size:24px;letter-spacing:1px;line-height:1}
+.mbtn .tt span{font-weight:700;letter-spacing:2px;font-size:13px;color:#cfc6d4;opacity:.85}
+.mbtn .chev{margin-left:auto;font-family:'Anton';font-size:26px}
+
+/* attributes panel */
+.attrs{position:absolute;left:44px;top:692px;z-index:5;width:430px;display:flex;gap:18px;align-items:center}
+.attrs .lbl{position:absolute;top:-30px;left:0;font-style:italic;font-weight:800;color:var(--ac2);letter-spacing:3px;font-size:21px}
+.radar{width:170px;height:170px;flex:none}
+.alist{display:flex;flex-direction:column;gap:7px;flex:1}
+.arow{display:flex;align-items:center;gap:10px;font-weight:800;letter-spacing:1px;font-size:15px}
+.arow span{width:96px;color:#e8e2ec}
+.abar{flex:1;height:7px;background:#241d28;position:relative}
+.abar i{position:absolute;inset:0 auto 0 0;background:linear-gradient(90deg,var(--dark),var(--ac));box-shadow:0 0 8px rgba(var(--glow),.55)}
+.arow b{width:30px;text-align:right;font-size:16px}
+
+/* ═══ CENTER-RIGHT of character: role tag ═══ */
+.roletag{position:absolute;left:1010px;top:330px;z-index:4;text-align:center}
+.roletag .rn{font-style:italic;font-weight:800;font-size:38px;letter-spacing:1px;text-shadow:2px 2px 0 #000}
+.roletag .rp{font-family:'Permanent Marker',cursive;font-size:74px;color:var(--ac);line-height:.9;text-shadow:3px 3px 0 #000,0 0 24px rgba(var(--glow),.6)}
+.roletag .rc{display:inline-block;margin-top:10px;background:var(--deep);font-weight:800;letter-spacing:2px;font-size:17px;padding:5px 18px;clip-path:polygon(4% 0,100% 0,96% 100%,0 100%)}
+
+/* ═══ LEVEL / EXP block (below character) ═══ */
+.lvl{position:absolute;left:560px;top:660px;z-index:5;width:420px}
+.lvl .row1{display:flex;align-items:baseline;gap:14px}
+.lvl .lv{font-style:italic;font-weight:800;font-size:26px;letter-spacing:1px}
+.lvl .lv b{font-family:'Anton';font-size:54px;margin-left:6px;letter-spacing:2px}
+.lvl .exp{margin-left:auto;font-weight:800;letter-spacing:1px;font-size:19px;color:#e8e2ec}
+.lvl .exp i{font-style:italic;color:#9b93a4;margin-right:10px}
+.expbar{height:9px;background:#241d28;margin:8px 0 14px;position:relative}
+.expbar i{position:absolute;inset:0 auto 0 0;background:linear-gradient(90deg,var(--dark),var(--ac2));box-shadow:0 0 10px rgba(var(--glow),.7)}
+.expav .t{font-style:italic;font-weight:800;color:#ffce3c;letter-spacing:2px;font-size:20px}
+.expav .v{display:flex;align-items:center;gap:14px;font-family:'Anton';font-size:46px;color:#ffce3c;text-shadow:0 0 16px rgba(255,200,60,.5)}
+.expav .chip{font-family:'Barlow Condensed';font-weight:800;font-size:15px;color:#1a1404;background:linear-gradient(180deg,#ffd96a,#d8a51f);padding:6px 10px;clip-path:polygon(25% 0,75% 0,100% 50%,75% 100%,25% 100%,0 50%)}
+
+/* role description + special ability */
+.roledesc{position:absolute;left:560px;top:868px;z-index:5;width:300px}
+.roledesc h3{font-style:italic;font-weight:800;color:var(--ac2);font-size:24px;letter-spacing:1px;margin-bottom:4px}
+.roledesc p{font-weight:500;font-size:16px;line-height:1.35;color:#ddd6e0}
+.ability{position:absolute;left:560px;top:960px;z-index:5;width:420px}
+.ability h3{font-style:italic;font-weight:800;color:var(--ac2);font-size:20px;letter-spacing:1px;margin-bottom:6px}
+.ability .in{display:flex;gap:12px;align-items:flex-start}
+.ability .ic{width:38px;height:38px;flex:none;display:flex;align-items:center;justify-content:center;font-size:22px;color:#ffce3c;border:2px solid #ffce3c;border-radius:50%;box-shadow:0 0 14px rgba(255,200,60,.5)}
+.ability b{display:block;color:#ffce3c;font-weight:800;letter-spacing:1px;font-size:19px}
+.ability span{font-weight:500;font-size:15px;line-height:1.3;color:#ddd6e0}
+
+/* ═══ RIGHT COLUMN · bracket ═══ */
+.tour{position:absolute;left:1180px;top:30px;width:710px;z-index:5}
+.tour .head{display:flex;gap:16px;align-items:center}
+.tour .cup{font-size:40px;filter:drop-shadow(0 0 10px rgba(255,180,40,.6))}
+.tour h2{font-style:italic;font-weight:800;font-size:31px;letter-spacing:1px;line-height:1}
+.tour .sub{font-weight:800;letter-spacing:2px;font-size:14px;color:#cfc6d4;margin-top:3px}
+.brk{margin-top:14px;position:relative;padding-left:26px}
+.brk::before{content:'';position:absolute;left:8px;top:10px;bottom:10px;width:2px;background:rgba(255,255,255,.25)}
+.stagelbl{font-weight:800;letter-spacing:2px;font-size:15px;color:#e8e2ec;margin:10px 0 6px}
+.mrow{position:relative;display:grid;grid-template-columns:48px 1fr 96px 1fr 48px;align-items:center;gap:10px;height:44px;margin-bottom:7px;padding:0 10px;background:linear-gradient(100deg,rgba(24,19,27,.92),rgba(11,8,13,.94));border:1px solid rgba(255,255,255,.12);clip-path:polygon(1% 0,100% 0,99% 100%,0 100%)}
+.mrow::before{content:'';position:absolute;left:-18px;top:50%;width:18px;height:2px;background:rgba(255,255,255,.25)}
+.mrow .c{width:34px;height:40px;justify-self:center;position:relative}
+.mrow .c img{width:100%;height:100%;object-fit:contain}
+.mrow .c .fb{position:absolute;inset:2px;display:none;clip-path:polygon(0 0,100% 0,100% 72%,50% 100%,0 72%)}
+.mrow .tn{font-weight:800;letter-spacing:1px;font-size:18px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.mrow .tn.r{text-align:right}
+.mrow .sc{text-align:center;font-family:'Anton';font-size:21px;letter-spacing:3px}
+.mrow .sc.vs{font-family:'Barlow Condensed';font-style:italic;font-weight:800;color:#b9aec2;font-size:18px}
+.mrow.win{background:linear-gradient(100deg,var(--deep) 0%,var(--deep2) 45%,rgba(11,8,13,.94) 100%);border-color:var(--acL)}
+.mrow.tbd{opacity:.45}
+.mrow .cupend{position:absolute;right:-58px;top:50%;transform:translateY(-50%);font-size:38px;filter:drop-shadow(0 0 12px rgba(255,180,40,.7))}
+
+/* ═══ PROSSIMA PARTITA panel ═══ */
+.next{position:absolute;left:1180px;top:782px;width:710px;height:250px;z-index:5;border:1px solid rgba(255,180,60,.4);clip-path:polygon(.6% 0,100% 0,99.4% 100%,0 100%);overflow:hidden;background:url('assets/story/vs-pitch.png') center/cover no-repeat,linear-gradient(160deg,#141826,#090b14)}
+.next::before{content:'';position:absolute;inset:0;background:linear-gradient(rgba(6,8,16,.55),rgba(6,8,16,.8))}
+.next>*{position:relative;z-index:1}
+.next .top{display:flex;justify-content:space-between;align-items:center;padding:14px 22px 0}
+.next .pp{font-style:italic;font-weight:800;color:var(--ac2);letter-spacing:2px;font-size:22px}
+.next .st{font-weight:800;letter-spacing:2px;font-size:18px}
+.next .vsrow{display:grid;grid-template-columns:1fr auto 1fr;align-items:center;padding:6px 60px 0;text-align:center}
+.next .tcol{display:flex;flex-direction:column;align-items:center;gap:6px}
+.next .tcol .c{width:88px;height:106px;position:relative}
+.next .tcol .c img{width:100%;height:100%;object-fit:contain;filter:drop-shadow(0 6px 14px rgba(0,0,0,.8))}
+.next .tcol b{font-weight:800;letter-spacing:1px;font-size:21px}
+.next .bigvs{font-family:'Permanent Marker',cursive;font-size:64px;color:#ffce3c;text-shadow:3px 3px 0 #000,0 0 22px rgba(255,200,60,.7);transform:rotate(-4deg)}
+.next .info{position:absolute;left:0;right:0;bottom:0;display:grid;grid-template-columns:1fr 1fr 1.4fr;border-top:1px solid rgba(255,255,255,.15)}
+.next .info>div{display:flex;align-items:center;justify-content:center;gap:10px;padding:10px 6px;font-weight:800;letter-spacing:1px;font-size:18px;border-right:1px solid rgba(255,255,255,.12)}
+.next .info>div:last-child{border-right:none}
+.next .info .red{color:var(--ac2)}
+
+/* footer */
+.foot{position:absolute;left:0;right:0;bottom:0;height:50px;display:flex;gap:40px;align-items:center;padding:0 30px;font-weight:700;letter-spacing:2px;font-size:16px;color:#dfe6f5;background:linear-gradient(transparent,rgba(0,0,0,.7));z-index:6}
+.glyph{display:inline-flex;width:26px;height:26px;border-radius:50%;border:2px solid currentColor;align-items:center;justify-content:center;margin-right:9px;font-size:14px;font-weight:900}
+.g-x{color:#7ea0ff}.g-o{color:#ff5b66}.g-s{color:#e98bd7}
+.g-s .in{width:12px;height:12px;border:2px solid currentColor;border-radius:2px}
+.sep{opacity:.3}
+</style>
+</head>
+<body>
+<div id="scaler">
+<div class="stage">
+  <div class="bg"></div>
+
+  <img class="char" src="assets/story/char-hub.png" onerror="this.style.display='none';this.nextElementSibling.style.display='flex'">
+  <span class="char fb"><i></i></span>
+
+  <!-- LEFT -->
+  <div class="brand"><h1>LA NUOVA STELLA</h1><div class="ul"></div><div class="mode">MODALITÀ STORIA</div></div>
+
+  <div class="chapter">
+    <div class="crest-big">
+      <img src="assets/team/hs_garibaldi.png" onerror="this.style.display='none';this.nextElementSibling.style.display='flex'">
+      <span class="crest-fb"><b>G</b></span>
+    </div>
+    <div class="txt">
+      <div class="cap">CAPITOLO 1</div>
+      <h2>LICEO GARIBALDI</h2>
+      <div class="dream">IL TUO SOGNO INIZIA QUI.</div>
+      <p>Il torneo interscolastico di Genova è il primo passo verso la gloria.</p>
+    </div>
+  </div>
+
+  <div class="menu">
+    <div class="mbtn hot" onclick="ui('next')"><span class="ic">⚽</span><span class="tt"><b>NEXT MATCH</b><span>PROSSIMA PARTITA</span></span><span class="chev">❯</span></div>
+    <div class="mbtn" onclick="ui('edit')"><span class="ic">👤</span><span class="tt"><b>EDIT CHARACTER</b><span>MODIFICA GIOCATORE</span></span></div>
+    <div class="mbtn" onclick="ui('back')"><span class="ic">↩</span><span class="tt"><b>GO BACK</b><span>TORNA ALLA MAPPA</span></span></div>
+  </div>
+
+  <div class="attrs">
+    <span class="lbl">ATTRIBUTI</span>
+    <svg class="radar" viewBox="0 0 170 170" id="radar"></svg>
+    <div class="alist" id="alist"></div>
+  </div>
+
+  <!-- CENTER -->
+  <div class="roletag"><div class="rn">IL REGISTA</div><div class="rp">CA</div><div class="rc">LICEO GARIBALDI</div></div>
+
+  <div class="lvl">
+    <div class="row1"><span class="lv">LV.<b>12</b></span><span class="exp"><i>EXP</i>2.450 / 4.800</span></div>
+    <div class="expbar"><i></i></div>
+    <div class="expav"><div class="t">EXP DISPONIBILI</div><div class="v">850 <span class="chip">EXP</span></div></div>
+  </div>
+
+  <div class="roledesc"><h3>REGISTA</h3><p>Il cervello della squadra. Controlla il ritmo, detta i tempi e trasforma il gioco in arte.</p></div>
+  <div class="ability"><h3>ABILITÀ SPECIALE</h3><div class="in"><span class="ic">✦</span><div><b>PASSAGGIO ILLUMINANTE</b><span>Aumenta la precisione e la velocità dei passaggi filtranti.</span></div></div></div>
+
+  <!-- RIGHT · bracket -->
+  <div class="tour">
+    <div class="head"><span class="cup">🏆</span><div><h2>TORNEO INTERSCOLASTICO DI GENOVA</h2><div class="sub">FASE A ELIMINAZIONE DIRETTA</div></div></div>
+    <div class="brk" id="brk"></div>
+  </div>
+
+  <!-- PROSSIMA PARTITA -->
+  <div class="next">
+    <div class="top"><span class="pp">PROSSIMA PARTITA</span><span class="st">QUARTI DI FINALE</span></div>
+    <div class="vsrow">
+      <div class="tcol"><span class="c"><img src="assets/team/hs_garibaldi.png" onerror="this.style.display='none';this.nextElementSibling.style.display='block'"><span class="fb crest-fb" style="display:none;background:linear-gradient(160deg,#5a0e14,#2c060a)"></span></span><b>LICEO GARIBALDI</b></div>
+      <div class="bigvs">VS</div>
+      <div class="tcol"><span class="c"><img src="assets/team/hs_galilei.png" onerror="this.style.display='none';this.nextElementSibling.style.display='block'"><span class="fb crest-fb" style="display:none;background:linear-gradient(160deg,#11235e,#080f2c)"></span></span><b>LICEO GALILEI</b></div>
+    </div>
+    <div class="info">
+      <div>📅 26 MAGGIO</div>
+      <div>🕐 17:00</div>
+      <div>📍 CAMPO “FERRANDO” <span class="red">GENOVA</span></div>
+    </div>
+  </div>
+
+  <div class="foot">
+    <span><span class="glyph g-x">✕</span>CONFERMA</span><span class="sep">|</span>
+    <span><span class="glyph g-o">◯</span>INDIETRO</span><span class="sep">|</span>
+    <span><span class="glyph g-s"><span class="in"></span></span>TUTORIAL</span>
+  </div>
+</div>
+</div>
+
+<script>
+function fit(){const k=Math.min(innerWidth/1920,innerHeight/1080);document.getElementById('scaler').style.transform=`translate(-50%,-50%) scale(${k})`;}
+addEventListener('resize',fit);fit();
+
+/* ── shared mock state ── */
+const MK='ue_story_mock';
+function loadState(){
+  try{const d=JSON.parse(localStorage.getItem(MK));if(d&&d.attrs)return d;}catch(e){}
+  const d={role:'ca',nome:'Luca',cognome:'Moretti',sopra:'',level:12,exp:2450,expNext:4800,expAvail:850,
+    attrs:{TECNICA:88,PASSAGGIO:94,VISIONE:96,TIRO:70,VELOCITÀ:79,FISICO:72,CONTROLLO:91}};
+  localStorage.setItem(MK,JSON.stringify(d));return d;
+}
+const ST=loadState();
+if(ST.role==='ca')document.getElementById('scaler').classList.add('ca');
+
+/* role-dependent texts */
+const ROLE_T={fw:{rn:'IL BOMBER',rp:'FW',h3:'BOMBER',desc:'L\'istinto del gol. Attacca la profondità, domina l\'area e trasforma ogni occasione in rete.',ab:'TIRO FULMINEO',abd:'Aumenta la potenza e la precisione dei tiri in corsa.'},
+              ca:{rn:'IL REGISTA',rp:'CA',h3:'REGISTA',desc:'Il cervello della squadra. Controlla il ritmo, detta i tempi e trasforma il gioco in arte.',ab:'PASSAGGIO ILLUMINANTE',abd:'Aumenta la precisione e la velocità dei passaggi filtranti.'}};
+const RT=ROLE_T[ST.role];
+document.querySelector('.roletag .rn').textContent=RT.rn;
+document.querySelector('.roletag .rp').textContent=RT.rp;
+document.querySelector('.roledesc h3').textContent=RT.h3;
+document.querySelector('.roledesc p').textContent=RT.desc;
+document.querySelector('.ability b').textContent=RT.ab;
+document.querySelector('.ability .in span:last-child, .ability .in div span').textContent=RT.abd;
+
+/* level / exp from state */
+document.querySelector('.lvl .lv b').textContent=ST.level;
+document.querySelector('.lvl .exp').innerHTML='<i>EXP</i>'+ST.exp.toLocaleString('it-IT')+' / '+ST.expNext.toLocaleString('it-IT');
+document.querySelector('.expbar i').style.width=Math.min(100,Math.round(100*ST.exp/ST.expNext))+'%';
+document.querySelector('.expav .v').firstChild.textContent=ST.expAvail+' ';
+
+/* nav */
+function ui(x){
+  if(x==='edit'){location.href='story-edit.html';return;}
+  if(x==='back'){location.href='story-select.html';return;}
+  if(x==='next'){alert('NEXT MATCH → qui si collega il match engine (team menu → partita).');return;}
+}
+
+/* ── attributes (from state) ── */
+const ATTRS=Object.entries(ST.attrs);
+document.getElementById('alist').innerHTML=ATTRS.map(([n,v])=>
+ `<div class="arow"><span>${n}</span><div class="abar"><i style="width:${v}%"></i></div><b>${v}</b></div>`).join('');
+
+/* radar (7 axes) */
+(function(){
+ const svg=document.getElementById('radar'),C=85,R=72,N=ATTRS.length;
+ const pt=(i,r)=>{const a=-Math.PI/2+i*2*Math.PI/N;return (C+r*Math.cos(a)).toFixed(1)+','+(C+r*Math.sin(a)).toFixed(1);};
+ let g='';
+ for(let ring=1;ring<=3;ring++){const r=R*ring/3;g+=`<polygon points="${ATTRS.map((_,i)=>pt(i,r)).join(' ')}" fill="none" stroke="rgba(255,255,255,.18)" stroke-width="1"/>`;}
+ g+=ATTRS.map((_,i)=>`<line x1="${C}" y1="${C}" x2="${pt(i,R).split(',')[0]}" y2="${pt(i,R).split(',')[1]}" stroke="rgba(255,255,255,.14)"/>`).join('');
+ g+=`<polygon points="${ATTRS.map(([_,v],i)=>pt(i,R*v/100)).join(' ')}" fill="rgba(226,37,49,.4)" stroke="#e22531" stroke-width="2" style="filter:drop-shadow(0 0 8px rgba(255,40,55,.7))"/>`;
+ svg.innerHTML=g;
+})();
+
+/* ── bracket (reference data) ── */
+const FB={garibaldi:'#5a0e14',doria:'#11235e',majorana:'#3a1050',montalcini:'#0e3a4a',cavour:'#4a2a08',costa:'#0e4a2a',colombo:'#3c3c10',davinci:'#104a16',galilei:'#11235e',tbd:'#1c1c24'};
+function crest(k){return `<span class="c"><img src="assets/team/hs_${k}.png" onerror="this.style.display='none';this.nextElementSibling.style.display='block'"><span class="fb" style="background:linear-gradient(160deg,${FB[k]||FB.tbd},#0a0a12)"></span></span>`;}
+const ROWS=[
+ ['OTTAVI DI FINALE',[
+   ['garibaldi','LICEO GARIBALDI','3 - 1','LICEO DORIA','doria','win'],
+   ['majorana','LICEO MAJORANA','2 - 0','LICEO MONTALCINI','montalcini',''],
+   ['cavour','LICEO CAVOUR','1 - 0','LICEO COSTA','costa',''],
+   ['colombo','LICEO COLOMBO','2 - 1','LICEO DA VINCI','davinci','']]],
+ ['QUARTI DI FINALE',[
+   ['garibaldi','LICEO GARIBALDI','VS','LICEO GALILEI','galilei','win'],
+   ['majorana','LICEO MAJORANA','VS','LICEO COLOMBO','colombo','']]],
+ ['SEMIFINALI',[
+   ['tbd','TBD','VS','TBD','tbd','tbd'],
+   ['tbd','TBD','VS','TBD','tbd','tbd']]],
+ ['FINALE',[
+   ['tbd','TBD','VS','TBD','tbd','tbd final']]]
+];
+document.getElementById('brk').innerHTML=ROWS.map(([lbl,ms])=>
+ `<div class="stagelbl">${lbl}</div>`+ms.map(([k1,n1,sc,n2,k2,cls])=>
+  `<div class="mrow ${cls.replace('final','')}">${crest(k1)}<span class="tn">${n1}</span><span class="sc ${sc==='VS'?'vs':''}">${sc}</span><span class="tn r">${n2}</span>${crest(k2)}${cls.includes('final')?'<span class="cupend">🏆</span>':''}</div>`).join('')
+).join('');
+</script>
+</body>
+</html>

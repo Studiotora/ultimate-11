@@ -73,7 +73,7 @@ function czRender(){
   if(!list||!ed)return;
   document.querySelectorAll('.cz-tab').forEach(b=>b.classList.toggle('on',b.dataset.t===czTab));
   const keys=czTab==='nations'
-    ?Object.keys(T).filter(k=>!T[k]._career&&!T[k]._story)
+    ?Object.keys(T).filter(k=>!T[k]._career)
     :Object.keys(CR_CLUBS);
   list.innerHTML=keys.map(k=>{
     const edited=CZ.teams[k]||(CZ.players[k]&&Object.keys(CZ.players[k]).length);
