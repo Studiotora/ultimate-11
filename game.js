@@ -6418,3 +6418,215 @@ function _txRenderLog(){
   }).join('');
 }
 
+
+
+/* ============================================================================
+   FIFA-STYLE TEAM SELECT  —  added (rebuilds #s-ts from JS)
+   • Three categories: Nationals / Clubs / Special Teams (All Stars).
+   • Cross-category selection (e.g. a national vs a club vs All Stars).
+   • OFF / MID / DEF / OVR computed live from the real rosters via calcOvr().
+   • Captain splash art: assets/team/captain-{key}.png
+   • Emblems via existing teamEmblemPath()/setTeamEmblem() (PNG → SVG/emoji).
+   • Renders inside #s-ts (already inside the scaled #viewport, 1920x1080) with
+     a scoped, injected stylesheet so GitHub Pages CSS caching can't hide it.
+   • Overrides syncTeamSelections() so showSc('s-ts') drives this screen.
+   ========================================================================== */
+(function(){
+  const ATT=['LW','ST','RW'], MIDP=['CM1','CM2','CM3'], DEFP=['GK','LB','CB1','CB2','RB'];
+
+  function tsStarters(t){ const r=new Set(t.reserves||[]); return t.p.filter(p=>!r.has(p.id)).slice(0,11); }
+  function tsLine(t){
+    const s=tsStarters(t);
+    const g=arr=>{ const a=s.filter(p=>arr.includes(p.pos)); return a.length?Math.round(a.reduce((x,p)=>x+calcOvr(p),0)/a.length):0; };
+    return { off:g(ATT), mid:g(MIDP), def:g(DEFP), ovr:calcTeamOvr(t) };
+  }
+  function tsPlayStyle(st){ const {off,mid,def}=st;
+    if(off-def>=3 && off>=mid) return 'Attacking';
+    if(def-off>=3 && def>=mid) return 'Defensive';
+    if(mid>=off && mid>=def)   return 'Possession';
+    return 'Balanced';
+  }
+  function tsCaptain(key){
+    if(CR_CLUBS[key] && CR_CLUBS[key].star) return CR_CLUBS[key].star;
+    const t=T[key]; if(!t) return '';
+    const s=tsStarters(t).filter(p=>p.pos!=='GK'); let b=s[0], bo=-1;
+    s.forEach(p=>{ const o=calcOvr(p); if(o>bo){bo=o;b=p;} });
+    return b?b.name:'';
+  }
+  function tsCaptainPath(key){ return 'assets/team/captain-'+key+'.png'; }
+  function tsCatTeams(cat){
+    if(cat==='clubs'){ Object.keys(CR_CLUBS).forEach(k=>{ try{crBuildClubTeam(k);}catch(e){} }); return Object.keys(CR_CLUBS).filter(k=>T[k]); }
+    if(cat==='special') return ['allstar'].filter(k=>T[k]);
+    return _natKeys.filter(k=>k!=='allstar' && T[k]);
+  }
+  function tsStarHTML(v){
+    const n = v>=90?5:v>=84?4.5:v>=78?4:v>=72?3.5:v>=66?3:v>=60?2.5:2;
+    const f=Math.floor(n), h=n%1?1:0;
+    return '★'.repeat(f)+(h?'<span class="tsf-half">★</span>':'')+'☆'.repeat(Math.max(0,5-f-h));
+  }
+
+  let tsViewCat='nationals', tsActive='home';
+  window.tsSetCat   = c=>{ tsViewCat=c; renderTeamSelect(); };
+  window.tsSetActive= s=>{ tsActive=s; renderTeamSelect(); };
+  window.tsPick     = key=>{
+    if(CR_CLUBS[key]){ try{crBuildClubTeam(key);}catch(e){} }
+    if(!T[key]) return;
+    if(tsActive==='home') selHome=key; else selAway=key;
+    HT=T[selHome]; AT=T[selAway];
+    renderTeamSelect();
+  };
+  window.tsRandom = ()=>{ const list=tsCatTeams(tsViewCat); if(list.length) window.tsPick(list[Math.floor(Math.random()*list.length)]); };
+  window.tsConfirm= ()=>{ if(selHome && selAway && selHome!==selAway && typeof openTeamMenu==='function') openTeamMenu(); };
+
+  function ensureCss(){
+    if(document.getElementById('tsf-css')) return;
+    const st=document.createElement('style'); st.id='tsf-css';
+    st.textContent = `
+    #s-ts .tsf-root{position:absolute;inset:0;display:flex;flex-direction:column;overflow:hidden;
+      font-family:"Segoe UI",system-ui,Roboto,Arial,sans-serif;color:#eaf2ff;}
+    #s-ts .tsf-bg{position:absolute;inset:0;z-index:0;background:
+      radial-gradient(120% 80% at 50% -8%,rgba(120,160,255,.18),transparent 60%),
+      linear-gradient(105deg,#071633 0%,#0a1b3d 30%,#0b1024 50%,#2a0c14 72%,#3a0a10 100%);}
+    #s-ts .tsf-bg::after{content:"";position:absolute;inset:0;mix-blend-mode:screen;background:
+      repeating-linear-gradient(115deg,rgba(255,255,255,.025) 0 2px,transparent 2px 26px),
+      radial-gradient(60% 50% at 50% 18%,rgba(255,255,255,.10),transparent 70%);}
+    #s-ts .tsf-root>*{position:relative;z-index:1;}
+    #s-ts .tsf-head{display:grid;grid-template-columns:1fr auto 1fr;align-items:center;padding:20px 48px 0;height:120px;}
+    #s-ts .tsf-title h1{font-style:italic;font-weight:800;letter-spacing:.04em;font-size:46px;line-height:.95;text-transform:uppercase;text-shadow:0 2px 14px rgba(0,0,0,.6);margin:0;}
+    #s-ts .tsf-sub{color:#2b6fff;font-weight:700;letter-spacing:.2em;font-size:16px;text-transform:uppercase;margin-top:4px;}
+    #s-ts .tsf-center{text-align:center;}
+    #s-ts .tsf-globe{font-size:36px;filter:drop-shadow(0 0 8px rgba(255,255,255,.35));}
+    #s-ts .tsf-ct{font-weight:800;letter-spacing:.16em;font-size:20px;text-transform:uppercase;margin-top:2px;}
+    #s-ts .tsf-ch{color:#9fb2cf;font-size:14px;margin-top:2px;}
+    #s-ts .tsf-hero{flex:1 1 auto;position:relative;display:flex;align-items:flex-end;justify-content:center;min-height:0;padding:0 48px;}
+    #s-ts .tsf-splash{position:absolute;bottom:0;height:100%;width:440px;z-index:0;pointer-events:none;display:flex;align-items:flex-end;}
+    #s-ts .tsf-splash-home{left:0;justify-content:flex-start;} #s-ts .tsf-splash-away{right:0;justify-content:flex-end;}
+    #s-ts .tsf-splash-img{height:100%;width:auto;object-fit:contain;object-position:bottom;display:none;filter:drop-shadow(0 0 30px rgba(0,0,0,.5));}
+    #s-ts .tsf-splash-away .tsf-splash-img{transform:scaleX(-1);}
+    #s-ts .tsf-splash-ph{height:90%;width:300px;border-radius:18px;display:flex;flex-direction:column;align-items:center;justify-content:flex-end;gap:10px;padding:18px;
+      background:linear-gradient(180deg,transparent,color-mix(in srgb,var(--c) 32%,transparent) 70%,color-mix(in srgb,var(--c) 55%,transparent));
+      -webkit-mask-image:linear-gradient(180deg,transparent 0%,#000 22%,#000 100%);mask-image:linear-gradient(180deg,transparent 0%,#000 22%,#000 100%);}
+    #s-ts .tsf-ph-sil{width:62%;aspect-ratio:.7;border-radius:50% 50% 12% 12%;
+      background:radial-gradient(60% 45% at 50% 22%,color-mix(in srgb,var(--c) 80%,#fff 0%),color-mix(in srgb,var(--c) 60%,#000 30%));box-shadow:inset 0 -30px 50px rgba(0,0,0,.35);}
+    #s-ts .tsf-ph-em{font-size:84px;line-height:1;filter:drop-shadow(0 0 14px rgba(0,0,0,.5));}
+    #s-ts .tsf-ph-cap{font-size:12px;color:#9fb2cf;letter-spacing:.03em;text-align:center;word-break:break-all;}
+    #s-ts .tsf-ph-cap b{color:#cdd8ee;}
+    #s-ts .tsf-cards{display:flex;align-items:center;justify-content:center;gap:56px;z-index:2;padding-bottom:18px;}
+    #s-ts .tsf-card{position:relative;width:288px;background:rgba(10,16,30,.62);backdrop-filter:blur(7px);
+      border:2px solid color-mix(in srgb,var(--c) 70%,transparent);border-radius:14px;padding:38px 22px 18px;text-align:center;cursor:pointer;
+      transition:transform .15s,box-shadow .2s;box-shadow:0 0 0 1px rgba(0,0,0,.4),0 14px 40px rgba(0,0,0,.5);}
+    #s-ts .tsf-home{--c:#2b6fff;} #s-ts .tsf-away{--c:#ff3a44;}
+    #s-ts .tsf-pill{position:absolute;top:-14px;left:50%;transform:translateX(-50%);background:var(--c);color:#fff;font-weight:800;letter-spacing:.14em;font-size:12px;padding:5px 18px;border-radius:6px;text-transform:uppercase;box-shadow:0 3px 10px rgba(0,0,0,.4);}
+    #s-ts .tsf-card.tsf-act{box-shadow:0 0 0 2px var(--c),0 0 30px color-mix(in srgb,var(--c) 70%,transparent),0 14px 40px rgba(0,0,0,.5);transform:translateY(-3px);}
+    #s-ts .tsf-tname{font-style:italic;font-weight:800;text-transform:uppercase;font-size:28px;line-height:1.02;margin-bottom:10px;text-shadow:0 2px 8px rgba(0,0,0,.6);min-height:30px;}
+    #s-ts .tsf-emblem{height:78px;display:flex;align-items:center;justify-content:center;margin:2px 0 8px;}
+    #s-ts .tsf-emblem img{height:78px;width:auto;filter:drop-shadow(0 3px 10px rgba(0,0,0,.5));}
+    #s-ts .tsf-emblem svg{height:78px;width:auto;}
+    #s-ts .tsf-stars{color:#ffd24a;font-size:20px;letter-spacing:3px;margin-bottom:10px;}
+    #s-ts .tsf-half{opacity:.45;}
+    #s-ts .tsf-stats{display:flex;justify-content:center;gap:22px;margin-bottom:10px;}
+    #s-ts .tsf-stats div{display:flex;flex-direction:column;}
+    #s-ts .tsf-stats span{color:#9fb2cf;font-size:11px;font-weight:700;letter-spacing:.1em;}
+    #s-ts .tsf-stats b{font-weight:800;font-size:26px;}
+    #s-ts .tsf-pslab{color:#9fb2cf;font-size:10px;font-weight:700;letter-spacing:.14em;text-transform:uppercase;}
+    #s-ts .tsf-psval{color:color-mix(in srgb,var(--c) 75%,#fff);font-weight:800;letter-spacing:.06em;text-transform:uppercase;font-size:17px;}
+    #s-ts .tsf-vs{font-style:italic;font-weight:900;font-size:52px;align-self:center;text-shadow:0 0 18px rgba(255,255,255,.4),0 4px 10px rgba(0,0,0,.6);}
+    #s-ts .tsf-hint{text-align:center;color:#9fb2cf;font-size:13px;padding:0 10px 4px;}
+    #s-ts .tsf-hint b{color:#cdd8ee;}
+    #s-ts .tsf-tabs{display:flex;justify-content:center;gap:8px;padding:0 10px 10px;}
+    #s-ts .tsf-tab{cursor:pointer;color:#9fb2cf;background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.08);padding:10px 30px;font-weight:800;letter-spacing:.1em;font-size:14px;text-transform:uppercase;border-radius:8px;transition:.15s;}
+    #s-ts .tsf-tab:hover{color:#eaf2ff;}
+    #s-ts .tsf-tab.on{color:#fff;background:linear-gradient(180deg,rgba(43,111,255,.35),rgba(43,111,255,.12));border-color:#2b6fff;box-shadow:0 0 16px rgba(43,111,255,.4);}
+    #s-ts .tsf-gridwrap{height:250px;overflow-y:auto;padding:2px 48px 6px;}
+    #s-ts .tsf-grid{display:grid;grid-template-columns:repeat(8,1fr);gap:10px;}
+    #s-ts .tsf-tile{position:relative;background:rgba(8,14,28,.55);border:1.5px solid rgba(255,255,255,.10);border-radius:9px;padding:9px 4px 8px;text-align:center;cursor:pointer;transition:.12s;display:flex;flex-direction:column;align-items:center;gap:5px;min-height:84px;justify-content:center;}
+    #s-ts .tsf-tile:hover{border-color:rgba(255,255,255,.4);transform:translateY(-2px);background:rgba(255,255,255,.06);}
+    #s-ts .tsf-tile-em{height:34px;display:flex;align-items:center;justify-content:center;}
+    #s-ts .tsf-tile-em img{height:34px;width:auto;filter:drop-shadow(0 2px 5px rgba(0,0,0,.5));}
+    #s-ts .tsf-tile-em svg{height:34px;width:auto;}
+    #s-ts .tsf-tile-nm{font-size:11px;font-weight:700;letter-spacing:.02em;text-transform:uppercase;color:#9fb2cf;line-height:1.1;}
+    #s-ts .tsf-tile-ovr{font-size:10px;font-weight:800;color:#ffd24a;}
+    #s-ts .tsf-tile.tsf-sel-h{border-color:#2b6fff;box-shadow:0 0 0 1px #2b6fff,0 0 16px rgba(43,111,255,.5);}
+    #s-ts .tsf-tile.tsf-sel-a{border-color:#ff3a44;box-shadow:0 0 0 1px #ff3a44,0 0 16px rgba(255,58,68,.5);}
+    #s-ts .tsf-tile.tsf-sel-h .tsf-tile-nm,#s-ts .tsf-tile.tsf-sel-a .tsf-tile-nm{color:#fff;}
+    #s-ts .tsf-bdg{position:absolute;top:-6px;right:-4px;font-size:9px;font-weight:800;font-style:normal;padding:2px 7px;border-radius:5px;color:#fff;}
+    #s-ts .tsf-bh{background:#2b6fff;} #s-ts .tsf-ba{background:#ff3a44;}
+    #s-ts .tsf-foot{display:flex;align-items:center;justify-content:space-between;padding:14px 48px;height:70px;}
+    #s-ts .tsf-keys{display:flex;gap:22px;color:#9fb2cf;font-size:13px;}
+    #s-ts .tsf-acts{display:flex;gap:10px;}
+    #s-ts .tsf-btn{cursor:pointer;font-weight:800;letter-spacing:.08em;text-transform:uppercase;font-size:14px;padding:11px 26px;border-radius:8px;color:#fff;border:none;}
+    #s-ts .tsf-rand{background:rgba(255,255,255,.1);border:1px solid rgba(255,255,255,.2);}
+    #s-ts .tsf-back{background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.18);}
+    #s-ts .tsf-conf{background:linear-gradient(180deg,#2b6fff,#1748c9);box-shadow:0 0 16px rgba(43,111,255,.5);}
+    #s-ts .tsf-btn:active{transform:translateY(1px);}
+    `;
+    document.head.appendChild(st);
+  }
+
+  function renderTeamSelect(){
+    const root=document.getElementById('s-ts'); if(!root) return;
+    if(!selHome) selHome='japan';
+    if(!selAway) selAway='allstar';
+    if(CR_CLUBS[selHome]){ try{crBuildClubTeam(selHome);}catch(e){} }
+    if(CR_CLUBS[selAway]){ try{crBuildClubTeam(selAway);}catch(e){} }
+    HT=T[selHome]; AT=T[selAway];
+    if(!HT||!AT) return;
+    ensureCss();
+
+    const labels={
+      nationals:["Men's National Teams","Select your nation.","International"],
+      clubs:["Club Teams","Select your club.","Clubs"],
+      special:["Special Teams","Select a squad.","Special"]
+    };
+    const L=labels[tsViewCat]||labels.nationals;
+
+    const card=(key,side)=>{ const t=T[key], st=tsLine(t);
+      return '<div class="tsf-card tsf-'+side+(tsActive===side?' tsf-act':'')+'" onclick="tsSetActive(\''+side+'\')">'+
+        '<div class="tsf-pill">'+(side==='home'?'Home':'Away')+'</div>'+
+        '<div class="tsf-tname">'+(t.name||'').toUpperCase()+'</div>'+
+        '<div class="tsf-emblem" data-key="'+key+'"></div>'+
+        '<div class="tsf-stars">'+tsStarHTML(st.ovr)+'</div>'+
+        '<div class="tsf-stats"><div><span>OFF</span><b>'+st.off+'</b></div><div><span>MID</span><b>'+st.mid+'</b></div><div><span>DEF</span><b>'+st.def+'</b></div></div>'+
+        '<div class="tsf-pslab">Play Style</div><div class="tsf-psval">'+tsPlayStyle(st)+'</div></div>';
+    };
+    const splash=(key,side)=>{ const t=T[key], p=tsCaptainPath(key),
+      col=(CR_CLUBS[key]&&CR_CLUBS[key].colors&&CR_CLUBS[key].colors[0])||(side==='home'?'#2b6fff':'#ff3a44');
+      return '<div class="tsf-splash tsf-splash-'+side+'">'+
+        '<img class="tsf-splash-img" src="'+p+'" alt="" onload="this.style.display=\'block\';this.nextElementSibling.style.display=\'none\';" onerror="this.style.display=\'none\';">'+
+        '<div class="tsf-splash-ph" style="--c:'+col+'"><div class="tsf-ph-em">'+(t.flag||'')+'</div><div class="tsf-ph-sil"></div><div class="tsf-ph-cap"><b>'+tsCaptain(key)+'</b><br>'+p+'</div></div></div>';
+    };
+    const tiles=tsCatTeams(tsViewCat).map(key=>{ const t=T[key], st=tsLine(t);
+      const cls=key===selHome?'tsf-sel-h':(key===selAway?'tsf-sel-a':'');
+      const badge=key===selHome?'<i class="tsf-bdg tsf-bh">H</i>':(key===selAway?'<i class="tsf-bdg tsf-ba">A</i>':'');
+      return '<div class="tsf-tile '+cls+'" onclick="tsPick(\''+key+'\')">'+badge+
+        '<div class="tsf-tile-em" data-key="'+key+'"></div><div class="tsf-tile-nm">'+t.name+'</div><div class="tsf-tile-ovr">OVR '+st.ovr+'</div></div>';
+    }).join('');
+
+    root.innerHTML =
+      '<div class="tsf-root"><div class="tsf-bg"></div>'+
+      '<div class="tsf-head"><div class="tsf-title"><h1>Team Select</h1><div class="tsf-sub">'+L[2]+'</div></div>'+
+      '<div class="tsf-center"><div class="tsf-globe">🌐</div><div class="tsf-ct">'+L[0]+'</div><div class="tsf-ch">'+L[1]+'</div></div><div></div></div>'+
+      '<div class="tsf-hero">'+splash(selHome,'home')+'<div class="tsf-cards">'+card(selHome,'home')+'<div class="tsf-vs">VS</div>'+card(selAway,'away')+'</div>'+splash(selAway,'away')+'</div>'+
+      '<div class="tsf-hint">Tap <b>HOME</b> or <b>AWAY</b>, then pick a team. Tabs mix nationals, clubs &amp; special.</div>'+
+      '<div class="tsf-tabs">'+
+        '<button class="tsf-tab'+(tsViewCat==='nationals'?' on':'')+'" onclick="tsSetCat(\'nationals\')">Nationals</button>'+
+        '<button class="tsf-tab'+(tsViewCat==='clubs'?' on':'')+'" onclick="tsSetCat(\'clubs\')">Clubs</button>'+
+        '<button class="tsf-tab'+(tsViewCat==='special'?' on':'')+'" onclick="tsSetCat(\'special\')">Special Teams</button>'+
+      '</div>'+
+      '<div class="tsf-gridwrap"><div class="tsf-grid">'+tiles+'</div></div>'+
+      '<div class="tsf-foot"><div class="tsf-keys"><span>✕ Confirm</span><span>◯ Back</span><span>▢ Random</span></div>'+
+        '<div class="tsf-acts"><button class="tsf-btn tsf-back" onclick="if(typeof exitToMenu===\'function\')exitToMenu();">Back</button><button class="tsf-btn tsf-rand" onclick="tsRandom()">Random</button><button class="tsf-btn tsf-conf" onclick="tsConfirm()">Confirm</button></div></div>'+
+      '</div>';
+
+    // Fill emblems through the engine's loader (PNG override → club SVG / flag emoji)
+    root.querySelectorAll('.tsf-emblem[data-key],.tsf-tile-em[data-key]').forEach(el=>{
+      const k=el.getAttribute('data-key'); setTeamEmblem(el,k,T[k]?T[k].flag:'🏳');
+    });
+  }
+  window.renderTeamSelect=renderTeamSelect;
+
+  // Drive the new screen whenever the engine syncs team selection.
+  // (function declarations create reassignable global bindings)
+  try { syncTeamSelections = function(){ try{ renderTeamSelect(); }catch(e){ console.warn('TS render error',e); } }; }
+  catch(e){ window.syncTeamSelections = function(){ try{ renderTeamSelect(); }catch(_){ } }; }
+})();
