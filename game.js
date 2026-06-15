@@ -2740,7 +2740,7 @@ function _updateJoystickVisibility(){
 }
 
 // ── PS-STYLE FACE BUTTONS (right side) ────────────────────────────
-// △ SHOOT · □ PASS · ○ PRESS · ✕ SPRINT (hold)
+// △ SHOOT · □ PASS · ○ SPRINT (hold) · ✕ SWITCH (defense)
 // Semi-transparent over the pitch; also the contract for future
 // physical-gamepad mapping on PC/console.
 let G_sprint=false,G_dpadEl=null;
@@ -2751,14 +2751,14 @@ function _buildDpad(){
   w.innerHTML=`
     <button class="db tri" data-a="shoot"><i>△</i><span>SHOOT</span></button>
     <button class="db sq"  data-a="pass"><i>□</i><span>PASS</span></button>
-    <button class="db ci"  data-a="press"><i>○</i><span>PRESS</span></button>
-    <button class="db xx"  data-a="sprint"><i>✕</i><span>SPRINT</span></button>`;
+    <button class="db ci"  data-a="sprint"><i>○</i><span>SPRINT</span></button>
+    <button class="db xx"  data-a="switch"><i>✕</i><span>SWITCH</span></button>`;
   document.body.appendChild(w);
   G_dpadEl=w;
   const tap=(sel,fn)=>{const b=w.querySelector(sel);b.addEventListener('pointerdown',e=>{e.preventDefault();e.stopPropagation();fn();},{passive:false});};
   tap('[data-a="shoot"]',()=>{if(G.poss==='h')manualShot();});
   tap('[data-a="pass"]',()=>{if(G.poss==='h'){ if(G.phase==='moving') directionalPass(); else togglePassMode(); }});
-  tap('[data-a="press"]',()=>togglePress());
+  tap('[data-a="switch"]',()=>{if(G.poss==='a')switchDefender();});
   const xb=w.querySelector('[data-a="sprint"]');
   const on=e=>{e.preventDefault();G_sprint=true;xb.classList.add('held');};
   const off=()=>{G_sprint=false;xb.classList.remove('held');};
@@ -2773,8 +2773,7 @@ function _updateDpad(show){
   const atk=G.poss==='h';
   G_dpadEl.querySelector('[data-a="shoot"]').classList.toggle('dim',!atk);
   G_dpadEl.querySelector('[data-a="pass"]').classList.toggle('dim',!atk);
-  G_dpadEl.querySelector('[data-a="press"]').classList.toggle('dim',atk);
-  G_dpadEl.querySelector('[data-a="press"]').classList.toggle('held',G.pressing&&!atk);
+  G_dpadEl.querySelector('[data-a="switch"]').classList.toggle('dim',atk);
 }
 // ── FIELD HUD CHIPS — controlled player + opponent (bottom-left) ──
 let _hudKeys='';
@@ -2878,6 +2877,27 @@ function directionalPass(){
   if(isOffside('h',best)){callOffside('h',best);return;}
   G_moveTarget=null;
   iPas(best);
+}
+
+// ── DEFENSIVE PLAYER SWITCH (✕ while defending) ───────────────────
+// Hand control to the defender closest to the ball carrier, excluding the
+// one you're already steering. Press again to rotate to the next nearest.
+function switchDefender(){
+  if(G.poss==='h'||G.phase!=='moving')return; // only when defending in open play
+  const ds='h';
+  const cp=(G.ck&&PP[G.poss])?PP[G.poss][G.ck]:null;
+  const ref=cp||ball; if(!ref)return;
+  let best=null,bestD=Infinity;
+  for(const k of validOutfieldKeys(ds)){
+    if(k===ROLES.engager||ocd(ds,k)||!PP[ds][k])continue;
+    const p=PP[ds][k];
+    const d=Math.hypot(p.x-ref.x,p.y-ref.y);
+    if(d<bestD){bestD=d;best=k;}
+  }
+  if(!best)return;
+  ROLES.engager=best;G.chk=best;
+  const pl=sq(ds)[best];
+  say('Switched to '+(pl?pl.name:'defender'));
 }
 
 // Unified canvas input — handles both mouse click and touch tap
