@@ -1498,8 +1498,8 @@ function carrierAdvanceVector(side,cp){
     const _bandSlow=_nearBand?0.55:1.0;
     tx=cp.x+dir*(W*.032*forwardFactor*_bandSlow)*(1-pressure*0.45*(2-(bh.pressResistance||1)));
   }
-  const clampedTx=clamp(tx,W*.01,W*.99);
-  const clampedTy=clamp(ty,H*.03,H*.97);
+  const clampedTx=clamp(tx,W*.005,W*.995);
+  const clampedTy=clamp(ty,H*.01,H*.99);
   return {x:clampedTx-cp.x, y:clampedTy-cp.y};
 }
 
@@ -1538,8 +1538,8 @@ function tick(dt=1){
     if(s==='h'&&G_sprint)capMult*=1.20; // ✕ sprint held
     const cap=MAX_CARRIER_STEP()*capMult*carrMult*dt;
     const step=Math.min(mvMag*dt,cap);
-    cp.x=clamp(cp.x+(mv.x/mvMag)*step,W*.01,W*.99);
-    cp.y=clamp(cp.y+(mv.y/mvMag)*step,H*.03,H*.97);
+    cp.x=clamp(cp.x+(mv.x/mvMag)*step,W*.005,W*.995);
+    cp.y=clamp(cp.y+(mv.y/mvMag)*step,H*.01,H*.99);
   }
   if(G_moveTarget&&Math.hypot(cp.x-G_moveTarget.x,cp.y-G_moveTarget.y)<W*.03)G_moveTarget=null;
   ball.tx=cp.x;ball.ty=cp.y;
@@ -2089,6 +2089,44 @@ function drawTacticalOverlays(){
   }
 }
 
+// ── DEBUG PITCH: draw the LOGICAL field straight from the engine constants ──
+// Red box = the actual movement clamp (where the carrier can physically run).
+// White = a proposed real-geometry pitch. Dashed = where the code's shot/box
+// logic ACTUALLY fires today (orange = shot gate .88, cyan = boxEdge .91).
+// Uses the same perspX/perspY mapping as players, so lines sit where players sit.
+function drawDebugPitch(){
+  cx.fillStyle='#0a0a0a'; cx.fillRect(0,0,W,H);
+  const L=(x1,y1,x2,y2)=>pLine(x1,y1,x2,y2);
+  const Yt=H*.01, Yb=H*.99;            // sidelines = vertical run limit
+  const gL=W*.07, gR=W*.93;            // goal lines (goalXFor)
+  // RUN BOUNDARY — the real movement clamp (.005–.995 x, .01–.99 y)
+  cx.setLineDash([]); cx.lineWidth=2; cx.strokeStyle='#ff5050';
+  const Xl=W*.005, Xr=W*.995;
+  L(Xl,Yt,Xr,Yt); L(Xr,Yt,Xr,Yb); L(Xr,Yb,Xl,Yb); L(Xl,Yb,Xl,Yt);
+  // PITCH MARKINGS (white)
+  cx.lineWidth=2; cx.strokeStyle='rgba(255,255,255,0.92)';
+  L(gL,Yt,gL,Yb); L(gR,Yt,gR,Yb);      // goal / end lines
+  L(gL,Yt,gR,Yt); L(gL,Yb,gR,Yb);      // sidelines
+  L(W*.5,Yt,W*.5,Yb);                  // halfway
+  const cxp=perspX(W*.5,H*.5),cyp=perspY(H*.5),cr=W*.085*perspScale(H*.5);
+  cx.beginPath(); cx.arc(cxp,cyp,cr,0,Math.PI*2); cx.stroke();
+  cx.beginPath(); cx.arc(cxp,cyp,3,0,Math.PI*2); cx.fillStyle='#fff'; cx.fill();
+  // penalty areas (~16% depth, central ~56% width)
+  const pa=W*.16, pbY0=H*.22, pbY1=H*.78;
+  L(gR,pbY0,gR-pa,pbY0); L(gR-pa,pbY0,gR-pa,pbY1); L(gR-pa,pbY1,gR,pbY1);
+  L(gL,pbY0,gL+pa,pbY0); L(gL+pa,pbY0,gL+pa,pbY1); L(gL+pa,pbY1,gL,pbY1);
+  // goal areas (~6% depth, central ~24% width)
+  const ga=W*.06, gaY0=H*.38, gaY1=H*.62;
+  L(gR,gaY0,gR-ga,gaY0); L(gR-ga,gaY0,gR-ga,gaY1); L(gR-ga,gaY1,gR,gaY1);
+  L(gL,gaY0,gL+ga,gaY0); L(gL+ga,gaY0,gL+ga,gaY1); L(gL+ga,gaY1,gL,gaY1);
+  // penalty spots
+  [[gR-W*.11,H*.5],[gL+W*.11,H*.5]].forEach(s=>{cx.beginPath();cx.arc(perspX(s[0],s[1]),perspY(s[1]),3,0,Math.PI*2);cx.fillStyle='#fff';cx.fill();});
+  // GAMEPLAY ZONE LINES — where shot/box logic actually triggers right now
+  cx.lineWidth=1.5; cx.setLineDash([9,7]);
+  cx.strokeStyle='rgba(255,150,40,0.9)'; L(W*.88,Yt,W*.88,Yb); L(W*.12,Yt,W*.12,Yb); // shot gate .88
+  cx.strokeStyle='rgba(60,200,255,0.9)'; L(W*.91,Yt,W*.91,Yb); L(W*.09,Yt,W*.09,Yb); // boxEdge .91
+  cx.setLineDash([]);
+}
 function draw(){
   cx.clearRect(0,0,W,H);
   // ── DYNAMIC CAMERA — follows the action, leads into movement ──
@@ -2096,7 +2134,12 @@ function draw(){
   cx.save();
   cx.translate(W/2,H/2);cx.scale(camZ,camZ);cx.translate(-camX,-camY);
   // Draw field image — all markings baked in (inside the camera, so it zooms too)
-  if(FIELD_IMG.complete&&FIELD_IMG.naturalWidth>0){
+  // DEBUG_PITCH: skip the PNG and draw the LOGICAL field (black + white lines from
+  // the real clamp/zone constants) so the invisible pitch is visible. Set
+  // window.DEBUG_PITCH=false to load the stadium PNG underneath instead.
+  if(window.DEBUG_PITCH!==false){
+    drawDebugPitch();
+  }else if(FIELD_IMG.complete&&FIELD_IMG.naturalWidth>0){
     cx.drawImage(FIELD_IMG,0,0,W,H);
   }else{
     cx.fillStyle='#1a4020';cx.fillRect(0,0,W,H);
