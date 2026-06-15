@@ -66,10 +66,12 @@
   const _origDraw=window.draw;
   window.draw=function(){ _origDraw(); if(PS1.on) postfx(); };
 
-  /* ---------- SPRITES (side profile, run cycle, mirrored) ---------- */
-  // Sheet = horizontal strip baked by ps1-sprite-baker.html:
-  //   frame 0 = idle, frames 1..n = run cycle. Faces screen-right.
-  const ASPECT = 128/192;                 // cell aspect from the baker
+  /* ---------- SPRITES (multi-direction grid, run cycle, mirrored) ---------- */
+  // Sheet = 7 cols x 6 rows grid (transparent PNG).
+  //   Run band  rows 0,1,2 = DOWN / UP / SIDE : col0 idle, cols1-6 run loop.
+  //   Action band rows 3,4,5 = DOWN / UP / SIDE : cols0-2 pass, cols3-6 shoot.
+  //   SIDE faces screen-right; mirrored for leftward travel.
+  const GRID = { cols:7, rows:6 };
   const SHEETS = { h:null, a:null };
   const _sheetKey = { h:undefined, a:undefined };
   // Try a chain of URLs; first that loads wins. Old sheet stays visible
@@ -79,9 +81,9 @@
     const tryNext=()=>{
       if(i>=urls.length){ if(!SHEETS[side]) SHEETS[side]='none'; return; }
       const im=new Image(), url=urls[i++];
-      im.onload=()=>{ let cw=im.height*ASPECT; let frames=Math.max(1,Math.round(im.width/cw));
-                      SHEETS[side]={img:im, cw:im.width/frames, ch:im.height, frames};
-                      console.log('[PS1] '+side+' sheet loaded: '+url, im.width+'x'+im.height, frames+' frames'); };
+      im.onload=()=>{ const cw=im.width/GRID.cols, ch=im.height/GRID.rows;
+                      SHEETS[side]={img:im, cw, ch, cols:GRID.cols, rows:GRID.rows, frames:GRID.cols};
+                      console.log('[PS1] '+side+' sheet loaded: '+url, im.width+'x'+im.height, GRID.cols+'x'+GRID.rows+' grid'); };
       im.onerror=tryNext;
       im.src=url;
     };
@@ -99,10 +101,11 @@
   }
   syncSheets();
 
-  // sheet layout (combined): idle, run, pass, shoot   [start,count]
-  const LAYOUT={ idle:0, run:[1,6], pass:[7,2], shoot:[9,3] };
+  // grid layout: rows by facing, columns by action  [startCol,count]
+  const ROW = { down:{run:0,act:3}, up:{run:1,act:4}, side:{run:2,act:5} };
+  const COL = { idle:0, run:[1,6], pass:[0,3], shoot:[3,4] };
   const ST={}, ACT={};
-  window.PS1_action=(s,k,name)=>{ if(LAYOUT[name]) ACT[s+':'+k]={name,t0:performance.now()}; };
+  window.PS1_action=(s,k,name)=>{ if(COL[name]) ACT[s+':'+k]={name,t0:performance.now()}; };
 
   // auto-detect passes/shots from the game's own state (no game.js edits)
   let lastCarrier=null, prevKick=false;
@@ -118,38 +121,34 @@
     prevKick=kicking;
   }
 
-  function state(s,k,p,frames){
+  function state(s,k,p){
     const id=s+':'+k;
     const now=performance.now();
-    const prev=ST[id]||{rx:p.x,ry:p.y,dir:0,moveT:-1e9};
+    const prev=ST[id]||{rx:p.x,ry:p.y,face:'side',flip:false,moveT:-1e9};
     const ddx=p.x-prev.rx, ddy=p.y-prev.ry;       // displacement from reference point
     const dist=Math.hypot(ddx,ddy);
-    const thresh=(W||1280)*0.0015;                // accumulate ~a few px before counting a step
-    let rx=prev.rx, ry=prev.ry, dir=prev.dir, moveT=prev.moveT;
+    const thresh=(W||1280)*0.0015;                // accumulate a few px before counting a step
+    let rx=prev.rx, ry=prev.ry, face=prev.face, flip=prev.flip, moveT=prev.moveT;
     if(dist>thresh){
-      if(Math.abs(ddx)>thresh*0.4) dir = ddx>0?1:-1;
+      if(Math.abs(ddx)>=Math.abs(ddy)){ face='side'; flip=ddx<0; }   // sheet faces right
+      else { face=ddy>0?'down':'up'; }                               // +y = toward camera
       moveT=now; rx=p.x; ry=p.y;                  // reset reference
     }
-    ST[id]={rx,ry,dir,moveT};
-    if(dir===0) dir=(typeof dirFor==='function'&&dirFor(s)>0)?1:-1;
-    // one-shot pass/shoot animation override
+    ST[id]={rx,ry,face,flip,moveT};
+    const band=ROW[face]||ROW.side;
+    // one-shot pass/shoot animation override (plays in the action band, same facing)
     const act=ACT[id];
     if(act){
-      const rng=LAYOUT[act.name], dur=act.name==='shoot'?480:360, el=now-act.t0;
-      if(frames>=rng[0]+rng[1] && el<dur){
-        const fi=Math.min(rng[1]-1, Math.floor(el/dur*rng[1]));
-        return {dir, frame:rng[0]+fi};
-      }
+      const rng=COL[act.name], dur=act.name==='shoot'?480:360, el=now-act.t0;
+      if(el<dur){ const fi=Math.min(rng[1]-1, Math.floor(el/dur*rng[1]));
+        return {row:band.act, col:rng[0]+fi, flip}; }
       delete ACT[id];
     }
     const running=(now-moveT)<220;                // recently moving -> run cycle
-    let frame=0;
-    if(frames>1 && running){
-      const fps=PS1.runFps||11, R=LAYOUT.run;
-      const rc=Math.max(1, Math.min(R[1], frames-R[0]));
-      frame = R[0] + (Math.floor(now/1000*fps) % rc);
-    }
-    return {dir,frame};
+    let col=COL.idle;
+    if(running){ const fps=PS1.runFps||11, R=COL.run;
+      col = R[0] + (Math.floor(now/1000*fps) % R[1]); }
+    return {row:band.run, col, flip};
   }
 
   // Called from drawT. Returns true if it rendered the player (skip default).
@@ -161,7 +160,7 @@
 
     const r=(typeof CR!=='undefined'?CR:13)*sc*(iC?1.15:1);
     const h=r*2*PS1.spriteScale, w=h*(sh.cw/sh.ch);
-    const st=state(s,k,p,sh.frames);
+    const st=state(s,k,p);
 
     cx.save();
     cx.globalAlpha=1; // (was .6 for the chaser — players must never render transparent)
@@ -173,10 +172,10 @@
       cx.lineWidth=2*sc; cx.strokeStyle=iC?'#2882f0':'#f03030'; cx.stroke();
     }
     cx.imageSmoothingEnabled=false;
-    const sxc=st.frame*sh.cw, dx=px-w/2, dy=py-h+w*0.12;
-    if(st.dir<0){ cx.save(); cx.translate(px,0); cx.scale(-1,1); cx.translate(-px,0);
-                  cx.drawImage(sh.img,sxc,0,sh.cw,sh.ch,dx,dy,w,h); cx.restore(); }
-    else        { cx.drawImage(sh.img,sxc,0,sh.cw,sh.ch,dx,dy,w,h); }
+    const sxc=st.col*sh.cw, syc=st.row*sh.ch, dx=px-w/2, dy=py-h+w*0.12;
+    if(st.flip){ cx.save(); cx.translate(px,0); cx.scale(-1,1); cx.translate(-px,0);
+                  cx.drawImage(sh.img,sxc,syc,sh.cw,sh.ch,dx,dy,w,h); cx.restore(); }
+    else        { cx.drawImage(sh.img,sxc,syc,sh.cw,sh.ch,dx,dy,w,h); }
     cx.imageSmoothingEnabled=true;
 
     if(typeof jerseyNum==='function'){
