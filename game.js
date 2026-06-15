@@ -2168,6 +2168,20 @@ function draw(){
   cx.restore(); // end dynamic camera
   // ── MINI RADAR (screen space, classic bottom strip) ──
   if(G.phase==='moving'||G.phase==='pass_anim')drawRadar();
+  // ── DEBUG: carrier coordinate readout (set SHOW_COORD=false to hide) ──
+  if(window.SHOW_COORD!==false && (G.phase==='moving'||G.phase==='pass_anim') && G.ck && PP[G.poss] && PP[G.poss][G.ck]){
+    const _c=PP[G.poss][G.ck];
+    const _xp=_c.x/W*100, _yp=_c.y/H*100;
+    const _pr=(typeof progressFor==='function')?progressFor(G.poss,_c)*100:0;
+    const _px=pitchX(_c.x)/W*100, _py=pitchY(_c.y)/H*100;
+    const _t='CARRIER x:'+_xp.toFixed(1)+'% y:'+_yp.toFixed(1)+'% prog:'+_pr.toFixed(1)+'%  |  DRAWN px:'+_px.toFixed(1)+'% py:'+_py.toFixed(1)+'%';
+    cx.save();
+    cx.font='bold 12px monospace'; cx.textAlign='left'; cx.textBaseline='top';
+    const _w=cx.measureText(_t).width+12;
+    cx.fillStyle='rgba(0,0,0,0.6)'; cx.fillRect(8,H*0.078,_w,20);
+    cx.fillStyle='#7CFC00'; cx.fillText(_t,14,H*0.078+4);
+    cx.restore();
+  }
 }
 function _fieldTag(p,txt,col){
   const sx=perspX(p.x,p.y),sy=perspY(p.y),sc=perspScale(p.y);
