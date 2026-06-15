@@ -1631,6 +1631,7 @@ function tick(dt=1){
       const cpuPress=ds==='a'&&teamStance('a')>0.55; // trailing CPU presses on its own
       const pressMult=((G.pressing&&ds==='h')||cpuPress)?1.5:1.0;
       const engPl=sq(ds)[ROLES.engager];
+      if(engPl && ds==='h' && G_sprint) engPl.spirit=Math.max(0,(engPl.spirit||1500)-0.5*dt); // sprint costs stamina on defense too
       const sprintMult=(ds==='h'&&G_sprint)?1.22:1.08; // AI chase slightly hotter
       const manualMult=manualDef?1.3:1.0;
       const step=MAX_DEF_STEP()*pressMult*sprintMult*manualMult*fieldSpdMult(engPl)*dt;
@@ -4465,7 +4466,19 @@ function resDuel(){
   if(carrier&&atkCost>0)carrier.spirit=Math.max(0,(carrier.spirit||1500)-atkCost);
   if(def&&defCost>0){
     const defMax=def.pos==='GK'?2000:1500;
-    def.spirit=Math.max(0,(def.spirit||defMax)-defCost);
+    let spend=defCost;
+    // Anti-drain meta: a keeper barely tires parrying a shot from distance.
+    // Routine saves/punches (not supersave) cost little outside the box and
+    // full inside it — so you can't grind the keeper down by spamming long
+    // shots; you have to manufacture real close chances.
+    if(def.pos==='GK' && isShot && defA!=='supersave'){
+      const Z=ENGINE_CONFIG.duel.zones;
+      const sp=(as&&PP[as])?PP[as][G.ck]:null;
+      const prog=sp?progressFor(as,sp):1;
+      const close=clamp((prog-Z.longRange)/(Z.boxEdge-Z.longRange),0,1);
+      spend=Math.round(defCost*(0.15+0.85*close)); // ~15% far → 100% point-blank
+    }
+    def.spirit=Math.max(0,(def.spirit||defMax)-spend);
   }
   G.duels++;
   if(['shoot','special'].includes(ak))G.shots++;
