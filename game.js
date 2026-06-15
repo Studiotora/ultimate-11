@@ -3922,6 +3922,12 @@ function aiDef(){
   const bh=getBehaviorProfile(def);
 
   if(G.D.isShot&&defIsGK){
+    // Against a HUMAN shooter, aiDef fires on the reveal timer before the player
+    // has committed shoot/special — so the keeper used to lock its save tier
+    // blind and could never answer a super shot with a super save. Saves aren't
+    // RPS (no counter triangle to protect), so it's fair to wait for the shot
+    // type. Defer: confirmDuel / timeout re-invokes aiDef once G.D.ak is set.
+    if(G.D.as!=='a' && !G.D.ak) return;
     const punchBias=prog>.88?(1.8):((1-centrality)*1.4);
     const gkSp=def?(def.spirit||2000):2000;
     const canAffordSuper=gkSp>=320;
