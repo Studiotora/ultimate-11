@@ -1498,11 +1498,18 @@ function carrierAdvanceVector(side,cp){
     const _bandSlow=_nearBand?0.55:1.0;
     tx=cp.x+dir*(W*.032*forwardFactor*_bandSlow)*(1-pressure*0.45*(2-(bh.pressResistance||1)));
   }
-  const clampedTx=clamp(tx,W*.005,W*.995);
+  const clampedTx=clamp(tx,W*.07,W*.93);
   const clampedTy=clamp(ty,H*.01,H*.99);
   return {x:clampedTx-cp.x, y:clampedTy-cp.y};
 }
 
+// ── FIELD BOUNDS — single source of truth for "inside the pitch" ──
+// X: goal line to goal line (.07/.93, = goalXFor). Y: touchline to touchline.
+// Every player is clamped here each frame so nobody runs off the field.
+const FB={x0:0.07,x1:0.93,y0:0.01,y1:0.99};
+function clampAllToPitch(){
+  ['h','a'].forEach(s=>{const q=PP[s];if(!q)return;for(const k in q){const p=q[k];if(!p)continue;p.x=clamp(p.x,W*FB.x0,W*FB.x1);p.y=clamp(p.y,H*FB.y0,H*FB.y1);}});
+}
 function tick(dt=1){
   const s=G.poss,ds=s==='h'?'a':'h';
   const cp=PP[s][G.ck];if(!cp)return;
@@ -1538,7 +1545,7 @@ function tick(dt=1){
     if(s==='h'&&G_sprint)capMult*=1.20; // ✕ sprint held
     const cap=MAX_CARRIER_STEP()*capMult*carrMult*dt;
     const step=Math.min(mvMag*dt,cap);
-    cp.x=clamp(cp.x+(mv.x/mvMag)*step,W*.005,W*.995);
+    cp.x=clamp(cp.x+(mv.x/mvMag)*step,W*.07,W*.93);
     cp.y=clamp(cp.y+(mv.y/mvMag)*step,H*.01,H*.99);
   }
   if(G_moveTarget&&Math.hypot(cp.x-G_moveTarget.x,cp.y-G_moveTarget.y)<W*.03)G_moveTarget=null;
@@ -1661,6 +1668,7 @@ function tick(dt=1){
 
   moveOffBall(s,ds,dt);
   applyRepulsion();
+  clampAllToPitch();
 }
 
 function moveOffBall(s,ds,dt=1){
@@ -2101,7 +2109,7 @@ function drawDebugPitch(){
   const gL=W*.07, gR=W*.93;            // goal lines (goalXFor)
   // RUN BOUNDARY — the real movement clamp (.005–.995 x, .01–.99 y)
   cx.setLineDash([]); cx.lineWidth=2; cx.strokeStyle='#ff5050';
-  const Xl=W*.005, Xr=W*.995;
+  const Xl=W*.07, Xr=W*.93;
   L(Xl,Yt,Xr,Yt); L(Xr,Yt,Xr,Yb); L(Xr,Yb,Xl,Yb); L(Xl,Yb,Xl,Yt);
   // PITCH MARKINGS (white)
   cx.lineWidth=2; cx.strokeStyle='rgba(255,255,255,0.92)';
@@ -2249,10 +2257,24 @@ function drawRadar(){
     const col=s==='h'?'#4ea0ff':'#ff5050';
     Object.keys(PP[s]||{}).forEach(k=>{
       const p=PP[s][k];if(!p)return;
+      if(s===G.poss&&k===G.ck)return; // carrier drawn last, glowing
       cx.beginPath();cx.arc(px(p.x),py(p.y),2.4,0,Math.PI*2);
       cx.fillStyle=col;cx.fill();
     });
   });
+  // ── glowing carrier dot (the player you control) ──
+  const _rcp=(G.ck&&PP[G.poss])?PP[G.poss][G.ck]:null;
+  if(_rcp){
+    const ccol=G.poss==='h'?'#4ea0ff':'#ff5050';
+    const t=(Math.sin(Date.now()/220)+1)/2; // 0..1 pulse
+    cx.save();
+    cx.shadowColor=ccol;cx.shadowBlur=6+t*7;
+    cx.beginPath();cx.arc(px(_rcp.x),py(_rcp.y),3.8,0,Math.PI*2);
+    cx.fillStyle='#ffffff';cx.fill();
+    cx.beginPath();cx.arc(px(_rcp.x),py(_rcp.y),5+t*1.6,0,Math.PI*2);
+    cx.strokeStyle=ccol;cx.lineWidth=1.4;cx.stroke();
+    cx.restore();
+  }
   if(typeof ball!=='undefined'&&ball){
     cx.beginPath();cx.arc(px(ball.x),py(ball.y),2.8,0,Math.PI*2);
     cx.fillStyle='#fff';cx.fill();
@@ -2904,6 +2926,7 @@ function tickPassMotion(dt=1){
   if(!G.poss)return;
   const s=G.poss,ds=s==='h'?'a':'h';
   if(PP[s]&&PP[s][G.ck]) moveOffBall(s,ds,dt*0.55);
+  clampAllToPitch();
 }
 
 function tickBallTravel(dt=1){
@@ -2979,7 +3002,7 @@ function camUpdate(){
   let fx=W/2,fy=H/2,tz=1.0;
   const cp=(G.ck&&PP[G.poss]&&PP[G.poss][G.ck])?PP[G.poss][G.ck]:null;
   if(G.phase==='moving'&&cp){
-    tz=CAM_BASE;
+    tz=CAM_BASE*((typeof window.ZOOM_MULT==='number')?window.ZOOM_MULT:2.8);
     const d=nearestOpponentDist(G.poss,G.ck);
     if(d<IR()*1.8)tz+=0.08;else if(d<IR()*3)tz+=0.04;
     fx=perspX(cp.x,cp.y);fy=perspY(cp.y);
