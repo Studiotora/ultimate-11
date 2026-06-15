@@ -1050,7 +1050,8 @@ function buildBenchList(){
 // Kills timers, clears squads, clears pending career match, stops animations.
 function exitToMenu(){
   try{clearInterval(G.mt);clearInterval(G.di);cancelAnimationFrame(raf);}catch(e){}
-  if(G){G.phase='idle';G.paused=false;G.mt=null;G.di=null;G.pm=false;G.kickoffUntil=0;G.goalGen=(G.goalGen||0)+1;}
+  if(G){G.phase='idle';G.paused=false;G.mt=null;G.di=null;G.pm=false;G.kickoffUntil=0;G.awaitKickoff=null;G.goalGen=(G.goalGen||0)+1;}
+  ['kickoff-prompt','goal-banner','card-flash'].forEach(id=>{const e=document.getElementById(id);if(e)e.classList.remove('show');});
   if(typeof closeDuel==='function')closeDuel();
   hSq={};aSq={};PP={h:{},a:{}};PT={h:{},a:{}};
   if(typeof trail!=='undefined')trail=[];
@@ -2758,7 +2759,7 @@ function _buildDpad(){
   G_dpadEl=w;
   const tap=(sel,fn)=>{const b=w.querySelector(sel);b.addEventListener('pointerdown',e=>{e.preventDefault();e.stopPropagation();fn();},{passive:false});};
   tap('[data-a="shoot"]',()=>{if(G.poss==='h')manualShot();});
-  tap('[data-a="pass"]',()=>{if(G.poss==='h'){ if(G.phase==='moving') directionalPass(); else togglePassMode(); }});
+  tap('[data-a="pass"]',()=>{ if(G.awaitKickoff==='h'){doKickoff();return;} if(G.poss==='h'){ if(G.phase==='moving') directionalPass(); else togglePassMode(); }});
   tap('[data-a="switch"]',()=>{if(G.poss==='a')switchDefender();});
   const xb=w.querySelector('[data-a="sprint"]');
   const on=e=>{e.preventDefault();G_sprint=true;xb.classList.add('held');};
@@ -4621,13 +4622,14 @@ function afGoal(scorer,s,gen){
   goalZoom();
   shakeScreen(12, 200);
   impactText('⚽ GOAL!!!', '#f0c040', 'clamp(28px,64px,52px)');
+  showGoalBanner(scorer,s);
   setTimeout(()=>{
     Object.values(hSq).forEach(p=>{if(p)p.cooldownUntil=0;}); Object.values(aSq).forEach(p=>{if(p)p.cooldownUntil=0;});
     iPos(); const ns=s==='h'?'a':'h',q=sq(ns),kk=['CM2','CM1','ST'].find(k=>q[k])||Object.keys(q).find(k=>q[k]);
     G.poss=ns; G.ck=kk; G.tP++; if(ns==='h')G.hP++; if(PP[ns][kk]){PP[ns][kk].x=W/2;PP[ns][kk].y=H/2;PT[ns][kk]={x:W/2,y:H/2};}
-    ball.x=W/2;ball.y=H/2;ball.tx=W/2;ball.ty=H/2; updP(); say(((ns==='h'?HT:AT)?.name||'Team')+' kick off.');
+    ball.x=W/2;ball.y=H/2;ball.tx=W/2;ball.ty=H/2; updP(); say(((ns==='h'?HT:AT)?.name||'Team')+' to kick off.');
     showReferee('KICK OFF');
-    setTimeout(()=>{G._scoringGoal=false; asnC();G.phase='moving';if(ns==='h')document.getElementById('passhint').style.display='block';},1000);
+    setTimeout(()=>{ G._scoringGoal=false; armKickoff(ns); },1000);
   },2100);
 }
 
@@ -5048,6 +5050,8 @@ function rollFoul(defSide,defSlot,attSide,prob){
     say(foulName+' — foul! Free kick awarded.');
     showReferee('FOUL');
   }
+  // Discipline: roll for a card on the fouler (yellow / red / second-yellow).
+  bookPlayer(defSide,defSlot,isPK);
   // Close the duel overlay right away and lock the match into an idle grace.
   closeDuel();
   G.phase='idle';
@@ -5074,8 +5078,9 @@ function rollFoul(defSide,defSlot,attSide,prob){
       });
     }
     G.ck=ak;G.chk=null;G_moveTarget=null;G_laneTarget=null;
-    if(PP[attSide]&&PP[attSide][ak]){PP[attSide][ak].x=defPos.x;PP[attSide][ak].y=defPos.y;}
-    ball.x=defPos.x;ball.y=defPos.y;ball.tx=defPos.x;ball.ty=defPos.y;
+    const fkx=clamp(defPos.x,W*0.08,W*0.92), fky=clamp(defPos.y,H*0.06,H*0.94);
+    if(PP[attSide]&&PP[attSide][ak]){PP[attSide][ak].x=fkx;PP[attSide][ak].y=fky;}
+    ball.x=fkx;ball.y=fky;ball.tx=fkx;ball.ty=fky;
     // PENALTY (#2): spot sits in front of the goal on the X axis (was Y —
     // the old spot was on the sideline), then a REAL shot duel vs the GK.
     if(isPK){
@@ -5128,6 +5133,177 @@ function showFreeKickPause(title,foulName,duration){
     </div>`;
   el.classList.remove('show');void el.offsetWidth;el.classList.add('show');
   setTimeout(()=>{el.classList.remove('show');},duration);
+}
+
+// ── DISCIPLINE: yellow / red cards & sending-off ──────────────────
+// CSS injected at runtime (GitHub Pages CDN caches style.css, so card UI
+// lives here in JS to stay cache-proof).
+function _ensureDisciplineCSS(){
+  if(document.getElementById('discipline-css'))return;
+  const st=document.createElement('style');st.id='discipline-css';
+  st.textContent=`
+  #card-flash{position:fixed;inset:0;display:flex;align-items:center;justify-content:center;
+    pointer-events:none;opacity:0;transition:opacity .18s;z-index:9000;}
+  #card-flash.show{opacity:1;}
+  #card-flash .cf-card{width:84px;height:118px;border-radius:9px;
+    transform:rotate(-8deg) scale(.55);transition:transform .32s cubic-bezier(.2,1.5,.4,1);
+    box-shadow:0 14px 44px rgba(0,0,0,.65),inset 0 0 0 2px rgba(255,255,255,.18);}
+  #card-flash.show .cf-card{transform:rotate(-8deg) scale(1);}
+  #card-flash .cf-card.yellow{background:linear-gradient(150deg,#ffe24d,#f4b400);}
+  #card-flash .cf-card.red{background:linear-gradient(150deg,#ff5050,#c70808);}
+  #card-flash .cf-txt{position:absolute;margin-top:138px;text-align:center;color:#fff;
+    font-weight:800;letter-spacing:.5px;text-shadow:0 2px 14px #000;}
+  #card-flash .cf-title{font-size:21px;}
+  #card-flash .cf-name{font-size:14px;opacity:.92;margin-top:2px;}
+  #red-badges{position:fixed;top:62px;left:50%;transform:translateX(-50%);display:flex;gap:10px;
+    z-index:8000;pointer-events:none;font-weight:800;font-size:12px;letter-spacing:.4px;}
+  #red-badges .rb{background:rgba(178,12,12,.92);color:#fff;padding:3px 10px;border-radius:11px;
+    box-shadow:0 4px 14px rgba(0,0,0,.5);display:flex;align-items:center;gap:5px;}
+  #red-badges .rb b{font-size:13px;}`;
+  document.head.appendChild(st);
+}
+function showCardFlash(kind,name,sub){
+  _ensureDisciplineCSS();
+  let el=document.getElementById('card-flash');
+  if(!el){el=document.createElement('div');el.id='card-flash';
+    (document.getElementById('viewport')||document.body).appendChild(el);}
+  el.innerHTML=`<div class="cf-card ${kind==='red'?'red':'yellow'}"></div>`+
+    `<div class="cf-txt"><div class="cf-title">${kind==='red'?'RED CARD':'YELLOW CARD'}</div>`+
+    `<div class="cf-name">${name}${sub?' \u2014 '+sub:''}</div></div>`;
+  el.classList.remove('show');void el.offsetWidth;el.classList.add('show');
+  setTimeout(()=>el.classList.remove('show'),kind==='red'?2600:2000);
+}
+function updateRedBadges(){
+  _ensureDisciplineCSS();
+  let el=document.getElementById('red-badges');
+  if(!el){el=document.createElement('div');el.id='red-badges';
+    (document.getElementById('viewport')||document.body).appendChild(el);}
+  const out=[];
+  const mk=(s)=>{const t=(s==='h'?HT:AT);const n=(t&&t.name)?t.name:(s==='h'?'HOME':'AWAY');
+    const r=(G.reds&&G.reds[s])||0;
+    if(r>0)out.push(`<div class="rb">\u{1F7E5} ${n.toUpperCase()} <b>${11-r} MEN</b></div>`);};
+  mk('h');mk('a');
+  el.innerHTML=out.join('');
+}
+// Decide & apply a card for a committed foul. Returns 'none' | 'yellow' | 'red'.
+// isPK = last-ditch foul in the box → punished harder (DOGSO).
+function bookPlayer(side,slot,isPK){
+  const pl=sq(side)[slot];
+  if(!pl||pl._sent)return 'none';
+  const isGK=pl.pos==='GK';
+  const yC=isPK?0.55:0.22, rC=isPK?0.12:0.03;   // yellow / straight-red chance — tune here
+  const r=Math.random();
+  let card = r<rC ? 'red' : (r<rC+yC ? 'yellow' : 'none');
+  if(card==='yellow' && (pl._yc||0)>=1) card='red';   // second booking = automatic red
+  if(card==='red' && isGK) card='yellow';             // never empty the goal — keepers capped at yellow
+  if(card==='none')return 'none';
+  const name=pl.name?pl.name.split('.').pop():(isGK?'Keeper':'Defender');
+  if(card==='yellow'){
+    pl._yc=(pl._yc||0)+1;
+    showCardFlash('yellow',name);
+    say(name+' is booked \u2014 yellow card.');
+    showReferee('YELLOW');
+    return 'yellow';
+  }
+  // ── RED → actually send the player off ──
+  pl._yc=(pl._yc||0)+1; pl._sent=true;
+  const secondYellow=pl._yc>=2;
+  sq(side)[slot]=null;                       // remove from the squad (sim/draw loops skip null slots)
+  if(PP[side])PP[side][slot]=null;
+  if(PT[side])PT[side][slot]=null;
+  ['engager','cover','blocker','runner1','runner2'].forEach(rk=>{if(ROLES[rk]===slot)ROLES[rk]=null;});
+  if(G.chk===slot)G.chk=null;
+  if(G.ck===slot)G.ck=null;
+  G.reds=G.reds||{h:0,a:0}; G.reds[side]=(G.reds[side]||0)+1;
+  const teamN=((side==='h'?HT:AT)||{}).name||(side==='h'?'HOME':'AWAY');
+  showCardFlash('red',name,secondYellow?'second yellow':'sent off');
+  say(name+(secondYellow?' \u2014 second yellow, OFF! ':' is SENT OFF! ')+teamN.toUpperCase()+' down to '+(11-G.reds[side])+' men.');
+  showReferee('RED CARD');
+  updateRedBadges();
+  try{asnC();}catch(e){}
+  return 'red';
+}
+
+// ── KICK-OFF GATE — match start & after a goal wait for the player ──
+function _ensureKickoffCSS(){
+  if(document.getElementById('kickoff-css'))return;
+  const st=document.createElement('style');st.id='kickoff-css';
+  st.textContent=`
+  #kickoff-prompt{position:fixed;left:50%;bottom:21%;transform:translateX(-50%) scale(.8);
+    opacity:0;transition:opacity .2s,transform .2s;z-index:8200;text-align:center;}
+  #kickoff-prompt.show{opacity:1;transform:translateX(-50%) scale(1);}
+  #kickoff-prompt .ko-btn{background:linear-gradient(160deg,#1e72dc,#0a3a86);color:#fff;
+    font-weight:800;letter-spacing:.6px;font-size:16px;padding:13px 26px;border-radius:30px;
+    box-shadow:0 8px 28px rgba(0,0,0,.55),inset 0 0 0 2px rgba(255,255,255,.18);
+    cursor:pointer;pointer-events:auto;animation:koPulse 1.1s ease-in-out infinite;}
+  #kickoff-prompt .ko-info{background:rgba(8,12,22,.85);color:#cfe0ff;font-weight:700;
+    font-size:14px;letter-spacing:.5px;padding:9px 20px;border-radius:24px;
+    box-shadow:0 6px 22px rgba(0,0,0,.5);}
+  @keyframes koPulse{0%,100%{transform:scale(1)}50%{transform:scale(1.06)}}`;
+  document.head.appendChild(st);
+}
+function showKickoffPrompt(text,interactive){
+  _ensureKickoffCSS();
+  let el=document.getElementById('kickoff-prompt');
+  if(!el){el=document.createElement('div');el.id='kickoff-prompt';
+    (document.getElementById('viewport')||document.body).appendChild(el);}
+  el.innerHTML=interactive?`<div class="ko-btn">${text}</div>`:`<div class="ko-info">${text}</div>`;
+  if(interactive){const b=el.querySelector('.ko-btn');if(b)b.onclick=()=>{if(G.awaitKickoff==='h')doKickoff();};}
+  el.classList.remove('show');void el.offsetWidth;el.classList.add('show');
+}
+function hideKickoffPrompt(){const el=document.getElementById('kickoff-prompt');if(el)el.classList.remove('show');}
+// Freeze play and wait. Human kick-off → wait for PASS (or tap the button).
+// AI kick-off → short breather, then auto.
+function armKickoff(side){
+  G.awaitKickoff=side; G.phase='idle';
+  const ph=document.getElementById('passhint'); if(ph)ph.style.display='none';
+  const teamN=((side==='h'?HT:AT)||{}).name||(side==='h'?'HOME':'AWAY');
+  if(side==='h'){
+    showKickoffPrompt('\u25B6 TAP PASS TO KICK OFF', true);
+  }else{
+    showKickoffPrompt(teamN.toUpperCase()+' KICK OFF', false);
+    const gen=G.goalGen;
+    setTimeout(()=>{ if(G.goalGen===gen && G.awaitKickoff===side) doKickoff(); }, 1500);
+  }
+}
+function doKickoff(){
+  if(!G.awaitKickoff)return;
+  G.awaitKickoff=null; hideKickoffPrompt();
+  G.kickoffUntil=Date.now()+900;
+  asnC(); G.phase='moving';
+  if(G.poss==='h'){const ph=document.getElementById('passhint');if(ph)ph.style.display='block';}
+}
+
+// ── GOAL BANNER — ball-in-the-net art (drop your image at assets/ui/goal_net.png) ──
+function _ensureGoalCSS(){
+  if(document.getElementById('goalbanner-css'))return;
+  const st=document.createElement('style');st.id='goalbanner-css';
+  st.textContent=`
+  #goal-banner{position:fixed;inset:0;display:flex;align-items:center;justify-content:center;
+    pointer-events:none;opacity:0;transition:opacity .2s;z-index:8600;}
+  #goal-banner.show{opacity:1;}
+  #goal-banner .gb-inner{text-align:center;transform:scale(.7);
+    transition:transform .35s cubic-bezier(.2,1.5,.4,1);}
+  #goal-banner.show .gb-inner{transform:scale(1);}
+  #goal-banner .gb-img{max-width:48vw;max-height:44vh;filter:drop-shadow(0 14px 40px rgba(0,0,0,.7));}
+  #goal-banner .gb-title{font-size:clamp(40px,9vw,90px);font-weight:900;color:#ffd24a;
+    letter-spacing:2px;text-shadow:0 4px 22px #000,0 0 30px rgba(255,180,40,.6);margin-top:-6px;}
+  #goal-banner .gb-sub{font-size:clamp(14px,2.4vw,22px);font-weight:800;color:#fff;
+    letter-spacing:1px;text-shadow:0 2px 12px #000;margin-top:2px;}`;
+  document.head.appendChild(st);
+}
+function showGoalBanner(scorer,side){
+  _ensureGoalCSS();
+  let el=document.getElementById('goal-banner');
+  if(!el){el=document.createElement('div');el.id='goal-banner';
+    (document.getElementById('viewport')||document.body).appendChild(el);}
+  const tn=((side==='h'?HT:AT)||{}).name||''; const nm=scorer?scorer.name.toUpperCase():'';
+  el.innerHTML=`<div class="gb-inner">`+
+    `<img class="gb-img" src="assets/ui/goal_net.png" alt="" onerror="this.style.display='none'">`+
+    `<div class="gb-title">GOAL!</div>`+
+    `<div class="gb-sub">${nm}${tn?(' \u2014 '+tn):''}</div></div>`;
+  el.classList.remove('show');void el.offsetWidth;el.classList.add('show');
+  setTimeout(()=>el.classList.remove('show'),2000);
 }
 
 function updH(){
@@ -5251,11 +5427,13 @@ function goFull(){
   document.getElementById('wtag').textContent=wt;showSc('s-end');
   returnToMenuMusic();
 }
-function secondHalf(){G.half=2;G.tL=2400;iPos();const q=sq('a');const kk=['CM2','CM1','ST'].find(k=>q[k])||Object.keys(q).find(k=>q[k]);G.poss='a';G.ck=kk;G.tP++;if(PP.a[kk]){PP.a[kk].x=W/2;PP.a[kk].y=H/2;}ball.x=W/2;ball.y=H/2;ball.tx=W/2;ball.ty=H/2;showSc('s-match');updH();updP();startMT();startAnim();startMatchMusic();say((AT?.name||'Away')+' kick off — 2nd half!');showReferee('2ND HALF');G.kickoffUntil=Date.now()+3000;G.phase='idle';setTimeout(()=>{asnC();G.phase='moving';},1200);}
+function secondHalf(){G.half=2;G.tL=2400;iPos();const q=sq('a');const kk=['CM2','CM1','ST'].find(k=>q[k])||Object.keys(q).find(k=>q[k]);G.poss='a';G.ck=kk;G.tP++;if(PP.a[kk]){PP.a[kk].x=W/2;PP.a[kk].y=H/2;}ball.x=W/2;ball.y=H/2;ball.tx=W/2;ball.ty=H/2;showSc('s-match');updH();updP();startMT();startAnim();startMatchMusic();say((AT?.name||'Away')+' kick off — 2nd half!');showReferee('2ND HALF');G.kickoffUntil=Date.now()+3000;G.phase='idle';setTimeout(()=>{armKickoff('a');},900);}
 
 function initMatch(){
   Object.values(hSq).forEach(p=>{if(p){p.spirit=(p.pos==="GK"?2000:1500);p.cooldownUntil=0;}});Object.values(aSq).forEach(p=>{if(p){p.spirit=(p.pos==="GK"?2000:1500);p.cooldownUntil=0;}});
-  G={half:1,tL:2400,hG:0,aG:0,poss:'h',ck:null,chk:null,mom:50,duels:0,shots:0,hP:0,tP:0,phase:'idle',mt:null,di:null,D:{},pm:false,kickoffUntil:0,pressing:false,goalGen:0,paused:false,subsUsed:0};
+  G={half:1,tL:2400,hG:0,aG:0,poss:'h',ck:null,chk:null,mom:50,duels:0,shots:0,hP:0,tP:0,phase:'idle',mt:null,di:null,D:{},pm:false,kickoffUntil:0,pressing:false,goalGen:0,paused:false,subsUsed:0,reds:{h:0,a:0}};
+  Object.values(hSq).forEach(p=>{if(p){p._yc=0;p._sent=false;}});Object.values(aSq).forEach(p=>{if(p){p._yc=0;p._sent=false;}});
+  if(typeof updateRedBadges==='function')updateRedBadges();
   preloadSquadImages(); // start loading all player face images
   showSc('s-match');rsz();iPos();
   startMatchMusic();
@@ -5266,7 +5444,7 @@ function initMatch(){
   say('Kick off! '+HT.name+' vs '+AT.name+' — build from midfield.');
   showReferee('KICK OFF');
   G.kickoffUntil=Date.now()+3500;
-  G.phase='idle';setTimeout(()=>{G.phase='moving';document.getElementById('passhint').style.display='block';},1200);
+  G.phase='idle';setTimeout(()=>{armKickoff('h');},900);
 }
 // ── FORMATION POPUP ──────────────────────────────────────────────
 function openFormationPicker(){
