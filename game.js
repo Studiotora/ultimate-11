@@ -2757,7 +2757,7 @@ function _buildDpad(){
   G_dpadEl=w;
   const tap=(sel,fn)=>{const b=w.querySelector(sel);b.addEventListener('pointerdown',e=>{e.preventDefault();e.stopPropagation();fn();},{passive:false});};
   tap('[data-a="shoot"]',()=>{if(G.poss==='h')manualShot();});
-  tap('[data-a="pass"]',()=>{if(G.poss==='h')togglePassMode();});
+  tap('[data-a="pass"]',()=>{if(G.poss==='h'){ if(G.phase==='moving') directionalPass(); else togglePassMode(); }});
   tap('[data-a="press"]',()=>togglePress());
   const xb=w.querySelector('[data-a="sprint"]');
   const on=e=>{e.preventDefault();G_sprint=true;xb.classList.add('held');};
@@ -2847,6 +2847,38 @@ function togglePress(){
   say(G.pressing?'High press ON — closing down!':'Press off.');
 }
 function togglePassMode(){ if(G.poss!=='h'||G.phase!=='moving'||!G.ck) return; G.pm=!G.pm; document.getElementById('pass-banner').style.display=G.pm?'block':'none'; document.getElementById('pass-banner').textContent='PASS MODE — CLICK A PLAYER'; if(G.pm) say('Pass mode enabled.'); }
+
+// ── DIRECTIONAL PASS ──────────────────────────────────────────────
+// □ in open play: pass to the teammate that best lines up with the way
+// you're aiming the stick/d-pad (G_inputVec) — true angle, not just L/R.
+// Neutral stick → pass forward (toward the attacking goal).
+function directionalPass(){
+  if(G.poss!=='h'||G.phase!=='moving'||!G.ck)return;
+  const cp=PP.h[G.ck];if(!cp)return;
+  let ax=G_inputVec.x, ay=G_inputVec.y;
+  const mag=Math.hypot(ax,ay);
+  if(mag<0.15){ ax=dirFor('h'); ay=0; }        // no aim → straight forward
+  else { ax/=mag; ay/=mag; }
+  let best=null,bestScore=-Infinity;
+  for(const k of Object.keys(hSq)){
+    if(k===G.ck||!hSq[k]||hSq[k].pos==='GK')continue;
+    const p=PP.h[k];if(!p)continue;
+    let dx=p.x-cp.x, dy=p.y-cp.y;
+    const d=Math.hypot(dx,dy);if(d<W*0.02)continue;
+    dx/=d; dy/=d;
+    const align=dx*ax+dy*ay;                    // -1..1: how well they sit in the aim direction
+    if(align<0.25)continue;                      // outside ~75° cone — not "that way"
+    const distPen=Math.abs(d-W*0.20)/(W*0.22);   // favour sensible pass range
+    let score=align*3.0 - distPen*0.5;
+    if(isOffside('h',k))score-=5;
+    if(score>bestScore){bestScore=score;best=k;}
+  }
+  if(!best) best=bestTeammateFor('h',G.ck,'pass'); // nobody in the cone → engine's best option
+  if(!best){say('No passing option!');return;}
+  if(isOffside('h',best)){callOffside('h',best);return;}
+  G_moveTarget=null;
+  iPas(best);
+}
 
 // Unified canvas input — handles both mouse click and touch tap
 function handleCanvasInput(clientX, clientY){
@@ -3002,7 +3034,7 @@ function camUpdate(){
   let fx=W/2,fy=H/2,tz=1.0;
   const cp=(G.ck&&PP[G.poss]&&PP[G.poss][G.ck])?PP[G.poss][G.ck]:null;
   if(G.phase==='moving'&&cp){
-    tz=CAM_BASE*((typeof window.ZOOM_MULT==='number')?window.ZOOM_MULT:2.8);
+    tz=CAM_BASE*((typeof window.ZOOM_MULT==='number')?window.ZOOM_MULT:2.0);
     const d=nearestOpponentDist(G.poss,G.ck);
     if(d<IR()*1.8)tz+=0.08;else if(d<IR()*3)tz+=0.04;
     fx=perspX(cp.x,cp.y);fy=perspY(cp.y);
