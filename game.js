@@ -1576,7 +1576,11 @@ function tick(dt=1){
   const progress=progressFor(s,cp);
   const centrality=1-Math.abs(cp.y/H-.5);
   const shotGate=progress>.88 && centrality>.35;
-  if(shotGate&&G.phase==='moving'&&Date.now()>=(G.kickoffUntil||0)&&!G._scoringGoal){
+  // AI carrier only. The human carrier shoots when THEY choose (△ SHOOT →
+  // manualShot), so they can keep dribbling, cross, or pass instead of being
+  // force-fired the moment they cross the box edge. This also lets the human
+  // run all the way to the goal line instead of stopping at the .88 gate.
+  if(shotGate&&s!=='h'&&G.phase==='moving'&&Date.now()>=(G.kickoffUntil||0)&&!G._scoringGoal){
     clearInterval(G.di);
     if(rollShotMiss(s)){shotMissed(s);return;}
     G.phase='pass_anim';
@@ -2012,8 +2016,8 @@ function startAnim(){
 const PB={
   x0: 0.060,
   x1: 0.940,
-  y0: 0.120,
-  y1: 0.850,
+  y0: 0.239,
+  y1: 0.897,
 };
 // Map a flat canvas coord (0..W, 0..H) into the pitch image area
 function pitchX(x){ return (PB.x0 + (x/W)*(PB.x1-PB.x0))*W; }
