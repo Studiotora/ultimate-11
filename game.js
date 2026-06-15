@@ -3963,7 +3963,10 @@ function aiDef(){
     // dice. Hard-commit inside that band only if the GK keeps a healthy
     // stamina cushion (>=300) after the super save.
     const rngEdge=(ENGINE_CONFIG.duel.rngMax||1.1)/(ENGINE_CONFIG.duel.rngMin||0.9);
-    if(canAffordSuper && (estShot>estSave*0.92 || (estShot*rngEdge>estSave && cushionAfter>=300))) G.D.defA='supersave';
+    // A super shot is THE marquee threat — answer it with the super save every
+    // time the keeper can afford it, never gamble on a weighted roll.
+    if(canAffordSuper && isSpecialShot) G.D.defA='supersave';
+    else if(canAffordSuper && (estShot>estSave*0.92 || (estShot*rngEdge>estSave && cushionAfter>=300))) G.D.defA='supersave';
     else G.D.defA=weightedPick(opts.filter(o=>o.w>0));
   } else {
     let tackleW=2.0, interceptW=1.8, blockW=1.6;
@@ -4348,7 +4351,7 @@ function resDuel(){
     if(win){det=carrier?carrier.name+' beats the press!':'';}
     else{det=def?def.name+' wins it!':'';}
   }
-  const al={pass:'PASS',dribble:'DRIBBLE',shoot:'SHOOT',special:'SPECIAL','one-two':'ONE-TWO',
+  const al={pass:'PASS',dribble:'DRIBBLE',shoot:'SHOOT',special:'SUPER SHOT','one-two':'ONE-TWO',
     'super-pass':'SUPER PASS','super-dribble':'SUPER DRIBBLE','super-one-two':'SUPER 1-2'};
   const dl={tackle:'TACKLE',intercept:'INTERCEPT',block:'BLOCK',save:'SAVE',punch:'PUNCH',
     supersave:'SUPER SAVE','super-tackle':'SUPER TACKLE','super-intercept':'SUPER INTERCEPT','super-block':'SUPER BLOCK'};
@@ -4356,8 +4359,12 @@ function resDuel(){
   document.getElementById('rbadge').style.color=rc2;
   document.getElementById('rdet').textContent=det;
   document.getElementById('rdet').style.color=rc2;
-  document.getElementById('ract').textContent=
-    (al[ak]||ak.toUpperCase())+' '+Math.round(atkPow)+' vs '+(dl[defA]||defA.toUpperCase())+' '+Math.round(defPow);
+  {
+    const aN=carrier?carrier.name.split('.').pop().trim():'';
+    const dN=def?def.name.split('.').pop().trim():'';
+    document.getElementById('ract').textContent=
+      aN+' '+(al[ak]||ak.toUpperCase())+' '+Math.round(atkPow)+'  vs  '+dN+' '+(dl[defA]||defA.toUpperCase())+' '+Math.round(defPow);
+  }
   const ro=document.getElementById('duel-res');
   ro.classList.add('show');say(badge+(det?' — '+det:''));
 
