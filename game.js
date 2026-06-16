@@ -2154,7 +2154,7 @@ function draw(){
   // DEBUG_PITCH: skip the PNG and draw the LOGICAL field (black + white lines from
   // the real clamp/zone constants) so the invisible pitch is visible. Set
   // window.DEBUG_PITCH=false to load the stadium PNG underneath instead.
-  if(window.DEBUG_PITCH!==false){
+  if(window.DEBUG_PITCH===true){
     drawDebugPitch();
   }else if(FIELD_IMG.complete&&FIELD_IMG.naturalWidth>0){
     cx.drawImage(FIELD_IMG,0,0,W,H);
