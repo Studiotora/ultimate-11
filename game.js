@@ -1459,11 +1459,12 @@ function assignRoles(){
 function carrierAdvanceVector(side,cp){
   const dir=dirFor(side);
   const goalX=goalXFor(side);
-  // ── MANUAL CARRIER CONTROL (home only) ──
-  // Player drives the carrier with WASD/arrows or the virtual joystick.
+  // ── MANUAL CARRIER CONTROL ──
+  // Home is always human; in PvP the away carrier is human too (pad 2).
   // Input vector magnitude (0..1) acts as analog throttle.
-  if(side==='h'){
-    const ix=G_inputVec.x, iy=G_inputVec.y;
+  const _carVec=_manualInputForSide(side);
+  if(_carVec){
+    const ix=_carVec.x, iy=_carVec.y;
     const mag=Math.hypot(ix,iy);
     if(mag>0.05){
       // Manual control feels MUCH better with a snappier base speed than the
@@ -1512,6 +1513,7 @@ function clampAllToPitch(){
   ['h','a'].forEach(s=>{const q=PP[s];if(!q)return;for(const k in q){const p=q[k];if(!p)continue;p.x=clamp(p.x,W*FB.x0,W*FB.x1);p.y=clamp(p.y,H*FB.y0,H*FB.y1);}});
 }
 function tick(dt=1){
+  if(typeof pvpPumpInput==='function')pvpPumpInput();
   const s=G.poss,ds=s==='h'?'a':'h';
   const cp=PP[s][G.ck];if(!cp)return;
   const dir=dirFor(s);
@@ -1543,7 +1545,7 @@ function tick(dt=1){
   const mvMag=Math.hypot(mv.x,mv.y);
   if(mvMag>0.0001){
     let capMult=(s==='h')?2.25:1.45;
-    if(s==='h'&&G_sprint)capMult*=1.20; // ✕ sprint held
+    if(_sprintForSide(s))capMult*=1.20; // sprint held (per side in PvP)
     const cap=MAX_CARRIER_STEP()*capMult*carrMult*dt;
     const step=Math.min(mvMag*dt,cap);
     cp.x=clamp(cp.x+(mv.x/mvMag)*step,W*.07,W*.93);
@@ -1557,7 +1559,7 @@ function tick(dt=1){
     const carrier2=sq(s)[G.ck];
     if(carrier2&&carrier2.pos!=='GK'){
       const engClose=ROLES.engager&&PP[ds][ROLES.engager]&&dist(cp,PP[ds][ROLES.engager])<IR()*2.2;
-      carrier2.spirit=Math.max(0,(carrier2.spirit||1500)-((engClose?0.55:0.18)+((G.poss==='h'&&G_sprint)?0.4:0))*dt);
+      carrier2.spirit=Math.max(0,(carrier2.spirit||1500)-((engClose?0.55:0.18)+((_sprintForSide(G.poss))?0.4:0))*dt);
     }
     ['h','a'].forEach(side=>{
       Object.entries(sq(side)).forEach(([k,pl])=>{
@@ -1617,14 +1619,18 @@ function tick(dt=1){
     if(dp2){
       // MANUAL DEFENSE STEERING — when the human defends, joystick/WASD
       // drives the engager directly. AI chase resumes the moment input idles.
-      const manualDef = ds==='h' && (Math.abs(G_inputVec.x)>0.12||Math.abs(G_inputVec.y)>0.12);
+      const _defVec=_manualInputForSide(ds);
+      const manualDef = !!_defVec && (Math.abs(_defVec.x)>0.12||Math.abs(_defVec.y)>0.12);
       let ux,uy;
-      if(manualDef){ux=G_inputVec.x;uy=G_inputVec.y;}
+      if(manualDef){ux=_defVec.x;uy=_defVec.y;}
       else{
         // Predictive chase: aim where the carrier is GOING, not where he was
         const lead=W*0.05;
-        const targetX=cp.x+(G.poss==='h'?G_inputVec.x:dirFor(G.poss))*lead;
-        const targetY=cp.y+(G.poss==='h'?G_inputVec.y*lead:0);
+        const _carV=_manualInputForSide(G.poss);
+        const _lx=_carV?_carV.x:dirFor(G.poss);
+        const _ly=_carV?_carV.y:0;
+        const targetX=cp.x+_lx*lead;
+        const targetY=cp.y+_ly*lead;
         const dx=targetX-dp2.x,dy=targetY-dp2.y;
         const dd=Math.hypot(dx,dy)||1;
         ux=dx/dd;uy=dy/dd;
@@ -1632,8 +1638,8 @@ function tick(dt=1){
       const cpuPress=ds==='a'&&teamStance('a')>0.55; // trailing CPU presses on its own
       const pressMult=((G.pressing&&ds==='h')||cpuPress)?1.5:1.0;
       const engPl=sq(ds)[ROLES.engager];
-      if(engPl && ds==='h' && G_sprint) engPl.spirit=Math.max(0,(engPl.spirit||1500)-0.5*dt); // sprint costs stamina on defense too
-      const sprintMult=(ds==='h'&&G_sprint)?1.22:1.08; // AI chase slightly hotter
+      if(engPl && _sprintForSide(ds)) engPl.spirit=Math.max(0,(engPl.spirit||1500)-0.5*dt); // sprint costs stamina on defense too
+      const sprintMult=(_sprintForSide(ds))?1.22:1.08; // AI chase slightly hotter
       const manualMult=manualDef?1.3:1.0;
       const step=MAX_DEF_STEP()*pressMult*sprintMult*manualMult*fieldSpdMult(engPl)*dt;
       dp2.x=clamp(dp2.x+ux*step,W*.01,W*.99);
@@ -1991,6 +1997,7 @@ function startAnim(){
     const dt=_lastFrameTs?Math.min((ts-_lastFrameTs)/16.667,3):1;
     _lastFrameTs=ts;
     if(G.paused){draw();raf=requestAnimationFrame(loop);return;}
+    if(G.phase==='duel' && typeof pvpDuelInput==='function') pvpDuelInput();
     if(G.phase==='moving')tick(dt);
     if(G.phase==='pass_anim'){tickBallTravel(dt);tickPassMotion(dt);}
     // WATCHDOG — duel phase can never exceed 50s (countdown is 30s).
@@ -2637,6 +2644,136 @@ let G_moveTarget=null;
 // tick. Active only while G.phase==='moving' && G.poss==='h'.
 // ────────────────────────────────────────────────────────────────
 let G_inputVec={x:0,y:0};
+
+// ═══════════════════════════════════════════════════════════════
+// LOCAL PvP — two-pad open play  (Stage 2: movement · sprint · switch)
+// OFF by default → engine behaves EXACTLY as single-player.
+// Enable: window.UE_PVP=true (or PVP.on=true) + 2 pads via pvp-gamepad.js.
+// P1 = pad 1 = HOME · P2 = pad 2 = AWAY. Control binds by TEAM, not possession.
+// ═══════════════════════════════════════════════════════════════
+const PVP={ on:false, set(v){ this.on=!!v; } };
+let G_inputVec2={x:0,y:0};    // P2 (away) left-stick
+let G_sprint2=false;          // P2 ○ held
+const _pvpPrev=[{},{}];       // per-pad button-held snapshot (edge detection)
+
+// Input vector that should DRIVE a side's active player, or null = AI-controlled.
+function _manualInputForSide(side){
+  if(!PVP.on) return (side==='h')?G_inputVec:null;                   // single-player: only home is manual
+  if(side==='h') return G_inputVec;                                  // PvP: P1 → home
+  if(typeof GP!=='undefined' && GP.connected(2)) return G_inputVec2; // P2 → away (if pad 2 present)
+  return null;                                                       // no pad 2 → away stays AI
+}
+// Sprint-held flag for a side (○ button) — per player in PvP.
+function _sprintForSide(side){
+  if(side==='h') return G_sprint;
+  return PVP.on ? G_sprint2 : false;
+}
+// Pump pad state into the engine's input vars each sim frame. Called from tick().
+function pvpPumpInput(){
+  if(!PVP.on || typeof GP==='undefined') return;
+  if(GP.connected(1)){ const v=GP.stick(1); G_inputVec.x=v.x; G_inputVec.y=v.y; }
+  if(GP.connected(2)){ const v=GP.stick(2); G_inputVec2.x=v.x; G_inputVec2.y=v.y; }
+  else { G_inputVec2.x=0; G_inputVec2.y=0; }
+  G_sprint  = GP.down(1,'east');   // ○ hold = sprint  (face map: △ north / □ west / ○ east / ✕ south)
+  G_sprint2 = GP.down(2,'east');
+  const edge=(p,name)=>{ const i=p===2?1:0; return GP.down(p,name) && !_pvpPrev[i][name]; };
+  // ✕ = switch the defender of the side that player controls (only while that side defends)
+  if(edge(1,'south')) pvpSwitch(1);
+  if(edge(2,'south')) pvpSwitch(2);
+  // open-play attack — only the CARRIER's pad shoots/passes
+  if(G.phase==='moving'){
+    const atk=(G.poss==='h')?1:(GP.connected(2)?2:0);
+    if(atk){
+      if(edge(atk,'north')) manualShot();        // △ shoot
+      if(edge(atk,'west'))  directionalPass();    // □ pass
+    }
+  }
+  for(const p of [1,2]){ const i=p===2?1:0; for(const n of ['south','north','west','east','r1']) _pvpPrev[i][n]=GP.down(p,n); }
+}
+let _pvpDuelPrev=[{},{}]; // per-pad button snapshot during duels
+
+// Map pad picks → duel actions. press-to-lock: a press sets the pick (hidden);
+// re-press changes it until BOTH sides have picked, then it resolves.
+function pvpSetAtk(id){
+  const sp=G.D.carrier?Math.round(G.D.carrier.spirit||1500):1500;
+  if((ATK_ACTIONS[id]?.cost||0)>sp) id=baseAction(id);        // can't afford super → base
+  G.D.ak=id; G.D.pk=null; G.D.ak2=null;
+  const b=baseAction(id);
+  if(b==='pass'||b==='one-two') G.D.pk=bestTeammateFor(G.D.as,G.ck,b)||bestTeammateFor(G.D.as,G.ck,'pass');
+  if(G.D.is2v1 && b!=='pass' && b!=='one-two') G.D.ak2=(b==='shoot')?'shoot':'dribble'; // 2v1 2nd move auto (v1 approx)
+}
+function pvpSetDef(id){
+  const sp=G.D.def?Math.round(G.D.def.spirit||(G.D.def&&G.D.def.pos==='GK'?2000:1500)):1500;
+  if((DEF_ACTIONS[id]?.cost||0)>sp) id=baseAction(id);
+  G.D.defA=id;
+}
+function pvpDuelInput(){
+  if(!PVP.on || typeof GP==='undefined' || G.phase!=='duel' || !G.D) return;
+  const as=G.D.as, ds=G.D.ds;
+  const atkPad=(as==='h')?1:2, defPad=(ds==='h')?1:2;
+  const edge=(p,name)=>{ const i=p===2?1:0; return GP.down(p,name) && !_pvpDuelPrev[i][name]; };
+  const bothIn=()=>!!(G.D.ak && G.D.defA);
+  // ATTACKER pad  (face map: △ shoot · □ pass · ○ dribble · ✕ one-two · R1+ = super)
+  if(GP.connected(atkPad) && !bothIn()){
+    const sup=GP.down(atkPad,'r1'); let id=null;
+    if(G.D.isShot){ if(edge(atkPad,'north')) id=sup?'special':'shoot'; }
+    else{
+      if(edge(atkPad,'west'))  id=sup?'super-pass':'pass';
+      if(edge(atkPad,'east'))  id=sup?'super-dribble':'dribble';
+      if(edge(atkPad,'north')) id=sup?'special':'shoot';
+      if(edge(atkPad,'south')) id=sup?'super-one-two':'one-two';
+    }
+    if(id) pvpSetAtk(id);
+  }
+  // DEFENDER pad  (✕ tackle · ○ intercept · □ block · R1+ = super) | GK: ✕ save · ○ punch · R1+✕ supersave
+  if(GP.connected(defPad) && !bothIn()){
+    const sup=GP.down(defPad,'r1'); let id=null;
+    if(G.D.isShot && G.D.def && G.D.def.pos==='GK'){
+      if(edge(defPad,'south')) id=sup?'supersave':'save';
+      if(edge(defPad,'east'))  id='punch';
+    }else{
+      if(edge(defPad,'south')) id=sup?'super-tackle':'tackle';
+      if(edge(defPad,'east'))  id=sup?'super-intercept':'intercept';
+      if(edge(defPad,'west'))  id=sup?'super-block':'block';
+    }
+    if(id) pvpSetDef(id);
+  }
+  _pvpUpdLocks();
+  for(const p of [1,2]){ const i=p===2?1:0; for(const n of ['south','north','west','east','r1']) _pvpDuelPrev[i][n]=GP.down(p,n); }
+  // both locked → resolve through the normal path (handles specials + resDuel reveal)
+  if(bothIn() && !G.D._pvpResolved){ G.D._pvpResolved=true; if(typeof confirmDuel==='function')confirmDuel(); }
+}
+function _pvpEnsureLocks(){
+  const ov=document.getElementById('duel-ov'); if(!ov)return null;
+  let el=document.getElementById('pvp-locks');
+  if(!el){
+    el=document.createElement('div'); el.id='pvp-locks';
+    el.style.cssText='position:absolute;left:0;right:0;bottom:14px;display:flex;justify-content:space-between;'+
+      'padding:0 6%;pointer-events:none;z-index:40;font:700 16px/1 Orbitron,sans-serif;letter-spacing:1px;';
+    el.innerHTML='<div id="pvp-l1"></div><div id="pvp-l2"></div>';
+    ov.appendChild(el);
+  }
+  return el;
+}
+function _pvpUpdLocks(){
+  if(!PVP.on || !G.D) return;
+  if(!_pvpEnsureLocks())return;
+  const p1L=(G.D.as==='h')?!!G.D.ak:!!G.D.defA, p2L=(G.D.as==='a')?!!G.D.ak:!!G.D.defA;
+  const p1R=(G.D.as==='h')?'ATK':'DEF', p2R=(G.D.as==='a')?'ATK':'DEF';
+  const pill=(who,role,lk)=>(lk?'🔒 ':'• ')+who+' '+role+(lk?' ✓':' …');
+  const l1=document.getElementById('pvp-l1'), l2=document.getElementById('pvp-l2');
+  if(l1){ l1.textContent=pill('P1',p1R,p1L); l1.style.color=p1L?'#5f5':'#f0c040'; }
+  if(l2){ l2.textContent=pill('P2',p2R,p2L); l2.style.color=p2L?'#5f5':'#f0c040'; }
+}
+function _pvpDuelConceal(){
+  // Hide the interactive menus + GO so neither player can read the other's pick.
+  ['abtns','dbtns'].forEach(id=>{const e=document.getElementById(id);if(e)e.style.display='none';});
+  const cf=document.getElementById('dcfm'); if(cf)cf.style.display='none';
+  _pvpEnsureLocks(); _pvpUpdLocks();
+}
+
+if(typeof window!=='undefined'){ window.PVP=PVP; if(window.UE_PVP===true)PVP.on=true; }
+
 const G_keys={};
 function _recomputeInputFromKeys(){
   if(G_joyActive)return; // joystick drag has priority
@@ -2827,12 +2964,13 @@ else _buildJoystick();
 
 let G_laneTarget=null;
 function manualShot(){
-  if(G.poss!=='h'||G.phase!=='moving'||!G.ck||G._scoringGoal)return;
+  if(G.phase!=='moving'||!G.ck||G._scoringGoal)return;
+  const s=G.poss, ds=s==='h'?'a':'h';
   G_moveTarget=null;
-  const _cpM=PP.h[G.ck]; if(!_cpM)return;
+  const _cpM=PP[s][G.ck]; if(!_cpM)return;
   clearInterval(G.di);
-  if(rollShotMiss('h')){shotMissed('h');return;}
-  const _gkPosM=PP.a&&PP.a['GK']?PP.a['GK']:{x:goalXFor('h'),y:H*.5};
+  if(rollShotMiss(s)){shotMissed(s);return;}
+  const _gkPosM=PP[ds]&&PP[ds]['GK']?PP[ds]['GK']:{x:goalXFor(s),y:H*.5};
   G.phase='pass_anim';
   G._shotTrail=true;
   shakeScreen(4,60);
@@ -2854,16 +2992,18 @@ function togglePassMode(){ if(G.poss!=='h'||G.phase!=='moving'||!G.ck) return; G
 // you're aiming the stick/d-pad (G_inputVec) — true angle, not just L/R.
 // Neutral stick → pass forward (toward the attacking goal).
 function directionalPass(){
-  if(G.poss!=='h'||G.phase!=='moving'||!G.ck)return;
-  const cp=PP.h[G.ck];if(!cp)return;
-  let ax=G_inputVec.x, ay=G_inputVec.y;
+  if(G.phase!=='moving'||!G.ck)return;
+  const s=G.poss, sq2=sq(s);
+  const cp=PP[s][G.ck];if(!cp)return;
+  const inp=_manualInputForSide(s)||{x:0,y:0};
+  let ax=inp.x, ay=inp.y;
   const mag=Math.hypot(ax,ay);
-  if(mag<0.15){ ax=dirFor('h'); ay=0; }        // no aim → straight forward
+  if(mag<0.15){ ax=dirFor(s); ay=0; }          // no aim → straight forward
   else { ax/=mag; ay/=mag; }
   let best=null,bestScore=-Infinity;
-  for(const k of Object.keys(hSq)){
-    if(k===G.ck||!hSq[k]||hSq[k].pos==='GK')continue;
-    const p=PP.h[k];if(!p)continue;
+  for(const k of Object.keys(sq2)){
+    if(k===G.ck||!sq2[k]||sq2[k].pos==='GK')continue;
+    const p=PP[s][k];if(!p)continue;
     let dx=p.x-cp.x, dy=p.y-cp.y;
     const d=Math.hypot(dx,dy);if(d<W*0.02)continue;
     dx/=d; dy/=d;
@@ -2871,12 +3011,12 @@ function directionalPass(){
     if(align<0.25)continue;                      // outside ~75° cone — not "that way"
     const distPen=Math.abs(d-W*0.20)/(W*0.22);   // favour sensible pass range
     let score=align*3.0 - distPen*0.5;
-    if(isOffside('h',k))score-=5;
+    if(isOffside(s,k))score-=5;
     if(score>bestScore){bestScore=score;best=k;}
   }
-  if(!best) best=bestTeammateFor('h',G.ck,'pass'); // nobody in the cone → engine's best option
+  if(!best) best=bestTeammateFor(s,G.ck,'pass'); // nobody in the cone → engine's best option
   if(!best){say('No passing option!');return;}
-  if(isOffside('h',best)){callOffside('h',best);return;}
+  if(isOffside(s,best)){callOffside(s,best);return;}
   G_moveTarget=null;
   iPas(best);
 }
@@ -2884,10 +3024,11 @@ function directionalPass(){
 // ── DEFENSIVE PLAYER SWITCH (✕ while defending) ───────────────────
 // Hand control to the defender closest to the ball carrier, excluding the
 // one you're already steering. Press again to rotate to the next nearest.
-function switchDefender(){
-  if(G.poss==='h'||G.phase!=='moving')return; // only when defending in open play
-  const ds='h';
-  const cp=(G.ck&&PP[G.poss])?PP[G.poss][G.ck]:null;
+function _switchEngager(ds){
+  if(G.phase!=='moving')return;
+  const os=(ds==='h')?'a':'h';      // possessing (attacking) side
+  if(G.poss!==os)return;            // ds must currently be DEFENDING
+  const cp=(G.ck&&PP[os])?PP[os][G.ck]:null;
   const ref=cp||ball; if(!ref)return;
   let best=null,bestD=Infinity;
   for(const k of validOutfieldKeys(ds)){
@@ -2901,6 +3042,8 @@ function switchDefender(){
   const pl=sq(ds)[best];
   say('Switched to '+(pl?pl.name:'defender'));
 }
+function switchDefender(){ _switchEngager('h'); }                 // touch/keyboard path (P1 / home)
+function pvpSwitch(player){ _switchEngager(player===2?'a':'h'); } // pad ✕ — switches the side that player controls
 
 // Unified canvas input — handles both mouse click and touch tap
 function handleCanvasInput(clientX, clientY){
@@ -2994,18 +3137,18 @@ function tickBallTravel(dt=1){
 }
 
 function iPas(tk){
-  const side='h';
-  const fr=hSq[G.ck],fp2=PP.h[G.ck],tp=PP.h[tk];if(!fp2||!tp)return;
-  const intResult=chkIntOutcome(fp2,tp,'h');
+  const s=G.poss, ds=s==='h'?'a':'h';
+  const fr=sq(s)[G.ck],fp2=PP[s][G.ck],tp=PP[s][tk];if(!fp2||!tp)return;
+  const intResult=chkIntOutcome(fp2,tp,s);
   const ic=intResult.interceptor;
   if(ic){
     const outcome=intResult.outcome;
-    const iPos=PP.a[ic]||tp;
+    const iPos=PP[ds][ic]||tp;
     if(outcome==='deflect'){
       // Deflection — ball bounces to loose position between passer and interceptor
       const lx=lerp(fp2.x,iPos.x,0.5)+(Math.random()-.5)*W*.06;
       const ly=lerp(fp2.y,iPos.y,0.5)+(Math.random()-.5)*H*.06;
-      say((fr?fr.name:'—')+' pass deflected by '+sq('a')[ic].name+'!');
+      say((fr?fr.name:'—')+' pass deflected by '+sq(ds)[ic].name+'!');
       animateBallTo(fp2.x,fp2.y,lx,ly,()=>{
         let closestSide='h',closestKey=G.ck,closestDist=Infinity;
         ['h','a'].forEach(side=>{Object.keys(sq(side)).forEach(k=>{
@@ -3020,17 +3163,17 @@ function iPas(tk){
       },passDuration(fp2.x,fp2.y,lx,ly,24));
     }else{
       // Clean steal
-      say((fr?fr.name:'—')+' pass cut by '+sq('a')[ic].name+'!');
+      say((fr?fr.name:'—')+' pass cut by '+sq(ds)[ic].name+'!');
       animateBallTo(fp2.x,fp2.y,iPos.x,iPos.y,()=>{
-        G.poss='a';G.ck=ic;G.tP++;if(PP.a[ic]){ball.x=PP.a[ic].x;ball.y=PP.a[ic].y;ball.tx=ball.x;ball.ty=ball.y;}
+        G.poss=ds;G.ck=ic;G.tP++;if(PP[ds][ic]){ball.x=PP[ds][ic].x;ball.y=PP[ds][ic].y;ball.tx=ball.x;ball.ty=ball.y;}
         updP();G.phase='idle';
         setTimeout(()=>{asnC();G.phase='moving';},200);
       },passDuration(fp2.x,fp2.y,iPos.x,iPos.y,26));
     }
   } else {
-    say((fr?fr.name:'—')+' → '+(hSq[tk]?hSq[tk].name:'—'));
+    say((fr?fr.name:'—')+' → '+(sq(s)[tk]?sq(s)[tk].name:'—'));
     animateBallTo(fp2.x,fp2.y,tp.x,tp.y,()=>{
-      setC(tk,'h'); ball.x=tp.x;ball.y=tp.y;ball.tx=tp.x;ball.ty=tp.y;
+      setC(tk,s); ball.x=tp.x;ball.y=tp.y;ball.tx=tp.x;ball.ty=tp.y;
       G.phase='idle';
       setTimeout(()=>{asnC();G.phase='moving';if(G.poss==='h')document.getElementById('passhint').style.display='block';},120);
     },passDuration(fp2.x,fp2.y,tp.x,tp.y,28));
@@ -3350,16 +3493,20 @@ function opDuel(isShot, committedAk){
   const albl=document.getElementById('albl');
   if(albl) albl.textContent = (G.D.is2v1 && as==='h' && !isShot) ? 'ATTACK (vs 1ST)' : 'ATTACK';
   document.getElementById('di').textContent=as==='h'?(G.D.is2v1?'PICK 2 MOVES (30s)':'CHOOSE ATTACK (30s)'):ds==='h'?'CHOOSE DEFENCE (30s)':'AI DUEL';
+  if(PVP.on){ document.getElementById('di').textContent='CHOOSE ON YOUR PAD (30s)'; if(typeof _pvpDuelConceal==='function')_pvpDuelConceal(); }
   document.getElementById('dcfm').classList.remove('rdy'); document.getElementById('duel-res').classList.remove('show');
   const _reveal=()=>{
     document.getElementById('duel-ov').classList.add('show');
     try{document.getElementById('s-match').classList.add('duel-live');}catch(e){}
     const vs=document.getElementById('dvs');vs.classList.remove('show');void vs.offsetWidth;vs.classList.add('show');
     startCD();
-    // Stagger: aiAtk fires first, aiDef fires 200ms later so it can read G.D.ak for RPS counter-pick
-    if(as==='a'&&!G.D.ak) setTimeout(aiAtk, 280);
-    if(as==='a'&&G.D.ak)  setTimeout(()=>{ if(G.D.as==='a'&&G.D.ds==='a') tryRes(); }, 280);
-    if(ds==='a') setTimeout(aiDef, as==='a' ? 490 : 260);
+    // Stagger: aiAtk fires first, aiDef fires 200ms later so it can read G.D.ak for RPS counter-pick.
+    // In PvP both sides are human — skip all AI picks; pvpDuelInput drives the duel.
+    if(!PVP.on){
+      if(as==='a'&&!G.D.ak) setTimeout(aiAtk, 280);
+      if(as==='a'&&G.D.ak)  setTimeout(()=>{ if(G.D.as==='a'&&G.D.ds==='a') tryRes(); }, 280);
+      if(ds==='a') setTimeout(aiDef, as==='a' ? 490 : 260);
+    }
   };
   try{
     playDuelCutIn({atk:carrier,def,as,ds,isShot,is2v1:G.D.is2v1,zoneTxt},_reveal);
@@ -4184,8 +4331,8 @@ function tryRes(){
   if(G.D.ak && G.D.defA) resDuel();
 }
 function confirmDuel(){
-  if(!G.D.ak && G.D.as==='a') aiAtk();
-  if(!G.D.defA && G.D.ds==='a') aiDef();
+  if(!PVP.on && !G.D.ak && G.D.as==='a') aiAtk();
+  if(!PVP.on && !G.D.defA && G.D.ds==='a') aiDef();
   if(G.D.ak && G.D.defA){
     if(isSuperAtk(G.D.ak)){
       const spec=G.D.ak==='special'?getSpecial(G.D.carrier):SUPER_NAMES[G.D.ak];
@@ -4213,11 +4360,12 @@ function startCD(){
     if(s<=0){
       clearInterval(G.di);
       if(!G.D.ak){
-        if(G.D.as==='a') aiAtk();
-        else { G.D.ak='pass'; G.D.pk=bestTeammateFor('h',G.ck,'pass')||validOutfieldKeys('h').find(k=>k!==G.ck)||null; }
+        if(!PVP.on && G.D.as==='a') aiAtk();
+        else if(PVP.on && G.D.isShot) { G.D.ak='shoot'; }
+        else { G.D.ak='pass'; G.D.pk=bestTeammateFor(G.D.as,G.ck,'pass')||validOutfieldKeys(G.D.as).find(k=>k!==G.ck)||null; }
       }
       if(!G.D.defA){
-        if(G.D.ds==='a') aiDef();
+        if(!PVP.on && G.D.ds==='a') aiDef();
         else if(G.D.isShot && G.D.def && G.D.def.pos==='GK') { G.D.defA='save'; }
         else { G.D.defA='tackle'; }
       }
