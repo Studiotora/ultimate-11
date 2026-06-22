@@ -3318,7 +3318,7 @@ html,body{overscroll-behavior:none;}
 .pz-dim{position:absolute;inset:0;background:rgba(4,6,11,.55)}
 
 .pz-layout{position:absolute;inset:0;display:grid;grid-template-columns:30.5% 1fr 30.5%}
-@media (max-width:900px){.pz-layout{grid-template-columns:1fr;grid-template-rows:auto auto auto;overflow-y:auto}
+@media (max-width:0px){.pz-layout{grid-template-columns:1fr;grid-template-rows:auto auto auto;overflow-y:auto}
   .pz-side{order:2}.pz-side.away{order:3}.pz-pausewrap{order:1;padding:12px 0}}
 
 .pz-side{position:relative;padding:clamp(10px,1.6vw,18px) clamp(10px,1.4vw,16px) 14px;display:flex;flex-direction:column;overflow:hidden}
