@@ -538,10 +538,18 @@ const FORMATIONS={
   }
 };
 let activeHomeFormation='4-3-3';
+let activeAwayFormation='4-3-3';
 let FORMATION_COORDS=JSON.parse(JSON.stringify(FORMATIONS['4-3-3'].coords));
 let HOME_SLOT_ASSIGN={};
+// CPU formation = stable per team (honors an explicitly-authored non-default .formation if one exists)
+function awayFormationFor(key,team){
+  if(team&&team.formation&&team.formation!=='4-3-3'&&FORMATIONS[team.formation])return team.formation;
+  const opts=Object.keys(FORMATIONS); let h=2166136261>>>0,s=String(key||'');
+  for(let i=0;i<s.length;i++){h^=s.charCodeAt(i);h=Math.imul(h,16777619)>>>0;}
+  return opts[Math.floor(h/4294967296*opts.length)];
+}
 function formationCoordsFor(side,key){
-  const fm=(side==='h'?FORMATIONS[activeHomeFormation].coords:FORMATIONS['4-3-3'].coords);
+  const fm=(side==='h'?(FORMATIONS[activeHomeFormation]||FORMATIONS['4-3-3']):(FORMATIONS[activeAwayFormation]||FORMATIONS['4-3-3'])).coords;
   return fm[key]||BF[key];
 }
 function fp(k,s,h){let p={...(formationCoordsFor(s==='home'?'h':'a',k)||BF[k])};if(s==='away'){p.x=1-p.x;p.y=1-p.y;}if(h===2){p.x=1-p.x;}return{x:Math.max(.03,Math.min(.97,p.x)),y:Math.max(.04,Math.min(.96,p.y))};}
@@ -1152,6 +1160,7 @@ function startGame(){
     CAR.pendingMatch=null;
   }
   hSq={};aSq={};
+  activeAwayFormation=awayFormationFor(selAway,AT);
   const roster=HT.p.slice();
   const used=new Set();
   Object.keys(FORMATIONS[activeHomeFormation].coords).forEach(slot=>{
@@ -5330,6 +5339,7 @@ function pzBuildHeader(){
   setTeamEmblem(document.getElementById('pz-hcrest'),selHome,HT?.flag||'🏳');
   setTeamEmblem(document.getElementById('pz-acrest'),selAway,AT?.flag||'🏳');
   document.getElementById('pz-hfm').textContent=activeHomeFormation||'4-3-3';
+  const _afm=document.getElementById('pz-afm'); if(_afm)_afm.textContent=activeAwayFormation||'4-3-3';
 }
 
 /* ---- one team's square pitch + bench, built from hSq/aSq ---- */
@@ -5338,7 +5348,8 @@ function pzBuildSide(side){
   const team = side==='h' ? HT : AT;
   const teamKey = side==='h' ? selHome : selAway;
   const mirrored = side==='a';
-  const coords = (side==='h' && FORMATIONS[activeHomeFormation]) ? FORMATIONS[activeHomeFormation].coords : FORMATIONS['4-3-3'].coords;
+  const fmKey = side==='h' ? activeHomeFormation : activeAwayFormation;
+  const coords = (FORMATIONS[fmKey]||FORMATIONS['4-3-3']).coords;
   const cardsEl = document.getElementById(side==='h'?'pz-home-cards':'pz-away-cards');
   cardsEl.innerHTML='';
   Object.keys(coords).forEach(slot=>{
