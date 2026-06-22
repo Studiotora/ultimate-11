@@ -12,7 +12,7 @@
   if(typeof window.draw!=='function'){ console.warn('[PS1] draw() not found — load after game.js'); return; }
 
   const PS1 = window.PS1 = {
-    on:true, dither:true, scanlines:true, jitter:false, debug:true,
+    on:true, dither:true, scanlines:true, jitter:false, debug:false,
     pixelate:false,     // true = heavy PS1 framebuffer crush (blurs the nice sprites); off keeps them crisp
     res:300,            // internal framebuffer width (lower = chunkier)
     sprites:true,

@@ -355,10 +355,14 @@ $('b-auto').onclick=()=>{
 $('b-save').onclick=()=>toast('FORMATION SAVED');
 $('b-back').onclick=()=>{
  clearSel();$('uts').style.display='none';
- try{if(typeof showSc==='function')showSc('s-ts');}catch(e){}
+ try{
+  if(typeof teamEditorBack==='function'){teamEditorBack();return;}
+  if(typeof showSc==='function')showSc('s-ts');
+ }catch(e){try{if(typeof showSc==='function')showSc('s-ts');}catch(e2){}}
 };
 $('b-start').onclick=()=>{
  clearSel();$('uts').style.display='none';
+ if(typeof G_teamEditorOrigin!=='undefined'&&G_teamEditorOrigin==='pause'&&typeof pzCloseSquadEditor==='function'){pzCloseSquadEditor();return;}
  if(window._utsStart){const cb=window._utsStart;window._utsStart=null;cb();return;}
  try{if(typeof startGame==='function'){startGame();return;}}catch(e){}
  toast('KICK OFF! (no game engine)');

@@ -1071,6 +1071,8 @@ function exitToMenu(){
 
 // Dynamic back from the team editor — route to career hub if in career mode.
 function teamEditorBack(){
+  // Opened from the in-match PAUSE menu → apply lineup and return to the paused match.
+  if(G_teamEditorOrigin==='pause'){ if(typeof pzCloseSquadEditor==='function')pzCloseSquadEditor(); return; }
   // Only route to career hub when this team-editor session was opened from career.
   if(G_teamEditorOrigin==='career'){
     CAR.formation=activeHomeFormation;
@@ -1227,7 +1229,8 @@ function iPos(){
     });
   });ball={x:W/2,y:H/2,tx:W/2,ty:H/2};trail=[];
 }
-let G={half:1,tL:2400,hG:0,aG:0,poss:'h',ck:null,chk:null,mom:50,duels:0,shots:0,hP:0,tP:0,phase:'idle',mt:null,di:null,D:{},pm:false,kickoffUntil:0,goalGen:0,hShots:0,aShots:0,hDuels:0,aDuels:0,hFouls:0,aFouls:0,hOff:0,aOff:0};
+function makeG(){return {half:1,tL:2400,hG:0,aG:0,poss:'h',ck:null,chk:null,mom:50,duels:0,shots:0,hP:0,tP:0,phase:'idle',mt:null,di:null,D:{},pm:false,kickoffUntil:0,pressing:false,goalGen:0,paused:false,subsUsed:0,reds:{h:0,a:0},hShots:0,aShots:0,hDuels:0,aDuels:0,hFouls:0,aFouls:0,hOff:0,aOff:0};}
+let G=makeG();
 function setC(k,s){G.poss=s;G.ck=k;G.tP++;if(s==='h')G.hP++;updP();updH();}
 // ═══════════════════════════════════════════════════════════════
 // MOVEMENT ENGINE v2 — Possession State Machine
@@ -5428,7 +5431,6 @@ function pzShowSquad(){
   G_teamEditorOrigin='pause';
   document.getElementById('pause-overlay').classList.remove('show');
   openTeamMenu();
-  setTimeout(pzPatchTeamMenuButtons,650);
 }
 function pzPatchTeamMenuButtons(){
   if(G_teamEditorOrigin!=='pause')return;
@@ -5462,7 +5464,9 @@ function pzCloseSquadEditor(){
     hSq=fresh;
   }
   G_teamEditorOrigin=null;
-  showSc('s-match'); // pause-overlay keeps its 'show' class — still paused
+  const _uts=document.getElementById('uts'); if(_uts)_uts.style.display='none';
+  showSc('s-match');
+  const _po=document.getElementById('pause-overlay'); if(_po)_po.classList.add('show'); // back to the paused pause-menu
   pzBuildAll();
 }
 
@@ -5991,7 +5995,7 @@ function secondHalf(){G.half=2;G.tL=2400;iPos();const q=sq('a');const kk=['CM2',
 
 function initMatch(){
   Object.values(hSq).forEach(p=>{if(p){p.spirit=(p.pos==="GK"?2000:1500);p.cooldownUntil=0;}});Object.values(aSq).forEach(p=>{if(p){p.spirit=(p.pos==="GK"?2000:1500);p.cooldownUntil=0;}});
-  G={half:1,tL:2400,hG:0,aG:0,poss:'h',ck:null,chk:null,mom:50,duels:0,shots:0,hP:0,tP:0,phase:'idle',mt:null,di:null,D:{},pm:false,kickoffUntil:0,pressing:false,goalGen:0,paused:false,subsUsed:0,reds:{h:0,a:0},hShots:0,aShots:0,hDuels:0,aDuels:0,hFouls:0,aFouls:0,hOff:0,aOff:0};
+  G=makeG();
   Object.values(hSq).forEach(p=>{if(p){p._yc=0;p._sent=false;}});Object.values(aSq).forEach(p=>{if(p){p._yc=0;p._sent=false;}});
   if(typeof updateRedBadges==='function')updateRedBadges();
   preloadSquadImages(); // start loading all player face images
