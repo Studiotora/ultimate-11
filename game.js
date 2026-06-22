@@ -5345,7 +5345,7 @@ function pzBuildSide(side){
     const pl=sqd[slot]; if(!pl) return;
     const c=coords[slot];
     const dn=(c.x-.05)/(.56-.05);                 // 0 (GK) → 1 (forward line)
-    const top = mirrored ? 8+dn*82 : 92-dn*82;
+    const top = 92-dn*82;                          // both sides: GK bottom, FW top (no mirror)
     const left = 10+c.y*80;
     const card=document.createElement('div');
     card.className='pz-card'+(slot==='GK'?' gk':'');

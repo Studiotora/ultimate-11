@@ -3344,7 +3344,7 @@ html,body{overscroll-behavior:none;}
 .pz-halfline{position:absolute;left:4%;right:4%;height:2px;background:rgba(255,255,255,.18)}
 .pz-gkbox{position:absolute;left:14%;right:14%;height:18%;border:2px solid rgba(255,255,255,.18)}
 .pz-side.home .pz-gkbox{bottom:0;border-bottom:none}
-.pz-side.away .pz-gkbox{top:0;border-top:none}
+.pz-side.away .pz-gkbox{bottom:0;border-bottom:none}
 
 .pz-card{position:absolute;width:13.5%;aspect-ratio:.86/1;transform:translate(-50%,-50%);
   border-radius:7px;background-size:160%;background-position:center 28%;background-repeat:no-repeat;
