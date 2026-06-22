@@ -1,0 +1,84 @@
+<!-- ════════════════════════════════════════════════════════════════
+     PAUSE MENU — paste this in place of the existing #pause-overlay
+     div inside #s-match > .mviews (index.html, ~line 1013).
+     Loads live HT/AT rosters + formations from hSq/aSq — nothing
+     here is mock data once wired to game.js (see pause-menu.js).
+     ════════════════════════════════════════════════════════════════ -->
+<div id="pause-overlay" style="display:none">
+  <div class="pz-bg"><img src="assets/wallpaper/teamselect.png" onerror="this.remove()"></div>
+  <div class="pz-dim"></div>
+
+  <div class="pz-score">
+    <span class="pz-tm" id="pz-htn">HOME</span><b id="pz-hsc">0</b><span class="pz-vs">—</span><b id="pz-asc">0</b><span class="pz-tm" id="pz-atn">AWAY</span>
+    <span class="pz-time" id="pz-time">45:00</span>
+  </div>
+
+  <div class="pz-layout">
+    <!-- HOME -->
+    <div class="pz-side home">
+      <div class="pz-side-hd"><div class="pz-crest" id="pz-hcrest">🏳</div>
+        <div><div class="pz-tn" id="pz-hname">HOME</div><div class="pz-tag">PLAYER 1</div></div></div>
+      <div class="pz-fm" id="pz-hfm">4-3-3</div>
+      <div class="pz-pitch-wrap"><div class="pz-pitch">
+        <div class="pz-halfline" style="top:18%"></div>
+        <div class="pz-gkbox"></div>
+        <div id="pz-home-cards"></div>
+      </div></div>
+      <div class="pz-subs-lbl">SUBSTITUTES</div>
+      <div class="pz-subs" id="pz-home-subs"></div>
+    </div>
+
+    <!-- PAUSE / MATCH DATA -->
+    <div class="pz-pausewrap">
+      <div class="pz-pause" id="pz-pause-panel">
+        <div class="pz-pause-hd"><div class="pz-eyebrow">MATCH PAUSED</div><h1>PAUSE MENU</h1></div>
+        <div class="pz-opts">
+          <div class="pz-opt pz-sel" onclick="togglePause()"><span class="pz-ic">▶</span><div class="pz-tx"><b>RESUME MATCH</b><span>BACK TO THE PITCH</span></div></div>
+          <div class="pz-opt" onclick="pzShowSquad()"><span class="pz-ic">☰</span><div class="pz-tx"><b>SQUAD</b><span>FORMATION, SUBS &amp; ROLES</span></div><span class="pz-car">›</span></div>
+          <div class="pz-opt" onclick="pzShowMdata()"><span class="pz-ic">📊</span><div class="pz-tx"><b>MATCH DATA</b><span>STATS THIS GAME</span></div><span class="pz-car">›</span></div>
+          <div class="pz-opt" onclick="openSettings()"><span class="pz-ic">🔊</span><div class="pz-tx"><b>OPTIONS</b><span>SAME SETTINGS AS MAIN MENU</span></div><span class="pz-car">›</span></div>
+          <div class="pz-opt" onclick="pzRestart()"><span class="pz-ic">↻</span><div class="pz-tx"><b>RESTART MATCH</b><span>START THIS FIXTURE OVER</span></div></div>
+          <div class="pz-opt pz-danger" onclick="pzForfeit()"><span class="pz-ic">⏹</span><div class="pz-tx"><b>FORFEIT MATCH</b><span>QUIT TO MAIN MENU</span></div></div>
+        </div>
+        <div class="pz-pause-ft">
+          <span class="pz-glyph x"><i>✕</i>SELECT</span>
+          <span class="pz-glyph o"><i>◯</i>RESUME</span>
+        </div>
+      </div>
+
+      <div class="pz-mdata" id="pz-mdata-panel">
+        <div class="pz-mdata-hd"><span class="pz-mdata-back" onclick="pzBackPause()">‹ BACK</span>
+          <div class="pz-eyebrow">MATCH PAUSED</div><h1>MATCH DATA</h1></div>
+        <div class="pz-mdata-teams"><span class="h" id="pz-md-hname">HOME</span><span class="a" id="pz-md-aname">AWAY</span></div>
+        <div class="pz-mdata-rows" id="pz-mdata-rows"></div>
+      </div>
+    </div>
+
+    <!-- AWAY -->
+    <div class="pz-side away">
+      <div class="pz-side-hd"><div class="pz-crest" id="pz-acrest">🏳</div>
+        <div><div class="pz-tn" id="pz-aname">AWAY</div><div class="pz-tag">CPU</div></div></div>
+      <div class="pz-fm">4-3-3</div>
+      <div class="pz-pitch-wrap"><div class="pz-pitch">
+        <div class="pz-halfline" style="top:82%"></div>
+        <div class="pz-gkbox"></div>
+        <div id="pz-away-cards"></div>
+      </div></div>
+      <div class="pz-subs-lbl">SUBSTITUTES</div>
+      <div class="pz-subs" id="pz-away-subs"></div>
+    </div>
+  </div>
+</div>
+
+<!-- ════════════════════════════════════════════════════════════════
+     TINY TWEAKS to the existing #s-team screen (so SQUAD, opened
+     mid-match, can return to the live match instead of kick-off).
+     Find these two lines in #s-team and replace them:
+     ════════════════════════════════════════════════════════════════
+
+     OLD: <button class="back-btn" onclick="showSc('s-ts')">← BACK</button>
+     NEW: <button class="back-btn" id="tmBackBtn" onclick="tmBackHandler()">← BACK</button>
+
+     OLD: <button class="kick-btn rdy" onclick="startGame()" style="width:100%;justify-content:center">KICK OFF →</button>
+     NEW: <button class="kick-btn rdy" id="tmKickBtn" onclick="startGame()" style="width:100%;justify-content:center">KICK OFF →</button>
+-->

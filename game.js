@@ -1,4 +1,3 @@
-
 /**
  * ULTIMATE ELEVEN - BETA VERSION
  * Captain Tsubasa Football Strategy Game
@@ -687,7 +686,7 @@ function showSc(id){
   document.getElementById(id).classList.add('active');
   if(id==='s-home'){hmHover('friendly');returnToMenuMusic();}
   if(id==='s-career-clubs'){crBuildClubList();}
-  if(id==='s-ts'){if(typeof syncTeamSelections==='function')syncTeamSelections();}
+  if(id==='s-ts'){if(typeof syncTeamSelections==='function')syncTeamSelections(); if(typeof _pvpInjectToggle==='function')_pvpInjectToggle();}
 }
 function cs(){say('Coming soon!');}
 
@@ -1056,7 +1055,7 @@ function exitToMenu(){
   hSq={};aSq={};PP={h:{},a:{}};PT={h:{},a:{}};
   if(typeof trail!=='undefined')trail=[];
   // Reset pause overlay if visible
-  const po=document.getElementById('pause-overlay');if(po)po.style.display='none';
+  const po=document.getElementById('pause-overlay');if(po){po.classList.remove('show');po.style.display='';}
   const pb=document.getElementById('pauseBtn');if(pb){pb.textContent='⏸';pb.classList.remove('paused');}
   const ph=document.getElementById('passhint');if(ph)ph.style.display='none';
   // Abandon career match without saving the score (counts as not played)
@@ -1141,6 +1140,10 @@ function openTeamMenu(){
   [200,600].forEach(t=>setTimeout(buildFormationMenu,t));
 }
 function startGame(){
+  if(PVP.intent && !PVP._setupDone){
+    if(typeof openPvpSetup==='function'){ openPvpSetup(()=>{ PVP._setupDone=true; PVP.on=true; startGame(); }); return; }
+  }
+  PVP.on = !!PVP.intent;  // commit the toggle when match actually starts
   if(!selHome||!selAway||!HT||!AT||selHome===selAway)return;
   // If we started this flow outside career mode (or pending match is stale), clear it
   if(!CAR.active||!CAR.pendingMatch||(CAR.pendingMatch.home!==selHome&&CAR.pendingMatch.home!==selAway&&CAR.pendingMatch.away!==selHome&&CAR.pendingMatch.away!==selAway)){
@@ -1224,7 +1227,7 @@ function iPos(){
     });
   });ball={x:W/2,y:H/2,tx:W/2,ty:H/2};trail=[];
 }
-let G={half:1,tL:2400,hG:0,aG:0,poss:'h',ck:null,chk:null,mom:50,duels:0,shots:0,hP:0,tP:0,phase:'idle',mt:null,di:null,D:{},pm:false,kickoffUntil:0,goalGen:0};
+let G={half:1,tL:2400,hG:0,aG:0,poss:'h',ck:null,chk:null,mom:50,duels:0,shots:0,hP:0,tP:0,phase:'idle',mt:null,di:null,D:{},pm:false,kickoffUntil:0,goalGen:0,hShots:0,aShots:0,hDuels:0,aDuels:0,hFouls:0,aFouls:0,hOff:0,aOff:0};
 function setC(k,s){G.poss=s;G.ck=k;G.tP++;if(s==='h')G.hP++;updP();updH();}
 // ═══════════════════════════════════════════════════════════════
 // MOVEMENT ENGINE v2 — Possession State Machine
@@ -2651,17 +2654,85 @@ let G_inputVec={x:0,y:0};
 // Enable: window.UE_PVP=true (or PVP.on=true) + 2 pads via pvp-gamepad.js.
 // P1 = pad 1 = HOME · P2 = pad 2 = AWAY. Control binds by TEAM, not possession.
 // ═══════════════════════════════════════════════════════════════
-const PVP={ on:false, set(v){ this.on=!!v; } };
+const PVP={ on:false, intent:false, _setupDone:false, set(v){ this.on=!!v; } };
 let G_inputVec2={x:0,y:0};    // P2 (away) left-stick
 let G_sprint2=false;          // P2 ○ held
 const _pvpPrev=[{},{}];       // per-pad button-held snapshot (edge detection)
 
+// ── INPUT BINDING ── per-player device assignment.  {type:'pad',idx:0|1} | {type:'kb',cluster:'wasd'|'numpad'} | null
+const INPUT_BIND={ P1:null, P2:null };
+
+// ── P1 KEYBOARD HOLDS ── for face buttons in PvP (open-play + duel)
+const G_keysP1={};  // J/K/L/I clusters etc. — also reads space/shift if you want; populated by listener below
+const _P1KB={ south:'space', east:'shift', west:'q', north:'e', r1:'tab' }; // P1 face btns on keyboard (configurable)
+// ── P2 KEYBOARD FALLBACK ── numpad: 8/4/5/6 = stick · 9=△ shoot · 1=□ pass · 3=○ (sprint/intercept) · 2=✕ (switch/one-two/tackle/save) · 7=R1 super-chord
+const G_keysP2={};
+const _NUMP={ south:'numpad2', east:'numpad3', west:'numpad1', north:'numpad9', r1:'numpad7' };
+
+function _kbStick(keys, set){
+  let x=0,y=0;
+  if(set==='wasd'){
+    if(keys['a']||keys['arrowleft'])x-=1; if(keys['d']||keys['arrowright'])x+=1;
+    if(keys['w']||keys['arrowup'])y-=1;   if(keys['s']||keys['arrowdown'])y+=1;
+  }else{
+    if(keys['numpad4'])x-=1; if(keys['numpad6'])x+=1;
+    if(keys['numpad8'])y-=1; if(keys['numpad5'])y+=1;
+  }
+  const len=Math.hypot(x,y); return len>0?{x:x/len,y:y/len}:{x:0,y:0};
+}
+function _padOK(idx){ return typeof GP!=='undefined' && GP.connected(idx+1); }   // GP is 1-indexed
+function _bindStick(b){
+  if(!b) return {x:0,y:0};
+  if(b.type==='pad' && _padOK(b.idx)) return GP.stick(b.idx+1);
+  if(b.type==='kb')  return _kbStick(b.cluster==='wasd'?G_keysP1:G_keysP2, b.cluster);
+  return {x:0,y:0};
+}
+function _bindDown(b,name){
+  if(!b) return false;
+  if(b.type==='pad' && _padOK(b.idx)) return GP.down(b.idx+1,name);
+  if(b.type==='kb'){
+    const map=(b.cluster==='wasd')?_P1KB:_NUMP, k=map[name];
+    return !!(b.cluster==='wasd'?G_keysP1:G_keysP2)[k];
+  }
+  return false;
+}
+// Default binding when PvP is on but the setup overlay hasn't run (back-compat with the old auto-detect path).
+function _ensureDefaultBindings(){
+  if(!PVP.on)return;
+  if(!INPUT_BIND.P1) INPUT_BIND.P1 = _padOK(0)?{type:'pad',idx:0}:{type:'kb',cluster:'wasd'};
+  if(!INPUT_BIND.P2) INPUT_BIND.P2 = _padOK(1)?{type:'pad',idx:1}:{type:'kb',cluster:'numpad'};
+}
+function P1_stick(){ _ensureDefaultBindings(); return _bindStick(INPUT_BIND.P1); }
+function P2_stick(){ _ensureDefaultBindings(); return _bindStick(INPUT_BIND.P2); }
+function P1_down(name){ _ensureDefaultBindings(); return _bindDown(INPUT_BIND.P1,name); }
+function P2_down(name){ _ensureDefaultBindings(); return _bindDown(INPUT_BIND.P2,name); }
+
+// Keyboard listeners — capture P1 face-button keys + numpad without clobbering the existing WASD handler.
+window.addEventListener('keydown',e=>{
+  const c=(e.code||'').toLowerCase(), k=(e.key||'').toLowerCase();
+  if(c.startsWith('numpad')){ G_keysP2[c]=true; e.preventDefault(); }
+  // P1 face btns — only register when PvP is active so we don't fight other shortcuts
+  if(PVP.on){
+    if(k==='shift'||k==='q'||k==='e'||k==='tab'||k===' '||k==='space'){
+      G_keysP1[k==='shift'?'shift':k==='q'?'q':k==='e'?'e':k==='tab'?'tab':'space']=true;
+      if(k==='tab'||k===' ')e.preventDefault();
+    }
+  }
+});
+window.addEventListener('keyup',e=>{
+  const c=(e.code||'').toLowerCase(), k=(e.key||'').toLowerCase();
+  if(c.startsWith('numpad')) G_keysP2[c]=false;
+  if(k==='shift'||k==='q'||k==='e'||k==='tab'||k===' '||k==='space'){
+    G_keysP1[k==='shift'?'shift':k==='q'?'q':k==='e'?'e':k==='tab'?'tab':'space']=false;
+  }
+});
+window.addEventListener('blur',()=>{ for(const k in G_keysP1)G_keysP1[k]=false; for(const k in G_keysP2)G_keysP2[k]=false; });
+
 // Input vector that should DRIVE a side's active player, or null = AI-controlled.
 function _manualInputForSide(side){
-  if(!PVP.on) return (side==='h')?G_inputVec:null;                   // single-player: only home is manual
-  if(side==='h') return G_inputVec;                                  // PvP: P1 → home
-  if(typeof GP!=='undefined' && GP.connected(2)) return G_inputVec2; // P2 → away (if pad 2 present)
-  return null;                                                       // no pad 2 → away stays AI
+  if(!PVP.on) return (side==='h')?G_inputVec:null;   // single-player: only home is manual
+  if(side==='h') return G_inputVec;                  // PvP: P1 → home
+  return G_inputVec2;                                // PvP: P2 → away (pad 2 OR numpad — filled by pump)
 }
 // Sprint-held flag for a side (○ button) — per player in PvP.
 function _sprintForSide(side){
@@ -2670,25 +2741,23 @@ function _sprintForSide(side){
 }
 // Pump pad state into the engine's input vars each sim frame. Called from tick().
 function pvpPumpInput(){
-  if(!PVP.on || typeof GP==='undefined') return;
-  if(GP.connected(1)){ const v=GP.stick(1); G_inputVec.x=v.x; G_inputVec.y=v.y; }
-  if(GP.connected(2)){ const v=GP.stick(2); G_inputVec2.x=v.x; G_inputVec2.y=v.y; }
-  else { G_inputVec2.x=0; G_inputVec2.y=0; }
-  G_sprint  = GP.down(1,'east');   // ○ hold = sprint  (face map: △ north / □ west / ○ east / ✕ south)
-  G_sprint2 = GP.down(2,'east');
-  const edge=(p,name)=>{ const i=p===2?1:0; return GP.down(p,name) && !_pvpPrev[i][name]; };
-  // ✕ = switch the defender of the side that player controls (only while that side defends)
-  if(edge(1,'south')) pvpSwitch(1);
-  if(edge(2,'south')) pvpSwitch(2);
-  // open-play attack — only the CARRIER's pad shoots/passes
+  if(!PVP.on) return;
+  const v1=P1_stick(); G_inputVec.x=v1.x; G_inputVec.y=v1.y;
+  const v2=P2_stick(); G_inputVec2.x=v2.x; G_inputVec2.y=v2.y;
+  G_sprint  = P1_down('east');
+  G_sprint2 = P2_down('east');
+  const edge1=(name)=>{ const cur=P1_down(name); return cur && !_pvpPrev[0][name]; };
+  const edge2=(name)=>{ const cur=P2_down(name); return cur && !_pvpPrev[1][name]; };
+  if(edge1('south')) pvpSwitch(1);
+  if(edge2('south')) pvpSwitch(2);
   if(G.phase==='moving'){
-    const atk=(G.poss==='h')?1:(GP.connected(2)?2:0);
-    if(atk){
-      if(edge(atk,'north')) manualShot();        // △ shoot
-      if(edge(atk,'west'))  directionalPass();    // □ pass
-    }
+    if(G.poss==='h'){ if(edge1('north'))manualShot(); if(edge1('west'))directionalPass(); }
+    else            { if(edge2('north'))manualShot(); if(edge2('west'))directionalPass(); }
   }
-  for(const p of [1,2]){ const i=p===2?1:0; for(const n of ['south','north','west','east','r1']) _pvpPrev[i][n]=GP.down(p,n); }
+  for(const n of ['south','north','west','east','r1']){
+    _pvpPrev[0][n]=P1_down(n);
+    _pvpPrev[1][n]=P2_down(n);
+  }
 }
 let _pvpDuelPrev=[{},{}]; // per-pad button snapshot during duels
 
@@ -2708,39 +2777,40 @@ function pvpSetDef(id){
   G.D.defA=id;
 }
 function pvpDuelInput(){
-  if(!PVP.on || typeof GP==='undefined' || G.phase!=='duel' || !G.D) return;
+  if(!PVP.on || G.phase!=='duel' || !G.D) return;
   const as=G.D.as, ds=G.D.ds;
-  const atkPad=(as==='h')?1:2, defPad=(ds==='h')?1:2;
-  const edge=(p,name)=>{ const i=p===2?1:0; return GP.down(p,name) && !_pvpDuelPrev[i][name]; };
+  const atkIsP1=(as==='h'), defIsP1=(ds==='h');
+  const sideDown = (isP1,name)=> isP1 ? P1_down(name) : P2_down(name);
+  const sideEdge = (isP1,name)=>{ const i=isP1?0:1; const cur=sideDown(isP1,name); return cur && !_pvpDuelPrev[i][name]; };
   const bothIn=()=>!!(G.D.ak && G.D.defA);
-  // ATTACKER pad  (face map: △ shoot · □ pass · ○ dribble · ✕ one-two · R1+ = super)
-  if(GP.connected(atkPad) && !bothIn()){
-    const sup=GP.down(atkPad,'r1'); let id=null;
-    if(G.D.isShot){ if(edge(atkPad,'north')) id=sup?'special':'shoot'; }
+  if(!bothIn()){
+    const sup=sideDown(atkIsP1,'r1'); let id=null;
+    if(G.D.isShot){ if(sideEdge(atkIsP1,'north')) id=sup?'special':'shoot'; }
     else{
-      if(edge(atkPad,'west'))  id=sup?'super-pass':'pass';
-      if(edge(atkPad,'east'))  id=sup?'super-dribble':'dribble';
-      if(edge(atkPad,'north')) id=sup?'special':'shoot';
-      if(edge(atkPad,'south')) id=sup?'super-one-two':'one-two';
+      if(sideEdge(atkIsP1,'west'))  id=sup?'super-pass':'pass';
+      if(sideEdge(atkIsP1,'east'))  id=sup?'super-dribble':'dribble';
+      if(sideEdge(atkIsP1,'north')) id=sup?'special':'shoot';
+      if(sideEdge(atkIsP1,'south')) id=sup?'super-one-two':'one-two';
     }
     if(id) pvpSetAtk(id);
   }
-  // DEFENDER pad  (✕ tackle · ○ intercept · □ block · R1+ = super) | GK: ✕ save · ○ punch · R1+✕ supersave
-  if(GP.connected(defPad) && !bothIn()){
-    const sup=GP.down(defPad,'r1'); let id=null;
+  if(!bothIn()){
+    const sup=sideDown(defIsP1,'r1'); let id=null;
     if(G.D.isShot && G.D.def && G.D.def.pos==='GK'){
-      if(edge(defPad,'south')) id=sup?'supersave':'save';
-      if(edge(defPad,'east'))  id='punch';
+      if(sideEdge(defIsP1,'south')) id=sup?'supersave':'save';
+      if(sideEdge(defIsP1,'east'))  id='punch';
     }else{
-      if(edge(defPad,'south')) id=sup?'super-tackle':'tackle';
-      if(edge(defPad,'east'))  id=sup?'super-intercept':'intercept';
-      if(edge(defPad,'west'))  id=sup?'super-block':'block';
+      if(sideEdge(defIsP1,'south')) id=sup?'super-tackle':'tackle';
+      if(sideEdge(defIsP1,'east'))  id=sup?'super-intercept':'intercept';
+      if(sideEdge(defIsP1,'west'))  id=sup?'super-block':'block';
     }
     if(id) pvpSetDef(id);
   }
   _pvpUpdLocks();
-  for(const p of [1,2]){ const i=p===2?1:0; for(const n of ['south','north','west','east','r1']) _pvpDuelPrev[i][n]=GP.down(p,n); }
-  // both locked → resolve through the normal path (handles specials + resDuel reveal)
+  for(const n of ['south','north','west','east','r1']){
+    _pvpDuelPrev[0][n]=P1_down(n);
+    _pvpDuelPrev[1][n]=P2_down(n);
+  }
   if(bothIn() && !G.D._pvpResolved){ G.D._pvpResolved=true; if(typeof confirmDuel==='function')confirmDuel(); }
 }
 function _pvpEnsureLocks(){
@@ -2772,7 +2842,176 @@ function _pvpDuelConceal(){
   _pvpEnsureLocks(); _pvpUpdLocks();
 }
 
-if(typeof window!=='undefined'){ window.PVP=PVP; if(window.UE_PVP===true)PVP.on=true; }
+if(typeof window!=='undefined'){ window.PVP=PVP; if(window.UE_PVP===true){PVP.on=true;PVP.intent=true;} }
+
+// ── PvP setup CSS (injected once) ───────────────────────────
+function _pvpInjectCss(){
+  if(document.getElementById('pvp-setup-css'))return;
+  const st=document.createElement('style'); st.id='pvp-setup-css';
+  st.textContent = `
+    #pvp-toggle{display:inline-flex;align-items:center;gap:8px;padding:6px 14px;border-radius:8px;cursor:pointer;
+      font:700 12px/1 Orbitron,sans-serif;letter-spacing:2px;border:1px solid rgba(240,192,64,.5);
+      background:rgba(20,28,48,.7);color:#cfd8e8;user-select:none;margin-left:10px;}
+    #pvp-toggle.on{background:linear-gradient(90deg,#f0c040,#ffd870);color:#1a1208;border-color:#f0c040;
+      box-shadow:0 0 18px rgba(240,192,64,.45);}
+    #pvp-toggle .dot{width:8px;height:8px;border-radius:50%;background:#555;}
+    #pvp-toggle.on .dot{background:#1a1208;box-shadow:0 0 8px #fff;}
+    #pvp-setup-ov{position:fixed;inset:0;z-index:99995;background:rgba(4,8,18,.92);
+      display:none;align-items:stretch;justify-content:center;color:#cfd8e8;}
+    #pvp-setup-ov.show{display:flex;}
+    #pvp-setup-ov .pvp-wrap{display:flex;flex-direction:column;width:min(1100px,94vw);height:100vh;padding:24px;gap:18px;}
+    #pvp-setup-ov h2{font:800 28px/1 'Bebas Neue',sans-serif;letter-spacing:4px;color:#f0c040;margin:0;text-align:center;}
+    #pvp-setup-ov .pvp-sub{font:600 12px/1.4 Orbitron,sans-serif;letter-spacing:2px;color:#7e8aa0;text-align:center;}
+    #pvp-setup-ov .pvp-cols{display:flex;gap:18px;flex:1;min-height:0;}
+    #pvp-setup-ov .pvp-col{flex:1;background:rgba(20,28,48,.55);border:1px solid rgba(255,255,255,.08);border-radius:14px;
+      padding:22px;display:flex;flex-direction:column;gap:12px;position:relative;}
+    #pvp-setup-ov .pvp-col.ready{border-color:#5f5;box-shadow:0 0 24px rgba(80,220,120,.22);}
+    #pvp-setup-ov .pvp-col h3{font:800 22px/1 'Bebas Neue',sans-serif;letter-spacing:3px;margin:0;color:#fff;}
+    #pvp-setup-ov .pvp-prompt{font:600 12px Orbitron,sans-serif;letter-spacing:2px;color:#f0c040;}
+    #pvp-setup-ov .pvp-dev{font:700 18px/1.3 Orbitron,sans-serif;color:#fff;min-height:1.3em;}
+    #pvp-setup-ov .pvp-hint{font:500 11px/1.4 Orbitron,sans-serif;color:#7e8aa0;letter-spacing:1px;white-space:pre-line;}
+    #pvp-setup-ov .pvp-foot{display:flex;justify-content:space-between;gap:10px;}
+    #pvp-setup-ov button{font:700 13px Orbitron,sans-serif;letter-spacing:2px;padding:10px 20px;border-radius:8px;
+      cursor:pointer;border:1px solid rgba(255,255,255,.15);background:rgba(20,28,48,.7);color:#cfd8e8;}
+    #pvp-setup-ov button.primary{background:linear-gradient(90deg,#f0c040,#ffd870);color:#1a1208;border-color:#f0c040;}
+    #pvp-setup-ov button[disabled]{opacity:.4;cursor:not-allowed;}
+  `;
+  document.head.appendChild(st);
+}
+
+// Inject the "LOCAL PVP" toggle into the team-select header (idempotent).
+function _pvpInjectToggle(){
+  _pvpInjectCss();
+  const hdr=document.querySelector('#s-ts .ts-hdr'); if(!hdr) return;
+  let t=document.getElementById('pvp-toggle');
+  if(!t){
+    t=document.createElement('div'); t.id='pvp-toggle';
+    t.innerHTML='<span class="dot"></span><span>LOCAL PVP: <b id="pvp-toggle-state">OFF</b></span>';
+    t.onclick=()=>{
+      PVP.intent=!PVP.intent;
+      // Toggling off clears any previous setup so it re-runs next time.
+      if(!PVP.intent){ PVP._setupDone=false; INPUT_BIND.P1=null; INPUT_BIND.P2=null; }
+      t.classList.toggle('on',PVP.intent);
+      const s=document.getElementById('pvp-toggle-state'); if(s)s.textContent=PVP.intent?'ON':'OFF';
+    };
+    const tabs=hdr.querySelector('.ts-cat-tabs');
+    (tabs?tabs.parentNode:hdr).appendChild(t);
+  }
+  t.classList.toggle('on',!!PVP.intent);
+  const s=document.getElementById('pvp-toggle-state'); if(s)s.textContent=PVP.intent?'ON':'OFF';
+}
+
+// ── INPUT SETUP OVERLAY ─────────────────────────────────────
+// Each player presses any input on their chosen device → binding locked.
+// Devices: pad0, pad1, kbWASD, kbNumpad. A device can only be bound to one player.
+function openPvpSetup(onConfirm){
+  _pvpInjectCss();
+  let ov=document.getElementById('pvp-setup-ov');
+  if(!ov){
+    ov=document.createElement('div'); ov.id='pvp-setup-ov';
+    ov.innerHTML=`
+      <div class="pvp-wrap">
+        <h2>LOCAL PVP — INPUT SETUP</h2>
+        <div class="pvp-sub">EACH PLAYER · PRESS ANY BUTTON ON YOUR DEVICE TO BIND</div>
+        <div class="pvp-cols">
+          <div class="pvp-col" id="pvp-col-1">
+            <h3>PLAYER 1 · HOME</h3>
+            <div class="pvp-prompt" id="pvp-prompt-1">PRESS ANY BUTTON</div>
+            <div class="pvp-dev" id="pvp-dev-1">—</div>
+            <div class="pvp-hint">PAD: any face / shoulder / stick press\nKEYBOARD WASD: W A S D · SPACE · SHIFT · Q · E · TAB</div>
+            <div class="pvp-foot"><button id="pvp-reset-1">RESET</button></div>
+          </div>
+          <div class="pvp-col" id="pvp-col-2">
+            <h3>PLAYER 2 · AWAY</h3>
+            <div class="pvp-prompt" id="pvp-prompt-2">PRESS ANY BUTTON</div>
+            <div class="pvp-dev" id="pvp-dev-2">—</div>
+            <div class="pvp-hint">PAD: any face / shoulder / stick press\nKEYBOARD NUMPAD: 8 4 5 6 · 1 2 3 7 9</div>
+            <div class="pvp-foot"><button id="pvp-reset-2">RESET</button></div>
+          </div>
+        </div>
+        <div class="pvp-foot" style="justify-content:center;gap:14px;">
+          <button id="pvp-cancel">CANCEL</button>
+          <button id="pvp-start" class="primary" disabled>START MATCH →</button>
+        </div>
+      </div>`;
+    document.body.appendChild(ov);
+  }
+  const $=id=>document.getElementById(id);
+  // local state for this run
+  let bind={P1:null,P2:null};
+  const devLabel=(b)=>{
+    if(!b) return '—';
+    if(b.type==='pad'){ const info=(typeof GP!=='undefined'&&GP.info)?GP.info(b.idx+1):null;
+      const id=(info&&info.id)?info.id.slice(0,28):'Gamepad';
+      return 'PAD '+(b.idx+1)+' · '+id; }
+    return b.cluster==='wasd'?'KEYBOARD · WASD CLUSTER':'KEYBOARD · NUMPAD';
+  };
+  function paint(){
+    const c1=$('pvp-col-1'),c2=$('pvp-col-2');
+    $('pvp-dev-1').textContent=devLabel(bind.P1);
+    $('pvp-dev-2').textContent=devLabel(bind.P2);
+    $('pvp-prompt-1').textContent=bind.P1?'✓ BOUND — PRESS RESET TO CHANGE':'PRESS ANY BUTTON';
+    $('pvp-prompt-2').textContent=bind.P2?'✓ BOUND — PRESS RESET TO CHANGE':'PRESS ANY BUTTON';
+    c1.classList.toggle('ready',!!bind.P1); c2.classList.toggle('ready',!!bind.P2);
+    $('pvp-start').disabled=!(bind.P1 && bind.P2);
+  }
+  function same(a,b){ if(!a||!b)return false; if(a.type!==b.type)return false;
+    return a.type==='pad'?a.idx===b.idx:a.cluster===b.cluster; }
+  function tryBind(which,dev){
+    if(!dev)return;
+    const other=which==='P1'?bind.P2:bind.P1;
+    if(other && same(other,dev)){
+      // device already taken by the other player — silently ignore
+      return;
+    }
+    bind[which]=dev; paint();
+  }
+  // Detection loop: poll pads + read recent keyboard hits.
+  // Keys that bind to P1 (WASD cluster): w/a/s/d/arrows/space/shift/q/e/tab.
+  // Keys that bind to P2 (numpad cluster): Numpad*.
+  let raf=0, lastPad=[{},{}];
+  const seenKeys={ P1:null, P2:null };
+  function onKey(e){
+    if(!ov.classList.contains('show'))return;
+    const c=(e.code||'').toLowerCase(), k=(e.key||'').toLowerCase();
+    if(c.startsWith('numpad'))      seenKeys.P2={type:'kb',cluster:'numpad'};
+    else if(['w','a','s','d','arrowup','arrowdown','arrowleft','arrowright',' ','space','shift','q','e','tab'].includes(k))
+      seenKeys.P1={type:'kb',cluster:'wasd'};
+  }
+  function pollFrame(){
+    // pad presses → first NEW press on any pad becomes that player's binding (next unbound slot)
+    if(typeof GP!=='undefined'){
+      for(let i=0;i<2;i++){
+        if(!GP.connected(i+1)){ lastPad[i]={}; continue; }
+        const facenames=['south','east','west','north','l1','r1','l2','r2','start','back','dup','ddown','dleft','dright'];
+        let pressed=null;
+        for(const n of facenames){ const cur=GP.down(i+1,n); if(cur && !lastPad[i][n]){ pressed=n; break; } }
+        for(const n of facenames) lastPad[i][n]=GP.down(i+1,n);
+        const st=GP.stick(i+1); const stickHit=Math.hypot(st.x,st.y)>0.6;
+        if(pressed || stickHit){
+          const dev={type:'pad',idx:i};
+          if(!bind.P1) tryBind('P1',dev);
+          else if(!bind.P2) tryBind('P2',dev);
+        }
+      }
+    }
+    if(seenKeys.P1){ if(!bind.P1) tryBind('P1',seenKeys.P1); seenKeys.P1=null; }
+    if(seenKeys.P2){ if(!bind.P2) tryBind('P2',seenKeys.P2); else if(bind.P1 && bind.P1.type==='pad' && !bind.P2) tryBind('P2',seenKeys.P2); seenKeys.P2=null; }
+    raf=requestAnimationFrame(pollFrame);
+  }
+  function close(commit){
+    ov.classList.remove('show');
+    cancelAnimationFrame(raf); raf=0;
+    window.removeEventListener('keydown',onKey,true);
+    if(commit){ INPUT_BIND.P1=bind.P1; INPUT_BIND.P2=bind.P2; PVP.on=true; PVP._setupDone=true; if(typeof onConfirm==='function')onConfirm(); }
+  }
+  $('pvp-reset-1').onclick=()=>{ bind.P1=null; paint(); };
+  $('pvp-reset-2').onclick=()=>{ bind.P2=null; paint(); };
+  $('pvp-cancel').onclick=()=>close(false);
+  $('pvp-start').onclick=()=>{ if(bind.P1&&bind.P2)close(true); };
+  window.addEventListener('keydown',onKey,true);
+  bind={P1:null,P2:null}; paint(); ov.classList.add('show'); pollFrame();
+}
 
 const G_keys={};
 function _recomputeInputFromKeys(){
@@ -4630,7 +4869,8 @@ function resDuel(){
     def.spirit=Math.max(0,(def.spirit||defMax)-spend);
   }
   G.duels++;
-  if(['shoot','special'].includes(ak))G.shots++;
+  if(as==='h')G.hDuels++; else G.aDuels++;
+  if(['shoot','special'].includes(ak)){G.shots++; if(as==='h')G.hShots++; else G.aShots++;}
   updH();
   if(win&&dk)scd(ds,dk);        // loser: full cooldown
   if(!win)scd(as,G.ck);         // loser: full cooldown
@@ -5061,11 +5301,181 @@ function togglePause(){
   const overlay=document.getElementById('pause-overlay');
   if(G.paused){
     btn.textContent='▶';btn.classList.add('paused');
-    if(overlay)overlay.style.display='flex';
+    if(overlay){overlay.classList.add('show');pzBuildAll();}
   } else {
     btn.textContent='⏸';btn.classList.remove('paused');
-    if(overlay)overlay.style.display='none';
+    if(overlay)overlay.classList.remove('show');
   }
+}
+
+/* ---- pause menu: master builder, called every time the overlay opens ---- */
+function pzBuildAll(){
+  pzBuildHeader();
+  pzBuildSide('h');
+  pzBuildSide('a');
+  pzShowPause(); // default to the menu, not match data
+}
+
+function pzBuildHeader(){
+  document.getElementById('pz-hname').textContent=HT?.name||'HOME';
+  document.getElementById('pz-aname').textContent=AT?.name||'AWAY';
+  document.getElementById('pz-htn').textContent=(HT?.name||'HOME').toUpperCase();
+  document.getElementById('pz-atn').textContent=(AT?.name||'AWAY').toUpperCase();
+  document.getElementById('pz-hsc').textContent=G.hG;
+  document.getElementById('pz-asc').textContent=G.aG;
+  document.getElementById('pz-time').textContent=document.getElementById('htime').textContent;
+  setTeamEmblem(document.getElementById('pz-hcrest'),selHome,HT?.flag||'🏳');
+  setTeamEmblem(document.getElementById('pz-acrest'),selAway,AT?.flag||'🏳');
+  document.getElementById('pz-hfm').textContent=activeHomeFormation||'4-3-3';
+}
+
+/* ---- one team's square pitch + bench, built from hSq/aSq ---- */
+function pzBuildSide(side){
+  const sqd = side==='h' ? hSq : aSq;
+  const team = side==='h' ? HT : AT;
+  const teamKey = side==='h' ? selHome : selAway;
+  const mirrored = side==='a';
+  const coords = (side==='h' && FORMATIONS[activeHomeFormation]) ? FORMATIONS[activeHomeFormation].coords : FORMATIONS['4-3-3'].coords;
+  const cardsEl = document.getElementById(side==='h'?'pz-home-cards':'pz-away-cards');
+  cardsEl.innerHTML='';
+  Object.keys(coords).forEach(slot=>{
+    const pl=sqd[slot]; if(!pl) return;
+    const c=coords[slot];
+    const dn=(c.x-.05)/(.56-.05);                 // 0 (GK) → 1 (forward line)
+    const top = mirrored ? 8+dn*82 : 92-dn*82;
+    const left = 10+c.y*80;
+    const card=document.createElement('div');
+    card.className='pz-card'+(slot==='GK'?' gk':'');
+    card.style.top=top+'%'; card.style.left=left+'%';
+    card.innerHTML=`<span class="jr">${pl.jersey||'?'}</span><span class="ovr">${calcOvr(pl)}</span><span class="nm">${playerSurname(pl.name)}</span>`;
+    cardsEl.appendChild(card);
+    pzLoadCardImg(card,pl,teamKey);
+  });
+
+  // bench
+  const subsEl = document.getElementById(side==='h'?'pz-home-subs':'pz-away-subs');
+  subsEl.innerHTML='';
+  const roster = team?.p||[];
+  const benchIds = side==='h' ? (HOME_RESERVES||[]).filter(Boolean) : (team?.reserves||[]);
+  benchIds.forEach(pid=>{
+    const pl=roster.find(p=>p.id===pid); if(!pl) return;
+    const sc=document.createElement('div'); sc.className='pz-sc';
+    sc.innerHTML=`<div class="av"></div><div class="nm">${playerSurname(pl.name)}</div>`;
+    subsEl.appendChild(sc);
+    pzLoadCardImg(sc.querySelector('.av'),pl,teamKey,true);
+  });
+}
+
+/* ---- identical fallback chain to the in-game formation editor:
+   assets/players/{lastname}.png → assets/players/{teamkey}.png →
+   (career clubs route through assets/career/clubs/...) →
+   generic silhouette                                              */
+const PZ_GENERIC_SVG = 'data:image/svg+xml;utf8,'+encodeURIComponent(
+  `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 280">
+    <defs><linearGradient id="g" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#3a4a6a"/><stop offset="1" stop-color="#1a2438"/></linearGradient></defs>
+    <circle cx="100" cy="80" r="32" fill="url(#g)" stroke="rgba(255,255,255,0.15)" stroke-width="2"/>
+    <path d="M 40 280 L 50 180 Q 60 140 100 140 Q 140 140 150 180 L 160 280 Z" fill="url(#g)" stroke="rgba(255,255,255,0.15)" stroke-width="2"/>
+  </svg>`);
+function pzLoadCardImg(el,pl,teamKey,small){
+  const last=playerLastName(pl);
+  const specific = pl.clubKey ? `assets/career/clubs/${last}${pl.clubKey}.png` : `assets/players/${last}.png`;
+  const placeholder = pl.clubKey ? `assets/career/clubs/${pl.clubKey}.png` : `assets/players/${teamKey}.png`;
+  const apply=url=>{ el.style.backgroundImage=`url(${url})`; };
+  const t1=new Image();
+  t1.onload=()=>apply(specific);
+  t1.onerror=()=>{
+    const t2=new Image();
+    t2.onload=()=>apply(placeholder);
+    t2.onerror=()=>apply(PZ_GENERIC_SVG);
+    t2.src=placeholder;
+  };
+  t1.src=specific;
+}
+
+/* ---- MATCH DATA — live numbers from G, no mock values ---- */
+function pzBuildMdata(){
+  document.getElementById('pz-md-hname').textContent=(HT?.name||'HOME').toUpperCase();
+  document.getElementById('pz-md-aname').textContent=(AT?.name||'AWAY').toUpperCase();
+  const hPoss = G.tP>0 ? Math.round(G.hP/G.tP*100) : 50;
+  const aPoss = 100-hPoss;
+  const STATS=[
+    {lbl:'POSSESSION', h:hPoss, a:aPoss, unit:'%'},
+    {lbl:'SHOTS',       h:G.hShots||0, a:G.aShots||0},
+    {lbl:'PASSES',      h:G.hP||0,     a:Math.max(0,(G.tP||0)-(G.hP||0))},
+    {lbl:'DUELS WON',   h:G.hDuels||0, a:G.aDuels||0},
+    {lbl:'FOULS',       h:G.hFouls||0, a:G.aFouls||0},
+    {lbl:'OFFSIDES',    h:G.hOff||0,   a:G.aOff||0},
+  ];
+  document.getElementById('pz-mdata-rows').innerHTML=STATS.map(s=>{
+    const tot=s.h+s.a||1, hp=Math.round(s.h/tot*100), ap=100-hp;
+    return `<div class="pz-mrow">
+      <div class="vals"><span class="h">${s.h}${s.unit||''}</span><span class="lbl">${s.lbl}</span><span class="a">${s.a}${s.unit||''}</span></div>
+      <div class="pz-mbar"><span class="h" style="width:${hp}%"></span><span class="a" style="width:${ap}%"></span></div>
+    </div>`;
+  }).join('');
+}
+
+/* ---- screen toggles inside the overlay ---- */
+function pzShowPause(){ document.getElementById('pz-mdata-panel').classList.remove('show'); document.getElementById('pz-pause-panel').classList.remove('hide'); }
+function pzBackPause(){ pzShowPause(); }
+function pzShowMdata(){ pzBuildMdata(); document.getElementById('pz-pause-panel').classList.add('hide'); document.getElementById('pz-mdata-panel').classList.add('show'); }
+
+/* ---- SQUAD — opens the SAME formation/sub editor used pre-match.
+   Mid-match we can't just "kick off" again, so the editor's back/kick-off
+   buttons are swapped for the duration and the chosen lineup is written
+   back into hSq when the user returns.                                 */
+function pzShowSquad(){
+  G_teamEditorOrigin='pause';
+  document.getElementById('pause-overlay').classList.remove('show');
+  openTeamMenu();
+  setTimeout(pzPatchTeamMenuButtons,650);
+}
+function pzPatchTeamMenuButtons(){
+  if(G_teamEditorOrigin!=='pause')return;
+  const back=document.getElementById('tmBackBtn');
+  const kick=document.getElementById('tmKickBtn');
+  if(back) back.textContent='← BACK';
+  if(kick){ kick.textContent='✓ APPLY & RESUME'; kick.onclick=pzCloseSquadEditor; }
+}
+function tmBackHandler(){
+  if(G_teamEditorOrigin==='pause'){ pzCloseSquadEditor(); return; }
+  showSc('s-ts');
+}
+function pzCloseSquadEditor(){
+  // re-map hSq to the (possibly edited) HOME_SLOT_ASSIGN, keeping spirit/
+  // cooldown for any player who's still in the same slot
+  if(HT&&HT.p){
+    const roster=HT.p.slice();
+    const used=new Set();
+    const fresh={};
+    Object.keys(FORMATIONS[activeHomeFormation].coords).forEach(slot=>{
+      const pid=HOME_SLOT_ASSIGN[slot];
+      let pl=roster.find(r=>r.id===pid && !used.has(r.id));
+      if(!pl) pl=roster.find(r=>!used.has(r.id));
+      if(pl){
+        used.add(pl.id);
+        const prev=hSq[slot];
+        const keep = prev && prev.id===pl.id;
+        fresh[slot]={...pl, slot, spirit:keep?prev.spirit:(pl.pos==='GK'?2000:1500), cooldownUntil:keep?prev.cooldownUntil:0};
+      }
+    });
+    hSq=fresh;
+  }
+  G_teamEditorOrigin=null;
+  showSc('s-match'); // pause-overlay keeps its 'show' class — still paused
+  pzBuildAll();
+}
+
+/* ---- restart / forfeit ---- */
+function pzRestart(){
+  if(!confirm('Restart this match from 0-0? Current progress will be lost.'))return;
+  document.getElementById('pause-overlay').classList.remove('show');
+  G.paused=false;
+  startGame();
+}
+function pzForfeit(){
+  if(!confirm('Forfeit this match and return to the menu?'))return;
+  exitToMenu();
 }
 
 // ── EVENT BANNER (offside / foul) ────────────────────────────────
@@ -5154,6 +5564,7 @@ function callOffside(s,tk){
   animateBallTo(fp2.x,fp2.y,tp.x,tp.y,()=>{
     if(G.goalGen!==gen)return;
     showEventBanner('\u{1F6A9} OFFSIDE','foul',2400);
+    if(s==='h')G.hOff++; else G.aOff++;
     showReferee('OFFSIDE');
     say((pl?pl.name:'Receiver')+' caught offside!');
     if(ds==='h')G.hP++; else G.tP++;
@@ -5188,6 +5599,7 @@ function rollFoul(defSide,defSlot,attSide,prob){
   const inBox=Math.abs(defPos.x-ownGx)<W*0.20 && defPos.y>H*0.30 && defPos.y<H*0.70;
   const _fgen=G.goalGen;
   const isPK=inBox&&Math.random()<0.4;
+  if(defSide==='h')G.hFouls++; else G.aFouls++;
   const foulName=defPl?defPl.name.split('.').pop():'Defender';
   if(isPK){
     showEventBanner('🟥 PENALTY!','foul',3500);
@@ -5579,7 +5991,7 @@ function secondHalf(){G.half=2;G.tL=2400;iPos();const q=sq('a');const kk=['CM2',
 
 function initMatch(){
   Object.values(hSq).forEach(p=>{if(p){p.spirit=(p.pos==="GK"?2000:1500);p.cooldownUntil=0;}});Object.values(aSq).forEach(p=>{if(p){p.spirit=(p.pos==="GK"?2000:1500);p.cooldownUntil=0;}});
-  G={half:1,tL:2400,hG:0,aG:0,poss:'h',ck:null,chk:null,mom:50,duels:0,shots:0,hP:0,tP:0,phase:'idle',mt:null,di:null,D:{},pm:false,kickoffUntil:0,pressing:false,goalGen:0,paused:false,subsUsed:0,reds:{h:0,a:0}};
+  G={half:1,tL:2400,hG:0,aG:0,poss:'h',ck:null,chk:null,mom:50,duels:0,shots:0,hP:0,tP:0,phase:'idle',mt:null,di:null,D:{},pm:false,kickoffUntil:0,pressing:false,goalGen:0,paused:false,subsUsed:0,reds:{h:0,a:0},hShots:0,aShots:0,hDuels:0,aDuels:0,hFouls:0,aFouls:0,hOff:0,aOff:0};
   Object.values(hSq).forEach(p=>{if(p){p._yc=0;p._sent=false;}});Object.values(aSq).forEach(p=>{if(p){p._yc=0;p._sent=false;}});
   if(typeof updateRedBadges==='function')updateRedBadges();
   preloadSquadImages(); // start loading all player face images
