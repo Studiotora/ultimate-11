@@ -40,7 +40,8 @@
           lift:2 },          // extra camera height offset
     bowl:{ yOff:0, gap:0, rake:50, tierH:30, sharp:false, roof:true,
            openFront:true, mode:'crowd', tiers:{1:true,2:true,3:true} },
-    spriteScale:1.9,     // billboard height vs engine token radius CR
+    spriteScale:1.9,     // (legacy) billboard height vs engine token radius CR
+    spriteFrac:0.045,    // billboard height as fraction of world pitch LENGTH (HD-2D)
     debug:false,         // sprite/shadow debug overlay (Camera Lab)
     ready:false
   };
@@ -244,18 +245,22 @@
       if(!pitchMesh) return;
       scene.remove(bowlGroup); bowlGroup=new T.Group(); scene.add(bowlGroup);
       const S=P3D.bowl;
-      const RUNOFF = PWID*0.08;
-      const baseHL = PLEN/2 + RUNOFF + (S.gap||0);
-      const baseHW = PWID/2 + RUNOFF + (S.gap||0);
-      const r = S.sharp? 40 : 60;
-      const th = (S.tierH!=null?S.tierH:30) * (PWID/45);   // scale tier height to world
+      // The sandbox was tuned at pitch 300x190. The live pitch is ~70x43, so
+      // every absolute dimension must scale by U = PWID/190 to reproduce the
+      // SAME proportions. Sliders stay in sandbox units; U converts to world.
+      const U = PWID/190;
+      const RUNOFF = 26*U;                                  // sandbox runoff
+      const baseHL = PLEN/2 + RUNOFF + (S.gap||0)*U;
+      const baseHW = PWID/2 + RUNOFF + (S.gap||0)*U;
+      const r = (S.sharp? 40 : 60) * U;                     // corner radius, scaled
+      const th = (S.tierH!=null?S.tierH:30) * U;            // tier height, scaled
       const rakeRad = (S.rake!=null?S.rake:50)*Math.PI/180;
       const out = th/Math.tan(rakeRad);
       const of = (S.openFront!=null)? S.openFront : true;
       const mode = S.mode||'crowd';
       const DIAG=['#2f6bd6','#8a3fd6','#d63f54'];
 
-      let yB=S.yOff||0, ihl=baseHL, ihw=baseHW, prevTop=null;
+      let yB=(S.yOff||0)*U, ihl=baseHL, ihw=baseHW, prevTop=null;
       for(let n=1;n<=3;n++){
         if(S.tiers && S.tiers[n]===false){ yB+=th*0.92; ihl+=out*0.92; ihw+=out*0.92; continue; }
         const key=TIER_KEY[n-1], idx=n-1;
@@ -278,7 +283,7 @@
       }
       // base hoarding — full perimeter, closes the near side
       const hoMat=new T.MeshLambertMaterial({color:'#1d242c', side:T.DoubleSide});
-      bowlGroup.add(buildTierSegmented(baseHL,baseHW,r, (S.yOff||0), (S.yOff||0)+th*0.55, 0.5,
+      bowlGroup.add(buildTierSegmented(baseHL,baseHW,r, (S.yOff||0)*U, (S.yOff||0)*U+th*0.55, 0.5,
         {backMat:hoMat, texFor:null, openFront:false, sharp:S.sharp}));
       // roof
       if(S.roof!==false){
@@ -364,10 +369,10 @@
           const pl=q[k], p=PP[s] && PP[s][k]; if(!pl||!p) return;
           const id=s+':'+k; seen.add(id);
           const o=ensureSprite(id,sheet);
-          // size from engine token radius CR, in world units (rough scale)
-          const CRv=(typeof CR!=='undefined'?CR:13);
-          const wpx=CRv*2*P3D.spriteScale;
-          const hWorld=(wpx/(window.H||720))*PWID*1.7;   // map px height into world
+          // sprite height = fixed fraction of world pitch LENGTH (HD-2D scale).
+          // P3D.spriteFrac defaults to ~0.045 of PLEN — tune in Camera Lab.
+          const frac=(P3D.spriteFrac!=null?P3D.spriteFrac:0.045);
+          const hWorld=PLEN*frac;
           const wWorld=hWorld*(sheet.cw/sheet.ch);
           const st=cellState(id,p);
           o.tex.offset.set(st.col/GRID.cols, 1-(st.row+1)/GRID.rows);
@@ -375,7 +380,7 @@
           const wx=ex2wx(p.x), wz=ey2wz(p.y);
           o.sprite.position.set(wx,0.05,wz);
           o.shadow.position.set(wx,0.04,wz);
-          o.shadow.scale.setScalar(Math.max(0.5,wWorld*0.4));
+          o.shadow.scale.setScalar(Math.max(0.3,wWorld*0.42));
         });
       });
       // hide sprites whose players vanished (subs, etc.)

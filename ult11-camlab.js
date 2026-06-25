@@ -43,14 +43,34 @@
       if(typeof updH==='function') updH();
     }catch(e){ console.warn('[CamLab] duel resolve failed', e); }
   }
-  function watchPhase(){
-    if(LAB.active && LAB.noDuels && typeof G!=='undefined' && G &&
-       (G.phase==='duel' || G.phase==='duel_result')){
-      resolveDuelInstant();
+  /* ---- FREE-MOVEMENT MODE ----
+     You wanted no CPU opponent and free movement. The engine only lets the
+     human steer while G.poss==='h', and opponents chase via ROLES.engager +
+     trigger duels. So each frame we:
+       • null ROLES.engager / G.chk  → nobody chases, no duel ever triggers
+       • force possession to 'h'      → you always control your carrier
+       • clear any duel that slips through
+     Opponents still drift to formation shape (harmless bodies for framing).   */
+  function freeMoveFrame(){
+    if(LAB.active){
+      try{
+        if(typeof ROLES!=='undefined'&&ROLES){ ROLES.engager=null; ROLES.cover=null; }
+        if(typeof G!=='undefined'&&G){
+          G.chk=null;
+          if(G.phase==='duel'||G.phase==='duel_result') resolveDuelInstant();
+          // keep control on the human side so manual steering stays enabled
+          if(G.poss!=='h' && G.phase==='moving'){
+            const hq=(typeof sq==='function')?sq('h'):null;
+            const hk = G.ck && hq && hq[G.ck] ? G.ck
+                     : (hq?Object.keys(hq).find(k=>hq[k]&&hq[k].pos!=='GK'):null);
+            if(hk){ G.poss='h'; G.ck=hk; if(typeof updP==='function')updP(); if(typeof updH==='function')updH(); }
+          }
+        }
+      }catch(e){}
     }
-    requestAnimationFrame(watchPhase);
+    requestAnimationFrame(freeMoveFrame);
   }
-  requestAnimationFrame(watchPhase);
+  requestAnimationFrame(freeMoveFrame);
 
   /* ---- launch: reuse the friendly flow ---- */
   function camLabStart(){
@@ -140,6 +160,9 @@
     tg.appendChild(toggle('Sharp',  ()=>B.sharp,     v=>{B.sharp=v; reb();}));
     tg.appendChild(toggle('NearStand',()=>!B.openFront, v=>{B.openFront=!v; reb();}));
     panel.appendChild(tg);
+
+    panel.appendChild(section('PLAYERS'));
+    panel.appendChild(row('Sprite size', 0.02,0.10,0.001, ()=>P3D.spriteFrac, v=>P3D.spriteFrac=v));
 
     panel.appendChild(section('DEBUG'));
     const dg=document.createElement('div'); dg.style.cssText='display:flex;flex-wrap:wrap';
