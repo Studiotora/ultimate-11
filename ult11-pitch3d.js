@@ -30,9 +30,18 @@
     suppress2D:true,     // when on, blank the 2D canvas so only 3D shows
     // camera (broadcast band — deliberately constrained so it can't break HD-2D)
     cam:{ height:26, dist:46, fov:38, zoomIn:0.5,
-          phiMin:0.34, phiMax:0.82, thetaLimit:0.20 },  // tight clamps vs the sandbox
-    bowl:{ yOff:0, rScale:1.0, radStep:1.0, yStep:1.4 },
+          phiMin:0.34, phiMax:0.82, thetaLimit:0.20,
+          // ---- Camera Lab tunables ----
+          phi:0.55,          // fixed elevation when not dragging
+          followLerp:6,      // how fast focus chases the carrier (higher = snappier)
+          zFollow:0.35,      // 0=stay sideways at midline, 1=fully follow Z
+          inwardYaw:0.55,    // how much the camera turns inward near the goals
+          lookY:1.0,         // height of the look-at point
+          lift:2 },          // extra camera height offset
+    bowl:{ yOff:0, gap:0, rake:50, tierH:30, sharp:false, roof:true,
+           openFront:true, mode:'crowd', tiers:{1:true,2:true,3:true} },
     spriteScale:1.9,     // billboard height vs engine token radius CR
+    debug:false,         // sprite/shadow debug overlay (Camera Lab)
     ready:false
   };
 
@@ -97,49 +106,198 @@
         buildPitch(new T.CanvasTexture(c),1.78);
       });
 
-    /* ════════ 9-PANEL FLAT TIERED STADIUM ════════
-       3 walls (far touchline + both goal ends) × 3 tiers (lower/upper/roof).
-       Near touchline omitted (camera side). Tiers step back + up. */
-    const TIER = {
-      lower: { depth:0.06, yBase:0.0, hScale:0.40, wScale:1.06 },
-      upper: { depth:0.22, yBase:2.4, hScale:0.56, wScale:1.30 },
-      roof:  { depth:0.40, yBase:5.2, hScale:0.86, wScale:1.58 },
-    };
-    const TIER_KEYS=['lower','upper','roof'];
-    const LAYER_TEX={lower:null,upper:null,roof:null};
-    const panels={far:{},cpu:{},plr:{}};
+    /* ════════ SEGMENTED BOWL STADIUM (ported from stadium-live sandbox) ════════
+       Each tier = 4 straight walls + 4 corners. Straights take a flat crowd
+       strip (no stretch); corners take their own texture. Risers fill the gap
+       between tiers; a base hoarding closes the near side so no void shows.
+       Tunable live via P3D.bowl (driven by Camera Lab sliders). */
+    const TIER_KEY=['lower','upper','roof'];
+    const TIER_TEX={lower:null,upper:null,roof:null};
+    const CORNER_TEX={lower:null,upper:null,roof:null};
+    let bowlGroup=new T.Group(); scene.add(bowlGroup);
 
-    function makePanel(tex,w,h){
-      const m=new T.Mesh(new T.PlaneGeometry(w,h),
-        new T.MeshBasicMaterial({map:tex,transparent:true,side:T.DoubleSide,depthWrite:false,fog:true}));
-      return m;
+    function makeCrowdTexture(){
+      const c=document.createElement('canvas'); c.width=512;c.height=128;
+      const x=c.getContext('2d'); x.fillStyle='#11161f'; x.fillRect(0,0,512,128);
+      const cols=['#c94f4f','#d9d2c8','#3b6fb0','#e0b15a','#4c8c5a','#bcc4cc','#8a5a8f'];
+      for(let i=0;i<5200;i++){ x.fillStyle=cols[(Math.random()*cols.length)|0];
+        x.fillRect(Math.random()*512, Math.random()*128, 2.2, 2.6); }
+      const t=new T.CanvasTexture(c); t.wrapS=t.wrapT=T.RepeatWrapping; t.repeat.set(18,1);
+      return t;
     }
-    function buildTier(tk){
-      const TI=TIER[tk], tex=LAYER_TEX[tk]; if(!TI||!tex||!pitchMesh) return;
+    const crowdTex=makeCrowdTexture();
+
+    function buildStraightWall(ax,az,bx,bz, yB,yT, out, mat, uRepeat){
+      const dx=bx-ax, dz=bz-az, len=Math.hypot(dx,dz)||1;
+      let nx=dz/len, nz=-dx/len; const mxp=(ax+bx)/2, mzp=(az+bz)/2;
+      if(nx*mxp+nz*mzp<0){ nx=-nx; nz=-nz; }
+      const aBot=[ax,yB,az], bBot=[bx,yB,bz];
+      const aTop=[ax+nx*out,yT,az+nz*out], bTop=[bx+nx*out,yT,bz+nz*out];
+      const g=new T.BufferGeometry();
+      g.setAttribute('position', new T.Float32BufferAttribute(
+        [...aBot,...bBot,...bTop, ...aBot,...bTop,...aTop],3));
+      const u=uRepeat||1;
+      g.setAttribute('uv', new T.Float32BufferAttribute([0,0,u,0,u,1, 0,0,u,1,0,1],2));
+      g.computeVertexNormals();
+      return new T.Mesh(g,mat);
+    }
+    function buildRiser(blHL,blHW, tlHL,tlHW, r, yB,yT, mat, sharp, openFront){
+      const grp=new T.Group(); const seg=sharp?1:6;
+      const ring=(hl,hw)=>({hl:hl-r, hw:hw-r});
+      const lo=ring(blHL,blHW), hi=ring(tlHL,tlHW);
+      const sides=[
+        ['back',  [-lo.hl,-blHW],[ lo.hl,-blHW], [-hi.hl,-tlHW],[ hi.hl,-tlHW]],
+        ['right', [ blHL,-lo.hw],[ blHL, lo.hw], [ tlHL,-hi.hw],[ tlHL, hi.hw]],
+        ['front', [ lo.hl, blHW],[-lo.hl, blHW], [ hi.hl, tlHW],[-hi.hl, tlHW]],
+        ['left',  [-blHL, lo.hw],[-blHL,-lo.hw], [-tlHL, hi.hw],[-tlHL,-hi.hw]],
+      ];
+      for(const [name,la,lb,ha,hb] of sides){
+        if(openFront && name==='front') continue;
+        const g=new T.BufferGeometry();
+        g.setAttribute('position', new T.Float32BufferAttribute(
+          [la[0],yB,la[1], lb[0],yB,lb[1], hb[0],yT,hb[1],
+           la[0],yB,la[1], hb[0],yT,hb[1], ha[0],yT,ha[1]],3));
+        g.computeVertexNormals(); grp.add(new T.Mesh(g,mat));
+      }
+      const corners=[
+        ['c_br', lo.hl,-lo.hw, hi.hl,-hi.hw, -Math.PI/2],
+        ['c_fr', lo.hl, lo.hw, hi.hl, hi.hw, 0],
+        ['c_fl',-lo.hl, lo.hw,-hi.hl, hi.hw, Math.PI/2],
+        ['c_bl',-lo.hl,-lo.hw,-hi.hl,-hi.hw, Math.PI],
+      ];
+      for(const [name,lcx,lcz,hcx,hcz,a0] of corners){
+        if(openFront && (name==='c_fl'||name==='c_fr')) continue;
+        const pos=[];
+        for(let i=0;i<seg;i++){
+          const t0=a0+(Math.PI/2)*(i/seg), t1=a0+(Math.PI/2)*((i+1)/seg);
+          const lax=lcx+Math.cos(t0)*r, laz=lcz+Math.sin(t0)*r;
+          const lbx=lcx+Math.cos(t1)*r, lbz=lcz+Math.sin(t1)*r;
+          const hax=hcx+Math.cos(t0)*r, haz=hcz+Math.sin(t0)*r;
+          const hbx=hcx+Math.cos(t1)*r, hbz=hcz+Math.sin(t1)*r;
+          pos.push(lax,yB,laz, lbx,yB,lbz, hbx,yT,hbz, lax,yB,laz, hbx,yT,hbz, hax,yT,haz);
+        }
+        const g=new T.BufferGeometry();
+        g.setAttribute('position', new T.Float32BufferAttribute(pos,3));
+        g.computeVertexNormals(); grp.add(new T.Mesh(g,mat));
+      }
+      return grp;
+    }
+    function buildCorner(cx,cz, r, a0, yB,yT, out, mat, sharp){
+      const seg=sharp?1:6; const positions=[], uvs=[];
+      for(let i=0;i<seg;i++){
+        const t0=a0+(Math.PI/2)*(i/seg), t1=a0+(Math.PI/2)*((i+1)/seg);
+        const ax=cx+Math.cos(t0)*r, az=cz+Math.sin(t0)*r;
+        const bx=cx+Math.cos(t1)*r, bz=cz+Math.sin(t1)*r;
+        const aOut=[Math.cos(t0),Math.sin(t0)], bOut=[Math.cos(t1),Math.sin(t1)];
+        const aBot=[ax,yB,az], bBot=[bx,yB,bz];
+        const aTop=[ax+aOut[0]*out,yT,az+aOut[1]*out], bTop=[bx+bOut[0]*out,yT,bz+bOut[1]*out];
+        const u0=i/seg, u1=(i+1)/seg;
+        positions.push(...aBot,...bBot,...bTop, ...aBot,...bTop,...aTop);
+        uvs.push(u0,0,u1,0,u1,1, u0,0,u1,1,u0,1);
+      }
+      const g=new T.BufferGeometry();
+      g.setAttribute('position', new T.Float32BufferAttribute(positions,3));
+      g.setAttribute('uv', new T.Float32BufferAttribute(uvs,2));
+      g.computeVertexNormals();
+      return new T.Mesh(g,mat);
+    }
+    function mkTexMat(tex){
+      let m=tex;
+      if(!m || m.image===undefined || (m.image&&m.image.width===0)) m=crowdTex;
+      if(m===crowdTex){ m=m.clone(); m.wrapS=m.wrapT=T.RepeatWrapping; m.needsUpdate=true; }
+      return new T.MeshBasicMaterial({map:m, color:0xffffff, side:T.DoubleSide});
+    }
+    function buildTierSegmented(ihl,ihw,r, yB,yT, out, opts){
+      const grp=new T.Group(); const {backMat,texFor,openFront,sharp}=opts;
+      const hl=ihl-r, hw=ihw-r;
+      const walls=[
+        ['back', -hl,-ihw,  hl,-ihw],
+        ['right', ihl,-hw,  ihl, hw],
+        ['front', hl, ihw, -hl, ihw],
+        ['left', -ihl, hw, -ihl,-hw],
+      ];
+      const corners=[
+        ['c_br', hl,-hw, -Math.PI/2],['c_fr', hl, hw, 0],
+        ['c_fl',-hl, hw,  Math.PI/2],['c_bl',-hl,-hw, Math.PI],
+      ];
+      for(const [name,ax,az,bx,bz] of walls){
+        if(openFront && name==='front') continue;
+        const back=buildStraightWall(ax,az,bx,bz, yB,yT, out, backMat,1);
+        back.renderOrder=0; grp.add(back);
+        const tm=texFor&&texFor(name,false);
+        if(tm){ const t=buildStraightWall(ax,az,bx,bz, yB-0.15,yT+0.15, out-0.6, tm, 1);
+          t.renderOrder=10; grp.add(t); }
+      }
+      for(const [name,cx,cz,a0] of corners){
+        if(openFront && (name==='c_fl'||name==='c_fr')) continue;
+        const back=buildCorner(cx,cz,r,a0, yB,yT, out, backMat, sharp);
+        back.renderOrder=0; grp.add(back);
+        const tm=texFor&&texFor(name,true);
+        if(tm){ const t=buildCorner(cx,cz,r,a0, yB-0.15,yT+0.15, out-0.6, tm, sharp);
+          t.renderOrder=10; grp.add(t); }
+      }
+      return grp;
+    }
+
+    // master bowl build — reads P3D.bowl live. Re-callable any time (Camera Lab).
+    function placeAllStadium(){
+      if(!pitchMesh) return;
+      scene.remove(bowlGroup); bowlGroup=new T.Group(); scene.add(bowlGroup);
       const S=P3D.bowl;
-      const depth=TI.depth*S.radStep, yb=TI.yBase*S.yStep + S.yOff;
-      const h=PWID*TI.hScale, yC=yb+h/2;
-      // far touchline (+Z toward camera; faces +Z so no rotation)
-      if(panels.far[tk]) scene.remove(panels.far[tk]);
-      { const w=PLEN*TI.wScale*S.rScale; const m=makePanel(tex,w,h);
-        m.position.set(0, yC, -(PWID/2 + PWID*depth + PWID*0.04));
-        m.renderOrder=-20+TIER_KEYS.indexOf(tk); panels.far[tk]=m; scene.add(m); }
-      // end walls
-      const endW=PWID*TI.wScale*1.15*S.rScale;
-      [['cpu',+1],['plr',-1]].forEach(([side,sgn])=>{
-        if(panels[side][tk]) scene.remove(panels[side][tk]);
-        const m=makePanel(tex,endW,h);
-        m.position.set(sgn*(PLEN/2 + PLEN*depth*0.5 + PLEN*0.03), yC, 0);
-        m.rotation.y = sgn>0 ? -Math.PI/2 : Math.PI/2;
-        m.renderOrder=-20+TIER_KEYS.indexOf(tk); panels[side][tk]=m; scene.add(m);
-      });
+      const RUNOFF = PWID*0.08;
+      const baseHL = PLEN/2 + RUNOFF + (S.gap||0);
+      const baseHW = PWID/2 + RUNOFF + (S.gap||0);
+      const r = S.sharp? 40 : 60;
+      const th = (S.tierH!=null?S.tierH:30) * (PWID/45);   // scale tier height to world
+      const rakeRad = (S.rake!=null?S.rake:50)*Math.PI/180;
+      const out = th/Math.tan(rakeRad);
+      const of = (S.openFront!=null)? S.openFront : true;
+      const mode = S.mode||'crowd';
+      const DIAG=['#2f6bd6','#8a3fd6','#d63f54'];
+
+      let yB=S.yOff||0, ihl=baseHL, ihw=baseHW, prevTop=null;
+      for(let n=1;n<=3;n++){
+        if(S.tiers && S.tiers[n]===false){ yB+=th*0.92; ihl+=out*0.92; ihw+=out*0.92; continue; }
+        const key=TIER_KEY[n-1], idx=n-1;
+        const backMat=(mode==='color')
+          ? new T.MeshLambertMaterial({color:DIAG[idx], side:T.DoubleSide})
+          : new T.MeshLambertMaterial({color:'#39434f', side:T.DoubleSide});
+        if(prevTop){
+          const fillMat=new T.MeshLambertMaterial({color:'#2b333d', side:T.DoubleSide});
+          bowlGroup.add(buildRiser(prevTop.ihl,prevTop.ihw, ihl,ihw, r, prevTop.y, yB, fillMat, S.sharp, of));
+        }
+        const texFor=(segName,isCorner)=>{
+          if(mode==='solid') return null;
+          if(isCorner) return mkTexMat(CORNER_TEX[key]||TIER_TEX[key]||crowdTex);
+          return mkTexMat(TIER_TEX[key]||crowdTex);
+        };
+        bowlGroup.add(buildTierSegmented(ihl,ihw,r, yB,yB+th, out,
+          {backMat, texFor, openFront:of, sharp:S.sharp}));
+        prevTop={ y:yB+th, ihl:ihl+out, ihw:ihw+out };
+        yB+=th*0.92; ihl+=out*0.92; ihw+=out*0.92;
+      }
+      // base hoarding — full perimeter, closes the near side
+      const hoMat=new T.MeshLambertMaterial({color:'#1d242c', side:T.DoubleSide});
+      bowlGroup.add(buildTierSegmented(baseHL,baseHW,r, (S.yOff||0), (S.yOff||0)+th*0.55, 0.5,
+        {backMat:hoMat, texFor:null, openFront:false, sharp:S.sharp}));
+      // roof
+      if(S.roof!==false){
+        const roofY=yB+th*0.35;
+        bowlGroup.add(buildTierSegmented(ihl,ihw,r, roofY,roofY+2, -(out*1.4),
+          {backMat:new T.MeshLambertMaterial({color:'#2a3340', side:T.DoubleSide}), texFor:null, openFront:of, sharp:S.sharp}));
+        bowlGroup.add(buildTierSegmented(ihl-out*0.5,ihw-out*0.5,r, roofY-1,roofY, -(out*1.3),
+          {backMat:new T.MeshBasicMaterial({color:'#fff7e0', side:T.DoubleSide}), texFor:null, openFront:of, sharp:S.sharp}));
+      }
     }
-    function placeAllStadium(){ TIER_KEYS.forEach(buildTier); }
+    P3D._rebuildBowl=placeAllStadium;   // Camera Lab calls this when sliders change
+
     function loadLayer(key){
       loader.load('assets/stadium/'+key+'.png',
-        t=>{ t.anisotropy=8; LAYER_TEX[key]=t; if(pitchMesh) buildTier(key); },
-        undefined,
-        ()=>{ /* missing tier → silently skip; bowl still works with whatever loaded */ });
+        t=>{ t.wrapS=t.wrapT=T.ClampToEdgeWrapping; t.anisotropy=8; t.colorSpace=T.SRGBColorSpace;
+             TIER_TEX[key]=t; if(pitchMesh) placeAllStadium(); }, undefined, ()=>{});
+      loader.load('assets/stadium/'+key+'_corner.png',
+        t=>{ t.wrapS=t.wrapT=T.ClampToEdgeWrapping; t.anisotropy=8; t.colorSpace=T.SRGBColorSpace;
+             CORNER_TEX[key]=t; if(pitchMesh) placeAllStadium(); }, undefined, ()=>{});
     }
     loadLayer('lower'); loadLayer('upper'); loadLayer('roof');
 
@@ -225,6 +383,51 @@
         sprites[id].sprite.visible=vis; sprites[id].shadow.visible=vis; }
     }
 
+    /* ════════ SPRITE/SHADOW DEBUG OVERLAY (Camera Lab) ════════
+       Projects each player's sprite foot-anchor (green) and shadow-disc center
+       (red) to screen space and labels engine (x,y). Reveals any offset between
+       where the billboard plants and where its shadow lands. */
+    let dbgCv=null, dbgCx=null;
+    function ensureDbgCanvas(){
+      if(dbgCv) return;
+      dbgCv=document.createElement('canvas'); dbgCv.id='C3D_dbg';
+      dbgCv.style.cssText='position:absolute;inset:0;width:100%;height:100%;pointer-events:none;z-index:3;display:none';
+      CV.parentNode.insertBefore(dbgCv, gl.nextSibling); dbgCx=dbgCv.getContext('2d');
+    }
+    const _v3=new T.Vector3();
+    function projectToScreen(wx,wy,wz, w,h){
+      _v3.set(wx,wy,wz).project(camera);
+      return { x:(_v3.x*0.5+0.5)*w, y:(-_v3.y*0.5+0.5)*h, z:_v3.z };
+    }
+    function drawDebug(){
+      ensureDbgCanvas();
+      if(!P3D.debug){ if(dbgCv.style.display!=='none') dbgCv.style.display='none'; return; }
+      const w=CV.clientWidth||CV.width, h=CV.clientHeight||CV.height;
+      if(dbgCv.width!==w||dbgCv.height!==h){ dbgCv.width=w; dbgCv.height=h; }
+      dbgCv.style.display='block';
+      dbgCx.clearRect(0,0,w,h);
+      dbgCx.font='10px monospace'; dbgCx.textAlign='center';
+      for(const id in sprites){
+        const o=sprites[id]; if(!o.sprite.visible) continue;
+        const sp=o.sprite.position, sh=o.shadow.position;
+        const pFoot=projectToScreen(sp.x,sp.y,sp.z, w,h);      // sprite anchor (center.y=0 → foot)
+        const pShad=projectToScreen(sh.x,sh.y,sh.z, w,h);      // shadow centre
+        if(pFoot.z>1||pShad.z>1) continue;                      // behind camera
+        // line between them so any mismatch is obvious
+        dbgCx.strokeStyle='rgba(255,255,0,.6)'; dbgCx.lineWidth=1;
+        dbgCx.beginPath(); dbgCx.moveTo(pFoot.x,pFoot.y); dbgCx.lineTo(pShad.x,pShad.y); dbgCx.stroke();
+        // shadow center (red)
+        dbgCx.fillStyle='#ff3b3b'; dbgCx.beginPath(); dbgCx.arc(pShad.x,pShad.y,4,0,7); dbgCx.fill();
+        // sprite foot (green)
+        dbgCx.fillStyle='#2bff6a'; dbgCx.beginPath(); dbgCx.arc(pFoot.x,pFoot.y,4,0,7); dbgCx.fill();
+        // engine x,y label
+        const st=stt[id];
+        if(st){ dbgCx.fillStyle='#fff';
+          dbgCx.fillText(Math.round(st.rx)+','+Math.round(st.ry), pFoot.x, pFoot.y-8); }
+      }
+    }
+    P3D._drawDebug=drawDebug;
+
     /* ════════ BALL ════════ */
     const ballMesh=new T.Mesh(new T.SphereGeometry(0.22,16,12),
       new T.MeshBasicMaterial({color:'#f4f4f4'}));
@@ -256,21 +459,26 @@
     function updateCamera(dt){
       const C=P3D.cam;
       camera.fov=C.fov; camera.updateProjectionMatrix();
-      // focus = ball (so passes lead the eye) blended toward carrier
-      let fx=0,fz=0;
-      if(typeof ball!=='undefined'&&ball){ fx=ex2wx(ball.x); fz=ey2wz(ball.y); }
-      const cp=carrierPos(); if(cp){ fx=(fx+ex2wx(cp.x))/2; fz=(fz+ey2wz(cp.y))/2; }
-      const depth01=Math.max(0,Math.min(1,(-(fz)/(PWID/2))*0.5+0.5));
-      const targetDist=C.dist - C.zoomIn*depth01*(C.dist*0.42);
-      const k=Math.min(1,dt*6);
+      // FOCUS: follow whoever has the ball (both teams); fall back to ball.
+      let fx=0,fz=0, cx01=0.5;
+      const cp=carrierPos();
+      if(cp){ fx=ex2wx(cp.x); fz=ey2wz(cp.y); cx01=cp.x/(window.W||1280); }
+      else if(typeof ball!=='undefined'&&ball){ fx=ex2wx(ball.x); fz=ey2wz(ball.y); cx01=ball.x/(window.W||1280); }
+      const k=Math.min(1,dt*C.followLerp);
       camFocus.x+=(fx-camFocus.x)*k;
-      camFocus.z+=(fz*0.35-camFocus.z)*k;     // partial Z so the view stays sideways
-      camFocus.dist+=(targetDist-camFocus.dist)*k;
-      const r=camFocus.dist, ph=orbit.phi, th=orbit.theta;
+      camFocus.z+=(fz*C.zFollow-camFocus.z)*k;     // partial Z so view stays sideways
+      camFocus.dist+=(C.dist-camFocus.dist)*k;
+      // INWARD YAW: at midfield theta≈0 (pure sideways); near either goal, turn in.
+      // cx01: 0=left goal, 0.5=mid, 1=right goal  →  signed -1..1
+      const sideSigned=(cx01-0.5)*2;               // -1 .. +1
+      const autoTheta = sideSigned * C.inwardYaw;  // turn toward the active goal
+      const th = (drag? orbit.theta : autoTheta);
+      const ph = (drag? orbit.phi   : C.phi);
+      const r=camFocus.dist;
       camera.position.set(camFocus.x + r*Math.cos(ph)*Math.sin(th),
-                          C.height*Math.sin(ph)+2,
+                          C.height*Math.sin(ph)+C.lift,
                           camFocus.z + r*Math.cos(ph)*Math.cos(th));
-      camera.lookAt(camFocus.x,1.0,camFocus.z);
+      camera.lookAt(camFocus.x, C.lookY, camFocus.z);
     }
 
     /* ---- size sync to #C ---- */
@@ -293,6 +501,7 @@
       const now=performance.now(); const dt=Math.min(0.05,(now-lastTs)/1000); lastTs=now;
       syncSheets(); syncPlayers(); syncBall(); updateCamera(dt);
       renderer.render(scene,camera);
+      drawDebug();
     };
 
     /* ---- inject a 3D toggle button next to PS1 button if present ---- */
