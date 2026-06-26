@@ -26,15 +26,15 @@
    ============================================================ */
 (function(){
   const P3D = window.P3D = {
-    on:false,
+    on:true,
     suppress2D:true,     // when on, blank the 2D canvas so only 3D shows
     // camera (broadcast band — deliberately constrained so it can't break HD-2D)
     cam:{ height:26, dist:46, fov:38, zoomIn:0.5,
           phiMin:0.34, phiMax:0.82, thetaLimit:0.20,
           // ---- Camera Lab tunables ----
           phi:0.55,          // fixed elevation when not dragging
-          followLerp:6,      // how fast focus chases the carrier (higher = snappier)
-          zFollow:0.35,      // 0=stay sideways at midline, 1=fully follow Z
+          followLerp:11,     // how fast focus chases the carrier (higher = snappier)
+          zFollow:0.45,      // 0=stay sideways at midline, 1=fully follow Z
           inwardYaw:0.55,    // how much the camera turns inward near the goals
           lookY:1.0,         // height of the look-at point
           lift:2 },          // extra camera height offset
@@ -42,8 +42,19 @@
            openFront:true, mode:'crowd', tiers:{1:true,2:true,3:true} },
     spriteScale:1.9,     // (legacy) billboard height vs engine token radius CR
     spriteFrac:0.045,    // billboard height as fraction of world pitch LENGTH (HD-2D)
+    // ---- LIGHTING / SHADOWS (Camera Lab → LIGHTING) ----
+    light:{ azim:0.70,    // sun direction in the XZ plane (also shadow cast dir + glow pos)
+            elev:0.78,    // sun height 0..1 (lower = longer shadows, lower glow)
+            key:1.35,     // directional key-light intensity (models the bowl)
+            ambient:0.55, // hemisphere ambient intensity
+            warmth:0.55,  // 0 cool → 1 warm (tints fog, key light, glow)
+            shadow:0.40,  // player shadow opacity
+            shadowLen:1.0,// player shadow stretch (with elev)
+            glow:0.45 },  // warm sun-pool intensity on the pitch (0 = off)
+    // ---- POST-PROCESSING (Camera Lab → POST FX); needs the post scripts in index.html ----
+    fx:{ on:true, bloom:0.55, bloomRadius:0.5, bloomThresh:0.82, tilt:0.45, vignette:0.5 },
     debug:false,         // sprite/shadow debug overlay (Camera Lab)
-    ready:false
+    ready:true
   };
 
   /* ---- wait for the engine canvas + globals ---- */
@@ -63,6 +74,32 @@
   function init(CV){
     const T=window.THREE;
 
+    /* ---- persisted camera / stadium / sprite settings (localStorage) ----
+       Apply any saved tuning over the code defaults BEFORE the bowl + camera
+       build, so a reload restores your last saved look. Save with P3D.saveCam()
+       (e.g. from the console, or wire it to a Camera Lab button). */
+    try{
+      const saved=JSON.parse(localStorage.getItem('ue_p3d_cam')||'null');
+      if(saved){
+        if(saved.cam)  Object.assign(P3D.cam,  saved.cam);
+        if(saved.bowl) Object.assign(P3D.bowl, saved.bowl);
+        if(saved.light)Object.assign(P3D.light,saved.light);
+        if(saved.fx)   Object.assign(P3D.fx,   saved.fx);
+        if(saved.spriteFrac!=null) P3D.spriteFrac=saved.spriteFrac;
+        console.log('[P3D] restored saved camera settings');
+      }
+    }catch(e){}
+    P3D.saveCam=function(){
+      try{
+        localStorage.setItem('ue_p3d_cam', JSON.stringify(
+          {cam:P3D.cam, bowl:P3D.bowl, light:P3D.light, fx:P3D.fx, spriteFrac:P3D.spriteFrac}));
+        console.log('[P3D] camera settings saved — they will persist across reloads');
+        return true;
+      }catch(e){ console.warn('[P3D] saveCam failed',e); return false; }
+    };
+    P3D.clearCam=function(){ try{localStorage.removeItem('ue_p3d_cam');}catch(e){}
+      console.log('[P3D] saved camera settings cleared (defaults on next reload)'); };
+
     /* ---- overlay canvas, sized to #C, sitting directly on top ---- */
     const gl=document.createElement('canvas');
     gl.id='C3D';
@@ -74,38 +111,198 @@
     scene.fog=new T.Fog('#16202e',180,560);
     const camera=new T.PerspectiveCamera(P3D.cam.fov,1,0.1,2000);
 
-    // lighting is BAKED into the PNGs — keep it minimal & static.
-    scene.add(new T.HemisphereLight('#ffe2a8','#1c2e16',0.65));
-    const sun=new T.DirectionalLight('#ffd28a',1.1); sun.position.set(-60,80,40); scene.add(sun);
+    /* ---- LIGHTS (live-tunable via P3D.light / Camera Lab) ----
+       The pitch & crowd are pre-lit MeshBasic photos, so these lights mostly
+       model the bowl structure (Lambert) + set the overall warm mood. The
+       on-pitch "sun" is faked with an additive glow plane (see pitchGlow). */
+    const hemi=new T.HemisphereLight('#ffe2a8','#1c2e16',0.55);
+    scene.add(hemi);
+    const sun=new T.DirectionalLight('#ffd28a',1.35);
+    scene.add(sun);
+    // lerp helper: cool→warm color by t
+    function mix(a,b,t){ return a+(b-a)*t; }
+    function warmColor(t){ // t=0 cool blue-white, t=1 golden
+      const r=mix(0.78,1.00,t), g=mix(0.85,0.84,t), b=mix(1.00,0.62,t);
+      return new T.Color(r,g,b);
+    }
+    function applyLight(){
+      const Lt=P3D.light;
+      const az=Lt.azim, el=Math.max(0.05,Math.min(1,Lt.elev));
+      // sun sits opposite the cast direction, raised by elevation
+      const horiz=Math.cos(el*Math.PI/2), vert=Math.sin(el*Math.PI/2);
+      sun.position.set(-Math.sin(az)*horiz*120, vert*120+20, -Math.cos(az)*horiz*120);
+      sun.intensity=Lt.key;
+      sun.color.copy(warmColor(Lt.warmth));
+      hemi.intensity=Lt.ambient;
+      hemi.color.copy(warmColor(Lt.warmth*0.8));
+      // fog: warm haze when warm, cool when cold
+      const fogCol=new T.Color().copy(warmColor(Lt.warmth)).multiplyScalar(0.5);
+      if(scene.fog) scene.fog.color.copy(fogCol);
+      if(typeof updatePitchGlow==='function') updatePitchGlow();
+    }
+    P3D._applyLight=applyLight;     // Camera Lab calls this when light sliders change
+    let updatePitchGlow=null;       // defined once pitchGlow exists (after pitch build)
+
+    /* soft round shadow + warm sun-pool textures (shared) */
+    function makeRadialTex(stops){
+      const c=document.createElement('canvas'); c.width=c.height=128;
+      const x=c.getContext('2d'); const g=x.createRadialGradient(64,64,2,64,64,63);
+      stops.forEach(s=>g.addColorStop(s[0],s[1])); x.fillStyle=g; x.fillRect(0,0,128,128);
+      const t=new T.CanvasTexture(c); t.minFilter=T.LinearFilter; t.magFilter=T.LinearFilter; return t;
+    }
+    const SHADOW_TEX=makeRadialTex([[0,'rgba(0,0,0,0.62)'],[0.55,'rgba(0,0,0,0.32)'],[1,'rgba(0,0,0,0)']]);
+    const GLOW_TEX  =makeRadialTex([[0,'rgba(255,226,150,0.9)'],[0.5,'rgba(255,210,130,0.35)'],[1,'rgba(255,200,120,0)']]);
+    // warm sun-pool on the grass — additive fake light (pitch itself is unlit)
+    const pitchGlow=new T.Mesh(new T.PlaneGeometry(1,1),
+      new T.MeshBasicMaterial({map:GLOW_TEX,transparent:true,blending:T.AdditiveBlending,depthWrite:false,opacity:0.45}));
+    pitchGlow.rotation.x=-Math.PI/2; pitchGlow.position.y=0.02; pitchGlow.renderOrder=1; scene.add(pitchGlow);
+    updatePitchGlow=function(){
+      const Lt=P3D.light, az=Lt.azim, el=Math.max(0.05,Math.min(1,Lt.elev));
+      const reach=PWID*(0.30+(1-el)*0.25);                 // glow sits toward sun side
+      pitchGlow.position.set(-Math.sin(az)*reach, 0.02, -Math.cos(az)*reach);
+      const size=PWID*(1.5+(1-el)*0.6);
+      pitchGlow.scale.set(size,size,1);
+      pitchGlow.material.opacity=Lt.glow;
+      pitchGlow.visible=Lt.glow>0.001;
+    };
+    // reusable math for directional player shadows
+    const _AX=new T.Vector3(1,0,0), _AY=new T.Vector3(0,1,0);
+    const _qF=new T.Quaternion(), _qS=new T.Quaternion();
 
     /* ---- world scale: map engine px [0..W,0..H] → world units ---- */
     // We pick a fixed world pitch; engine coords are normalized into it each
     // frame, so it self-corrects if W/H change on resize/rotate.
     const PLEN=70;                       // world length (engine X / goal-to-goal)
     let   PWID=PLEN*0.62;                // world width  (engine Y / touchline)  set from field aspect
-    function ex2wx(x){ return (x/ (window.W||1280) - 0.5) * PLEN; }   // engine x → world X
-    function ey2wz(y){ return (y/ (window.H||720)  - 0.5) * PWID; }   // engine y → world Z
+    // EXACT engine logical pitch (from drawDebugPitch in game.js):
+    //   goal-lines x=0.07 & 0.93 ; sidelines y=0.01 & 0.99.
+    // Map those onto the plane edges so 3D matches the 2D engine 1:1.
+    const M3D={x0:0.07,x1:0.93,y0:0.01,y1:0.99};
+    const fbCx=(M3D.x0+M3D.x1)/2, fbCy=(M3D.y0+M3D.y1)/2;
+    const fbSx=(M3D.x1-M3D.x0)||1, fbSy=(M3D.y1-M3D.y0)||1;
+    function ex2wx(x){ return ((x/(CV.width ||1280)) - fbCx)/fbSx * PLEN; }
+    function ey2wz(y){ return ((y/(CV.height|| 720)) - fbCy)/fbSy * PWID; }
 
     /* ════════ PITCH ════════ */
     const loader=new T.TextureLoader();
-    let pitchMesh=null;
-    function buildPitch(tex,aspect){
-      PWID=PLEN/(aspect||1.78);
-      if(pitchMesh) scene.remove(pitchMesh);
-      tex.anisotropy=8;
-      pitchMesh=new T.Mesh(new T.PlaneGeometry(PLEN,PWID),
-        new T.MeshBasicMaterial({map:tex}));        // unlit: lighting baked in
-      pitchMesh.rotation.x=-Math.PI/2; scene.add(pitchMesh);
-      placeAllStadium();
+    let pitchMesh=null, apronMesh=null;
+    const goalGroup=new T.Group(); scene.add(goalGroup);
+
+    /* ════════ DEBUG PITCH (procedural — no PNG) ════════
+       Draw the field on a canvas using the EXACT engine logical constants so
+       the 3D markings sit where the 2D engine puts them. The plane spans the
+       engine playable rect (x .07–.93, y .01–.99); the canvas is drawn in that
+       same normalized space. Engine x/y coordinate ticks are printed so we can
+       read off alignment directly. Toggle: window.DEBUG_PITCH3D (default true). */
+    function makeDebugPitchTex(){
+      const cw=2048, ch=Math.round(cw*0.641);   // world aspect PWID/PLEN
+      const c=document.createElement('canvas'); c.width=cw; c.height=ch;
+      const x=c.getContext('2d');
+      // grass with mow stripes
+      for(let i=0;i<10;i++){ x.fillStyle=(i%2)?'#3f7d34':'#478a3a';
+        x.fillRect(i*cw/10,0,cw/10,ch); }
+      // The plane = engine rect [.07,.93]x[.01,.99]. Convert an engine fraction
+      // (ex,ey in 0..1 of W,H) to canvas px within that rect:
+      const EX0=0.07,EX1=0.93,EY0=0.01,EY1=0.99;
+      const u=ex=>((ex-EX0)/(EX1-EX0))*cw;
+      const v=ey=>((ey-EY0)/(EY1-EY0))*ch;
+      x.lineWidth=Math.max(2,cw*0.0016); x.strokeStyle='rgba(255,255,255,.95)';
+      const L=(x1,y1,x2,y2)=>{x.beginPath();x.moveTo(u(x1),v(y1));x.lineTo(u(x2),v(y2));x.stroke();};
+      const gL=0.07,gR=0.93,Yt=0.01,Yb=0.99;
+      // outer + halfway
+      L(gL,Yt,gR,Yt); L(gL,Yb,gR,Yb); L(gL,Yt,gL,Yb); L(gR,Yt,gR,Yb); L(0.5,Yt,0.5,Yb);
+      // centre circle r=0.085·W → in engine-x units; convert to canvas
+      const cr=0.085*( cw/(EX1-EX0) );           // 0.085 of W mapped to canvas px
+      x.beginPath(); x.arc(u(0.5),v(0.5),cr,0,7); x.stroke();
+      x.beginPath(); x.arc(u(0.5),v(0.5),cw*0.004,0,7); x.fillStyle='#fff'; x.fill();
+      // penalty box: depth .16·W, y .22–.78
+      const pa=0.16;
+      L(gR,0.22,gR-pa,0.22); L(gR-pa,0.22,gR-pa,0.78); L(gR-pa,0.78,gR,0.78);
+      L(gL,0.22,gL+pa,0.22); L(gL+pa,0.22,gL+pa,0.78); L(gL+pa,0.78,gL,0.78);
+      // goal box: depth .06·W, y .38–.62
+      const ga=0.06;
+      L(gR,0.38,gR-ga,0.38); L(gR-ga,0.38,gR-ga,0.62); L(gR-ga,0.62,gR,0.62);
+      L(gL,0.38,gL+ga,0.38); L(gL+ga,0.38,gL+ga,0.62); L(gL+ga,0.62,gL,0.62);
+      // penalty spots x .11 from each goal
+      [[gR-0.11,0.5],[gL+0.11,0.5]].forEach(s=>{x.beginPath();x.arc(u(s[0]),v(s[1]),cw*0.003,0,7);x.fillStyle='#fff';x.fill();});
+      // COORDINATE TICKS — engine x along top, engine y along left (in W/H px)
+      x.fillStyle='#ffe14d'; x.font='bold '+Math.round(cw*0.013)+'px monospace';
+      x.textAlign='center'; x.textBaseline='top';
+      for(let ex=0.1; ex<=0.9; ex+=0.1){ const px=u(ex);
+        L(ex,Yt,ex,Yt+0.012); x.fillText('x'+Math.round(ex*(CV.width||1280)), px, v(Yt)+6); }
+      x.textAlign='left'; x.textBaseline='middle';
+      for(let ey=0.1; ey<=0.9; ey+=0.1){ const py=v(ey);
+        L(gL,ey,gL+0.01,ey); x.fillText('y'+Math.round(ey*(CV.height||720)), u(gL)+8, py); }
+      const tex=new T.CanvasTexture(c); tex.anisotropy=8; return tex;
     }
-    loader.load('assets/stadium/pitch.png',
-      t=>buildPitch(t, t.image.width/t.image.height),
-      undefined,
-      ()=>{ // fallback: flat green
-        const c=document.createElement('canvas');c.width=1280;c.height=720;
-        const x=c.getContext('2d');x.fillStyle='#1f5a26';x.fillRect(0,0,1280,720);
-        buildPitch(new T.CanvasTexture(c),1.78);
+    function buildApron(){
+      if(apronMesh) scene.remove(apronMesh);
+      const aL=PLEN*2.4, aW=PWID*2.4;
+      apronMesh=new T.Mesh(new T.PlaneGeometry(aL,aW),
+        new T.MeshBasicMaterial({color:0x4c8c3f}));
+      apronMesh.rotation.x=-Math.PI/2; apronMesh.position.y=-0.05;
+      scene.add(apronMesh);
+    }
+    function buildGoals(){
+      goalGroup.clear();
+      const postMat=new T.MeshBasicMaterial({color:0xffffff});
+      const netMat=new T.MeshBasicMaterial({color:0xffffff,transparent:true,opacity:0.18,side:T.DoubleSide});
+      const HW=PWID*0.052;         // half goal-mouth (~7.3m of 68m)
+      const GH=PWID*0.030;         // crossbar height (~2.4m)
+      const DEP=PWID*0.026;        // net depth (outward, off pitch)
+      const r=PWID*0.0016;         // post radius
+      [-1,1].forEach(side=>{
+        const gx=side*(PLEN/2);    // goal-line
+        const bx=gx + side*DEP;    // net back, OUTWARD off the pitch
+        const g=new T.Group();
+        // two front uprights
+        [-HW,HW].forEach(z=>{
+          const p=new T.Mesh(new T.CylinderGeometry(r,r,GH,8),postMat);
+          p.position.set(gx,GH/2,z); g.add(p);
+        });
+        // crossbar (front, spans Z)
+        const cb=new T.Mesh(new T.CylinderGeometry(r,r,HW*2,8),postMat);
+        cb.rotation.x=Math.PI/2; cb.position.set(gx,GH,0); g.add(cb);
+        // back ground bar
+        const bb=new T.Mesh(new T.CylinderGeometry(r*0.8,r*0.8,HW*2,8),postMat);
+        bb.rotation.x=Math.PI/2; bb.position.set(bx,r,0); g.add(bb);
+        // top slope rails: front-top → back-bottom (both sides)
+        [-HW,HW].forEach(z=>{
+          const len=Math.hypot(DEP,GH);
+          const sr=new T.Mesh(new T.CylinderGeometry(r*0.7,r*0.7,len,6),postMat);
+          sr.position.set((gx+bx)/2,GH/2,z);
+          // rotate around Z so it leans from top-front down to back-ground
+          sr.rotation.z=side*Math.atan2(DEP,GH);
+          g.add(sr);
+        });
+        // NET — slanted back panel: top edge at front-top, bottom edge at back-ground
+        const slantLen=Math.hypot(DEP,GH);
+        const bn=new T.Mesh(new T.PlaneGeometry(HW*2,slantLen),netMat);
+        bn.position.set((gx+bx)/2,GH/2,0);
+        bn.rotation.y=Math.PI/2;                              // normal along X (faces pitch)
+        bn.rotation.x=side*Math.atan2(DEP,GH);                // lean to match slope rails
+        g.add(bn);
+        // side net panels (two right-triangle-ish quads, faces sideways)
+        [-HW,HW].forEach(z=>{
+          const sd=new T.Mesh(new T.PlaneGeometry(DEP,GH),netMat);
+          sd.position.set((gx+bx)/2,GH/2,z);                  // normal along Z
+          g.add(sd);
+        });
+        goalGroup.add(g);
       });
+    }
+    function buildPitch(tex,aspect){
+      PWID=PLEN*0.641;                              // engine playable-rect aspect
+      if(pitchMesh) scene.remove(pitchMesh);
+      pitchMesh=new T.Mesh(new T.PlaneGeometry(PLEN,PWID),
+        new T.MeshBasicMaterial({map:tex}));
+      pitchMesh.rotation.x=-Math.PI/2; pitchMesh.position.y=0; scene.add(pitchMesh);
+      buildApron(); buildGoals(); placeAllStadium();
+    }
+    /* NOTE: the initial buildPitch() call lives lower down, AFTER the bowl
+       consts (crowdTex / bowlGroup / TIER_TEX / CORNER_TEX) are declared —
+       calling it here would hit those in the temporal dead zone and throw,
+       killing init() before the render loop/buttons register. */
 
     /* ════════ SEGMENTED BOWL STADIUM (ported from stadium-live sandbox) ════════
        Each tier = 4 straight walls + 4 corners. Straights take a flat crowd
@@ -249,7 +446,7 @@
       // every absolute dimension must scale by U = PWID/190 to reproduce the
       // SAME proportions. Sliders stay in sandbox units; U converts to world.
       const U = PWID/190;
-      const RUNOFF = 26*U;                                  // sandbox runoff
+      const RUNOFF = 6*U;                                   // tight apron — stands hug the pitch
       const baseHL = PLEN/2 + RUNOFF + (S.gap||0)*U;
       const baseHW = PWID/2 + RUNOFF + (S.gap||0)*U;
       const r = (S.sharp? 40 : 60) * U;                     // corner radius, scaled
@@ -283,7 +480,7 @@
       }
       // base hoarding — full perimeter, closes the near side
       const hoMat=new T.MeshLambertMaterial({color:'#1d242c', side:T.DoubleSide});
-      bowlGroup.add(buildTierSegmented(baseHL,baseHW,r, (S.yOff||0)*U, (S.yOff||0)*U+th*0.55, 0.5,
+      bowlGroup.add(buildTierSegmented(baseHL,baseHW,r, (S.yOff||0)*U, (S.yOff||0)*U+th*0.12, 0.4,
         {backMat:hoMat, texFor:null, openFront:false, sharp:S.sharp}));
       // roof
       if(S.roof!==false){
@@ -295,6 +492,21 @@
       }
     }
     P3D._rebuildBowl=placeAllStadium;   // Camera Lab calls this when sliders change
+
+    /* ---- initial pitch + stadium build (safe here: all bowl consts above are
+       now initialized, so placeAllStadium won't hit a temporal dead zone).
+       Default = assets/stadium/pitch.png. Set window.DEBUG_PITCH3D=true for the
+       procedural debug pitch with engine coordinate ticks. ---- */
+    if(window.DEBUG_PITCH3D===true){
+      buildPitch(makeDebugPitchTex(), 1.56);
+    } else {
+      loader.load('assets/stadium/pitch.png',
+        t=>buildPitch(t, t.image.width/t.image.height),
+        undefined,
+        ()=>{ const c=document.createElement('canvas');c.width=1280;c.height=720;
+          const x=c.getContext('2d');x.fillStyle='#1f5a26';x.fillRect(0,0,1280,720);
+          buildPitch(new T.CanvasTexture(c),1.56); });
+    }
 
     function loadLayer(key){
       loader.load('assets/stadium/'+key+'.png',
@@ -336,16 +548,16 @@
       tex.repeat.set(1/GRID.cols,1/GRID.rows); tex.needsUpdate=true;
       const sp=new T.Sprite(new T.SpriteMaterial({map:tex,transparent:true}));
       sp.center.set(0.5,0); scene.add(sp);
-      const sh=new T.Mesh(new T.CircleGeometry(0.9,16),
-        new T.MeshBasicMaterial({color:'#000',transparent:true,opacity:.36}));
-      sh.rotation.x=-Math.PI/2; sh.position.y=0.04; scene.add(sh);
+      const sh=new T.Mesh(new T.PlaneGeometry(1,1),
+        new T.MeshBasicMaterial({map:SHADOW_TEX,transparent:true,opacity:P3D.light.shadow,depthWrite:false}));
+      sh.rotation.x=-Math.PI/2; sh.position.y=0.04; sh.renderOrder=2; scene.add(sh);
       return sprites[id]={sprite:sp,shadow:sh,tex};
     }
     function cellState(id,p){
       const now=performance.now();
       const prev=stt[id]||{rx:p.x,ry:p.y,face:'side',flip:false,moveT:-1e9};
       const ddx=p.x-prev.rx, ddy=p.y-prev.ry, dist=Math.hypot(ddx,ddy);
-      const thresh=(window.W||1280)*0.0015;
+      const thresh=(CV.width||1280)*0.0015;
       let {rx,ry,face,flip,moveT}=prev;
       if(dist>thresh){
         if(Math.abs(ddx)>=Math.abs(ddy)){ face='side'; flip=ddx<0; }   // sheet faces right
@@ -379,8 +591,17 @@
           o.sprite.scale.set(wWorld*(st.flip?-1:1), hWorld, 1);
           const wx=ex2wx(p.x), wz=ey2wz(p.y);
           o.sprite.position.set(wx,0.05,wz);
-          o.shadow.position.set(wx,0.04,wz);
-          o.shadow.scale.setScalar(Math.max(0.3,wWorld*0.42));
+          // ---- directional soft shadow (cast away from the sun) ----
+          const Lt=P3D.light, az=Lt.azim, el=Math.max(0.05,Math.min(1,Lt.elev));
+          const baseR=Math.max(0.3, wWorld*0.46);
+          const elong=1+(1-el)*Lt.shadowLen*2.2;           // lower sun → longer
+          const cdx=-Math.sin(az), cdz=-Math.cos(az);       // cast direction (away from sun)
+          const off=baseR*(elong-1)*0.6;                    // shift centre down-shadow
+          o.shadow.position.set(wx+cdx*off, 0.04, wz+cdz*off);
+          o.shadow.scale.set(baseR, baseR*elong, 1);        // width × length(=cast dir)
+          _qF.setFromAxisAngle(_AX,-Math.PI/2); _qS.setFromAxisAngle(_AY,az);
+          o.shadow.quaternion.copy(_qS).multiply(_qF);      // flat, length aligned to cast dir
+          o.shadow.material.opacity=Lt.shadow;
         });
       });
       // hide sprites whose players vanished (subs, etc.)
@@ -434,12 +655,34 @@
     P3D._drawDebug=drawDebug;
 
     /* ════════ BALL ════════ */
-    const ballMesh=new T.Mesh(new T.SphereGeometry(0.22,16,12),
-      new T.MeshBasicMaterial({color:'#f4f4f4'}));
+    // ⚽ emoji ball — flat billboard rendered from a canvas, anchored at the
+    // ground point so it sits at the player's feet (no float, no oversize).
+    const ballCv=document.createElement('canvas'); ballCv.width=ballCv.height=128;
+    const bcx=ballCv.getContext('2d');
+    bcx.clearRect(0,0,128,128); bcx.font='104px serif';
+    bcx.textAlign='center'; bcx.textBaseline='middle';
+    bcx.fillText('⚽',64,70);
+    const ballTex=new T.Texture(ballCv); ballTex.needsUpdate=true;
+    ballTex.minFilter=T.LinearFilter; ballTex.magFilter=T.LinearFilter;
+    const ballMesh=new T.Sprite(new T.SpriteMaterial({map:ballTex,transparent:true}));
+    ballMesh.center.set(0.5,0);              // bottom-anchored at the ground point
     scene.add(ballMesh);
     function syncBall(){
       if(typeof ball==='undefined'||!ball) return;
-      ballMesh.position.set(ex2wx(ball.x),0.22,ey2wz(ball.y));
+      const frac=(P3D.spriteFrac!=null?P3D.spriteFrac:0.045);
+      const d=PLEN*frac*0.21;                // ball ~0.21 of player sprite height
+      ballMesh.scale.set(d,d,1);
+      let bx=ball.x, by=ball.y;
+      // Cosmetic: when a carrier is dribbling, pull the rendered ball toward his
+      // feet so it doesn't read as detached (engine keeps it slightly ahead).
+      // During passes / loose balls, show the true ball position so it travels.
+      const cp=carrierPos();
+      const passing=(typeof G!=='undefined'&&G&&(G.phase==='pass_anim'||(G.phase==='moving'&&G.pm)));
+      if(cp && !passing){
+        const t=0.6;                         // 0 = true pos, 1 = on the sprite
+        bx+=(cp.x-bx)*t; by+=(cp.y-by)*t;
+      }
+      ballMesh.position.set(ex2wx(bx),0.05,ey2wz(by));
     }
 
     /* ════════ CAMERA (broadcast, follows carrier, constrained) ════════ */
@@ -464,15 +707,24 @@
     function updateCamera(dt){
       const C=P3D.cam;
       camera.fov=C.fov; camera.updateProjectionMatrix();
-      // FOCUS: follow whoever has the ball (both teams); fall back to ball.
+      // FOCUS: during a pass/loose ball, follow the BALL (it leads to the
+      // receiver); otherwise follow the carrier. This keeps far receivers framed.
       let fx=0,fz=0, cx01=0.5;
+      const passing = (typeof G!=='undefined'&&G&&(G.phase==='pass_anim'||G.phase==='moving'&&G.pm));
       const cp=carrierPos();
-      if(cp){ fx=ex2wx(cp.x); fz=ey2wz(cp.y); cx01=cp.x/(window.W||1280); }
-      else if(typeof ball!=='undefined'&&ball){ fx=ex2wx(ball.x); fz=ey2wz(ball.y); cx01=ball.x/(window.W||1280); }
+      if(passing && typeof ball!=='undefined'&&ball){
+        fx=ex2wx(ball.x); fz=ey2wz(ball.y); cx01=ball.x/(CV.width||1280);
+      } else if(cp){ fx=ex2wx(cp.x); fz=ey2wz(cp.y); cx01=cp.x/(CV.width||1280); }
+      else if(typeof ball!=='undefined'&&ball){ fx=ex2wx(ball.x); fz=ey2wz(ball.y); cx01=ball.x/(CV.width||1280); }
       const k=Math.min(1,dt*C.followLerp);
       camFocus.x+=(fx-camFocus.x)*k;
       camFocus.z+=(fz*C.zFollow-camFocus.z)*k;     // partial Z so view stays sideways
-      camFocus.dist+=(C.dist-camFocus.dist)*k;
+      // AUTO-ZOOM near the SOUTH touchline: as the carrier approaches the near
+      // edge, pull the camera in so the dark base/sponsor panel goes out of frame.
+      const cyN = cp ? cp.y/(CV.height||720) : 0.5;        // 0..1 (1 = near/south)
+      const southProx = Math.max(0, (cyN - 0.62)/0.38);   // 0 at mid, →1 at south edge
+      const targetDist = C.dist * (1 - 0.5*southProx);     // up to 50% closer
+      camFocus.dist+=(targetDist-camFocus.dist)*k;
       // INWARD YAW: at midfield theta≈0 (pure sideways); near either goal, turn in.
       // cx01: 0=left goal, 0.5=mid, 1=right goal  →  signed -1..1
       const sideSigned=(cx01-0.5)*2;               // -1 .. +1
@@ -493,37 +745,110 @@
       camera.aspect=w/h; camera.updateProjectionMatrix();
       renderer.setPixelRatio(Math.min(devicePixelRatio,2));
       renderer.setSize(w,h,false);
+      if(typeof resizeComposer==='function') resizeComposer();
     }
     addEventListener('resize',resize);
 
-    /* ---- hook draw(): render 3D after the engine's 2D pass ---- */
+    /* ---- render 3D on an INDEPENDENT rAF loop ----
+       Do NOT depend on wrapping window.draw: other modules (ps1-mod, camlab)
+       may re-wrap it after us, or the engine may call draw by a local name, in
+       which case our wrapper would silently never run. A standalone loop that
+       reads P3D.on each frame is immune to load order / draw ownership. */
     let lastTs=performance.now();
-    const _prevDraw=window.draw;          // (this is ps1-mod's wrapped draw — fine)
-    window.draw=function(){
-      _prevDraw();                         // engine (+PS1) draw 2D underneath
-      if(!P3D.on){ if(gl.style.display!=='none'){gl.style.display='none'; if(P3D.suppress2D)CV.style.visibility='';} return; }
+    function loop3d(){
+      requestAnimationFrame(loop3d);
+      if(!P3D.on){
+        if(gl.style.display!=='none'){ gl.style.display='none'; if(P3D.suppress2D)CV.style.visibility=''; }
+        return;
+      }
       if(gl.style.display==='none'){ gl.style.display='block'; resize(); if(P3D.suppress2D)CV.style.visibility='hidden'; }
       const now=performance.now(); const dt=Math.min(0.05,(now-lastTs)/1000); lastTs=now;
       syncSheets(); syncPlayers(); syncBall(); updateCamera(dt);
-      renderer.render(scene,camera);
+      if(composer && P3D.fx && P3D.fx.on) composer.render(dt);
+      else renderer.render(scene,camera);
       drawDebug();
-    };
+    }
+    requestAnimationFrame(loop3d);
 
-    /* ---- inject a 3D toggle button next to PS1 button if present ---- */
+    /* ---- inject a 2.5D toggle button (robust, retries until DOM ready) ---- */
     function injectButton(){
-      // try to find the PS1 button or any toolbar; otherwise float one
-      let host=document.querySelector('#fieldShotBtn');
+      if(document.getElementById('p3dToggleBtn')) return true;
       const b=document.createElement('button');
+      b.id='p3dToggleBtn';
       b.textContent='2.5D';
-      b.style.cssText='position:absolute;left:8px;top:8px;z-index:140;font:700 11px Orbitron,sans-serif;'
-        +'letter-spacing:.1em;color:#cfd8e3;background:rgba(18,28,46,.92);border:1px solid rgba(240,192,64,.3);'
-        +'border-radius:6px;padding:6px 10px;cursor:pointer';
+      b.style.cssText='position:fixed;left:50%;top:96px;transform:translateX(-50%);z-index:99999;'
+        +'font:700 11px Orbitron,sans-serif;letter-spacing:.1em;color:#cfd8e3;'
+        +'background:rgba(18,28,46,.92);border:1px solid rgba(240,192,64,.45);'
+        +'border-radius:6px;padding:6px 12px;cursor:pointer';
       b.onclick=()=>{ P3D.on=!P3D.on; b.style.background=P3D.on?'#1f9d63':'rgba(18,28,46,.92)';
                       b.style.color=P3D.on?'#04140c':'#cfd8e3'; };
-      document.querySelector('.mviews')?.appendChild(b) || document.body.appendChild(b);
+      document.body.appendChild(b);
+      // reflect current state
+      b.style.background=P3D.on?'#1f9d63':'rgba(18,28,46,.92)';
+      b.style.color=P3D.on?'#04140c':'#cfd8e3';
+      return true;
     }
-    injectButton();
+    /* Bind the permanent index.html button (#view25Btn) directly to P3D, and
+       inject a JS fallback button, so the toggle can never fire before init. */
+    (function wireToggles(){
+      const idx=document.getElementById('view25Btn');
+      if(idx && !idx._p3dWired){
+        idx._p3dWired=true;
+        idx.onclick=()=>{ P3D.on=!P3D.on;
+          idx.style.background=P3D.on?'#1f9d63':'';
+          idx.style.color=P3D.on?'#04140c':''; };
+      }
+      injectButton();
+      if(!idx) setTimeout(wireToggles,500);
+    })();
 
+    /* ════════ POST-PROCESSING (HD-2D: bloom + tilt-shift + vignette) ════════
+       Uses stock three.js r128 example passes loaded in index.html. If any are
+       missing (scripts blocked/offline) we silently fall back to direct render —
+       no black screen. */
+    let composer=null, bloomPass=null, hTilt=null, vTilt=null, vignettePass=null;
+    function buildComposer(){
+      if(!(T.EffectComposer && T.RenderPass && T.ShaderPass && T.UnrealBloomPass)){
+        console.warn('[P3D] post-processing scripts not found — running without FX');
+        return false;
+      }
+      composer=new T.EffectComposer(renderer);
+      composer.addPass(new T.RenderPass(scene,camera));
+      bloomPass=new T.UnrealBloomPass(new T.Vector2(1,1),
+        P3D.fx.bloom, P3D.fx.bloomRadius, P3D.fx.bloomThresh);
+      composer.addPass(bloomPass);
+      if(T.HorizontalTiltShiftShader && T.VerticalTiltShiftShader){
+        hTilt=new T.ShaderPass(T.HorizontalTiltShiftShader);
+        vTilt=new T.ShaderPass(T.VerticalTiltShiftShader);
+        hTilt.uniforms.r.value=0.5; vTilt.uniforms.r.value=0.5;   // sharp band at vertical centre
+        composer.addPass(hTilt); composer.addPass(vTilt);
+      }
+      if(T.VignetteShader){
+        vignettePass=new T.ShaderPass(T.VignetteShader);
+        composer.addPass(vignettePass);
+      }
+      const ps=composer.passes; ps[ps.length-1].renderToScreen=true;
+      resizeComposer(); applyFx();
+      console.log('[P3D] post-processing ready (bloom + tilt-shift + vignette)');
+      return true;
+    }
+    function resizeComposer(){
+      if(!composer) return;
+      const w=CV.clientWidth||CV.width, h=CV.clientHeight||CV.height; if(!w||!h) return;
+      composer.setPixelRatio(Math.min(devicePixelRatio,2));
+      composer.setSize(w,h);
+      if(bloomPass) bloomPass.setSize(w,h);
+    }
+    function applyFx(){
+      if(!composer) return;
+      if(bloomPass){ bloomPass.strength=P3D.fx.bloom; bloomPass.radius=P3D.fx.bloomRadius; bloomPass.threshold=P3D.fx.bloomThresh; }
+      if(hTilt&&vTilt){ const b=P3D.fx.tilt*0.0035; hTilt.uniforms.h.value=b; vTilt.uniforms.v.value=b; }
+      if(vignettePass){ vignettePass.uniforms.offset.value=1.0; vignettePass.uniforms.darkness.value=1.0+P3D.fx.vignette*0.9; }
+    }
+    P3D._applyFx=applyFx;
+    buildComposer();
+
+    applyLight();      // set initial sun / ambient / fog / pitch glow
     resize();
     P3D.ready=true;
     console.log('[P3D] 2.5D renderer ready — toggle via the 2.5D button or window.P3D.on=true');

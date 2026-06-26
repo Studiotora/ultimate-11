@@ -93,9 +93,9 @@
   }
   window.camLabStart = camLabStart;
 
-  /* ---- when leaving the match, deactivate the lab ---- */
-  const _origShowSc = window.showSc;
-  if(typeof _origShowSc==='function'){
+  /* ---- when leaving the match, deactivate the lab (best-effort) ---- */
+  if(typeof window.showSc==='function'){
+    const _origShowSc = window.showSc;
     window.showSc = function(id){
       if(id!=='s-match' && LAB.active){ LAB.active=false; hidePanel(); if(window.P3D)P3D.on=false; }
       return _origShowSc.apply(this, arguments);
@@ -133,8 +133,15 @@
       +'background:rgba(8,14,26,.94);border:1px solid rgba(240,192,64,.25);border-radius:10px;padding:10px 12px;'
       +'backdrop-filter:blur(6px)';
     const title=document.createElement('div');
-    title.textContent='CAMERA LAB';
-    title.style.cssText='font:800 13px system-ui;letter-spacing:.18em;color:#f0c040;margin-bottom:4px';
+    title.style.cssText='display:flex;align-items:center;justify-content:space-between;margin-bottom:4px';
+    const tt=document.createElement('span');
+    tt.textContent='CAMERA LAB';
+    tt.style.cssText='font:800 13px system-ui;letter-spacing:.18em;color:#f0c040';
+    const hide=document.createElement('button');
+    hide.textContent='✕';
+    hide.style.cssText='font:800 14px system-ui;color:#f0c040;background:transparent;border:0;cursor:pointer;padding:0 4px';
+    hide.onclick=()=>{ panel.style.display='none'; showReopen(); };
+    title.append(tt,hide);
     panel.appendChild(title);
 
     const C=P3D.cam, B=P3D.bowl;
@@ -145,7 +152,7 @@
     panel.appendChild(row('Elevation', 0.1,1.3,0.01, ()=>C.phi,  v=>C.phi=v));
     panel.appendChild(row('Look Y',    0,8,0.1,  ()=>C.lookY,    v=>C.lookY=v));
     panel.appendChild(row('Lift',      0,12,0.5, ()=>C.lift,     v=>C.lift=v));
-    panel.appendChild(row('Follow spd',1,14,0.5, ()=>C.followLerp, v=>C.followLerp=v));
+    panel.appendChild(row('Follow spd',1,25,0.5, ()=>C.followLerp, v=>C.followLerp=v));
     panel.appendChild(row('Z-follow',  0,1,0.01, ()=>C.zFollow,  v=>C.zFollow=v));
     panel.appendChild(row('Inward yaw',0,1.2,0.01,()=>C.inwardYaw, v=>C.inwardYaw=v));
 
@@ -164,6 +171,28 @@
     panel.appendChild(section('PLAYERS'));
     panel.appendChild(row('Sprite size', 0.02,0.10,0.001, ()=>P3D.spriteFrac, v=>P3D.spriteFrac=v));
 
+    panel.appendChild(section('LIGHTING'));
+    const L=P3D.light, al=()=>{ if(P3D._applyLight) P3D._applyLight(); };
+    panel.appendChild(row('Sun angle',  0,6.28,0.01, ()=>L.azim,      v=>{L.azim=v; al();}));
+    panel.appendChild(row('Sun height', 0.05,1,0.01, ()=>L.elev,      v=>{L.elev=v; al();}));
+    panel.appendChild(row('Key light',  0,3,0.05,    ()=>L.key,       v=>{L.key=v; al();}));
+    panel.appendChild(row('Ambient',    0,2,0.05,    ()=>L.ambient,   v=>{L.ambient=v; al();}));
+    panel.appendChild(row('Warmth',     0,1,0.01,    ()=>L.warmth,    v=>{L.warmth=v; al();}));
+    panel.appendChild(row('Shadow',     0,0.9,0.01,  ()=>L.shadow,    v=>{L.shadow=v;}));
+    panel.appendChild(row('Shadow len', 0,2,0.05,    ()=>L.shadowLen, v=>{L.shadowLen=v;}));
+    panel.appendChild(row('Sun glow',   0,1,0.01,    ()=>L.glow,      v=>{L.glow=v; al();}));
+
+    panel.appendChild(section('POST FX'));
+    const F=P3D.fx, af=()=>{ if(P3D._applyFx) P3D._applyFx(); };
+    const fxg=document.createElement('div'); fxg.style.cssText='display:flex;flex-wrap:wrap;margin-bottom:2px';
+    fxg.appendChild(toggle('FX', ()=>F.on, v=>{F.on=v;}));
+    panel.appendChild(fxg);
+    panel.appendChild(row('Bloom',      0,2,0.05,    ()=>F.bloom,       v=>{F.bloom=v; af();}));
+    panel.appendChild(row('Bloom size', 0,1,0.01,    ()=>F.bloomRadius, v=>{F.bloomRadius=v; af();}));
+    panel.appendChild(row('Bloom thr',  0,1,0.01,    ()=>F.bloomThresh, v=>{F.bloomThresh=v; af();}));
+    panel.appendChild(row('Tilt-shift', 0,1,0.01,    ()=>F.tilt,        v=>{F.tilt=v; af();}));
+    panel.appendChild(row('Vignette',   0,1,0.01,    ()=>F.vignette,    v=>{F.vignette=v; af();}));
+
     panel.appendChild(section('DEBUG'));
     const dg=document.createElement('div'); dg.style.cssText='display:flex;flex-wrap:wrap';
     dg.appendChild(toggle('Sprite dots', ()=>P3D.debug, v=>P3D.debug=v));
@@ -177,12 +206,26 @@
     copy.onclick=()=>{
       const out='// Camera Lab — paste into P3D defaults in ult11-pitch3d.js\n'
         +'cam: '+JSON.stringify(P3D.cam,null,2)+',\n'
-        +'bowl: '+JSON.stringify(P3D.bowl,null,2);
+        +'bowl: '+JSON.stringify(P3D.bowl,null,2)+',\n'
+        +'light: '+JSON.stringify(P3D.light,null,2)+',\n'
+        +'fx: '+JSON.stringify(P3D.fx,null,2);
       try{ navigator.clipboard.writeText(out); copy.textContent='✓ COPIED'; }
       catch(e){ console.log(out); copy.textContent='✓ LOGGED (console)'; }
       setTimeout(()=>copy.textContent='⧉ COPY FINAL VALUES',1400);
     };
     panel.appendChild(copy);
+
+    // save to localStorage — persists across reloads (camera + stadium + light)
+    const save=document.createElement('button');
+    save.textContent='💾 SAVE SETTINGS';
+    save.style.cssText='width:100%;margin-top:6px;font:800 11px system-ui;letter-spacing:.08em;color:#04140c;'
+      +'background:#1f9d63;border:0;border-radius:7px;padding:8px;cursor:pointer';
+    save.onclick=()=>{
+      const ok=window.P3D && P3D.saveCam && P3D.saveCam();
+      save.textContent=ok?'✓ SAVED':'✗ SAVE FAILED';
+      setTimeout(()=>save.textContent='💾 SAVE SETTINGS',1400);
+    };
+    panel.appendChild(save);
 
     // exit
     const exit=document.createElement('button');
@@ -194,7 +237,19 @@
 
     (document.querySelector('.mviews')||document.body).appendChild(panel);
   }
-  function showPanel(){ if(!window.P3D){ return; } if(!panel) buildPanel(); panel.style.display='block'; P3D.on=true; }
+  let reopenBtn=null;
+  function showReopen(){
+    if(!reopenBtn){
+      reopenBtn=document.createElement('button');
+      reopenBtn.textContent='⚙ LAB';
+      reopenBtn.style.cssText='position:absolute;right:8px;top:8px;z-index:201;font:800 11px system-ui;'
+        +'letter-spacing:.08em;color:#04140c;background:#f0c040;border:0;border-radius:7px;padding:7px 10px;cursor:pointer';
+      reopenBtn.onclick=()=>{ reopenBtn.style.display='none'; if(panel)panel.style.display='block'; };
+      (document.querySelector('.mviews')||document.body).appendChild(reopenBtn);
+    }
+    reopenBtn.style.display='block';
+  }
+  function showPanel(){ if(!window.P3D){ return; } if(!panel) buildPanel(); panel.style.display='block'; if(reopenBtn)reopenBtn.style.display='none'; P3D.on=true; }
   function hidePanel(){ if(panel) panel.style.display='none'; }
 
   console.log('[CamLab] ready — launch via the Camera Lab menu entry or camLabStart()');
