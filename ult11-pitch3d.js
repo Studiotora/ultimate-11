@@ -620,8 +620,13 @@
           const cy=Math.min(Math.max(p.y,0.01*H),0.99*H);
           const wx=ex2wx(cx), wz=ey2wz(cy);
           const st=cellState(id,p,wx,wz);
-          o.tex.offset.set(st.col/GRID.cols, 1-(st.row+1)/GRID.rows);
-          o.sprite.scale.set(wWorld*(st.flip?-1:1), hWorld, 1);
+          // Mirror via UV, not scale: THREE.Sprite ignores negative scale.x.
+          // flip → repeat.x negative + offset shifted one cell to the right edge.
+          const cw=1/GRID.cols, ch=1/GRID.rows;
+          const ox=st.col*cw, oy=1-(st.row+1)*ch;
+          if(st.flip){ o.tex.repeat.set(-cw,ch); o.tex.offset.set(ox+cw,oy); }
+          else       { o.tex.repeat.set( cw,ch); o.tex.offset.set(ox,   oy); }
+          o.sprite.scale.set(wWorld, hWorld, 1);
           o.sprite.position.set(wx,0.05,wz);
           // ---- shadows ----
           const Lt=P3D.light, az=Lt.azim, el=Math.max(0.05,Math.min(1,Lt.elev));
@@ -634,7 +639,7 @@
           // SILHOUETTE cast: lay the sprite flat, stretch away from the sun
           const projLen=hWorld*(0.55+(1-el)*Lt.shadowLen*2.6);
           o.sil.position.set(wx+cdx*projLen*0.5, 0.045, wz+cdz*projLen*0.5);
-          o.sil.scale.set(wWorld*(st.flip?-1:1), projLen, 1);
+          o.sil.scale.set(wWorld, projLen, 1);
           _qF.setFromAxisAngle(_AX,-Math.PI/2); _qS.setFromAxisAngle(_AY,az);
           o.sil.quaternion.copy(_qS).multiply(_qF);
           o.sil.material.opacity=Lt.shadow*0.8;
