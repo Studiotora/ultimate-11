@@ -1533,6 +1533,20 @@ function tick(dt=1){
   const cp=PP[s][G.ck];if(!cp)return;
   const dir=dirFor(s);
 
+  // ★ CAMERA LAB — freeze opponent: no chase, no duels, no shots. The lab is a
+  //   pure camera/sprite test, so the away team must stay put and the human
+  //   keeps the ball. Gated behind CAMLAB.active so it's inert in normal play.
+  //   ★ REMOVE FOR RELEASE (or leave — it only fires inside Camera Lab).
+  if(window.CAMLAB && window.CAMLAB.active){
+    ROLES.engager=null; ROLES.cover=null; ROLES.blocker=null;
+    G.chk=null;
+    G.kickoffUntil=Math.max(G.kickoffUntil||0, Date.now()+10000); // block duel/shot gates
+    if(G.poss!=='h'){ // keep control on the human side
+      const hq=sq('h'); const hk=(G.ck&&hq[G.ck])?G.ck:Object.keys(hq).find(k=>hq[k]&&hq[k].pos!=='GK');
+      if(hk){ G.poss='h'; G.ck=hk; }
+    }
+  }
+
   // GK carrier: locked to his goal area AND must distribute immediately —
   // the keeper never keeps the ball.
   const _carrPl0=sq(s)[G.ck];
@@ -3299,6 +3313,21 @@ function pvpSwitch(player){ _switchEngager(player===2?'a':'h'); } // pad ✕ —
 // Unified canvas input — handles both mouse click and touch tap
 function handleCanvasInput(clientX, clientY){
   if(G.poss!=='h')return;
+  // ── 2.5D: hit-test against the 3D screen positions instead of the 2D ones ──
+  if(window.P3D && P3D.on && typeof P3D.pickPlayerAt==='function'){
+    const k=P3D.pickPlayerAt(clientX, clientY);   // nearest home teammate (not carrier) in 3D
+    if(!k) return;
+    if(G.pm){
+      G.D.pk=k; G.pm=false;
+      document.getElementById('pass-banner').style.display='none';
+      document.getElementById('duel-ov').classList.add('show');
+      chkRdy(); say((G.D.ak==='one-two'?'Wall pass':'Pass')+' to '+hSq[k].name+' — GO!');
+      return;
+    }
+    if(G.phase!=='moving')return;
+    if(isOffside('h',k)){callOffside('h',k);return;}
+    iPas(k); return;
+  }
   const rect=CV.getBoundingClientRect();
   const mx0=(clientX-rect.left)*(W/rect.width);
   const my0=(clientY-rect.top)*(H/rect.height);

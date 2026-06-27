@@ -43,7 +43,7 @@
     spriteScale:1.9,     // (legacy) billboard height vs engine token radius CR
     spriteFrac:0.045,    // billboard height as fraction of world pitch LENGTH (HD-2D)
     // ---- LIGHTING / SHADOWS (Camera Lab → LIGHTING) ----
-    light:{ azim:0.70,    // sun direction in the XZ plane (also shadow cast dir + glow pos)
+    light:{ azim:3.14,    // sun NORTH → shadows cast SOUTH (+Z). Sun angle slider rotates this.
             elev:0.78,    // sun height 0..1 (lower = longer shadows, lower glow)
             key:1.35,     // directional key-light intensity (models the bowl)
             ambient:0.55, // hemisphere ambient intensity
@@ -130,7 +130,7 @@
       const az=Lt.azim, el=Math.max(0.05,Math.min(1,Lt.elev));
       // sun sits opposite the cast direction, raised by elevation
       const horiz=Math.cos(el*Math.PI/2), vert=Math.sin(el*Math.PI/2);
-      sun.position.set(-Math.sin(az)*horiz*120, vert*120+20, -Math.cos(az)*horiz*120);
+      sun.position.set(Math.sin(az)*horiz*120, vert*120+20, Math.cos(az)*horiz*120);
       sun.intensity=Lt.key;
       sun.color.copy(warmColor(Lt.warmth));
       hemi.intensity=Lt.ambient;
@@ -546,22 +546,41 @@
       const tex=new T.Texture(sheet.img);
       tex.magFilter=T.NearestFilter; tex.minFilter=T.NearestFilter;
       tex.repeat.set(1/GRID.cols,1/GRID.rows); tex.needsUpdate=true;
-      const sp=new T.Sprite(new T.SpriteMaterial({map:tex,transparent:true}));
+      const sp=new T.Sprite(new T.SpriteMaterial({map:tex,transparent:true,alphaTest:0.5}));
       sp.center.set(0.5,0); scene.add(sp);
+      // soft round CONTACT shadow under the feet
       const sh=new T.Mesh(new T.PlaneGeometry(1,1),
         new T.MeshBasicMaterial({map:SHADOW_TEX,transparent:true,opacity:P3D.light.shadow,depthWrite:false}));
       sh.rotation.x=-Math.PI/2; sh.position.y=0.04; sh.renderOrder=2; scene.add(sh);
-      return sprites[id]={sprite:sp,shadow:sh,tex};
+      // SILHOUETTE cast shadow — same sprite texture, tinted black, laid flat &
+      // stretched away from the sun (real shape, since the sprite is transparent).
+      const sil=new T.Mesh(new T.PlaneGeometry(1,1),
+        new T.MeshBasicMaterial({map:tex,color:0x000000,transparent:true,alphaTest:0.5,
+                                 opacity:P3D.light.shadow,depthWrite:false}));
+      sil.renderOrder=2; scene.add(sil);
+      return sprites[id]={sprite:sp,shadow:sh,sil,tex};
     }
-    function cellState(id,p){
+    function cellState(id,p,wx,wz){
       const now=performance.now();
       const prev=stt[id]||{rx:p.x,ry:p.y,face:'side',flip:false,moveT:-1e9};
       const ddx=p.x-prev.rx, ddy=p.y-prev.ry, dist=Math.hypot(ddx,ddy);
       const thresh=(CV.width||1280)*0.0015;
       let {rx,ry,face,flip,moveT}=prev;
       if(dist>thresh){
-        if(Math.abs(ddx)>=Math.abs(ddy)){ face='side'; flip=ddx<0; }   // sheet faces right
-        else { face=ddy>0?'down':'up'; }                               // +y toward camera
+        const dwx=ddx*_wpeX, dwz=ddy*_wpeZ;             // engine delta → world delta
+        const sX=dwx*_camRX+dwz*_camRZ;                 // screen-horizontal (abs only)
+        const sZ=dwx*_camFX+dwz*_camFZ;                 // screen-depth (+ = away)
+        if(Math.abs(sX)>=Math.abs(sZ)){
+          face='side';
+          // flip from the ACTUAL on-screen horizontal motion (project feet now vs
+          // feet+velocity). Sign-proof and works for the camera-followed carrier.
+          _fp.set(wx,0.05,wz).project(camera);
+          _fp2.set(wx+dwx,0.05,wz+dwz).project(camera);
+          const sdx=_fp2.x-_fp.x;
+          if(Math.abs(sdx)>1e-5) flip=sdx<0;            // moving screen-left → mirror (sheet faces right)
+        } else {
+          face=sZ>0?'up':'down';                        // away → back row, toward → front row
+        }
         moveT=now; rx=p.x; ry=p.y;
       }
       stt[id]={rx,ry,face,flip,moveT};
@@ -572,8 +591,16 @@
       return {row:band.run, col, flip};
     }
     const seen=new Set();
+    let _camRX=1,_camRZ=0,_camFX=0,_camFZ=1,_wpeX=1,_wpeZ=1;
+    const _camRgt=new T.Vector3(), _camFwd=new T.Vector3();
+    const _fp=new T.Vector3(), _fp2=new T.Vector3();   // for projected screen-motion flip
     function syncPlayers(){
       seen.clear();
+      // camera-relative ground axes (for sprite facing) + engine→world scale
+      _camRgt.setFromMatrixColumn(camera.matrixWorld,0); _camRgt.y=0; _camRgt.normalize();
+      camera.getWorldDirection(_camFwd); _camFwd.y=0; _camFwd.normalize();
+      _camRX=_camRgt.x; _camRZ=_camRgt.z; _camFX=_camFwd.x; _camFZ=_camFwd.z;
+      _wpeX=PLEN/((CV.width||1280)*fbSx); _wpeZ=PWID/((CV.height||720)*fbSy);
       ['h','a'].forEach(s=>{
         const sheet=SHEETS[s]; if(!sheet||sheet==='none'||!sheet.img.complete) return;
         const q=sq(s);
@@ -586,27 +613,37 @@
           const frac=(P3D.spriteFrac!=null?P3D.spriteFrac:0.045);
           const hWorld=PLEN*frac;
           const wWorld=hWorld*(sheet.cw/sheet.ch);
-          const st=cellState(id,p);
+          // keep feet on the pitch: clamp x to the goal lines (GK sits at ~0.05 in
+          // the engine, which would render BEHIND the goal line) and y to sidelines.
+          const W=(CV.width||1280), H=(CV.height||720);
+          const cx=Math.min(Math.max(p.x,0.07*W),0.93*W);
+          const cy=Math.min(Math.max(p.y,0.01*H),0.99*H);
+          const wx=ex2wx(cx), wz=ey2wz(cy);
+          const st=cellState(id,p,wx,wz);
           o.tex.offset.set(st.col/GRID.cols, 1-(st.row+1)/GRID.rows);
           o.sprite.scale.set(wWorld*(st.flip?-1:1), hWorld, 1);
-          const wx=ex2wx(p.x), wz=ey2wz(p.y);
           o.sprite.position.set(wx,0.05,wz);
-          // ---- directional soft shadow (cast away from the sun) ----
+          // ---- shadows ----
           const Lt=P3D.light, az=Lt.azim, el=Math.max(0.05,Math.min(1,Lt.elev));
-          const baseR=Math.max(0.3, wWorld*0.46);
-          const elong=1+(1-el)*Lt.shadowLen*2.2;           // lower sun → longer
-          const cdx=-Math.sin(az), cdz=-Math.cos(az);       // cast direction (away from sun)
-          const off=baseR*(elong-1)*0.6;                    // shift centre down-shadow
-          o.shadow.position.set(wx+cdx*off, 0.04, wz+cdz*off);
-          o.shadow.scale.set(baseR, baseR*elong, 1);        // width × length(=cast dir)
+          const cdx=-Math.sin(az), cdz=-Math.cos(az);        // cast direction (away from sun)
+          // small soft CONTACT patch under the feet
+          const baseR=Math.max(0.3, wWorld*0.5);
+          o.shadow.position.set(wx,0.04,wz);
+          o.shadow.scale.set(baseR, baseR*0.55, 1);
+          o.shadow.material.opacity=Lt.shadow*0.55;
+          // SILHOUETTE cast: lay the sprite flat, stretch away from the sun
+          const projLen=hWorld*(0.55+(1-el)*Lt.shadowLen*2.6);
+          o.sil.position.set(wx+cdx*projLen*0.5, 0.045, wz+cdz*projLen*0.5);
+          o.sil.scale.set(wWorld*(st.flip?-1:1), projLen, 1);
           _qF.setFromAxisAngle(_AX,-Math.PI/2); _qS.setFromAxisAngle(_AY,az);
-          o.shadow.quaternion.copy(_qS).multiply(_qF);      // flat, length aligned to cast dir
-          o.shadow.material.opacity=Lt.shadow;
+          o.sil.quaternion.copy(_qS).multiply(_qF);
+          o.sil.material.opacity=Lt.shadow*0.8;
         });
       });
       // hide sprites whose players vanished (subs, etc.)
       for(const id in sprites){ const vis=seen.has(id);
-        sprites[id].sprite.visible=vis; sprites[id].shadow.visible=vis; }
+        sprites[id].sprite.visible=vis; sprites[id].shadow.visible=vis;
+        if(sprites[id].sil) sprites[id].sil.visible=vis; }
     }
 
     /* ════════ SPRITE/SHADOW DEBUG OVERLAY (Camera Lab) ════════
@@ -654,6 +691,97 @@
     }
     P3D._drawDebug=drawDebug;
 
+    /* ════════ 2.5D HUD: radar + carrier/chaser name tags + click hit-test ════════
+       The 2D engine drew these on #C, which is hidden under the GL canvas while
+       2.5D is on. We redraw them here using the 3D camera projection, and expose
+       P3D.pickPlayerAt so the engine's tap-to-pass works against 3D positions. */
+    let hudCv=null, hudCx=null;
+    function ensureHud(){
+      if(hudCv) return;
+      hudCv=document.createElement('canvas'); hudCv.id='C3D_hud';
+      hudCv.style.cssText='position:absolute;inset:0;width:100%;height:100%;pointer-events:none;z-index:4;display:none';
+      CV.parentNode.insertBefore(hudCv, gl.nextSibling); hudCx=hudCv.getContext('2d');
+    }
+    // foot world position of an engine player (same clamp + mapping as the sprite)
+    function footWorld(p){
+      const W=(CV.width||1280), H=(CV.height||720);
+      const cx=Math.min(Math.max(p.x,0.07*W),0.93*W);
+      const cy=Math.min(Math.max(p.y,0.01*H),0.99*H);
+      return {x:ex2wx(cx), z:ey2wz(cy)};
+    }
+    // nearest home teammate (not carrier) to a client click, in 3D screen space
+    P3D.pickPlayerAt=function(clientX, clientY){
+      if(typeof PP==='undefined'||!PP||!PP.h) return null;
+      const rect=gl.getBoundingClientRect();
+      const px=(clientX-rect.left), py=(clientY-rect.top);
+      const w=gl.clientWidth||gl.width, h=gl.clientHeight||gl.height;
+      let best=null, bestD=1e9;
+      const hq=(typeof hSq!=='undefined')?hSq:(typeof sq==='function'?sq('h'):null);
+      for(const k in (hq||{})){
+        if(!hq[k]) continue;
+        if(typeof G!=='undefined'&&G&&k===G.ck) continue;   // skip the carrier
+        const p=PP.h[k]; if(!p) continue;
+        const fw=footWorld(p);
+        const s=projectToScreen(fw.x,1.2,fw.z, w,h);          // aim at chest height
+        if(s.z>1) continue;                                   // behind camera
+        const d=Math.hypot(s.x-px, s.y-py);
+        if(d<bestD){ bestD=d; best=k; }
+      }
+      return (best && bestD<70) ? best : best;                // nearest wins; tolerance generous
+    };
+    function tag(ctx,sx,sy,txt,col){
+      ctx.font='700 12px Orbitron, system-ui';
+      const w=ctx.measureText(txt).width+16;
+      ctx.fillStyle='rgba(2,4,10,.82)'; ctx.fillRect(sx-w/2,sy-58,w,18);
+      ctx.fillStyle=col; ctx.fillRect(sx-w/2,sy-58,3,18);
+      ctx.fillStyle='#fff'; ctx.textAlign='center'; ctx.fillText(txt,sx+1,sy-45);
+    }
+    function drawRadar3D(ctx,w,h){
+      if(typeof PP==='undefined'||!PP) return;
+      const rw=Math.min(220,w*0.28), rh=rw*0.52, rx=(w-rw)/2, ry=h-rh-14;
+      ctx.save(); ctx.globalAlpha=.9;
+      ctx.fillStyle='rgba(4,10,6,.6)'; ctx.fillRect(rx,ry,rw,rh);
+      ctx.strokeStyle='rgba(255,255,255,.4)'; ctx.lineWidth=1.5; ctx.strokeRect(rx,ry,rw,rh);
+      ctx.beginPath(); ctx.moveTo(rx+rw/2,ry); ctx.lineTo(rx+rw/2,ry+rh); ctx.stroke();
+      ctx.beginPath(); ctx.arc(rx+rw/2,ry+rh/2,rw*0.06,0,7); ctx.stroke();
+      const W=(CV.width||1280), H=(CV.height||720);
+      const rpx=x=>rx+(x/W)*rw, rpy=y=>ry+(y/H)*rh;
+      const poss=(typeof G!=='undefined'&&G)?G.poss:'h', ck=(typeof G!=='undefined'&&G)?G.ck:null;
+      ['h','a'].forEach(s=>{ const col=s==='h'?'#4ea0ff':'#ff5050';
+        Object.keys(PP[s]||{}).forEach(k=>{ const p=PP[s][k]; if(!p) return;
+          if(s===poss&&k===ck) return;
+          ctx.beginPath(); ctx.arc(rpx(p.x),rpy(p.y),2.4,0,7); ctx.fillStyle=col; ctx.fill(); }); });
+      const cp=(ck&&PP[poss])?PP[poss][ck]:null;
+      if(cp){ const ccol=poss==='h'?'#4ea0ff':'#ff5050'; const t=(Math.sin(Date.now()/220)+1)/2;
+        ctx.save(); ctx.shadowColor=ccol; ctx.shadowBlur=6+t*7;
+        ctx.beginPath(); ctx.arc(rpx(cp.x),rpy(cp.y),3.6,0,7); ctx.fillStyle='#fff'; ctx.fill();
+        ctx.beginPath(); ctx.arc(rpx(cp.x),rpy(cp.y),5+t*1.6,0,7); ctx.strokeStyle=ccol; ctx.lineWidth=1.4; ctx.stroke();
+        ctx.restore(); }
+      if(typeof ball!=='undefined'&&ball){ ctx.beginPath(); ctx.arc(rpx(ball.x),rpy(ball.y),2.6,0,7);
+        ctx.fillStyle='#fff'; ctx.fill(); ctx.strokeStyle='#ffd24a'; ctx.lineWidth=1; ctx.stroke(); }
+      ctx.restore();
+    }
+    function drawHUD(){
+      ensureHud();
+      if(typeof G==='undefined'||!G || !(G.phase==='moving'||G.phase==='pass_anim')){
+        if(hudCv.style.display!=='none') hudCv.style.display='none'; return;
+      }
+      const w=CV.clientWidth||CV.width, h=CV.clientHeight||CV.height;
+      if(hudCv.width!==w||hudCv.height!==h){ hudCv.width=w; hudCv.height=h; }
+      hudCv.style.display='block'; hudCx.clearRect(0,0,w,h);
+      // carrier + chaser name tags
+      const poss=G.poss, ds=poss==='h'?'a':'h';
+      const carP=(G.ck&&PP[poss])?PP[poss][G.ck]:null, carPl=carP?sq(poss)[G.ck]:null;
+      if(carP&&carPl){ const fw=footWorld(carP); const s=projectToScreen(fw.x,0,fw.z,w,h);
+        if(s.z<=1) tag(hudCx,s.x,s.y,(carPl.name||'').toUpperCase(),poss==='h'?'#4ea0ff':'#ff5050'); }
+      const eng=(typeof ROLES!=='undefined'&&ROLES)?ROLES.engager:null;
+      const engP=(eng&&PP[ds])?PP[ds][eng]:null, engPl=engP?sq(ds)[eng]:null;
+      if(engP&&engPl){ const fw=footWorld(engP); const s=projectToScreen(fw.x,0,fw.z,w,h);
+        if(s.z<=1) tag(hudCx,s.x,s.y,(engPl.name||'').toUpperCase(),ds==='h'?'#4ea0ff':'#ff5050'); }
+      drawRadar3D(hudCx,w,h);
+    }
+    P3D._drawHUD=drawHUD;
+
     /* ════════ BALL ════════ */
     // ⚽ emoji ball — flat billboard rendered from a canvas, anchored at the
     // ground point so it sits at the player's feet (no float, no oversize).
@@ -664,7 +792,7 @@
     bcx.fillText('⚽',64,70);
     const ballTex=new T.Texture(ballCv); ballTex.needsUpdate=true;
     ballTex.minFilter=T.LinearFilter; ballTex.magFilter=T.LinearFilter;
-    const ballMesh=new T.Sprite(new T.SpriteMaterial({map:ballTex,transparent:true}));
+    const ballMesh=new T.Sprite(new T.SpriteMaterial({map:ballTex,transparent:true,alphaTest:0.2}));
     ballMesh.center.set(0.5,0);              // bottom-anchored at the ground point
     scene.add(ballMesh);
     function syncBall(){
@@ -759,6 +887,7 @@
       requestAnimationFrame(loop3d);
       if(!P3D.on){
         if(gl.style.display!=='none'){ gl.style.display='none'; if(P3D.suppress2D)CV.style.visibility=''; }
+        if(hudCv && hudCv.style.display!=='none') hudCv.style.display='none';
         return;
       }
       if(gl.style.display==='none'){ gl.style.display='block'; resize(); if(P3D.suppress2D)CV.style.visibility='hidden'; }
@@ -766,7 +895,7 @@
       syncSheets(); syncPlayers(); syncBall(); updateCamera(dt);
       if(composer && P3D.fx && P3D.fx.on) composer.render(dt);
       else renderer.render(scene,camera);
-      drawDebug();
+      drawDebug(); drawHUD();
     }
     requestAnimationFrame(loop3d);
 
