@@ -3724,12 +3724,12 @@ function _ensureBusts(){
     const right=side==='a';
     const w=document.createElement('div');
     w.id='bust-'+side;
-    w.style.cssText='position:absolute;bottom:26px;'+(right?'right:0;':'left:0;')+
+    w.style.cssText='position:absolute;bottom:26px;'+(right?'right:18px;':'left:18px;')+
       'width:200px;height:250px;z-index:5;pointer-events:none;display:none;';
     const img=document.createElement('div');
     img.className='bust-img';
     img.style.cssText='position:absolute;left:0;right:0;top:0;bottom:26px;'+
-      'background:no-repeat center top/135% auto;'+
+      'background:no-repeat center 8%/190% auto;'+
       'filter:drop-shadow(0 4px 10px rgba(0,0,0,.65));'+(right?'transform:scaleX(-1);':'');
     const col=side==='h'?'#1e72dc':'#c22020';
     const plate=document.createElement('div');
@@ -5352,6 +5352,20 @@ function afPass(s,tk){
   const receiverName=q[tk]?q[tk].name:'Teammate';
   // Offside check before completing pass
   if(checkOffside(s,tk)){callOffside(s,tk);return;}
+  // Animate the completed pass (lofted arc) instead of teleporting possession
+  const fpA=PP[s][G.ck], tpA=PP[s][tk];
+  if(fpA&&tpA){
+    say((q[G.ck]?q[G.ck].name:'—')+' → '+receiverName);
+    animateBallTo(fpA.x,fpA.y,tpA.x,tpA.y,()=>{
+      setC(tk,s);
+      const np=PP[s][tk];
+      if(np){ball.x=np.x;ball.y=np.y;ball.tx=np.x;ball.ty=np.y;}
+      G_moveTarget=null;G_laneTarget=null;
+      G.phase='idle';
+      setTimeout(()=>{asnC();G.phase='moving';if(G.poss==='h')document.getElementById('passhint').style.display='block';},120);
+    },passDuration(fpA.x,fpA.y,tpA.x,tpA.y,28));
+    return;
+  }
   setC(tk,s); if(PP[s][tk]){ball.tx=PP[s][tk].x;ball.ty=PP[s][tk].y;} G_moveTarget=null;G_laneTarget=null; resume(s,receiverName+' receives!');
 }
 

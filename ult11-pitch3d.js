@@ -808,7 +808,7 @@
         const t=0.6;                         // 0 = true pos, 1 = on the sprite
         bx+=(cp.x-bx)*t; by+=(cp.y-by)*t;
       }
-      ballMesh.position.set(ex2wx(bx),0.05,ey2wz(by));
+      ballMesh.position.set(ex2wx(bx),0.05+((ball.bz||0)*0.09),ey2wz(by));
     }
 
     /* ════════ REFEREE ════════
