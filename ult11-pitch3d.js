@@ -795,6 +795,7 @@
     ballMesh.center.set(0.5,0);              // bottom-anchored at the ground point
     scene.add(ballMesh);
     function syncBall(){
+      if(cine) return;   // cinematic drives the ball directly
       if(typeof ball==='undefined'||!ball) return;
       const frac=(P3D.spriteFrac!=null?P3D.spriteFrac:0.045);
       const d=PLEN*frac*0.21;                // ball ~0.21 of player sprite height
@@ -940,6 +941,148 @@
       camera.lookAt(camFocus.x, C.lookY, camFocus.z);
     }
 
+    /* ════════ SUPER-SHOT CINEMATIC ════════
+       CT J style: camera swings frontal on the striker (kick anim) → hard cut
+       to the keeper → ball flies in with a colored trail → net (goal) or GK
+       catch/dive (save). Outcome is decided by the duel BEFORE this plays —
+       this is pure presentation. Engine sits in idle/duel_result meanwhile.
+       GK dive sheet: assets/ps1/gk_dive.png (5 cols × 3 rows:
+       row0 = catch/center, row1 = dive left, row2 = dive right). Optional —
+       falls back to the team sheet's action row until the asset exists. */
+    let cine=null;
+    const DIVE={cols:5,rows:3};
+    let diveSheet=null;
+    (function(){ const im=new Image();
+      im.onload=()=>diveSheet={img:im,cw:im.width/DIVE.cols,ch:im.height/DIVE.rows};
+      im.onerror=()=>diveSheet='none';
+      im.src='assets/ps1/gk_dive.png'; })();
+    // trail pool — additive fading ghosts behind the ball
+    const TRAIL=[];
+    function spawnTrail(x,y,z,col,size){
+      let t=TRAIL.find(t=>!t.alive);
+      if(!t){
+        const m=new T.SpriteMaterial({color:col,transparent:true,opacity:0.85,
+          blending:T.AdditiveBlending,depthWrite:false});
+        t={sp:new T.Sprite(m),alive:false,life:0};
+        scene.add(t.sp); TRAIL.push(t);
+      }
+      t.alive=true; t.life=0.45; t.max=0.45;
+      t.sp.material.color.set(col);
+      t.sp.visible=true; t.sp.position.set(x,y,z); t.sp.scale.set(size,size,1); t.size=size;
+    }
+    function tickTrail(dt){
+      TRAIL.forEach(t=>{ if(!t.alive)return;
+        t.life-=dt; if(t.life<=0){t.alive=false;t.sp.visible=false;return;}
+        const f=t.life/t.max;
+        t.sp.material.opacity=0.85*f; const s=t.size*(0.4+0.6*f); t.sp.scale.set(s,s,1); });
+    }
+    function clearTrail(){ TRAIL.forEach(t=>{t.alive=false;t.sp.visible=false;}); }
+    // force a sprite to an explicit sheet cell (used on shooter + GK)
+    function forceCell(id,row,col,flip){
+      const o=sprites[id]; if(!o)return;
+      const cw=1/GRID.cols, ch=1/GRID.rows;
+      const ox=col*cw, oy=1-(row+1)*ch;
+      if(flip){ o.tex.repeat.set(-cw,ch); o.tex.offset.set(ox+cw,oy); }
+      else    { o.tex.repeat.set( cw,ch); o.tex.offset.set(ox,oy); }
+    }
+    /* opts: {as, sk, ds, isGoal, color, onDone} — engine sides/keys */
+    P3D.superCine=function(o){
+      if(cine || !P3D.on || typeof PP==='undefined'){ o&&o.onDone&&o.onDone(); return; }
+      const sp=PP[o.as]&&PP[o.as][o.sk], gp=PP[o.ds]&&PP[o.ds]['GK'];
+      if(!sp||!gp){ o.onDone&&o.onDone(); return; }
+      const W=(CV.width||1280);
+      const gx=(o.as==='h')?W*0.93:W*0.07;   // target goal-line x
+      cine={t:0,o,
+        fx:sp.x, fy:sp.y,          // engine-space flight endpoints
+        tx:gp.x, ty:gp.y,
+        nx:gx,   ny:gp.y,          // net point (goal outcome)
+        col:o.color||'#ffd24a',
+        gkRestore:null, diveDir:(Math.random()<0.5?1:2)};
+      if(typeof ball!=='undefined'&&ball){ ball.x=sp.x; ball.y=sp.y; ball.bz=0; }
+    };
+    P3D.cineActive=function(){ return !!cine; };
+    function cineEnd(){
+      if(!cine)return;
+      const r=cine.gkRestore;
+      if(r){ const og=sprites[cine.o.ds+':GK'];
+        if(og){ og.sprite.material.map=r.map; og.tex=r.map; og.sil.material.map=r.map;
+                r.map.needsUpdate=true; } }
+      clearTrail();
+      const cb=cine.o.onDone; cine=null;
+      if(cb)cb();
+    }
+    // timeline (s): 0–1.5 striker frontal + kick · 1.5 cut to GK ·
+    // 1.35–2.6 flight · 2.6–3.6 outcome · 3.8 end
+    function cineStep(dt){
+      const c=cine; if(!c)return;
+      c.t+=dt;
+      if(typeof G==='undefined'||!G||typeof PP==='undefined'||!PP[c.o.as]){ cineEnd(); return; }
+      const W=(CV.width||1280);
+      const sid=c.o.as+':'+c.o.sk, gid=c.o.ds+':GK';
+      // ── shooter: frontal action row, kick frames over phase A ──
+      if(c.t<1.6){
+        const kf=Math.min(3,Math.floor(Math.max(0,(c.t-0.55))/0.28));  // 0..3
+        forceCell(sid, ROW.down.act, 3+kf, false);
+      }
+      // ── ball flight (engine coords + tall arc) ──
+      const T0=1.35, T1=2.6;
+      if(c.t>=T0){
+        const ft=Math.min(1,(c.t-T0)/(T1-T0));
+        let bx,by,bz;
+        if(ft<1){ bx=c.fx+(c.tx-c.fx)*ft; by=c.fy+(c.ty-c.fy)*ft; bz=46*4*ft*(1-ft)*0.55+8*Math.sin(ft*Math.PI); }
+        else if(c.o.isGoal){
+          const gt=Math.min(1,(c.t-T1)/0.25);
+          bx=c.tx+(c.nx-c.tx)*gt; by=c.ty+(c.ny-c.ty)*gt; bz=Math.max(0,6*(1-gt));
+        } else { bx=c.tx; by=c.ty; bz=4; }
+        if(typeof ball!=='undefined'&&ball){ ball.x=bx; ball.y=by; ball.bz=0; }
+        const bwx=ex2wx(Math.min(Math.max(bx,0.02*W),0.98*W)), bwz=ey2wz(by);
+        const bwy=0.05+bz*0.09;
+        const frac=(P3D.spriteFrac!=null?P3D.spriteFrac:0.045);
+        const d=PLEN*frac*0.21;
+        ballMesh.scale.set(d,d,1); ballMesh.position.set(bwx,bwy,bwz);
+        if(c.t<T1+0.3) spawnTrail(bwx,bwy+d*0.5,bwz,c.col,d*1.6);
+      } else {
+        ballMesh.position.set(ex2wx(c.fx),0.05,ey2wz(c.fy));
+      }
+      // ── keeper: face the play after the cut; dive/catch on arrival ──
+      if(c.t>=1.5){
+        const og=sprites[gid];
+        if(og && diveSheet && diveSheet!=='none' && !c.gkRestore && c.t>=2.3){
+          const tex=new T.Texture(diveSheet.img);
+          tex.magFilter=T.NearestFilter; tex.minFilter=T.NearestFilter;
+          tex.needsUpdate=true;
+          c.gkRestore={map:og.sprite.material.map};
+          og.sprite.material.map=tex; og.tex=tex; og.sil.material.map=tex;
+        }
+        if(c.gkRestore){
+          const row=c.o.isGoal?c.diveDir:0;     // goal → dive & miss, save → catch
+          const fr=Math.min(DIVE.cols-1,Math.floor(Math.max(0,(c.t-2.3))/0.14));
+          const cw=1/DIVE.cols, ch=1/DIVE.rows;
+          og.tex.repeat.set(cw,ch); og.tex.offset.set(fr*cw,1-(row+1)*ch);
+        } else {
+          forceCell(gid, ROW.down.act, c.t<2.3?0:3+Math.min(3,Math.floor((c.t-2.3)/0.16)), false);
+        }
+      }
+      tickTrail(dt);
+      if(c.t>=3.8) cineEnd();
+    }
+    function cineCamera(){
+      const c=cine; if(!c)return;
+      const swx=ex2wx(c.fx), swz=ey2wz(c.fy);
+      const gwx=ex2wx(c.tx), gwz=ey2wz(c.ty);
+      const dir=(c.o.as==='h')?1:-1;           // attacking toward +x (h) or −x (a)
+      if(c.t<1.5){
+        // PHASE A — frontal on the striker: goal-side, low, slow dolly-in.
+        const dv=6.5-Math.min(1.5,c.t)*0.9;
+        camera.position.set(swx+dir*dv, 2.0, swz+2.2);
+        camera.lookAt(swx, 1.5, swz);
+      } else {
+        // PHASE B/C — hard cut: field side of the keeper, ball incoming.
+        camera.position.set(gwx-dir*8.5, 2.4, gwz+2.6);
+        camera.lookAt(gwx, 1.3, gwz);
+      }
+    }
+
     /* ---- size sync to #C ---- */
     function resize(){
       const w=CV.clientWidth||CV.width, h=CV.clientHeight||CV.height;
@@ -966,7 +1109,10 @@
       }
       if(gl.style.display==='none'){ gl.style.display='block'; resize(); if(P3D.suppress2D)CV.style.visibility='hidden'; }
       const now=performance.now(); const dt=Math.min(0.05,(now-lastTs)/1000); lastTs=now;
-      syncSheets(); syncPlayers(); syncBall(); syncRef(dt); updateCamera(dt);
+      syncSheets(); syncPlayers();
+      if(cine){ cineStep(dt); cineCamera(); }
+      else    { syncBall(); updateCamera(dt); }
+      syncRef(dt);
       // anchor god rays at the sun's projected screen position
       if(rayPass){
         _v3.copy(sun.position).project(camera);

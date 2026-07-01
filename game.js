@@ -3256,6 +3256,33 @@ if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',
 else _buildJoystick();
 
 let G_laneTarget=null;
+/* ── SUPER-SHOT CINEMATIC BANNER ─────────────────────────────────
+   Shown during phase A of the 2.5D super-shot cinematic. The inner
+   .scb-media div is the future video slot: drop a <video> in there
+   later and the text strip stays as a lower-third. */
+function showSuperCineBanner(spec,side){
+  let el=document.getElementById('supercine-banner');
+  if(!el){
+    el=document.createElement('div'); el.id='supercine-banner';
+    el.style.cssText='position:absolute;left:0;right:0;top:12%;z-index:60;display:none;'
+      +'pointer-events:none;text-align:center;';
+    el.innerHTML='<div class="scb-media"></div>'
+      +'<div class="scb-txt" style="display:inline-block;padding:10px 34px;'
+      +'font-family:\'Bebas Neue\',sans-serif;font-size:44px;letter-spacing:.14em;color:#fff;'
+      +'background:linear-gradient(90deg,transparent,rgba(0,0,0,.82) 18%,rgba(0,0,0,.82) 82%,transparent);'
+      +'text-shadow:0 0 18px rgba(255,210,74,.9),0 2px 4px #000"></div>';
+    (document.getElementById('viewport')||document.body).appendChild(el);
+  }
+  const col=side==='h'?'#4ea0ff':'#ff5050';
+  const t=el.querySelector('.scb-txt');
+  t.textContent=(spec?spec.i+' '+spec.l:'⚡ SUPER SHOT').toUpperCase();
+  t.style.boxShadow='inset 0 -3px 0 '+col;
+  el.style.display='block';
+  el.animate([{opacity:0,transform:'translateY(-14px)'},{opacity:1,transform:'none'}],{duration:220});
+  clearTimeout(el._t);
+  el._t=setTimeout(()=>{el.style.display='none';},1500);
+}
+
 function manualShot(){
   if(G.phase!=='moving'||!G.ck||G._scoringGoal)return;
   const s=G.poss, ds=s==='h'?'a':'h';
@@ -5129,7 +5156,11 @@ function resDuel(){
     if(['shoot','special'].includes(ak)&&win){
       if(G.D.isShot){
         // Was already a shot duel (vs GK) — score directly
-        afGoal(carrier,as,_gen);
+        if(ak==='special'&&window.P3D&&P3D.on&&P3D.superCine){
+          showSuperCineBanner(getSpecial(carrier),as);
+          P3D.superCine({as, sk:G.ck, ds, isGoal:true,
+            onDone:()=>{ if(G.goalGen===_gen)afGoal(carrier,as,_gen); }});
+        } else afGoal(carrier,as,_gen);
       } else {
         // Won a field duel with a shot — animate to GK then open shot duel
         const _ds=as==='h'?'a':'h';
@@ -5143,7 +5174,13 @@ function resDuel(){
     else if(['shoot','special'].includes(ak)&&!win){
       // BUG1 FIX: afSave only for GK duels. A blocked shot in a FIELD duel
       // is a turnover — never re-adjudicated by the keeper sequence.
-      if(G.D.isShot)afSave(ds);
+      if(G.D.isShot){
+        if(ak==='special'&&window.P3D&&P3D.on&&P3D.superCine){
+          showSuperCineBanner(getSpecial(carrier),as);
+          P3D.superCine({as, sk:G.ck, ds, isGoal:false,
+            onDone:()=>{ if(G.goalGen===_gen)afSave(ds); }});
+        } else afSave(ds);
+      }
       else afTurn(ds);
     }
     else if((ak==='pass'||ak==='super-pass')&&win)afPass(as,pk);
