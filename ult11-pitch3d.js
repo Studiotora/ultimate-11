@@ -775,15 +775,7 @@
       const w=CV.clientWidth||CV.width, h=CV.clientHeight||CV.height;
       if(hudCv.width!==w||hudCv.height!==h){ hudCv.width=w; hudCv.height=h; }
       hudCv.style.display='block'; hudCx.clearRect(0,0,w,h);
-      // carrier + chaser name tags
-      const poss=G.poss, ds=poss==='h'?'a':'h';
-      const carP=(G.ck&&PP[poss])?PP[poss][G.ck]:null, carPl=carP?sq(poss)[G.ck]:null;
-      if(carP&&carPl){ const fw=footWorld(carP); const s=projectToScreen(fw.x,0,fw.z,w,h);
-        if(s.z<=1) tag(hudCx,s.x,s.y,(carPl.name||'').toUpperCase(),poss==='h'?'#4ea0ff':'#ff5050'); }
-      const eng=(typeof ROLES!=='undefined'&&ROLES)?ROLES.engager:null;
-      const engP=(eng&&PP[ds])?PP[ds][eng]:null, engPl=engP?sq(ds)[eng]:null;
-      if(engP&&engPl){ const fw=footWorld(engP); const s=projectToScreen(fw.x,0,fw.z,w,h);
-        if(s.z<=1) tag(hudCx,s.x,s.y,(engPl.name||'').toUpperCase(),ds==='h'?'#4ea0ff':'#ff5050'); }
+      // name tags removed — active players now shown in the 2D bust HUD
       drawRadar3D(hudCx,w,h);
     }
     P3D._drawHUD=drawHUD;

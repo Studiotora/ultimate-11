@@ -1060,6 +1060,7 @@ function exitToMenu(){
   if(G){G.phase='idle';G.paused=false;G.mt=null;G.di=null;G.pm=false;G.kickoffUntil=0;G.awaitKickoff=null;G.goalGen=(G.goalGen||0)+1;}
   ['kickoff-prompt','goal-banner','card-flash'].forEach(id=>{const e=document.getElementById(id);if(e)e.classList.remove('show');});
   if(typeof closeDuel==='function')closeDuel();
+  if(typeof hideBusts==='function')hideBusts();
   hSq={};aSq={};PP={h:{},a:{}};PT={h:{},a:{}};
   if(typeof trail!=='undefined')trail=[];
   // Reset pause overlay if visible
@@ -2080,7 +2081,7 @@ function startAnim(){
     if(trail.length>24)trail.shift();
     trail.forEach(t=>t.a*=Math.pow(.88,dt));
     _updateJoystickVisibility();
-    draw();raf=requestAnimationFrame(loop);
+    draw();updBusts();raf=requestAnimationFrame(loop);
   })(0);
 }
 
@@ -2275,16 +2276,7 @@ function draw(){
     cx.beginPath();cx.arc(perspX(t.x,t.y),perspY(t.y),4*tsc,0,Math.PI*2);
     cx.fillStyle=`rgba(255,215,60,${t.a*.5})`;cx.fill();
   });
-  // ── NAME TAGS over carrier + chaser (world space) ──
-  if(G.phase==='moving'||G.phase==='pass_anim'){
-    const carP=(G.ck&&PP[G.poss])?PP[G.poss][G.ck]:null;
-    const carPl=carP?sq(G.poss)[G.ck]:null;
-    if(carP&&carPl)_fieldTag(carP,(carPl.name||'').toUpperCase(),G.poss==='h'?'#4ea0ff':'#ff5050');
-    const ds=G.poss==='h'?'a':'h';
-    const engP=(ROLES.engager&&PP[ds])?PP[ds][ROLES.engager]:null;
-    const engPl=engP?sq(ds)[ROLES.engager]:null;
-    if(engP&&engPl)_fieldTag(engP,(engPl.name||'').toUpperCase(),ds==='h'?'#4ea0ff':'#ff5050');
-  }
+  // ── NAME TAGS removed — active players now shown in bust HUD ──
   cx.restore(); // end dynamic camera
   // ── MINI RADAR (screen space, classic bottom strip) ──
   if(G.phase==='moving'||G.phase==='pass_anim')drawRadar();
@@ -3707,6 +3699,7 @@ function _portraitChainFor(pl,side){
   const effTeam=pl&&pl.clubKey?pl.clubKey:(side==='h'?selHome:selAway);
   let isClub=false;try{isClub=!!(effTeam&&((CR_CLUBS&&CR_CLUBS[effTeam])||(window.ST_CLUBS&&window.ST_CLUBS[effTeam])));}catch(e){}
   const isGK=pl&&pl.pos==='GK';
+  const _hp=_storyHeroCardPath(pl);
   const _pre=_hp?[_hp]:[];
   if(isGK){
     return _pre.concat(isClub
@@ -3718,6 +3711,80 @@ function _portraitChainFor(pl,side){
     :[`assets/players/${lastName}.png`,`assets/players/${effTeam}.png`,_GENERIC_PLAYER_SVG_URL]);
 }
 function _setImgChain(img,paths){let i=0;img.onerror=()=>{i++;if(i<paths.length)img.src=paths[i];};img.src=paths[0];}
+
+/* ── ACTIVE-PLAYER BUST HUD (field play only) ──────────────────────
+   Bottom-left: home active player (carrier in attack / engager in defense).
+   Bottom-right: away active player, mirrored. Uses the same duel-card art,
+   CSS-cropped belly-up. Hidden outside moving/pass_anim (duels, menus). */
+let _bustEls=null,_bustKey={h:null,a:null};
+function _ensureBusts(){
+  if(_bustEls)return _bustEls;
+  const vp=document.getElementById('viewport')||document.body;
+  const mk=(side)=>{
+    const right=side==='a';
+    const w=document.createElement('div');
+    w.id='bust-'+side;
+    w.style.cssText='position:absolute;bottom:26px;'+(right?'right:0;':'left:0;')+
+      'width:200px;height:250px;z-index:5;pointer-events:none;display:none;';
+    const img=document.createElement('div');
+    img.className='bust-img';
+    img.style.cssText='position:absolute;left:0;right:0;top:0;bottom:26px;'+
+      'background:no-repeat center top/135% auto;'+
+      'filter:drop-shadow(0 4px 10px rgba(0,0,0,.65));'+(right?'transform:scaleX(-1);':'');
+    const col=side==='h'?'#1e72dc':'#c22020';
+    const plate=document.createElement('div');
+    plate.className='bust-plate';
+    plate.style.cssText='position:absolute;left:0;right:0;bottom:0;height:26px;display:flex;align-items:center;'+
+      (right?'flex-direction:row-reverse;':'')+
+      'background:linear-gradient('+(right?'270deg':'90deg')+','+col+'ee,rgba(10,14,24,.88));'+
+      'clip-path:polygon('+(right?'6% 0,100% 0,100% 100%,0 100%':'0 0,94% 0,100% 100%,0 100%')+');'+
+      'font-family:Rajdhani,system-ui;color:#fff;';
+    plate.innerHTML=
+      '<span class="b-num" style="font-weight:700;font-size:16px;min-width:28px;align-self:stretch;display:flex;align-items:center;justify-content:center;background:rgba(0,0,0,.35)"></span>'+
+      '<span class="b-name" style="font-weight:700;font-size:14px;letter-spacing:.06em;flex:1;padding:0 7px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;'+(right?'text-align:right;':'')+'"></span>'+
+      '<span class="b-pos" style="font-weight:700;font-size:12px;opacity:.9;padding:0 8px"></span>';
+    w.appendChild(img);w.appendChild(plate);
+    vp.appendChild(w);
+    return w;
+  };
+  _bustEls={h:mk('h'),a:mk('a')};
+  return _bustEls;
+}
+function _bustActiveKey(side){
+  if(G.poss===side)return G.ck;
+  return (typeof ROLES!=='undefined'&&ROLES)?ROLES.engager:null;
+}
+function hideBusts(){
+  if(!_bustEls)return;
+  _bustEls.h.style.display='none';_bustEls.a.style.display='none';
+  _bustKey={h:null,a:null};
+}
+function updBusts(){
+  const els=_ensureBusts();
+  const live=(G.phase==='moving'||G.phase==='pass_anim');
+  ['h','a'].forEach(side=>{
+    const el=els[side];
+    if(!live){if(el.style.display!=='none'){el.style.display='none';_bustKey[side]=null;}return;}
+    const k=_bustActiveKey(side);
+    const pl=k?sq(side)[k]:null;
+    if(!pl){if(el.style.display!=='none'){el.style.display='none';_bustKey[side]=null;}return;}
+    if(el.style.display!=='block')el.style.display='block';
+    const sig=side+':'+k+':'+(pl.name||'');
+    if(_bustKey[side]===sig)return;
+    _bustKey[side]=sig;
+    el.querySelector('.b-num').textContent=pl.jersey!=null?pl.jersey:'';
+    el.querySelector('.b-name').textContent=playerSurname(pl.name).toUpperCase();
+    let posTxt=pl.pos||'';try{posTxt=displayPosLabel(k)||posTxt;}catch(e){}
+    el.querySelector('.b-pos').textContent=posTxt;
+    const imgEl=el.querySelector('.bust-img');
+    const chain=_portraitChainFor(pl,side);
+    let i=0;const t=new Image();
+    t.onload=()=>{if(_bustKey[side]===sig)imgEl.style.backgroundImage=`url(${chain[i]})`;};
+    t.onerror=()=>{i++;if(i<chain.length)t.src=chain[i];};
+    t.src=chain[0];
+  });
+}
+
 function killCutIn(){
   _cutinTimers.forEach(clearTimeout);_cutinTimers=[];_cutinDone=null;
   const ci=document.getElementById('cutin-ov');if(ci)ci.remove();
