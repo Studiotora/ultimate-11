@@ -145,6 +145,40 @@
     panel.appendChild(title);
 
     const C=P3D.cam, B=P3D.bowl;
+
+    /* ── ONE-TAP LOOK PRESETS ── set light + post-FX in one click, then
+       fine-tune below. Camera geometry is left alone on purpose. */
+    panel.appendChild(section('LOOK PRESETS'));
+    const PRESETS={
+      'HD-2D':{ light:{elev:0.30,key:1.55,ambient:0.75,warmth:0.72,shadow:0.55,shadowLen:1.15,glow:0.7,shade:0.5},
+                fx:{bloom:0.9,bloomRadius:0.55,bloomThresh:0.70,tilt:0.70,vignette:0.60,rays:0.55,rayDecay:0.95,raySamples:60,
+                    sat:1.28,contrast:1.14,lift:-0.01,split:0.42} },
+      'BROADCAST':{ light:{elev:0.75,key:1.2,ambient:1.0,warmth:0.40,shadow:0.35,shadowLen:0.8,glow:0.3,shade:0.3},
+                fx:{bloom:0.35,bloomRadius:0.45,bloomThresh:0.85,tilt:0.15,vignette:0.25,rays:0.15,rayDecay:0.94,raySamples:40,
+                    sat:1.05,contrast:1.03,lift:0.0,split:0.10} },
+      'GOLDEN HOUR':{ light:{elev:0.14,key:1.7,ambient:0.65,warmth:0.95,shadow:0.62,shadowLen:1.6,glow:0.85,shade:0.55},
+                fx:{bloom:1.0,bloomRadius:0.6,bloomThresh:0.65,tilt:0.55,vignette:0.55,rays:0.9,rayDecay:0.955,raySamples:70,
+                    sat:1.22,contrast:1.10,lift:0.0,split:0.55} },
+      'NIGHT MATCH':{ light:{elev:0.9,key:1.85,ambient:0.45,warmth:0.10,shadow:0.5,shadowLen:0.6,glow:0.45,shade:0.65},
+                fx:{bloom:1.15,bloomRadius:0.6,bloomThresh:0.72,tilt:0.5,vignette:0.7,rays:0.3,rayDecay:0.94,raySamples:50,
+                    sat:1.10,contrast:1.20,lift:-0.02,split:0.25} }
+    };
+    const pg=document.createElement('div'); pg.style.cssText='display:flex;flex-wrap:wrap;margin-bottom:2px';
+    Object.keys(PRESETS).forEach(name=>{
+      const b=document.createElement('button'); b.textContent=name;
+      b.style.cssText='font:800 10px system-ui;letter-spacing:.05em;color:#04140c;background:#6fa8ff;'
+        +'border:0;border-radius:6px;padding:6px 8px;cursor:pointer;margin:2px';
+      b.onclick=()=>{
+        Object.assign(P3D.light,PRESETS[name].light);
+        Object.assign(P3D.fx,PRESETS[name].fx);
+        if(P3D._applyLight)P3D._applyLight(); if(P3D._applyFx)P3D._applyFx();
+        // rebuild the panel so every slider reflects the new values
+        const p=panel; panel=null; p.remove(); buildPanel(); panel.style.display='block';
+      };
+      pg.appendChild(b);
+    });
+    panel.appendChild(pg);
+
     panel.appendChild(section('CAMERA'));
     panel.appendChild(row('Distance',  20,90,1,  ()=>C.dist,     v=>C.dist=v));
     panel.appendChild(row('Height',    6,60,1,   ()=>C.height,   v=>C.height=v));
@@ -196,6 +230,10 @@
     panel.appendChild(row('God rays',   0,1.5,0.01,  ()=>F.rays,        v=>{F.rays=v; af();}));
     panel.appendChild(row('Ray reach',  0.8,0.99,0.005,()=>F.rayDecay,  v=>{F.rayDecay=v; af();}));
     panel.appendChild(row('Ray quality',16,120,2,    ()=>F.raySamples,  v=>{F.raySamples=v; af();}));
+    panel.appendChild(row('Saturation', 0.5,1.8,0.01,()=>F.sat,         v=>{F.sat=v; af();}));
+    panel.appendChild(row('Contrast',   0.7,1.5,0.01,()=>F.contrast,    v=>{F.contrast=v; af();}));
+    panel.appendChild(row('Lift',      -0.15,0.15,0.005,()=>F.lift,     v=>{F.lift=v; af();}));
+    panel.appendChild(row('Split tone', 0,1,0.01,    ()=>F.split,       v=>{F.split=v; af();}));
 
     panel.appendChild(section('DEBUG'));
     const dg=document.createElement('div'); dg.style.cssText='display:flex;flex-wrap:wrap';

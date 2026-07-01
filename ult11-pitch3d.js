@@ -53,7 +53,8 @@
             glow:0.45 },  // warm sun-pool intensity on the pitch (0 = off)
     // ---- POST-PROCESSING (Camera Lab → POST FX); needs the post scripts in index.html ----
     fx:{ on:true, bloom:0.55, bloomRadius:0.5, bloomThresh:0.82, tilt:0.45, vignette:0.5,
-         rays:0.55, rayDecay:0.95, raySamples:60 },   // volumetric god-ray scatter from the sun
+         rays:0.55, rayDecay:0.95, raySamples:60,
+         sat:1.0, contrast:1.0, lift:0.0, split:0.0 },   // grade: saturation/contrast/lift + warm-cool split-tone
     debug:false,         // sprite/shadow debug overlay (Camera Lab)
     ready:true
   };
@@ -1014,7 +1015,30 @@
        Uses stock three.js r128 example passes loaded in index.html. If any are
        missing (scripts blocked/offline) we silently fall back to direct render —
        no black screen. */
-    let composer=null, bloomPass=null, hTilt=null, vTilt=null, vignettePass=null, rayPass=null;
+    let composer=null, bloomPass=null, hTilt=null, vTilt=null, vignettePass=null, rayPass=null, gradePass=null;
+    // HD-2D color grade — saturation, contrast, lift, and warm-highlight /
+    // cool-shadow split-toning (the Octopath signature look).
+    const GradeShader={
+      uniforms:{ tDiffuse:{value:null}, sat:{value:1.0}, contrast:{value:1.0},
+                 lift:{value:0.0}, split:{value:0.0},
+                 shadowTint:{value:new T.Color(0.88,0.94,1.10)},
+                 highTint:{value:new T.Color(1.10,1.00,0.86)} },
+      vertexShader:'varying vec2 vUv; void main(){ vUv=uv; gl_Position=projectionMatrix*modelViewMatrix*vec4(position,1.0); }',
+      fragmentShader:[
+        'varying vec2 vUv; uniform sampler2D tDiffuse;',
+        'uniform float sat, contrast, lift, split; uniform vec3 shadowTint, highTint;',
+        'void main(){',
+        '  vec3 c=texture2D(tDiffuse,vUv).rgb;',
+        '  float l=dot(c,vec3(0.299,0.587,0.114));',
+        '  c=mix(vec3(l),c,sat);',
+        '  c=(c-0.5)*contrast+0.5+lift;',
+        '  float w=smoothstep(0.30,0.75,l);',
+        '  vec3 tint=mix(shadowTint,highTint,w);',
+        '  c=mix(c,c*tint,split);',
+        '  gl_FragColor=vec4(clamp(c,0.0,1.0),1.0);',
+        '}'
+      ].join('\n')
+    };
     // Screen-space radial light-scatter (god rays) — samples toward the sun's
     // projected screen position and accumulates a warm streaked glow. Tested GLSL.
     const GodRayShader={
@@ -1055,6 +1079,8 @@
         hTilt.uniforms.r.value=0.5; vTilt.uniforms.r.value=0.5;   // sharp band at vertical centre
         composer.addPass(hTilt); composer.addPass(vTilt);
       }
+      gradePass=new T.ShaderPass(GradeShader);    // grade after DOF, before vignette
+      composer.addPass(gradePass);
       if(T.VignetteShader){
         vignettePass=new T.ShaderPass(T.VignetteShader);
         composer.addPass(vignettePass);
@@ -1076,6 +1102,11 @@
       if(bloomPass){ bloomPass.strength=P3D.fx.bloom; bloomPass.radius=P3D.fx.bloomRadius; bloomPass.threshold=P3D.fx.bloomThresh; }
       if(hTilt&&vTilt){ const b=P3D.fx.tilt*0.0035; hTilt.uniforms.h.value=b; vTilt.uniforms.v.value=b; }
       if(vignettePass){ vignettePass.uniforms.offset.value=1.0; vignettePass.uniforms.darkness.value=1.0+P3D.fx.vignette*0.9; }
+      if(gradePass){ const g=gradePass.uniforms;
+        g.sat.value=P3D.fx.sat; g.contrast.value=P3D.fx.contrast;
+        g.lift.value=P3D.fx.lift; g.split.value=P3D.fx.split;
+        gradePass.enabled=(Math.abs(P3D.fx.sat-1)>0.001||Math.abs(P3D.fx.contrast-1)>0.001||
+                           Math.abs(P3D.fx.lift)>0.001||P3D.fx.split>0.001); }
       if(rayPass){ const u=rayPass.uniforms;
         u.exposure.value=P3D.fx.rays*0.45; u.decay.value=P3D.fx.rayDecay;
         u.samples.value=Math.max(8,Math.min(200,Math.round(P3D.fx.raySamples)));
