@@ -52,7 +52,8 @@
             shadowLen:1.0,// player shadow stretch (with elev)
             glow:0.45 },  // warm sun-pool intensity on the pitch (0 = off)
     // ---- POST-PROCESSING (Camera Lab → POST FX); needs the post scripts in index.html ----
-    fx:{ on:true, bloom:0.55, bloomRadius:0.5, bloomThresh:0.82, tilt:0.45, vignette:0.5 },
+    fx:{ on:true, bloom:0.55, bloomRadius:0.5, bloomThresh:0.82, tilt:0.45, vignette:0.5,
+         rays:0.55, rayDecay:0.95, raySamples:60 },   // volumetric god-ray scatter from the sun
     debug:false,         // sprite/shadow debug overlay (Camera Lab)
     ready:true
   };
@@ -818,6 +819,81 @@
       ballMesh.position.set(ex2wx(bx),0.05,ey2wz(by));
     }
 
+    /* ════════ REFEREE ════════
+       Sprite-sheet billboard (assets/ps1/referee.png) that follows the action,
+       trailing the ball at a set distance so he isn't on top of the play. He
+       stays on the field and may fall outside the camera frame — that's fine.
+       Sheet: 5 cols × 3 rows. col0 = idle, cols1-4 = run cycle.
+       rows: 0=down(toward cam), 1=up(away), 2=side(faces right; mirror=left). */
+    const REFG={cols:5,rows:3};
+    const REFROW={down:0,up:1,side:2};
+    let refSheet=null;
+    (function(){ const im=new Image();
+      im.onload=()=>refSheet={img:im, cw:im.width/REFG.cols, ch:im.height/REFG.rows};
+      im.onerror=()=>{}; im.src='assets/ps1/referee.png'; })();
+    const refTex=new T.Texture(); refTex.magFilter=T.NearestFilter; refTex.minFilter=T.NearestFilter;
+    const refMesh=new T.Sprite(new T.SpriteMaterial({map:refTex,transparent:true,alphaTest:0.5}));
+    refMesh.center.set(0.5,0); refMesh.visible=false; scene.add(refMesh);
+    const refSh=new T.Mesh(new T.PlaneGeometry(1,1),
+      new T.MeshBasicMaterial({map:SHADOW_TEX,transparent:true,opacity:0.35,depthWrite:false}));
+    refSh.rotation.x=-Math.PI/2; refSh.position.y=0.04; refSh.renderOrder=2; refSh.visible=false; scene.add(refSh);
+    // x,y normalized 0..1 field; gap = trailing distance, speed = max step/sec (field frac)
+    const REF={x:0.5,y:0.4, gap:0.13, speed:0.55, face:'down', flip:false, moveT:-1e9};
+    let refInit=false, _refTexBound=false;
+    function syncRef(dt){
+      if(!refSheet||!refSheet.img.complete){ refMesh.visible=false; refSh.visible=false; return; }
+      if(!_refTexBound){ refTex.image=refSheet.img; refTex.needsUpdate=true; _refTexBound=true; }
+      refMesh.visible=true; refSh.visible=true;
+      const W=(CV.width||1280), H=(CV.height||720);
+      const now=performance.now();
+      // TARGET = the action (carrier, else loose ball)
+      let tx,ty;
+      const cp=carrierPos();
+      if(cp){ tx=cp.x/W; ty=cp.y/H; }
+      else if(typeof ball!=='undefined'&&ball){ tx=ball.x/W; ty=ball.y/H; }
+      else { tx=REF.x; ty=REF.y; }
+      if(!refInit){ REF.x=tx; REF.y=ty-REF.gap; refInit=true; }
+      // close toward the action but hold gap distance off it
+      const dx=tx-REF.x, dy=ty-REF.y, d=Math.hypot(dx,dy);
+      let moving=false;
+      if(d>REF.gap){
+        const step=Math.min(REF.speed*dt, d-REF.gap);
+        REF.x+=dx/d*step; REF.y+=dy/d*step; moving=(step>1e-4);
+      }
+      if(moving) REF.moveT=now;
+      // FACING from camera-relative motion (same axes as players)
+      if(moving && d>1e-4){
+        const ewx=dx*W, ewy=dy*H;                       // engine-px delta
+        const dwx=ewx*_wpeX, dwz=ewy*_wpeZ;             // → world delta
+        const sX=dwx*_camRX+dwz*_camRZ, sZ=dwx*_camFX+dwz*_camFZ;
+        if(Math.abs(sX)>=Math.abs(sZ)){
+          REF.face='side';
+          const wx0=ex2wx(REF.x*W), wz0=ey2wz(REF.y*H);
+          _fp.set(wx0,0.05,wz0).project(camera);
+          _fp2.set(wx0+dwx,0.05,wz0+dwz).project(camera);
+          const sdx=_fp2.x-_fp.x; if(Math.abs(sdx)>1e-5) REF.flip=sdx<0;
+        } else { REF.face=sZ>0?'up':'down'; }
+      }
+      const cx=Math.min(Math.max(REF.x,0.05),0.95)*W;
+      const cy=Math.min(Math.max(REF.y,0.04),0.96)*H;
+      const wx=ex2wx(cx), wz=ey2wz(cy);
+      const frac=(P3D.spriteFrac!=null?P3D.spriteFrac:0.045);
+      const hWorld=PLEN*frac;
+      const wWorld=hWorld*(refSheet.cw/refSheet.ch);
+      // cell: row by facing, col idle/run
+      const running=(now-REF.moveT)<160;
+      const row=REFROW[REF.face]!=null?REFROW[REF.face]:REFROW.down;
+      const col=running?(1+(Math.floor(now/1000*9)%4)):0;
+      const cw=1/REFG.cols, chh=1/REFG.rows;
+      const ox=col*cw, oy=1-(row+1)*chh;
+      if(REF.flip && REF.face==='side'){ refTex.repeat.set(-cw,chh); refTex.offset.set(ox+cw,oy); }
+      else                             { refTex.repeat.set( cw,chh); refTex.offset.set(ox,   oy); }
+      refMesh.scale.set(wWorld,hWorld,1);
+      refMesh.position.set(wx,0.05,wz);
+      const r=Math.max(0.3,wWorld*0.5);
+      refSh.position.set(wx,0.04,wz); refSh.scale.set(r,r*0.55,1);
+    }
+
     /* ════════ CAMERA (broadcast, follows carrier, constrained) ════════ */
     const orbit={theta:0, phi:0.55};
     const camFocus={x:0,z:0,dist:P3D.cam.dist};
@@ -897,7 +973,13 @@
       }
       if(gl.style.display==='none'){ gl.style.display='block'; resize(); if(P3D.suppress2D)CV.style.visibility='hidden'; }
       const now=performance.now(); const dt=Math.min(0.05,(now-lastTs)/1000); lastTs=now;
-      syncSheets(); syncPlayers(); syncBall(); updateCamera(dt);
+      syncSheets(); syncPlayers(); syncBall(); syncRef(dt); updateCamera(dt);
+      // anchor god rays at the sun's projected screen position
+      if(rayPass){
+        _v3.copy(sun.position).project(camera);
+        rayPass.uniforms.lightPos.value.set(_v3.x*0.5+0.5, _v3.y*0.5+0.5);
+        rayPass.enabled = (P3D.fx.rays>0.001) && (_v3.z<1);   // off when sun behind camera
+      }
       if(composer && P3D.fx && P3D.fx.on) composer.render(dt);
       else renderer.render(scene,camera);
       drawDebug(); drawHUD();
@@ -940,7 +1022,29 @@
        Uses stock three.js r128 example passes loaded in index.html. If any are
        missing (scripts blocked/offline) we silently fall back to direct render —
        no black screen. */
-    let composer=null, bloomPass=null, hTilt=null, vTilt=null, vignettePass=null;
+    let composer=null, bloomPass=null, hTilt=null, vTilt=null, vignettePass=null, rayPass=null;
+    // Screen-space radial light-scatter (god rays) — samples toward the sun's
+    // projected screen position and accumulates a warm streaked glow. Tested GLSL.
+    const GodRayShader={
+      uniforms:{ tDiffuse:{value:null}, lightPos:{value:new T.Vector2(0.5,0.85)},
+                 exposure:{value:0.25}, decay:{value:0.95}, density:{value:0.6},
+                 weight:{value:0.4}, samples:{value:60}, tint:{value:new T.Color(1.0,0.86,0.6)} },
+      vertexShader:'varying vec2 vUv; void main(){ vUv=uv; gl_Position=projectionMatrix*modelViewMatrix*vec4(position,1.0); }',
+      fragmentShader:[
+        'varying vec2 vUv; uniform sampler2D tDiffuse; uniform vec2 lightPos;',
+        'uniform float exposure, decay, density, weight; uniform int samples; uniform vec3 tint;',
+        'void main(){',
+        '  vec2 uv=vUv; vec4 base=texture2D(tDiffuse,uv);',
+        '  vec2 delta=(uv-lightPos)*(density/float(samples));',
+        '  vec2 coord=uv; float illum=1.0; vec3 ray=vec3(0.0);',
+        '  for(int i=0;i<200;i++){ if(i>=samples)break; coord-=delta;',
+        '    vec3 s=texture2D(tDiffuse,coord).rgb; float lum=max(s.r,max(s.g,s.b));',
+        '    s*=smoothstep(0.55,1.0,lum);',           // only bright pixels streak (sun/sky)
+        '    s*=illum*weight; illum*=decay; ray+=s; }',
+        '  gl_FragColor=base+vec4(ray*exposure*tint,1.0);',
+        '}'
+      ].join('\n')
+    };
     function buildComposer(){
       if(!(T.EffectComposer && T.RenderPass && T.ShaderPass && T.UnrealBloomPass)){
         console.warn('[P3D] post-processing scripts not found — running without FX');
@@ -951,6 +1055,8 @@
       bloomPass=new T.UnrealBloomPass(new T.Vector2(1,1),
         P3D.fx.bloom, P3D.fx.bloomRadius, P3D.fx.bloomThresh);
       composer.addPass(bloomPass);
+      rayPass=new T.ShaderPass(GodRayShader);     // god rays after bloom, before tilt/grade
+      composer.addPass(rayPass);
       if(T.HorizontalTiltShiftShader && T.VerticalTiltShiftShader){
         hTilt=new T.ShaderPass(T.HorizontalTiltShiftShader);
         vTilt=new T.ShaderPass(T.VerticalTiltShiftShader);
@@ -978,6 +1084,11 @@
       if(bloomPass){ bloomPass.strength=P3D.fx.bloom; bloomPass.radius=P3D.fx.bloomRadius; bloomPass.threshold=P3D.fx.bloomThresh; }
       if(hTilt&&vTilt){ const b=P3D.fx.tilt*0.0035; hTilt.uniforms.h.value=b; vTilt.uniforms.v.value=b; }
       if(vignettePass){ vignettePass.uniforms.offset.value=1.0; vignettePass.uniforms.darkness.value=1.0+P3D.fx.vignette*0.9; }
+      if(rayPass){ const u=rayPass.uniforms;
+        u.exposure.value=P3D.fx.rays*0.45; u.decay.value=P3D.fx.rayDecay;
+        u.samples.value=Math.max(8,Math.min(200,Math.round(P3D.fx.raySamples)));
+        u.weight.value=0.45; u.density.value=0.7;
+        u.tint.value.copy(warmColor(P3D.light.warmth)); }
     }
     P3D._applyFx=applyFx;
     buildComposer();

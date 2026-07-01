@@ -133,8 +133,6 @@ function stExtendCast(){ // runs after story-script.js (load order)
     'captain-garibaldi':{name:'GRECO'},
     'gk-garibaldi':{name:'TOGNOLI'},
     'gk-sgiorgio':{name:'PIRAS'},
-    'coach-sgiorgio':{name:'MISTER BELLENO'},
-    'captain-sgiorgio':{name:'MAURO'},
     'captain-vesuvio':{name:SCHOOL_CAPTAINS.hs_vesuvio},
     'captain-meneghino':{name:SCHOOL_CAPTAINS.hs_meneghino},
     'captain-dante':{name:SCHOOL_CAPTAINS.hs_dante},
@@ -635,16 +633,12 @@ window.stBegin=function(){
   // hero school depends on role: CA → Liceo Garibaldi, FW → Ist. San Giorgio (rival gets the other)
   const hsSchool=role==='CA'?'hs_garibaldi':'hs_sangiorgio';
   const rivalSchool=role==='CA'?'hs_sangiorgio':'hs_garibaldi';
-  // ── PINNED HS BRACKET ─ deterministic, both roles meet the SAME 4 opponents ──
-  // Hero half:  your school → OppA (QF) → OppB (SF).   Rival half: rival → OppC (QF) → OppD (SF).
-  // Final is ALWAYS your school vs rival. Only these 4 clubs ever appear, so only 4 need art.
-  const HS_OPPS={qfHero:'hs_sabaudo',sfHero:'hs_vesuvio',qfRival:'hs_meneghino',sfRival:'hs_dante'};
-  const qf=[{home:hsSchool,away:HS_OPPS.qfHero,played:false},
-            {home:rivalSchool,away:HS_OPPS.qfRival,played:false}];
-  const hsByes={0:HS_OPPS.sfHero,1:HS_OPPS.sfRival}; // QF-match index → that half's SF opponent
+  const mid=shuffle(SCHOOLS.filter(k=>k!==hsSchool&&k!==rivalSchool));
+  const order=[hsSchool,...mid,rivalSchool]; // seeds 0 & 7 → can only meet in the final
+  const qf=[];for(let i=0;i<8;i+=2)qf.push({home:order[i],away:order[i+1],played:false});
   window.STORY={hero:{name:n1,rival:n2,role,club,rivalClub,nick:sopra,level:1,xp:0,points:0,alloc:{spd:0,pwr:0,tec:0,def:0},goalsSeason:0},
     phase:'hs',hsSchool,rivalSchool,
-    hs:{stage:'qf',ko:{qf,sf:null,f:null},byes:hsByes,alive:true,rivalAlive:true},
+    hs:{stage:'qf',ko:{qf,sf:null,f:null},alive:true,rivalAlive:true},
     league:null,wc:null,pending:null,seasonB:1,seasonA:0};
   save();
   window._stView='hub';
@@ -678,14 +672,6 @@ function myFixture(){
   return null;
 }
 function koWinner(m){if(m.hg>m.ag)return m.home;if(m.ag>m.hg)return m.away;return m.pens[0]>m.pens[1]?m.home:m.away;}
-function advanceHS(){ // pinned 6-team cup: qf(2 matches) → sf(winner vs that half's bye) → final
-  const S=STORY,ko=S.hs.ko,st=S.hs.stage,rd=ko[st];
-  rd.forEach(m=>{if(m.played)return;const r=simMatch(m.home,m.away);m.hg=r.hg;m.ag=r.ag;m.played=true;if(m.hg===m.ag)m.pens=pens();});
-  const winners=rd.map(koWinner);
-  if(st==='qf'){ko.sf=winners.map((w,i)=>({home:w,away:S.hs.byes[i],played:false}));S.hs.stage='sf';}
-  else if(st==='sf'){ko.f=[{home:winners[0],away:winners[1],played:false}];S.hs.stage='f';}
-  else{S.hs.champion=winners[0];S.hs.stage='done';}
-}
 function advanceKO(ko,stages){
   // sim unplayed of current stage, build next
   const S=STORY,cur=S.phase==='hs'?S.hs:S.wc,st=cur.stage,rd=ko[st];
@@ -846,7 +832,7 @@ function applyMyResult(m,hg,ag,played){
 function advanceAll(){
   const S=STORY;
   if(S.phase==='fr3'||S.phase==='fr4'){endOfRound();return;}
-  if(S.phase==='hs'){if(S.hs.stage!=='done')advanceHS();S.hs.alive=isAlive(S.hsSchool,S.hs);S.hs.rivalAlive=isAlive(S.rivalSchool,S.hs);endOfRound();return;}
+  if(S.phase==='hs'){if(S.hs.stage!=='done')advanceKO(S.hs.ko,['qf','sf','f']);S.hs.alive=isAlive(S.hsSchool,S.hs);S.hs.rivalAlive=isAlive(S.rivalSchool,S.hs);endOfRound();return;}
   if(S.phase==='sb'||S.phase==='sa'){
     const L=S.league,rd=L.fix[L.md];
     rd.forEach(mm=>{if(!mm.played){const r=simMatch(mm.home,mm.away);mm.hg=r.hg;mm.ag=r.ag;mm.played=true;}applyTab(L.tab,mm.home,mm.away,mm.hg,mm.ag);});

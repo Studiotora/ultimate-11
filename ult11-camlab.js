@@ -181,6 +181,7 @@
     panel.appendChild(row('Shadow',     0,0.9,0.01,  ()=>L.shadow,    v=>{L.shadow=v;}));
     panel.appendChild(row('Shadow len', 0,2,0.05,    ()=>L.shadowLen, v=>{L.shadowLen=v;}));
     panel.appendChild(row('Sun glow',   0,1,0.01,    ()=>L.glow,      v=>{L.glow=v; al();}));
+    panel.appendChild(row('Stand shade',0,1,0.01,    ()=>L.shade,     v=>{L.shade=v; al();}));
 
     panel.appendChild(section('POST FX'));
     const F=P3D.fx, af=()=>{ if(P3D._applyFx) P3D._applyFx(); };
@@ -192,6 +193,9 @@
     panel.appendChild(row('Bloom thr',  0,1,0.01,    ()=>F.bloomThresh, v=>{F.bloomThresh=v; af();}));
     panel.appendChild(row('Tilt-shift', 0,1,0.01,    ()=>F.tilt,        v=>{F.tilt=v; af();}));
     panel.appendChild(row('Vignette',   0,1,0.01,    ()=>F.vignette,    v=>{F.vignette=v; af();}));
+    panel.appendChild(row('God rays',   0,1.5,0.01,  ()=>F.rays,        v=>{F.rays=v; af();}));
+    panel.appendChild(row('Ray reach',  0.8,0.99,0.005,()=>F.rayDecay,  v=>{F.rayDecay=v; af();}));
+    panel.appendChild(row('Ray quality',16,120,2,    ()=>F.raySamples,  v=>{F.raySamples=v; af();}));
 
     panel.appendChild(section('DEBUG'));
     const dg=document.createElement('div'); dg.style.cssText='display:flex;flex-wrap:wrap';

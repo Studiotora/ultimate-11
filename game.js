@@ -1614,6 +1614,34 @@ function tick(dt=1){
 
   const progress=progressFor(s,cp);
   const centrality=1-Math.abs(cp.y/H-.5);
+
+  // ── CPU OPEN-PLAY PASSING ─────────────────────────────────────
+  // The AI carrier used to only ever drive at goal (it passed solely inside
+  // duels). Here it can choose to pass while dribbling: when pressured AND a
+  // clearly better-open teammate exists. Gated to CPU; cooldown stops spam.
+  if(s!=='h' && G.phase==='moving' && Date.now()>=(G.kickoffUntil||0)
+     && Date.now()>=(G._cpuPassAt||0) && !G._scoringGoal && !(progress>.88 && centrality>.35)){
+    const defDist=nearestDefenderDistance(s,cp);
+    const pressure=clamp(1-defDist/(W*ENGINE_CONFIG.ai.pressureRadius),0,1);
+    const carrBh=getBehaviorProfile(sq(s)[G.ck]);
+    // pass appetite rises with pressure and the carrier's passBias
+    const wantPass = pressure>0.45 || (pressure>0.25 && Math.random()<0.02*(carrBh.passBias||1));
+    if(wantPass){
+      const tk=bestTeammateFor(s,G.ck,'pass');
+      if(tk && tk!==G.ck){
+        // only pass if the target lane beats holding (avoid pointless square balls)
+        const lane=openPassLaneScore(s,G.ck,tk);
+        const threshold = pressure>0.6 ? -0.2 : 0.4; // under heavy press, accept tighter lanes
+        if(lane>threshold){
+          clearInterval(G.di);
+          G._cpuPassAt=Date.now()+1400; // cooldown so it doesn't ping-pong
+          afPass(s,tk);
+          return;
+        }
+      }
+    }
+  }
+
   const shotGate=progress>.88 && centrality>.35;
   // AI carrier only. The human carrier shoots when THEY choose (△ SHOOT →
   // manualShot), so they can keep dribbling, cross, or pass instead of being
@@ -1625,7 +1653,7 @@ function tick(dt=1){
     G.phase='pass_anim';
     const _gkPos2=PP[ds]&&PP[ds]['GK']?PP[ds]['GK']:{x:goalXFor(s),y:H*.5};
     G._shotTrail=true;
-    animateBallTo(cp.x,cp.y,_gkPos2.x,_gkPos2.y,()=>{G._shotTrail=false;G.phase='idle';opDuel(true);},45);
+    animateBallTo(cp.x,cp.y,_gkPos2.x,_gkPos2.y,()=>{G._shotTrail=false;G.phase='idle';opDuel(true);},45,true);
     return;
   }
 
@@ -2039,7 +2067,10 @@ function startAnim(){
       const _cp=PP[G.poss][G.ck];
       const _dir=dirFor(G.poss);
       const _off=IR()*0.55;
-      ball.x=_cp.x+_dir*_off;ball.y=_cp.y;
+      const fx=_cp.x+_dir*_off, fy=_cp.y;
+      // ease the ball to the foot so it reads as a rolling touch, not a teleport
+      const k=Math.min(.45*dt,1);
+      ball.x+=(fx-ball.x)*k; ball.y+=(fy-ball.y)*k;
       ball.tx=ball.x;ball.ty=ball.y;
     }else{
       ball.x+=(ball.tx-ball.x)*Math.min(.18*dt,1);
@@ -2314,7 +2345,12 @@ function drawRadar(){
     cx.restore();
   }
   if(typeof ball!=='undefined'&&ball){
-    cx.beginPath();cx.arc(px(ball.x),py(ball.y),2.8,0,Math.PI*2);
+    const bz=ball.bz||0;
+    if(bz>0.5){ // ground shadow when lofted
+      cx.beginPath();cx.ellipse(px(ball.x),py(ball.y),2.8,1.4,0,0,Math.PI*2);
+      cx.fillStyle='rgba(0,0,0,.28)';cx.fill();
+    }
+    cx.beginPath();cx.arc(px(ball.x),py(ball.y)-bz,2.8,0,Math.PI*2);
     cx.fillStyle='#fff';cx.fill();
     cx.strokeStyle='#ffd24a';cx.lineWidth=1;cx.stroke();
   }
@@ -3241,7 +3277,7 @@ function manualShot(){
   shakeScreen(4,60);
   animateBallTo(_cpM.x,_cpM.y,_gkPosM.x,_gkPosM.y,()=>{
     G._shotTrail=false; G.phase='idle'; opDuel(true);
-  },45);
+  },45,true);
 }
 function togglePress(){
   if(G.poss==='h'){say('Win the ball first to press!');return;}
@@ -3313,21 +3349,6 @@ function pvpSwitch(player){ _switchEngager(player===2?'a':'h'); } // pad ✕ —
 // Unified canvas input — handles both mouse click and touch tap
 function handleCanvasInput(clientX, clientY){
   if(G.poss!=='h')return;
-  // ── 2.5D: hit-test against the 3D screen positions instead of the 2D ones ──
-  if(window.P3D && P3D.on && typeof P3D.pickPlayerAt==='function'){
-    const k=P3D.pickPlayerAt(clientX, clientY);   // nearest home teammate (not carrier) in 3D
-    if(!k) return;
-    if(G.pm){
-      G.D.pk=k; G.pm=false;
-      document.getElementById('pass-banner').style.display='none';
-      document.getElementById('duel-ov').classList.add('show');
-      chkRdy(); say((G.D.ak==='one-two'?'Wall pass':'Pass')+' to '+hSq[k].name+' — GO!');
-      return;
-    }
-    if(G.phase!=='moving')return;
-    if(isOffside('h',k)){callOffside('h',k);return;}
-    iPas(k); return;
-  }
   const rect=CV.getBoundingClientRect();
   const mx0=(clientX-rect.left)*(W/rect.width);
   const my0=(clientY-rect.top)*(H/rect.height);
@@ -3397,7 +3418,28 @@ function passDuration(fx,fy,tx,ty,base){
   return Math.round(clamp(base + (d/W)*90, base, base*3.5));
 }
 let ballTravel={active:false,fx:0,fy:0,tx:0,ty:0,progress:0,duration:60,onArrive:null};
-function animateBallTo(fromX,fromY,toX,toY,onArrive,duration){ballTravel={active:true,fx:fromX,fy:fromY,tx:toX,ty:toY,progress:0,duration:duration||50,onArrive};G.phase='pass_anim';}
+function animateBallTo(fromX,fromY,toX,toY,onArrive,duration,flat){
+  // Physical roll: launch the ball with a velocity sized so it COASTS to the
+  // target under friction over ~duration ticks, then fire onArrive on arrival.
+  const dx=toX-fromX, dy=toY-fromY, distp=Math.hypot(dx,dy)||1;
+  const dur=flat ? Math.max(8,duration||40)
+                 : Math.max(14,Math.round((duration||50)*1.45 + (distp/W)*55));
+  const fr=flat?0.945:0.975;                       // friction (higher = more even speed)
+  const v0=distp*(1-fr)/(1-Math.pow(fr,dur));
+  const arc=flat?0:Math.min(34, 6 + (distp/W)*70); // shots flat; passes loft w/ distance
+  ballTravel={active:true, fx:fromX, fy:fromY, tx:toX, ty:toY,
+              x:fromX, y:fromY, vx:(dx/distp)*v0, vy:(dy/distp)*v0,
+              fr, dur, progress:0, onArrive, rolled:0, total:distp, arc};
+  ball.x=fromX; ball.y=fromY; ball.tx=fromX; ball.ty=fromY; ball.bz=0;
+  G.phase='pass_anim';
+}
+function animateBallVel(fromX,fromY,vx,vy,onArrive){
+  // Free roll with an explicit launch velocity (deflections / loose balls).
+  ballTravel={active:true, fx:fromX, fy:fromY, tx:fromX+vx*8, ty:fromY+vy*8,
+              x:fromX, y:fromY, vx, vy, fr:0.93, dur:120, progress:0,
+              onArrive, rolled:0, total:1e9, loose:true};
+  ball.x=fromX; ball.y=fromY; G.phase='pass_anim';
+}
 // Keep players moving during a pass — runs and defensive shape continue at reduced pace
 function tickPassMotion(dt=1){
   if(!G.poss)return;
@@ -3407,13 +3449,36 @@ function tickPassMotion(dt=1){
 }
 
 function tickBallTravel(dt=1){
-  ballTravel.progress+=dt;
-  const t=Math.min(1,ballTravel.progress/ballTravel.duration);
-  const ease=t<.5?2*t*t:1-Math.pow(-2*t+2,2)/2;
-  ball.x=ballTravel.fx+(ballTravel.tx-ballTravel.fx)*ease;
-  ball.y=ballTravel.fy+(ballTravel.ty-ballTravel.fy)*ease;
-  ball.tx=ball.x;ball.ty=ball.y;
-  if(t>=1){ballTravel.active=false;if(ballTravel.onArrive)ballTravel.onArrive();}
+  const b=ballTravel;
+  if(b.arc){
+    // PASS: drive ground + loft from one linear clock so they stay in sync (no wobble)
+    b.progress=Math.min(b.dur, b.progress+Math.max(1,Math.round(dt)));
+    const t=b.progress/b.dur;
+    b.x=b.fx+(b.tx-b.fx)*t;
+    b.y=b.fy+(b.ty-b.fy)*t;
+    ball.x=b.x; ball.y=b.y; ball.tx=ball.x; ball.ty=ball.y;
+    ball.bz=b.arc*4*t*(1-t);
+    if(t>=1){ ball.x=b.tx; ball.y=b.ty; ball.tx=ball.x; ball.ty=ball.y; ball.bz=0;
+              b.active=false; if(b.onArrive)b.onArrive(); }
+    return;
+  }
+  // SHOT / loose: velocity + friction
+  let steps=Math.max(1,Math.round(dt));
+  for(let i=0;i<steps;i++){
+    b.x+=b.vx; b.y+=b.vy;
+    b.rolled+=Math.hypot(b.vx,b.vy);
+    b.vx*=b.fr; b.vy*=b.fr;
+    b.progress++;
+  }
+  ball.x=b.x; ball.y=b.y; ball.tx=ball.x; ball.ty=ball.y;
+  ball.bz=0;
+  const arrivedTarget = !b.loose && (b.rolled>=b.total*0.985 || b.progress>=b.dur);
+  const stalled = (b.vx*b.vx+b.vy*b.vy) < 0.02 || b.progress>=(b.dur+40);
+  if(arrivedTarget || stalled){
+    if(!b.loose){ ball.x=b.tx; ball.y=b.ty; ball.tx=ball.x; ball.ty=ball.y; }
+    b.active=false;
+    if(b.onArrive)b.onArrive();
+  }
 }
 
 function iPas(tk){
@@ -5005,7 +5070,7 @@ function resDuel(){
         const _cp=PP[as][G.ck]||_gkPos;
         if(rollShotMiss(as,ak)){shotMissed(as);return;}
         G._shotTrail=true;
-        animateBallTo(_cp.x,_cp.y,_gkPos.x,_gkPos.y,()=>{G._shotTrail=false;G.phase='idle';opDuel(true,ak);},40);
+        animateBallTo(_cp.x,_cp.y,_gkPos.x,_gkPos.y,()=>{G._shotTrail=false;G.phase='idle';opDuel(true,ak);},40,true);
       }
     }
     else if(['shoot','special'].includes(ak)&&!win){
