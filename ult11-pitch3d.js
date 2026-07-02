@@ -531,48 +531,79 @@
     let flagGroup=new T.Group(); scene.add(flagGroup);
     let flagData=null;
     function bannerTex(img,color,emoji){
-      const c=document.createElement('canvas'); c.width=256; c.height=170;
+      const c=document.createElement('canvas'); c.width=192; c.height=128;
       const x=c.getContext('2d');
-      x.fillStyle=color||'#20304a'; x.fillRect(0,0,256,170);
-      x.fillStyle='rgba(0,0,0,.25)'; x.fillRect(0,150,256,20);       // bottom shade
-      x.strokeStyle='rgba(255,255,255,.55)'; x.lineWidth=6; x.strokeRect(5,5,246,160);
-      if(img){ const s=Math.min(200/img.width,120/img.height);
-        const w=img.width*s, h=img.height*s;
-        x.drawImage(img,(256-w)/2,(160-h)/2+4,w,h); }
-      else if(emoji){ x.font='96px serif'; x.textAlign='center'; x.textBaseline='middle';
-        x.fillText(emoji,128,86); }
-      const t=new T.CanvasTexture(c); return t;
+      if(emoji){ // national: the flag itself IS the banner
+        x.font='120px serif'; x.textAlign='center'; x.textBaseline='middle';
+        x.fillText(emoji,96,68);
+      } else {
+        x.fillStyle=color||'#20304a'; x.fillRect(0,0,192,128);
+        x.strokeStyle='rgba(255,255,255,.45)'; x.lineWidth=4; x.strokeRect(3,3,186,122);
+        if(img){ const s=Math.min(150/img.width,92/img.height);
+          const w=img.width*s, h=img.height*s;
+          x.drawImage(img,(192-w)/2,(122-h)/2+3,w,h); }
+      }
+      return new T.CanvasTexture(c);
     }
     function loadFirst(srcs,cb){
       (function tryN(i){ if(!srcs||i>=srcs.length)return cb(null);
         const im=new Image(); im.onload=()=>cb(im); im.onerror=()=>tryN(i+1); im.src=srcs[i]; })(0);
     }
     P3D.setTeamFlags=function(d){ flagData=d; placeFlags(); };
+    // deterministic pseudo-random per match so flags scatter but don't jitter
+    function _rng(seed){ return ()=>{ seed=(seed*9301+49297)%233280; return seed/233280; }; }
     function placeFlags(){
       scene.remove(flagGroup); flagGroup=new T.Group(); scene.add(flagGroup);
       if(!flagData) return;
-      // standing supporter boards on the apron, right in front of the hoarding —
-      // deterministic placement, impossible to occlude behind the bowl walls
-      const bh=PWID*0.11, bw=bh*1.5;
-      const zBack=-(PWID/2+PWID*0.055);          // far touchline apron
-      const xEndH=-(PLEN/2+PWID*0.055), xEndA=(PLEN/2+PWID*0.055);
-      function board(tex,x,z,rotY){
-        const m=new T.Mesh(new T.PlaneGeometry(bw,bh),
-          new T.MeshBasicMaterial({map:tex,side:T.DoubleSide}));
-        m.position.set(x,bh/2+0.1,z); m.rotation.y=rotY||0;
+      const S=P3D.bowl, U=PWID/190;
+      const RUNOFF=6*U;
+      const baseHL=PLEN/2+RUNOFF+(S.gap||0)*U;
+      const baseHW=PWID/2+RUNOFF+(S.gap||0)*U;
+      const th=(S.tierH!=null?S.tierH:30)*U;
+      const rakeRad=(S.rake!=null?S.rake:50)*Math.PI/180;
+      const out=th/Math.tan(rakeRad);
+      const lean=Math.atan2(out,th);
+      const y0=(S.yOff||0)*U+th*0.12;
+      const bh=th*0.34, bw=bh*1.5;              // small — reads as a fan flag
+      function addFlag(tex,wall,frac,tier,hJit,rng){
+        const yBase=y0+(tier===1?th*1.08:0);
+        const yC=yBase+th*(0.2+hJit*0.55);      // random height on the tier face
+        const off=out*((yC-y0-(tier===1?th*1.08:0))/th)-0.4;  // hug the rake, slightly proud
+        const m=new T.Mesh(new T.PlaneGeometry(bw*(0.85+rng()*0.4),bh*(0.85+rng()*0.4)),
+          new T.MeshBasicMaterial({map:tex,side:T.DoubleSide,transparent:true}));
+        const tilt=(rng()-0.5)*0.25;            // slight random waving tilt
+        if(wall==='back'){  m.position.set(frac*baseHL, yC, -(baseHW+off));
+                            m.rotation.x=lean; m.rotation.z=tilt; }
+        if(wall==='left'){  m.position.set(-(baseHL+off), yC, frac*baseHW);
+                            m.rotation.y=Math.PI/2; m.rotation.z=-lean; m.rotation.x=tilt; }
+        if(wall==='right'){ m.position.set( (baseHL+off), yC, frac*baseHW);
+                            m.rotation.y=-Math.PI/2; m.rotation.z=lean; m.rotation.x=tilt; }
+        m.rotation.order='YXZ';
         flagGroup.add(m);
       }
-      loadFirst(flagData.home,img=>{
+      function scatter(tex,homeSide,rng){
+        // 10 flags per team, random spots on their half: back straight + own end,
+        // mixed between lower (tier 0) and middle (tier 1) stands
+        for(let i=0;i<10;i++){
+          const tier=rng()<0.55?0:1;
+          const hJit=rng();
+          if(rng()<0.6){ // back straight, own half
+            const f=(0.08+rng()*0.72)*(homeSide?-1:1);
+            addFlag(tex,'back',f,tier,hJit,rng);
+          } else {       // own end stand
+            const f=(rng()*1.6-0.8);
+            addFlag(tex,homeSide?'left':'right',f,tier,hJit,rng);
+          }
+        }
+      }
+      const seed=(Date.now()%100000)|1;
+      loadFirst(flagData.homeFlag?null:flagData.home,img=>{
         const t=bannerTex(img,flagData.homeCol,flagData.homeFlag);
-        [-0.39,-0.275,-0.16,-0.05].forEach(f=>board(t,f*PLEN,zBack,0));
-        [-0.5,-0.15,0.2,0.55].forEach(f=>board(t,xEndH,f*PWID/2,Math.PI/2));
-        console.log('[P3D] home flags placed',flagGroup.children.length);
+        scatter(t,true,_rng(seed));
       });
-      loadFirst(flagData.away,img=>{
+      loadFirst(flagData.awayFlag?null:flagData.away,img=>{
         const t=bannerTex(img,flagData.awayCol,flagData.awayFlag);
-        [0.05,0.16,0.275,0.39].forEach(f=>board(t,f*PLEN,zBack,0));
-        [-0.5,-0.15,0.2,0.55].forEach(f=>board(t,xEndA,f*PWID/2,Math.PI/2));
-        console.log('[P3D] away flags placed',flagGroup.children.length);
+        scatter(t,false,_rng(seed*7));
       });
     }
     // console test: P3D.debugFlags() — colored boards, no PNGs needed
