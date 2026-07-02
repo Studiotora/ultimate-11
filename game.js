@@ -2206,6 +2206,9 @@ function drawDebugPitch(){
   cx.setLineDash([]);
 }
 function draw(){
+  // 2.5D permanent: the flat canvas is hidden — skip all 2D field rendering.
+  // (Still runs fully if pitch3d ever fails to load, as a safety fallback.)
+  if(window.P3D&&P3D.on){camUpdate();return;}
   cx.clearRect(0,0,W,H);
   // ── DYNAMIC CAMERA — follows the action, leads into movement ──
   camUpdate();
@@ -4002,9 +4005,8 @@ function opDuel(isShot, committedAk){
     }
   };
   try{
-    // 2.5D shot duels: the full cut-in moved into the super-shot cinematic —
-    // don't play it here before the shot as well.
-    if(isShot&&window.P3D&&P3D.on){killCutIn();_reveal();}
+    // Shot duels: no VS cut-in ever — GK-only layout replaces it.
+    if(isShot){killCutIn();_reveal();}
     else playDuelCutIn({atk:carrier,def,as,ds,isShot,is2v1:G.D.is2v1,zoneTxt},_reveal);
   }catch(e){killCutIn();_reveal();}
 }

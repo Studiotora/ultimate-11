@@ -58,6 +58,9 @@
     debug:false,         // sprite/shadow debug overlay (Camera Lab)
     ready:true
   };
+  // 2.5D is the ONLY renderer now — lock the flag so nothing (camlab,
+  // stale localStorage, console) can flip the game back to flat 2D.
+  try{Object.defineProperty(P3D,'on',{get:()=>true,set:()=>{},configurable:false});}catch(e){}
 
   /* ---- wait for the engine canvas + globals ---- */
   function boot(){
@@ -1242,37 +1245,7 @@
     }
     requestAnimationFrame(loop3d);
 
-    /* ---- inject a 2.5D toggle button (robust, retries until DOM ready) ---- */
-    function injectButton(){
-      if(document.getElementById('p3dToggleBtn')) return true;
-      const b=document.createElement('button');
-      b.id='p3dToggleBtn';
-      b.textContent='2.5D';
-      b.style.cssText='position:fixed;left:50%;top:96px;transform:translateX(-50%);z-index:99999;'
-        +'font:700 11px Orbitron,sans-serif;letter-spacing:.1em;color:#cfd8e3;'
-        +'background:rgba(18,28,46,.92);border:1px solid rgba(240,192,64,.45);'
-        +'border-radius:6px;padding:6px 12px;cursor:pointer';
-      b.onclick=()=>{ P3D.on=!P3D.on; b.style.background=P3D.on?'#1f9d63':'rgba(18,28,46,.92)';
-                      b.style.color=P3D.on?'#04140c':'#cfd8e3'; };
-      document.body.appendChild(b);
-      // reflect current state
-      b.style.background=P3D.on?'#1f9d63':'rgba(18,28,46,.92)';
-      b.style.color=P3D.on?'#04140c':'#cfd8e3';
-      return true;
-    }
-    /* Bind the permanent index.html button (#view25Btn) directly to P3D, and
-       inject a JS fallback button, so the toggle can never fire before init. */
-    (function wireToggles(){
-      const idx=document.getElementById('view25Btn');
-      if(idx && !idx._p3dWired){
-        idx._p3dWired=true;
-        idx.onclick=()=>{ P3D.on=!P3D.on;
-          idx.style.background=P3D.on?'#1f9d63':'';
-          idx.style.color=P3D.on?'#04140c':''; };
-      }
-      injectButton();
-      if(!idx) setTimeout(wireToggles,500);
-    })();
+    /* ---- 2.5D toggle buttons removed — engine is always on ---- */
 
     /* ════════ POST-PROCESSING (HD-2D: bloom + tilt-shift + vignette) ════════
        Uses stock three.js r128 example passes loaded in index.html. If any are
