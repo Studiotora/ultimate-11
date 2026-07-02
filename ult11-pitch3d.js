@@ -247,47 +247,75 @@
     }
     function buildGoals(){
       goalGroup.clear();
-      const postMat=new T.MeshBasicMaterial({color:0xffffff});
-      const netMat=new T.MeshBasicMaterial({color:0xffffff,transparent:true,opacity:0.18,side:T.DoubleSide});
-      const HW=PWID*0.052;         // half goal-mouth (~7.3m of 68m)
-      const GH=PWID*0.030;         // crossbar height (~2.4m)
-      const DEP=PWID*0.026;        // net depth (outward, off pitch)
-      const r=PWID*0.0016;         // post radius
+      // net = repeating diamond-mesh canvas texture (reads as real netting)
+      function netTex(rx,ry){
+        const c=document.createElement('canvas');c.width=c.height=64;
+        const x=c.getContext('2d');x.clearRect(0,0,64,64);
+        x.strokeStyle='rgba(255,255,255,.9)';x.lineWidth=1.5;
+        for(let i=-64;i<=128;i+=16){
+          x.beginPath();x.moveTo(i,0);x.lineTo(i+64,64);x.stroke();
+          x.beginPath();x.moveTo(i+64,0);x.lineTo(i,64);x.stroke();
+        }
+        const t=new T.CanvasTexture(c);t.wrapS=t.wrapT=T.RepeatWrapping;t.repeat.set(rx,ry);
+        return t;
+      }
+      const netMatFor=(rx,ry)=>new T.MeshBasicMaterial({map:netTex(rx,ry),transparent:true,
+        opacity:0.5,side:T.DoubleSide,depthWrite:false});
+      const postMat=new T.MeshLambertMaterial({color:0xe8e8e8});   // shaded, not glow-white
+      const HW=PWID*0.052;          // half goal-mouth
+      const GH=PWID*0.030;          // crossbar height
+      const DEP=PWID*0.030;         // net depth at the ground
+      const TOPD=DEP*0.5;           // net depth at the top (box shape)
+      const r=PWID*0.0009;          // post radius — thin
+      const NPM=8;                  // ~net cells per meter-ish density
       [-1,1].forEach(side=>{
-        const gx=side*(PLEN/2);    // goal-line
-        const bx=gx + side*DEP;    // net back, OUTWARD off the pitch
+        const gx=side*(PLEN/2);
+        const tx=gx+side*TOPD;      // top-back rail x
+        const bx=gx+side*DEP;       // ground-back bar x
         const g=new T.Group();
-        // two front uprights
+        // front uprights + crossbar
         [-HW,HW].forEach(z=>{
-          const p=new T.Mesh(new T.CylinderGeometry(r,r,GH,8),postMat);
+          const p=new T.Mesh(new T.CylinderGeometry(r,r,GH,10),postMat);
           p.position.set(gx,GH/2,z); g.add(p);
         });
-        // crossbar (front, spans Z)
-        const cb=new T.Mesh(new T.CylinderGeometry(r,r,HW*2,8),postMat);
+        const cb=new T.Mesh(new T.CylinderGeometry(r,r,HW*2+r*2,10),postMat);
         cb.rotation.x=Math.PI/2; cb.position.set(gx,GH,0); g.add(cb);
-        // back ground bar
-        const bb=new T.Mesh(new T.CylinderGeometry(r*0.8,r*0.8,HW*2,8),postMat);
+        // thin back frame: top-back rail, ground bar, and corner stanchions
+        const tb=new T.Mesh(new T.CylinderGeometry(r*0.6,r*0.6,HW*2,8),postMat);
+        tb.rotation.x=Math.PI/2; tb.position.set(tx,GH,0); g.add(tb);
+        const bb=new T.Mesh(new T.CylinderGeometry(r*0.6,r*0.6,HW*2,8),postMat);
         bb.rotation.x=Math.PI/2; bb.position.set(bx,r,0); g.add(bb);
-        // top slope rails: front-top → back-bottom (both sides)
         [-HW,HW].forEach(z=>{
-          const len=Math.hypot(DEP,GH);
-          const sr=new T.Mesh(new T.CylinderGeometry(r*0.7,r*0.7,len,6),postMat);
-          sr.position.set((gx+bx)/2,GH/2,z);
-          // rotate around Z so it leans from top-front down to back-ground
-          sr.rotation.z=side*Math.atan2(DEP,GH);
-          g.add(sr);
+          // short top link front→top-back
+          const l1=new T.Mesh(new T.CylinderGeometry(r*0.55,r*0.55,TOPD,6),postMat);
+          l1.rotation.z=Math.PI/2; l1.position.set((gx+tx)/2,GH,z); g.add(l1);
+          // slope rail top-back→ground-back
+          const len=Math.hypot(DEP-TOPD,GH);
+          const l2=new T.Mesh(new T.CylinderGeometry(r*0.55,r*0.55,len,6),postMat);
+          l2.position.set((tx+bx)/2,GH/2,z);
+          l2.rotation.z=side*Math.atan2(DEP-TOPD,GH);
+          g.add(l2);
         });
-        // NET — slanted back panel: top edge at front-top, bottom edge at back-ground
-        const slantLen=Math.hypot(DEP,GH);
-        const bn=new T.Mesh(new T.PlaneGeometry(HW*2,slantLen),netMat);
-        bn.position.set((gx+bx)/2,GH/2,0);
-        bn.rotation.y=Math.PI/2;                              // normal along X (faces pitch)
-        bn.rotation.x=side*Math.atan2(DEP,GH);                // lean to match slope rails
-        g.add(bn);
-        // side net panels (two right-triangle-ish quads, faces sideways)
+        // ── NET PANELS (each sized + UV-repeated so the mesh is continuous) ──
+        // roof: front crossbar → top-back rail (horizontal)
+        const roof=new T.Mesh(new T.PlaneGeometry(TOPD,HW*2),netMatFor(TOPD*NPM,HW*2*NPM));
+        roof.rotation.set(-Math.PI/2,0,0);        // flat: local x→world X (depth), y→Z (span)
+        roof.position.set((gx+tx)/2,GH,0); g.add(roof);
+        // back: top-back rail → ground bar (slanted, edges meet both rails)
+        const slant=Math.hypot(DEP-TOPD,GH);
+        const back=new T.Mesh(new T.PlaneGeometry(HW*2,slant),netMatFor(HW*2*NPM,slant*NPM));
+        back.position.set((tx+bx)/2,GH/2,0);
+        back.rotation.y=Math.PI/2;
+        back.rotation.x=side*Math.atan2(DEP-TOPD,GH);
+        g.add(back);
+        // sides: true profile polygon (front post → top link → slope → ground)
         [-HW,HW].forEach(z=>{
-          const sd=new T.Mesh(new T.PlaneGeometry(DEP,GH),netMat);
-          sd.position.set((gx+bx)/2,GH/2,z);                  // normal along Z
+          const sh=new T.Shape();
+          sh.moveTo(0,0); sh.lineTo(0,GH); sh.lineTo(side*TOPD,GH); sh.lineTo(side*DEP,0);
+          sh.closePath();
+          const sd=new T.Mesh(new T.ShapeGeometry(sh),netMatFor(DEP*NPM,GH*NPM));
+          // ShapeGeometry lies in XY = exactly a side panel's plane (normal = Z)
+          sd.position.set(gx,0,z);
           g.add(sd);
         });
         goalGroup.add(g);

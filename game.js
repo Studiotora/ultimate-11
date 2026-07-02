@@ -1066,7 +1066,7 @@ function exitToMenu(){
   // Reset pause overlay if visible
   const po=document.getElementById('pause-overlay');if(po){po.classList.remove('show');po.style.display='';}
   const pb=document.getElementById('pauseBtn');if(pb){pb.textContent='⏸';pb.classList.remove('paused');}
-  const ph=document.getElementById('passhint');if(ph)ph.style.display='none';
+  const ph=$id('passhint');if(ph)ph.style.display='none';
   // Abandon career match without saving the score (counts as not played)
   if(CAR.pendingMatch){CAR.pendingMatch=null;}
   if(window.CUP&&window.CUP.pending){window.CUP.pending=null;}
@@ -3305,7 +3305,7 @@ function togglePress(){
   if(btn){btn.classList.toggle('active',G.pressing);btn.textContent=G.pressing?'PRESS ⚡':'PRESS';}
   say(G.pressing?'High press ON — closing down!':'Press off.');
 }
-function togglePassMode(){ if(G.poss!=='h'||G.phase!=='moving'||!G.ck) return; G.pm=!G.pm; document.getElementById('pass-banner').style.display=G.pm?'block':'none'; document.getElementById('pass-banner').textContent='PASS MODE — CLICK A PLAYER'; if(G.pm) say('Pass mode enabled.'); }
+function togglePassMode(){ if(G.poss!=='h'||G.phase!=='moving'||!G.ck) return; G.pm=!G.pm; $id('pass-banner').style.display=G.pm?'block':'none'; $id('pass-banner').textContent='PASS MODE — CLICK A PLAYER'; if(G.pm) say('Pass mode enabled.'); }
 
 // ── DIRECTIONAL PASS ──────────────────────────────────────────────
 // □ in open play: pass to the teammate that best lines up with the way
@@ -3382,7 +3382,7 @@ function handleCanvasInput(clientX, clientY){
       const sc=perspScale(p.y);
       if(Math.hypot(sx-mx,sy-my)<(CR+16)*sc){
         G.D.pk=k;G.pm=false;
-        document.getElementById('pass-banner').style.display='none';
+        $id('pass-banner').style.display='none';
         document.getElementById('duel-ov').classList.add('show');
         chkRdy();say((G.D.ak==='one-two'?'Wall pass':'Pass')+' to '+hSq[k].name+' — GO!');return;
       }
@@ -3523,7 +3523,7 @@ function iPas(tk){
         G.poss=closestSide;G.ck=closestKey;G.tP++;if(closestSide==='h')G.hP++;
         ball.x=lx;ball.y=ly;ball.tx=lx;ball.ty=ly;
         updP();G.phase='idle';
-        setTimeout(()=>{asnC();G.phase='moving';if(closestSide==='h')document.getElementById('passhint').style.display='block';},200);
+        setTimeout(()=>{asnC();G.phase='moving';if(closestSide==='h')$id('passhint').style.display='block';},200);
       },passDuration(fp2.x,fp2.y,lx,ly,24));
     }else{
       // Clean steal
@@ -3539,7 +3539,7 @@ function iPas(tk){
     animateBallTo(fp2.x,fp2.y,tp.x,tp.y,()=>{
       setC(tk,s); ball.x=tp.x;ball.y=tp.y;ball.tx=tp.x;ball.ty=tp.y;
       G.phase='idle';
-      setTimeout(()=>{asnC();G.phase='moving';if(G.poss==='h')document.getElementById('passhint').style.display='block';},120);
+      setTimeout(()=>{asnC();G.phase='moving';if(G.poss==='h')$id('passhint').style.display='block';},120);
     },passDuration(fp2.x,fp2.y,tp.x,tp.y,28));
   }
 }
@@ -3737,6 +3737,11 @@ function _portraitChainFor(pl,side){
     ?[`assets/career/clubs/${ln}${effTeam}.png`,`assets/career/clubs/${effTeam}.png`,_GENERIC_PLAYER_SVG_URL]
     :[`assets/players/${lastName}.png`,`assets/players/${effTeam}.png`,_GENERIC_PLAYER_SVG_URL]);
 }
+/* ── hot DOM cache + gen-guarded timer helper ── */
+const _DOM={};
+function $id(id){const e=_DOM[id];if(e&&e.isConnected)return e;return _DOM[id]=document.getElementById(id);}
+function guarded(fn,ms){const _g=G.goalGen;return setTimeout(()=>{if(G.goalGen===_g)fn();},ms);}
+
 function _setImgChain(img,paths){let i=0;img.onerror=()=>{i++;if(i<paths.length)img.src=paths[i];};img.src=paths[0];}
 
 /* ── ACTIVE-PLAYER BUST HUD (field play only) ──────────────────────
@@ -3757,7 +3762,7 @@ function _ensureBusts(){
     img.className='bust-img';
     img.style.cssText='position:absolute;left:0;right:0;top:0;bottom:26px;'+
       'background:no-repeat center 8%/190% auto;'+
-      'filter:drop-shadow(0 4px 10px rgba(0,0,0,.65));'+(right?'transform:scaleX(-1);':'');
+      'filter:drop-shadow(0 4px 10px rgba(0,0,0,.65));';
     const col=side==='h'?'#1e72dc':'#c22020';
     const plate=document.createElement('div');
     plate.className='bust-plate';
@@ -3884,7 +3889,7 @@ function playDuelCutIn(opts,onDone){
 function opDuel(isShot, committedAk){
   if(!isShot&&(G.phase==='duel'||G.phase==='duel_result'||G.phase==='pass_anim'))return;
   if(isShot){clearInterval(G.di);closeDuel();}
-  G.phase='duel';G.pm=false;G._duelT=Date.now();document.getElementById('passhint').style.display='none';document.getElementById('pass-banner').style.display='none';
+  G.phase='duel';G.pm=false;G._duelT=Date.now();$id('passhint').style.display='none';$id('pass-banner').style.display='none';
   const as=G.poss,ds=as==='h'?'a':'h';
   const carrier=sq(as)[G.ck];const dk=isShot?'GK':(G.chk||Object.keys(sq(ds)).find(k=>sq(ds)[k]));
   const def=sq(ds)[dk];
@@ -4508,13 +4513,13 @@ function selA(a,btn){
   dimSiblings(document.getElementById('abtns'));
   const akB=baseAction(a.id);
   if(akB==='pass'||akB==='one-two'){
-    document.getElementById('duel-ov').classList.remove('show'); G.pm=true; document.getElementById('pass-banner').style.display='block';
+    document.getElementById('duel-ov').classList.remove('show'); G.pm=true; $id('pass-banner').style.display='block';
     const sn=SUPER_NAMES[a.id];
     const isSuper=isSuperAtk(a.id);
     let bannerTxt;
     if(akB==='one-two') bannerTxt = isSuper ? '⚡ LIGHTNING 1-2 — PICK TEAMMATE' : 'ONE-TWO — PICK TEAMMATE';
     else                bannerTxt = isSuper ? '🎯 THREADING PASS — CLICK A PLAYER' : 'PASS MODE — CLICK A PLAYER';
-    document.getElementById('pass-banner').textContent=bannerTxt;
+    $id('pass-banner').textContent=bannerTxt;
     document.getElementById('dcfm').classList.remove('rdy');
   } else {
     // In 2v1 prompt the user for a second move
@@ -5008,7 +5013,7 @@ function resDuel(){
   if(!G.D.defA&&G.D.ds==='h')return;
   clearInterval(G.di);
   G.phase='duel_result';G.pm=false;
-  document.getElementById('pass-banner').style.display='none';
+  $id('pass-banner').style.display='none';
   document.getElementById('duel-ov').classList.add('show');
   document.querySelectorAll('.dact3d').forEach(b=>b.classList.add('dact-dis'));
   document.getElementById('dcfm').classList.remove('rdy');
@@ -5140,8 +5145,10 @@ function resDuel(){
       const blowDir=(win&&loserSide===ds)?1:-1;
       const blowDist=clamp(powerDiff*0.7,40,130);
       let _bStep=0;
+      const _bGen=G.goalGen;
       const _bTimer=setInterval(()=>{
         _bStep++;
+        if(G.goalGen!==_bGen){clearInterval(_bTimer);return;}
         loserPos.x=clamp(loserPos.x+blowDir*(blowDist/10),W*.03,W*.97);
         if(_bStep>=10)clearInterval(_bTimer);
       },40);
@@ -5203,12 +5210,13 @@ function resDuel(){
   },950);
 }
 
-function closeDuel(){killCutIn();G._duelT=0;try{Object.values(hSq).forEach(p=>{if(p)p._pending2v1=false;});Object.values(aSq).forEach(p=>{if(p)p._pending2v1=false;});}catch(e){}try{document.getElementById('s-match').classList.remove('duel-live');}catch(e){}document.getElementById('duel-ov').classList.remove('show');document.getElementById('duel-res').classList.remove('show');G.pm=false;document.getElementById('pass-banner').style.display='none';const d2=document.getElementById('dpd2-wrap');if(d2)d2.remove();}
+function closeDuel(){killCutIn();G._duelT=0;try{Object.values(hSq).forEach(p=>{if(p)p._pending2v1=false;});Object.values(aSq).forEach(p=>{if(p)p._pending2v1=false;});}catch(e){}try{document.getElementById('s-match').classList.remove('duel-live');}catch(e){}document.getElementById('duel-ov').classList.remove('show');document.getElementById('duel-res').classList.remove('show');G.pm=false;$id('pass-banner').style.display='none';const d2=document.getElementById('dpd2-wrap');if(d2)d2.remove();}
 function resume(s,msg){
-  closeDuel(); if(msg)say(msg); G.phase='idle'; document.getElementById('passhint').style.display='none';
+  closeDuel(); if(msg)say(msg); G.phase='idle'; $id('passhint').style.display='none';
   // Grace period after duel — no new duel or shot gate can fire for 2.5s
   G.kickoffUntil=Date.now()+2500;
-  setTimeout(()=>{G.phase='moving'; asnC(); if(s==='h')document.getElementById('passhint').style.display='block';},180);
+  const _g=G.goalGen;
+  setTimeout(()=>{if(G.goalGen!==_g)return;G.phase='moving'; asnC(); if(s==='h')$id('passhint').style.display='block';},180);
 }
 
 function afGoal(scorer,s,gen){
@@ -5302,7 +5310,7 @@ function afSave(ds){
         const outlet=bestTeammateFor(ds,'GK','pass')||['CB1','CB2','LB','RB','CM2'].find(k=>q[k]);
         if(outlet){G.ck=outlet;G.tP++;if(ds==='h')G.hP++;if(PP[ds][outlet]){ball.tx=PP[ds][outlet].x;ball.ty=PP[ds][outlet].y;}}
         updP();G.kickoffUntil=Date.now()+1800;
-        setTimeout(()=>{asnC();G.phase='moving';if(ds==='h')document.getElementById('passhint').style.display='block';},500);
+        setTimeout(()=>{asnC();G.phase='moving';if(ds==='h')$id('passhint').style.display='block';},500);
       },900);
       return;
     }
@@ -5323,7 +5331,7 @@ function afSave(ds){
         G.poss=ds;G.ck=bestKey||'CB1';G.tP++;if(ds==='h')G.hP++;
         if(PP[ds][G.ck]){PP[ds][G.ck].x=clearX;PP[ds][G.ck].y=safeY;}
         updP();G.kickoffUntil=Date.now()+1800;
-        setTimeout(()=>{asnC();G.phase='moving';if(ds==='h')document.getElementById('passhint').style.display='block';},500);
+        setTimeout(()=>{asnC();G.phase='moving';if(ds==='h')$id('passhint').style.display='block';},500);
       },30);
       return;
     }
@@ -5385,7 +5393,7 @@ function afPass(s,tk){
             if(ipos){ball.x=ipos.x;ball.y=ipos.y;ball.tx=ipos.x;ball.ty=ipos.y;}
           }
           updP();G.phase='idle';
-          setTimeout(()=>{asnC();G.phase='moving';document.getElementById('passhint').style.display='block';},950);
+          setTimeout(()=>{asnC();G.phase='moving';$id('passhint').style.display='block';},950);
         },passDuration(fp2.x,fp2.y,ipos.x,ipos.y,26));
         return;
       }
@@ -5404,7 +5412,7 @@ function afPass(s,tk){
       if(np){ball.x=np.x;ball.y=np.y;ball.tx=np.x;ball.ty=np.y;}
       G_moveTarget=null;G_laneTarget=null;
       G.phase='idle';
-      setTimeout(()=>{asnC();G.phase='moving';if(G.poss==='h')document.getElementById('passhint').style.display='block';},120);
+      setTimeout(()=>{asnC();G.phase='moving';if(G.poss==='h')$id('passhint').style.display='block';},120);
     },passDuration(fpA.x,fpA.y,tpA.x,tpA.y,28));
     return;
   }
@@ -5757,7 +5765,7 @@ function shotMissed(side){
   G.shots++;updH();
   clearInterval(G.di);
   G.phase='pass_anim';G._shotTrail=true;
-  const ph=document.getElementById('passhint');if(ph)ph.style.display='none';
+  const ph=$id('passhint');if(ph)ph.style.display='none';
   // Ball flies past the post — outside the central goal-mouth band
   const tx=clamp(goalXFor(side)+dirFor(side)*W*0.045,W*0.005,W*0.995);
   const ty=Math.random()<0.5?H*(0.10+Math.random()*0.16):H*(0.74+Math.random()*0.16);
@@ -5791,8 +5799,8 @@ function callOffside(s,tk){
   if(!fp2||!tp){resume(ds,'Play on.');return;}
   clearInterval(G.di);
   G.phase='pass_anim';G.pm=false;
-  const ph=document.getElementById('passhint');if(ph)ph.style.display='none';
-  const pb=document.getElementById('pass-banner');if(pb)pb.style.display='none';
+  const ph=$id('passhint');if(ph)ph.style.display='none';
+  const pb=$id('pass-banner');if(pb)pb.style.display='none';
   animateBallTo(fp2.x,fp2.y,tp.x,tp.y,()=>{
     if(G.goalGen!==gen)return;
     showEventBanner('\u{1F6A9} OFFSIDE','foul',2400);
@@ -5813,7 +5821,7 @@ function callOffside(s,tk){
     setTimeout(()=>{
       if(G.goalGen!==gen)return;
       asnC();G.phase='moving';
-      if(ds==='h'){const ph2=document.getElementById('passhint');if(ph2)ph2.style.display='block';}
+      if(ds==='h'){const ph2=$id('passhint');if(ph2)ph2.style.display='block';}
     },1300);
   },passDuration(fp2.x,fp2.y,tp.x,tp.y,26));
 }
@@ -5847,7 +5855,7 @@ function rollFoul(defSide,defSlot,attSide,prob){
   // Close the duel overlay right away and lock the match into an idle grace.
   closeDuel();
   G.phase='idle';
-  const ph=document.getElementById('passhint');if(ph)ph.style.display='none';
+  const ph=$id('passhint');if(ph)ph.style.display='none';
   // Freeze everyone visually during the foul pause — no movement at all
   G.kickoffUntil=Date.now()+(isPK?4000:3700);
   // Show a visible "FREE KICK" overlay banner for the full pause duration
@@ -5901,7 +5909,7 @@ function rollFoul(defSide,defSlot,attSide,prob){
     // Resume play
     G.phase='moving';
     asnC();
-    if(attSide==='h'){const ph2=document.getElementById('passhint');if(ph2)ph2.style.display='block';}
+    if(attSide==='h'){const ph2=$id('passhint');if(ph2)ph2.style.display='block';}
     G.kickoffUntil=Date.now()+1500;
   },isPK?3500:3200);
   return true;
@@ -6048,7 +6056,7 @@ function hideKickoffPrompt(){const el=document.getElementById('kickoff-prompt');
 // AI kick-off → short breather, then auto.
 function armKickoff(side){
   G.awaitKickoff=side; G.phase='idle';
-  const ph=document.getElementById('passhint'); if(ph)ph.style.display='none';
+  const ph=$id('passhint'); if(ph)ph.style.display='none';
   const teamN=((side==='h'?HT:AT)||{}).name||(side==='h'?'HOME':'AWAY');
   if(side==='h'){
     showKickoffPrompt('\u25B6 TAP PASS TO KICK OFF', true);
@@ -6063,7 +6071,7 @@ function doKickoff(){
   G.awaitKickoff=null; hideKickoffPrompt();
   G.kickoffUntil=Date.now()+900;
   asnC(); G.phase='moving';
-  if(G.poss==='h'){const ph=document.getElementById('passhint');if(ph)ph.style.display='block';}
+  if(G.poss==='h'){const ph=$id('passhint');if(ph)ph.style.display='block';}
 }
 
 // ── GOAL BANNER — ball-in-the-net art (drop your image at assets/ui/goal_net.png) ──
@@ -6117,7 +6125,7 @@ function updH(){
 
 function goHalf(){
   clearInterval(G.mt);clearInterval(G.di);G.phase='idle';closeDuel();
-  document.getElementById('passhint').style.display='none';
+  $id('passhint').style.display='none';
   document.getElementById('hth').textContent=G.hG;document.getElementById('ata').textContent=G.aG;
   document.getElementById('htd').textContent=G.duels;document.getElementById('hts').textContent=G.shots;
   const pp=G.tP>0?Math.round(G.hP/G.tP*100):50;document.getElementById('htp').textContent=pp+'%';
@@ -6186,7 +6194,7 @@ function doSub(outSlot,inPl){
 }
 function goFull(){
   clearInterval(G.mt);clearInterval(G.di);G.phase='idle';closeDuel();
-  document.getElementById('passhint').style.display='none';
+  $id('passhint').style.display='none';
   stopMatchMusic();
   if(typeof window.storyOnFullTime==='function'&&window.STORY&&window.STORY.pending){
     window.storyOnFullTime(G.hG,G.aG);returnToMenuMusic();return;
@@ -6232,7 +6240,7 @@ function initMatch(){
   const sk=hSq['CM2']?'CM2':(hSq['CM1']?'CM1':'ST');G.poss='h';G.ck=sk;G.tP++;G.hP++;
   if(PP.h[sk]){PP.h[sk].x=W/2;PP.h[sk].y=H/2;}ball.x=W/2;ball.y=H/2;ball.tx=W/2;ball.ty=H/2;
   asnC();updP();updH();startMT();startAnim();
-  document.getElementById('passhint').style.display='none';
+  $id('passhint').style.display='none';
   say('Kick off! '+HT.name+' vs '+AT.name+' — build from midfield.');
   showReferee('KICK OFF');
   G.kickoffUntil=Date.now()+3500;
