@@ -3897,6 +3897,43 @@ function playDuelCutIn(opts,onDone){
   _cutinTimers.push(setTimeout(finish,full?1800:1200));
 }
 
+// ── GK SHOT-DUEL LAYOUT ────────────────────────────────────────────
+// Shot duels (vs GK) restyle the duel overlay: net background + solo
+// enlarged keeper art (waist-up crop of the same duel-card image).
+// Both infoboxes stay; card portraits, VS badge and ball chip hidden.
+// Net bg expected at GK_DUEL_BG; missing file = plain dark, no error.
+const GK_DUEL_BG='assets/ui/duel_net.png';
+function _gkDuelCSS(){
+  if(document.getElementById('gkduel-css'))return;
+  const st=document.createElement('style');st.id='gkduel-css';
+  st.textContent=
+    '#duel-ov.gk-mode #dpa-av,#duel-ov.gk-mode #dpd-av{visibility:hidden!important}'+
+    '#duel-ov.gk-mode #dvs{display:none!important}'+
+    '#duel-ov.gk-mode .dp-ball{display:none!important}'+
+    '#gkduel-bg{position:absolute;inset:0;z-index:-1;background:#05070e center/cover no-repeat;pointer-events:none;}'+
+    '#gkduel-bg::after{content:"";position:absolute;inset:0;background:radial-gradient(ellipse at 50% 28%,rgba(0,0,0,0) 28%,rgba(3,5,12,.8) 100%);}'+
+    '#gkduel-art{position:absolute;left:50%;transform:translateX(-50%);top:4%;bottom:0;width:min(58%,760px);'+
+      'background:center top/auto 165% no-repeat;pointer-events:none;'+
+      'filter:drop-shadow(0 10px 34px rgba(0,0,0,.8));}';
+  document.head.appendChild(st);
+}
+function gkShotLayout(on,def,ds){
+  const ov=document.getElementById('duel-ov');if(!ov)return;
+  let bg=document.getElementById('gkduel-bg'),art=document.getElementById('gkduel-art');
+  if(!on){ov.classList.remove('gk-mode');if(bg)bg.remove();if(art)art.remove();return;}
+  _gkDuelCSS();
+  ov.classList.add('gk-mode');
+  if(!bg){bg=document.createElement('div');bg.id='gkduel-bg';ov.insertBefore(bg,ov.firstChild);}
+  if(!art){art=document.createElement('div');art.id='gkduel-art';ov.insertBefore(art,bg.nextSibling);}
+  const b=new Image();b.onload=()=>{bg.style.backgroundImage=`url(${GK_DUEL_BG})`;};b.src=GK_DUEL_BG;
+  art.style.backgroundImage='';
+  const chain=_portraitChainFor(def,ds);
+  let i=0;const t=new Image();
+  t.onload=()=>{art.style.backgroundImage=`url(${chain[i]})`;};
+  t.onerror=()=>{i++;if(i<chain.length)t.src=chain[i];};
+  t.src=chain[0];
+}
+
 function opDuel(isShot, committedAk){
   if(!isShot&&(G.phase==='duel'||G.phase==='duel_result'||G.phase==='pass_anim'))return;
   if(isShot){clearInterval(G.di);closeDuel();}
@@ -3941,6 +3978,7 @@ function opDuel(isShot, committedAk){
     const hasBall=(as===leftSide);
     ballEl.className='dp-ball'+(hasBall?' show ball-left':' show ball-right');
   }
+  gkShotLayout(isShot,def,ds);
   bldA(carrier,isShot); bldD(def,ds,isShot);
   // ── 2v1 visual: show a second mini defender card stacked next to the main defender ──
   renderSecondDefender(G.D.is2v1?G.D.dk2:null, ds);
@@ -5221,7 +5259,7 @@ function resDuel(){
   },950);
 }
 
-function closeDuel(){killCutIn();G._duelT=0;try{Object.values(hSq).forEach(p=>{if(p)p._pending2v1=false;});Object.values(aSq).forEach(p=>{if(p)p._pending2v1=false;});}catch(e){}try{document.getElementById('s-match').classList.remove('duel-live');}catch(e){}document.getElementById('duel-ov').classList.remove('show');document.getElementById('duel-res').classList.remove('show');G.pm=false;$id('pass-banner').style.display='none';const d2=document.getElementById('dpd2-wrap');if(d2)d2.remove();}
+function closeDuel(){killCutIn();G._duelT=0;try{gkShotLayout(false);}catch(e){}try{Object.values(hSq).forEach(p=>{if(p)p._pending2v1=false;});Object.values(aSq).forEach(p=>{if(p)p._pending2v1=false;});}catch(e){}try{document.getElementById('s-match').classList.remove('duel-live');}catch(e){}document.getElementById('duel-ov').classList.remove('show');document.getElementById('duel-res').classList.remove('show');G.pm=false;$id('pass-banner').style.display='none';const d2=document.getElementById('dpd2-wrap');if(d2)d2.remove();}
 function resume(s,msg){
   closeDuel(); if(msg)say(msg); G.phase='idle'; $id('passhint').style.display='none';
   // Grace period after duel — no new duel or shot gate can fire for 2.5s
