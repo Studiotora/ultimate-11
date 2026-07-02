@@ -530,7 +530,7 @@
        with the same PNG chains used for the HUD emblems. */
     let flagGroup=new T.Group(); scene.add(flagGroup);
     let flagData=null;
-    function bannerTex(img,color){
+    function bannerTex(img,color,emoji){
       const c=document.createElement('canvas'); c.width=256; c.height=170;
       const x=c.getContext('2d');
       x.fillStyle=color||'#20304a'; x.fillRect(0,0,256,170);
@@ -539,6 +539,8 @@
       if(img){ const s=Math.min(200/img.width,120/img.height);
         const w=img.width*s, h=img.height*s;
         x.drawImage(img,(256-w)/2,(160-h)/2+4,w,h); }
+      else if(emoji){ x.font='96px serif'; x.textAlign='center'; x.textBaseline='middle';
+        x.fillText(emoji,128,86); }
       const t=new T.CanvasTexture(c); return t;
     }
     function loadFirst(srcs,cb){
@@ -549,40 +551,35 @@
     function placeFlags(){
       scene.remove(flagGroup); flagGroup=new T.Group(); scene.add(flagGroup);
       if(!flagData) return;
-      const S=P3D.bowl, U=PWID/190;
-      const RUNOFF=6*U;
-      const baseHL=PLEN/2+RUNOFF+(S.gap||0)*U;
-      const baseHW=PWID/2+RUNOFF+(S.gap||0)*U;
-      const th=(S.tierH!=null?S.tierH:30)*U;
-      const rakeRad=(S.rake!=null?S.rake:50)*Math.PI/180;
-      const out=th/Math.tan(rakeRad);
-      const y0=(S.yOff||0)*U+th*0.12;                 // sit on top of the hoarding
-      const lean=Math.atan2(out,th);
-      const bh=th*0.8, bw=bh*1.45;
-      function addBanner(tex,wall,frac){
+      // standing supporter boards on the apron, right in front of the hoarding —
+      // deterministic placement, impossible to occlude behind the bowl walls
+      const bh=PWID*0.11, bw=bh*1.5;
+      const zBack=-(PWID/2+PWID*0.055);          // far touchline apron
+      const xEndH=-(PLEN/2+PWID*0.055), xEndA=(PLEN/2+PWID*0.055);
+      function board(tex,x,z,rotY){
         const m=new T.Mesh(new T.PlaneGeometry(bw,bh),
-          new T.MeshBasicMaterial({map:tex,side:T.DoubleSide,transparent:false}));
-        const yC=y0+bh*0.62;
-        const inn=1.5;                       // clearly inside the bowl, in front of the crowd
-        if(wall==='back'){  m.position.set(frac*baseHL, yC, -(baseHW-inn)); m.rotation.x=lean*0.5; }
-        if(wall==='left'){  m.position.set(-(baseHL-inn), yC, frac*baseHW);
-                            m.rotation.y=Math.PI/2; m.rotation.z=-lean*0.5; }
-        if(wall==='right'){ m.position.set( (baseHL-inn), yC, frac*baseHW);
-                            m.rotation.y=-Math.PI/2; m.rotation.z=lean*0.5; }
-        m.rotation.order='YXZ';
+          new T.MeshBasicMaterial({map:tex,side:T.DoubleSide}));
+        m.position.set(x,bh/2+0.1,z); m.rotation.y=rotY||0;
         flagGroup.add(m);
       }
       loadFirst(flagData.home,img=>{
-        const t=bannerTex(img,flagData.homeCol);
-        [-0.75,-0.55,-0.35,-0.18].forEach(f=>addBanner(t,'back',f));
-        [-0.45,-0.15,0.15,0.45].forEach(f=>addBanner(t,'left',f));
+        const t=bannerTex(img,flagData.homeCol,flagData.homeFlag);
+        [-0.39,-0.275,-0.16,-0.05].forEach(f=>board(t,f*PLEN,zBack,0));
+        [-0.5,-0.15,0.2,0.55].forEach(f=>board(t,xEndH,f*PWID/2,Math.PI/2));
+        console.log('[P3D] home flags placed',flagGroup.children.length);
       });
       loadFirst(flagData.away,img=>{
-        const t=bannerTex(img,flagData.awayCol);
-        [0.18,0.35,0.55,0.75].forEach(f=>addBanner(t,'back',f));
-        [-0.45,-0.15,0.15,0.45].forEach(f=>addBanner(t,'right',f));
+        const t=bannerTex(img,flagData.awayCol,flagData.awayFlag);
+        [0.05,0.16,0.275,0.39].forEach(f=>board(t,f*PLEN,zBack,0));
+        [-0.5,-0.15,0.2,0.55].forEach(f=>board(t,xEndA,f*PWID/2,Math.PI/2));
+        console.log('[P3D] away flags placed',flagGroup.children.length);
       });
     }
+    // console test: P3D.debugFlags() — colored boards, no PNGs needed
+    P3D.debugFlags=function(){
+      flagData={home:[],away:[],homeCol:'#1e72dc',awayCol:'#c22020'};
+      placeFlags();
+    };
 
     /* ---- initial pitch + stadium build (safe here: all bowl consts above are
        now initialized, so placeAllStadium won't hit a temporal dead zone).

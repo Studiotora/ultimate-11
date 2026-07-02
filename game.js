@@ -6251,6 +6251,11 @@ function initMatch(){
   const sk=hSq['CM2']?'CM2':(hSq['CM1']?'CM1':'ST');G.poss='h';G.ck=sk;G.tP++;G.hP++;
   if(PP.h[sk]){PP.h[sk].x=W/2;PP.h[sk].y=H/2;}ball.x=W/2;ball.y=H/2;ball.tx=W/2;ball.ty=H/2;
   asnC();updP();updH();startMT();startAnim();
+  // supporter flags in the 2.5D stands — same emblem PNG chains as the HUD
+  try{ if(window.P3D&&P3D.setTeamFlags){
+    const chain=k=>{k=String(k).toLowerCase();return ['assets/team/'+k+'.png','assets/career/clubs/club'+k+'.png'];};
+    P3D.setTeamFlags({home:chain(selHome),away:chain(selAway),homeCol:'#1e72dc',awayCol:'#c22020',homeFlag:(HT&&HT.flag)||'',awayFlag:(AT&&AT.flag)||''});
+  }}catch(e){}
   $id('passhint').style.display='none';
   say('Kick off! '+HT.name+' vs '+AT.name+' — build from midfield.');
   showReferee('KICK OFF');
