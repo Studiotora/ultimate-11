@@ -3280,7 +3280,7 @@ function showSuperCineBanner(spec,side){
   el.style.display='block';
   el.animate([{opacity:0,transform:'translateY(-14px)'},{opacity:1,transform:'none'}],{duration:220});
   clearTimeout(el._t);
-  el._t=setTimeout(()=>{el.style.display='none';},1500);
+  el._t=setTimeout(()=>{el.style.display='none';},2400);
 }
 
 function manualShot(){
@@ -3948,7 +3948,10 @@ function opDuel(isShot, committedAk){
     }
   };
   try{
-    playDuelCutIn({atk:carrier,def,as,ds,isShot,is2v1:G.D.is2v1,zoneTxt},_reveal);
+    // 2.5D shot duels: the full cut-in moved into the super-shot cinematic —
+    // don't play it here before the shot as well.
+    if(isShot&&window.P3D&&P3D.on){killCutIn();_reveal();}
+    else playDuelCutIn({atk:carrier,def,as,ds,isShot,is2v1:G.D.is2v1,zoneTxt},_reveal);
   }catch(e){killCutIn();_reveal();}
 }
 
@@ -5157,6 +5160,7 @@ function resDuel(){
       if(G.D.isShot){
         // Was already a shot duel (vs GK) — score directly
         if(ak==='special'&&window.P3D&&P3D.on&&P3D.superCine){
+          try{playDuelCutIn({atk:carrier,def:sq(ds)['GK'],as,ds,isShot:true},()=>{});}catch(e){}
           showSuperCineBanner(getSpecial(carrier),as);
           P3D.superCine({as, sk:G.ck, ds, isGoal:true,
             onDone:()=>{ if(G.goalGen===_gen)afGoal(carrier,as,_gen); }});
@@ -5176,6 +5180,7 @@ function resDuel(){
       // is a turnover — never re-adjudicated by the keeper sequence.
       if(G.D.isShot){
         if(ak==='special'&&window.P3D&&P3D.on&&P3D.superCine){
+          try{playDuelCutIn({atk:carrier,def:sq(ds)['GK'],as,ds,isShot:true},()=>{});}catch(e){}
           showSuperCineBanner(getSpecial(carrier),as);
           P3D.superCine({as, sk:G.ck, ds, isGoal:false,
             onDone:()=>{ if(G.goalGen===_gen)afSave(ds); }});

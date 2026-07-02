@@ -1020,12 +1020,12 @@
       const W=(CV.width||1280);
       const sid=c.o.as+':'+c.o.sk, gid=c.o.ds+':GK';
       // ── shooter: frontal action row, kick frames over phase A ──
-      if(c.t<1.6){
-        const kf=Math.min(3,Math.floor(Math.max(0,(c.t-0.55))/0.28));  // 0..3
+      if(c.t<2.5){
+        const kf=Math.min(3,Math.floor(Math.max(0,(c.t-1.55))/0.28));  // 0..3
         forceCell(sid, ROW.down.act, 3+kf, false);
       }
       // ── ball flight (engine coords + tall arc) ──
-      const T0=1.35, T1=2.6;
+      const T0=2.3, T1=4.0;
       if(c.t>=T0){
         const ft=Math.min(1,(c.t-T0)/(T1-T0));
         let bx,by,bz;
@@ -1045,9 +1045,9 @@
         ballMesh.position.set(ex2wx(c.fx),0.05,ey2wz(c.fy));
       }
       // ── keeper: face the play after the cut; dive/catch on arrival ──
-      if(c.t>=1.5){
+      if(c.t>=2.45){
         const og=sprites[gid];
-        if(og && diveSheet && diveSheet!=='none' && !c.gkRestore && c.t>=2.3){
+        if(og && diveSheet && diveSheet!=='none' && !c.gkRestore && c.t>=3.7){
           const tex=new T.Texture(diveSheet.img);
           tex.magFilter=T.NearestFilter; tex.minFilter=T.NearestFilter;
           tex.needsUpdate=true;
@@ -1056,24 +1056,24 @@
         }
         if(c.gkRestore){
           const row=c.o.isGoal?c.diveDir:0;     // goal → dive & miss, save → catch
-          const fr=Math.min(DIVE.cols-1,Math.floor(Math.max(0,(c.t-2.3))/0.14));
+          const fr=Math.min(DIVE.cols-1,Math.floor(Math.max(0,(c.t-3.7))/0.14));
           const cw=1/DIVE.cols, ch=1/DIVE.rows;
           og.tex.repeat.set(cw,ch); og.tex.offset.set(fr*cw,1-(row+1)*ch);
         } else {
-          forceCell(gid, ROW.down.act, c.t<2.3?0:3+Math.min(3,Math.floor((c.t-2.3)/0.16)), false);
+          forceCell(gid, ROW.down.act, c.t<3.7?0:3+Math.min(3,Math.floor((c.t-3.7)/0.16)), false);
         }
       }
       tickTrail(dt);
-      if(c.t>=3.8) cineEnd();
+      if(c.t>=5.2) cineEnd();
     }
     function cineCamera(){
       const c=cine; if(!c)return;
       const swx=ex2wx(c.fx), swz=ey2wz(c.fy);
       const gwx=ex2wx(c.tx), gwz=ey2wz(c.ty);
       const dir=(c.o.as==='h')?1:-1;           // attacking toward +x (h) or −x (a)
-      if(c.t<1.5){
+      if(c.t<2.45){
         // PHASE A — frontal on the striker: goal-side, low, slow dolly-in.
-        const dv=6.5-Math.min(1.5,c.t)*0.9;
+        const dv=6.5-Math.min(2.4,c.t)*0.7;   // slow dolly-in
         camera.position.set(swx+dir*dv, 2.0, swz+2.2);
         camera.lookAt(swx, 1.5, swz);
       } else {
@@ -1110,7 +1110,7 @@
       if(gl.style.display==='none'){ gl.style.display='block'; resize(); if(P3D.suppress2D)CV.style.visibility='hidden'; }
       const now=performance.now(); const dt=Math.min(0.05,(now-lastTs)/1000); lastTs=now;
       syncSheets(); syncPlayers();
-      if(cine){ cineStep(dt); cineCamera(); }
+      if(cine){ try{cineStep(dt); cineCamera();}catch(e){console.error('[P3D] cine error',e); cineEnd();} }
       else    { syncBall(); updateCamera(dt); }
       syncRef(dt);
       // anchor god rays at the sun's projected screen position
