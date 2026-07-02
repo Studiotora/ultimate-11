@@ -521,7 +521,69 @@
           {backMat:new T.MeshBasicMaterial({color:'#fff7e0', side:T.DoubleSide}), texFor:null, openFront:of, sharp:S.sharp}));
       }
     }
-    P3D._rebuildBowl=placeAllStadium;   // Camera Lab calls this when sliders change
+    P3D._rebuildBowl=function(){placeAllStadium();placeFlags();};   // Camera Lab calls this
+
+    /* ── SUPPORTER FLAGS in the stands ─────────────────────────────
+       Big banner quads leaning against the lower tier: home crest ×3
+       (back-left straight + behind home goal), away crest ×3 mirrored.
+       game.js calls P3D.setTeamFlags({home:[srcs],away:[srcs],homeCol,awayCol})
+       with the same PNG chains used for the HUD emblems. */
+    let flagGroup=new T.Group(); scene.add(flagGroup);
+    let flagData=null;
+    function bannerTex(img,color){
+      const c=document.createElement('canvas'); c.width=256; c.height=170;
+      const x=c.getContext('2d');
+      x.fillStyle=color||'#20304a'; x.fillRect(0,0,256,170);
+      x.fillStyle='rgba(0,0,0,.25)'; x.fillRect(0,150,256,20);       // bottom shade
+      x.strokeStyle='rgba(255,255,255,.55)'; x.lineWidth=6; x.strokeRect(5,5,246,160);
+      if(img){ const s=Math.min(200/img.width,120/img.height);
+        const w=img.width*s, h=img.height*s;
+        x.drawImage(img,(256-w)/2,(160-h)/2+4,w,h); }
+      const t=new T.CanvasTexture(c); return t;
+    }
+    function loadFirst(srcs,cb){
+      (function tryN(i){ if(!srcs||i>=srcs.length)return cb(null);
+        const im=new Image(); im.onload=()=>cb(im); im.onerror=()=>tryN(i+1); im.src=srcs[i]; })(0);
+    }
+    P3D.setTeamFlags=function(d){ flagData=d; placeFlags(); };
+    function placeFlags(){
+      scene.remove(flagGroup); flagGroup=new T.Group(); scene.add(flagGroup);
+      if(!flagData) return;
+      const S=P3D.bowl, U=PWID/190;
+      const RUNOFF=6*U;
+      const baseHL=PLEN/2+RUNOFF+(S.gap||0)*U;
+      const baseHW=PWID/2+RUNOFF+(S.gap||0)*U;
+      const th=(S.tierH!=null?S.tierH:30)*U;
+      const rakeRad=(S.rake!=null?S.rake:50)*Math.PI/180;
+      const out=th/Math.tan(rakeRad);
+      const y0=(S.yOff||0)*U+th*0.12;                 // sit on top of the hoarding
+      const lean=Math.atan2(out,th);
+      const bh=th*0.8, bw=bh*1.45;
+      function addBanner(tex,wall,frac){
+        const m=new T.Mesh(new T.PlaneGeometry(bw,bh),
+          new T.MeshBasicMaterial({map:tex,side:T.DoubleSide,transparent:false}));
+        const yC=y0+bh/2;
+        // wall surface leans outward with the rake — sit 0.5 IN FRONT of it
+        const off=out*((yC-(S.yOff||0)*U)/th)-0.5;
+        if(wall==='back'){  m.position.set(frac*baseHL, yC, -(baseHW+off)); m.rotation.x=lean; }
+        if(wall==='left'){  m.position.set(-(baseHL+off), yC, frac*baseHW);
+                            m.rotation.y=Math.PI/2; m.rotation.z=-lean; }
+        if(wall==='right'){ m.position.set( (baseHL+off), yC, frac*baseHW);
+                            m.rotation.y=-Math.PI/2; m.rotation.z=lean; }
+        m.rotation.order='YXZ';
+        flagGroup.add(m);
+      }
+      loadFirst(flagData.home,img=>{
+        const t=bannerTex(img,flagData.homeCol);
+        addBanner(t,'back',-0.55); addBanner(t,'back',-0.22);
+        addBanner(t,'left',-0.15); addBanner(t,'left',0.25);
+      });
+      loadFirst(flagData.away,img=>{
+        const t=bannerTex(img,flagData.awayCol);
+        addBanner(t,'back',0.22); addBanner(t,'back',0.55);
+        addBanner(t,'right',-0.15); addBanner(t,'right',0.25);
+      });
+    }
 
     /* ---- initial pitch + stadium build (safe here: all bowl consts above are
        now initialized, so placeAllStadium won't hit a temporal dead zone).
