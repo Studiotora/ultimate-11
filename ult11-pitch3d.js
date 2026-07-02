@@ -562,26 +562,25 @@
       function addBanner(tex,wall,frac){
         const m=new T.Mesh(new T.PlaneGeometry(bw,bh),
           new T.MeshBasicMaterial({map:tex,side:T.DoubleSide,transparent:false}));
-        const yC=y0+bh/2;
-        // wall surface leans outward with the rake — sit 0.5 IN FRONT of it
-        const off=out*((yC-(S.yOff||0)*U)/th)-0.5;
-        if(wall==='back'){  m.position.set(frac*baseHL, yC, -(baseHW+off)); m.rotation.x=lean; }
-        if(wall==='left'){  m.position.set(-(baseHL+off), yC, frac*baseHW);
-                            m.rotation.y=Math.PI/2; m.rotation.z=-lean; }
-        if(wall==='right'){ m.position.set( (baseHL+off), yC, frac*baseHW);
-                            m.rotation.y=-Math.PI/2; m.rotation.z=lean; }
+        const yC=y0+bh*0.62;
+        const inn=1.5;                       // clearly inside the bowl, in front of the crowd
+        if(wall==='back'){  m.position.set(frac*baseHL, yC, -(baseHW-inn)); m.rotation.x=lean*0.5; }
+        if(wall==='left'){  m.position.set(-(baseHL-inn), yC, frac*baseHW);
+                            m.rotation.y=Math.PI/2; m.rotation.z=-lean*0.5; }
+        if(wall==='right'){ m.position.set( (baseHL-inn), yC, frac*baseHW);
+                            m.rotation.y=-Math.PI/2; m.rotation.z=lean*0.5; }
         m.rotation.order='YXZ';
         flagGroup.add(m);
       }
       loadFirst(flagData.home,img=>{
         const t=bannerTex(img,flagData.homeCol);
-        addBanner(t,'back',-0.55); addBanner(t,'back',-0.22);
-        addBanner(t,'left',-0.15); addBanner(t,'left',0.25);
+        [-0.75,-0.55,-0.35,-0.18].forEach(f=>addBanner(t,'back',f));
+        [-0.45,-0.15,0.15,0.45].forEach(f=>addBanner(t,'left',f));
       });
       loadFirst(flagData.away,img=>{
         const t=bannerTex(img,flagData.awayCol);
-        addBanner(t,'back',0.22); addBanner(t,'back',0.55);
-        addBanner(t,'right',-0.15); addBanner(t,'right',0.25);
+        [0.18,0.35,0.55,0.75].forEach(f=>addBanner(t,'back',f));
+        [-0.45,-0.15,0.15,0.45].forEach(f=>addBanner(t,'right',f));
       });
     }
 
