@@ -3283,6 +3283,17 @@ function showSuperCineBanner(spec,side){
   el._t=setTimeout(()=>{el.style.display='none';},2400);
 }
 
+/* ── DEBUG: run the super-shot cinematic from console during any match ──
+   testSuperCine()        → goal version, current carrier
+   testSuperCine(false)   → save version */
+window.testSuperCine=function(goal=true){
+  if(!window.P3D||!P3D.on||!P3D.superCine)return console.warn('2.5D off or old pitch3d file');
+  if(!G||!G.ck||G.phase==='idle')return console.warn('start a match first, need a carrier');
+  const as=G.poss, ds=as==='h'?'a':'h';
+  showSuperCineBanner(getSpecial(sq(as)[G.ck]),as);
+  P3D.superCine({as,sk:G.ck,ds,isGoal:goal,onDone:()=>console.log('cine done')});
+};
+
 function manualShot(){
   if(G.phase!=='moving'||!G.ck||G._scoringGoal)return;
   const s=G.poss, ds=s==='h'?'a':'h';
