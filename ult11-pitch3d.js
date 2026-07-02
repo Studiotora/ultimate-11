@@ -1220,6 +1220,7 @@
        which case our wrapper would silently never run. A standalone loop that
        reads P3D.on each frame is immune to load order / draw ownership. */
     let lastTs=performance.now();
+    let _lastW=0,_lastH=0;
     function loop3d(){
       requestAnimationFrame(loop3d);
       if(!P3D.on){
@@ -1228,6 +1229,9 @@
         return;
       }
       if(gl.style.display==='none'){ gl.style.display='block'; resize(); if(P3D.suppress2D)CV.style.visibility='hidden'; }
+      // Auto-resize: fullscreen enter/exit changes canvas size — re-sync or it stays blurry.
+      const _cw=CV.clientWidth,_ch=CV.clientHeight;
+      if(_cw&&_ch&&(_cw!==_lastW||_ch!==_lastH)){ _lastW=_cw;_lastH=_ch;resize(); }
       const now=performance.now(); const dt=Math.min(0.05,(now-lastTs)/1000); lastTs=now;
       syncSheets(); syncPlayers();
       if(cine){ try{cineStep(dt); cineCamera();}catch(e){console.error('[P3D] cine error',e); cineEnd();} }
