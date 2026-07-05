@@ -788,16 +788,16 @@
           _qF.setFromAxisAngle(_AX,-Math.PI/2); _qS.setFromAxisAngle(_AY,az);
           o.sil.quaternion.copy(_qS).multiply(_qF);
           o.sil.material.opacity=Lt.shadow*0.8;
-          // mockup detail: dust kicked up behind the sprinting carrier / chaser
-          if(typeof G!=='undefined'&&G){
-            const iC=(G.poss===s&&G.ck===k), iCh=(G.poss!==s&&G.chk===k);
-            if((iC||iCh) && (performance.now()-(stt[id]?stt[id].moveT:-1e9))<120){
-              const dst=stt[id];
-              if(!dst._dustT || performance.now()-dst._dustT>110){
-                dst._dustT=performance.now();
-                spawnTrail(wx+(Math.random()-.5)*0.5, 0.15+Math.random()*0.2,
-                           wz+0.2+(Math.random()-.5)*0.4, '#8a6f45', hWorld*0.28);
-              }
+          // mockup detail: small dust puff behind ANY sprinting player,
+          // trailing opposite their on-screen travel direction (not under feet).
+          const st2=stt[id];
+          if(st2 && (performance.now()-st2.moveT)<70){   // only while genuinely moving
+            if(!st2._dustT || performance.now()-st2._dustT>150){
+              st2._dustT=performance.now();
+              // travel dir in world space (from stored engine delta this frame)
+              const bdx=(st2.flip?1:-1);                 // side-facing: behind = opposite facing
+              spawnTrail(wx+bdx*wWorld*0.55, 0.06,
+                         wz+0.15, '#9c8055', hWorld*0.13);
             }
           }
         });
@@ -1184,15 +1184,16 @@
         const kf=Math.min(3,Math.floor(Math.max(0,(c.t-1.55))/0.28));  // 0..3
         forceCell(sid, ROW.down.act, 3+kf, false);
       }
-      // ── ball flight (engine coords + tall arc) ──
-      const T0=2.3, T1=4.0;
+      // ── ball flight (engine coords + tall arc) — slowed for readability ──
+      const T0=2.6, T1=4.9;
       if(c.t>=T0){
         const ft=Math.min(1,(c.t-T0)/(T1-T0));
+        const fe=ft*ft*(3-2*ft);              // ease so the strike reads, not a blur
         let bx,by,bz;
-        if(ft<1){ bx=c.fx+(c.tx-c.fx)*ft; by=c.fy+(c.ty-c.fy)*ft; bz=46*4*ft*(1-ft)*0.55+8*Math.sin(ft*Math.PI); }
+        if(ft<1){ bx=c.fx+(c.tx-c.fx)*fe; by=c.fy+(c.ty-c.fy)*fe; bz=46*4*fe*(1-fe)*0.7+10*Math.sin(fe*Math.PI); }
         else if(c.o.isGoal){
-          const gt=Math.min(1,(c.t-T1)/0.25);
-          bx=c.tx+(c.nx-c.tx)*gt; by=c.ty+(c.ny-c.ty)*gt; bz=Math.max(0,6*(1-gt));
+          const gt=Math.min(1,(c.t-T1)/0.4);
+          bx=c.tx+(c.nx-c.tx)*gt; by=c.ty+(c.ny-c.ty)*gt; bz=Math.max(0,7*(1-gt));
         } else { bx=c.tx; by=c.ty; bz=4; }
         if(typeof ball!=='undefined'&&ball){ ball.x=bx; ball.y=by; ball.bz=0; }
         const bwx=ex2wx(Math.min(Math.max(bx,0.02*W),0.98*W)), bwz=ey2wz(by);
@@ -1200,14 +1201,14 @@
         const frac=(P3D.spriteFrac!=null?P3D.spriteFrac:0.045);
         const d=PLEN*frac*0.21;
         ballMesh.scale.set(d,d,1); ballMesh.position.set(bwx,bwy,bwz);
-        if(c.t<T1+0.3) spawnTrail(bwx,bwy+d*0.5,bwz,c.col,d*1.6);
+        if(c.t<T1+0.4) spawnTrail(bwx,bwy+d*0.5,bwz,c.col,d*1.8);
       } else {
         ballMesh.position.set(ex2wx(c.fx),0.05,ey2wz(c.fy));
       }
       // ── keeper: face the play after the cut; dive/catch on arrival ──
-      if(c.t>=2.45){
+      if(c.t>=2.55){
         const og=sprites[gid];
-        if(og && diveSheet && diveSheet!=='none' && !c.gkRestore && c.t>=3.7){
+        if(og && diveSheet && diveSheet!=='none' && !c.gkRestore && c.t>=4.6){
           const tex=new T.Texture(diveSheet.img);
           tex.magFilter=T.NearestFilter; tex.minFilter=T.NearestFilter;
           tex.needsUpdate=true;
@@ -1216,23 +1217,23 @@
         }
         if(c.gkRestore){
           const row=c.o.isGoal?c.diveDir:0;     // goal → dive & miss, save → catch
-          const fr=Math.min(DIVE.cols-1,Math.floor(Math.max(0,(c.t-3.7))/0.14));
+          const fr=Math.min(DIVE.cols-1,Math.floor(Math.max(0,(c.t-4.6))/0.16));
           const cw=1/DIVE.cols, ch=1/DIVE.rows;
           og.tex.repeat.set(cw,ch); og.tex.offset.set(fr*cw,1-(row+1)*ch);
         } else {
-          forceCell(gid, ROW.down.act, c.t<3.7?0:3+Math.min(3,Math.floor((c.t-3.7)/0.16)), false);
+          forceCell(gid, ROW.down.act, c.t<4.6?0:3+Math.min(3,Math.floor((c.t-4.6)/0.18)), false);
         }
       }
-      if(c.t>=5.2) cineEnd();
+      if(c.t>=6.4) cineEnd();
     }
     function cineCamera(){
       const c=cine; if(!c)return;
       const swx=ex2wx(c.fx), swz=ey2wz(c.fy);
       const gwx=ex2wx(c.tx), gwz=ey2wz(c.ty);
       const dir=(c.o.as==='h')?1:-1;           // attacking toward +x (h) or −x (a)
-      if(c.t<2.45){
+      if(c.t<2.55){
         // PHASE A — frontal on the striker: goal-side, low, slow dolly-in.
-        const dv=6.5-Math.min(2.4,c.t)*0.7;   // slow dolly-in
+        const dv=6.5-Math.min(2.5,c.t)*0.7;   // slow dolly-in
         camera.position.set(swx+dir*dv, 2.0, swz+2.2);
         camera.lookAt(swx, 1.5, swz);
       } else {
