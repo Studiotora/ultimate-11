@@ -707,10 +707,33 @@
       }
       stt[id]={rx,ry,face,flip,moveT};
       const band=ROW[face]||ROW.side;
+      // one-shot pass/shoot animation override (action band, same facing) —
+      // same mechanism as ps1-mod's PS1_action, ported to the 3D billboards.
+      const act=ACT[id];
+      if(act){
+        const rng=COL[act.name], dur=act.name==='shoot'?480:360, el=now-act.t0;
+        if(el<dur){ const fi=Math.min(rng[1]-1, Math.floor(el/dur*rng[1]));
+          return {row:band.act, col:rng[0]+fi, flip}; }
+        delete ACT[id];
+      }
       const running=(now-moveT)<220;
       let col=COL.idle;
       if(running){ const R=COL.run; col=R[0]+(Math.floor(now/1000*11)%R[1]); }
       return {row:band.run, col, flip};
+    }
+    /* one-shot action triggers — auto-detected from engine phase transitions */
+    const ACT={};
+    P3D.action=function(s,k,name){ if(COL[name]) ACT[s+':'+k]={name,t0:performance.now()}; };
+    let _lastCarrier=null,_prevKick=false;
+    function watchActions(){
+      if(typeof G==='undefined'||!G) return;
+      if(G.phase==='moving'&&G.poss&&G.ck) _lastCarrier={s:G.poss,k:G.ck};
+      const kicking=(G.phase==='pass_anim');
+      if(kicking&&!_prevKick&&_lastCarrier){
+        const shot=!!(G._shotTrail||G._shotZone);
+        P3D.action(_lastCarrier.s,_lastCarrier.k, shot?'shoot':'pass');
+      }
+      _prevKick=kicking;
     }
     const seen=new Set();
     let _camRX=1,_camRZ=0,_camFX=0,_camFZ=1,_wpeX=1,_wpeZ=1;
@@ -765,6 +788,18 @@
           _qF.setFromAxisAngle(_AX,-Math.PI/2); _qS.setFromAxisAngle(_AY,az);
           o.sil.quaternion.copy(_qS).multiply(_qF);
           o.sil.material.opacity=Lt.shadow*0.8;
+          // mockup detail: dust kicked up behind the sprinting carrier / chaser
+          if(typeof G!=='undefined'&&G){
+            const iC=(G.poss===s&&G.ck===k), iCh=(G.poss!==s&&G.chk===k);
+            if((iC||iCh) && (performance.now()-(stt[id]?stt[id].moveT:-1e9))<120){
+              const dst=stt[id];
+              if(!dst._dustT || performance.now()-dst._dustT>110){
+                dst._dustT=performance.now();
+                spawnTrail(wx+(Math.random()-.5)*0.5, 0.15+Math.random()*0.2,
+                           wz+0.2+(Math.random()-.5)*0.4, '#8a6f45', hWorld*0.28);
+              }
+            }
+          }
         });
       });
       // hide sprites whose players vanished (subs, etc.)
@@ -930,7 +965,12 @@
         const t=0.6;                         // 0 = true pos, 1 = on the sprite
         bx+=(cp.x-bx)*t; by+=(cp.y-by)*t;
       }
-      ballMesh.position.set(ex2wx(bx),0.05+((ball.bz||0)*0.09),ey2wz(by));
+      const bwy=0.05+((ball.bz||0)*0.09);
+      ballMesh.position.set(ex2wx(bx),bwy,ey2wz(by));
+      // shot energy trail (3D replacement for the 2D _shotTrail glow)
+      if(typeof G!=='undefined'&&G&&G._shotTrail){
+        spawnTrail(ex2wx(bx),bwy+d*0.5,ey2wz(by),'#ffb040',d*1.5);
+      }
     }
 
     /* ════════ REFEREE ════════
@@ -1183,7 +1223,6 @@
           forceCell(gid, ROW.down.act, c.t<3.7?0:3+Math.min(3,Math.floor((c.t-3.7)/0.16)), false);
         }
       }
-      tickTrail(dt);
       if(c.t>=5.2) cineEnd();
     }
     function cineCamera(){
@@ -1233,9 +1272,10 @@
       const _cw=CV.clientWidth,_ch=CV.clientHeight;
       if(_cw&&_ch&&(_cw!==_lastW||_ch!==_lastH)){ _lastW=_cw;_lastH=_ch;resize(); }
       const now=performance.now(); const dt=Math.min(0.05,(now-lastTs)/1000); lastTs=now;
-      syncSheets(); syncPlayers();
+      syncSheets(); watchActions(); syncPlayers();
       if(cine){ try{cineStep(dt); cineCamera();}catch(e){console.error('[P3D] cine error',e); cineEnd();} }
       else    { syncBall(); updateCamera(dt); }
+      tickTrail(dt);
       syncRef(dt);
       // anchor god rays at the sun's projected screen position
       if(rayPass){
