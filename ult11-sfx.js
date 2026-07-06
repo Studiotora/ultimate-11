@@ -7,7 +7,7 @@
    ============================================================ */
 (function(){
   const SFX = window.SFX = {
-    on:true, master:0.9, crowd:0.35, steps:0.5, kick:0.9, whistle:0.8,
+    on:true, master:0.9, crowd:0.35, steps:0.5, kick:0.9, whistleVol:0.8,
     mute(){ SFX.on=false; }, unmute(){ SFX.on=true; }
   };
 
@@ -61,7 +61,9 @@
   /* ---------- REFEREE WHISTLE (two-tone FM, like a pea whistle) ---------- */
   SFX.whistle=function(kind){ // kind: 'kickoff' | 'goal' | 'foul' | 'full'
     if(!SFX.on||!ensure()) return; resume();
-    const t=AC.currentTime, v=SFX.whistle*SFX.master;
+    // if the context is still suspended (no gesture yet), retry once it resumes
+    if(AC.state==='suspended'){ AC.resume().then(()=>SFX.whistle(kind)).catch(()=>{}); return; }
+    const t=AC.currentTime, v=SFX.whistleVol*SFX.master;
     const g=AC.createGain(); g.connect(busMaster);
     const o=AC.createOscillator(); o.type='triangle';
     const trill=AC.createOscillator(); trill.type='sine'; trill.frequency.value=22;

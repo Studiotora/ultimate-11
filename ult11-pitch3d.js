@@ -788,16 +788,18 @@
           _qF.setFromAxisAngle(_AX,-Math.PI/2); _qS.setFromAxisAngle(_AY,az);
           o.sil.quaternion.copy(_qS).multiply(_qF);
           o.sil.material.opacity=Lt.shadow*0.8;
-          // mockup detail: small dust puff behind ANY sprinting player,
-          // trailing opposite their on-screen travel direction (not under feet).
+          // mockup detail: soft dust puff behind ANY sprinting player.
           const st2=stt[id];
-          if(st2 && (performance.now()-st2.moveT)<70){   // only while genuinely moving
-            if(!st2._dustT || performance.now()-st2._dustT>150){
+          if(st2 && (performance.now()-st2.moveT)<70){
+            if(!st2._dustT || performance.now()-st2._dustT>140){
               st2._dustT=performance.now();
-              // travel dir in world space (from stored engine delta this frame)
-              const bdx=(st2.flip?1:-1);                 // side-facing: behind = opposite facing
-              spawnTrail(wx+bdx*wWorld*0.55, 0.06,
-                         wz+0.15, '#9c8055', hWorld*0.13);
+              const bdx=(st2.flip?1:-1);                 // behind = opposite facing
+              for(let di=0; di<2; di++){
+                spawnTrail(wx+bdx*wWorld*0.35+(Math.random()-.5)*wWorld*0.25,
+                           0.05+Math.random()*0.06,
+                           wz+0.18+(Math.random()-.5)*wWorld*0.3,
+                           '#a88a5e', hWorld*(0.16+Math.random()*0.06));
+              }
             }
           }
         });
