@@ -3185,15 +3185,15 @@ function _buildDpad(){
   w.id='dpad';
   w.innerHTML=`
     <button class="db tri" data-a="shoot"><i>△</i><span>SHOOT</span></button>
-    <button class="db sq"  data-a="pass"><i>□</i><span>PASS</span></button>
+    <button class="db sq"  data-a="pass"><i>□</i><span>SUPER</span></button>
     <button class="db ci"  data-a="sprint"><i>○</i><span>SPRINT</span></button>
-    <button class="db xx"  data-a="switch"><i>✕</i><span>SWITCH</span></button>`;
+    <button class="db xx"  data-a="switch"><i>✕</i><span>PASS</span></button>`;
   document.body.appendChild(w);
   G_dpadEl=w;
   const tap=(sel,fn)=>{const b=w.querySelector(sel);b.addEventListener('pointerdown',e=>{e.preventDefault();e.stopPropagation();fn();},{passive:false});};
-  tap('[data-a="shoot"]',()=>{if(G.poss==='h')manualShot();});
-  tap('[data-a="pass"]',()=>{ if(G.awaitKickoff==='h'){doKickoff();return;} if(G.poss==='h'){ if(G.phase==='moving') directionalPass(); else togglePassMode(); }});
-  tap('[data-a="switch"]',()=>{if(G.poss==='a')switchDefender();});
+  tap('[data-a="shoot"]',()=>{if(G.poss==='h')manualShot('shoot');});
+  tap('[data-a="pass"]',()=>{ if(G.awaitKickoff==='h'){doKickoff();return;} if(G.poss==='h'){ if(G.phase==='moving') manualShot('special'); else togglePassMode(); }});
+  tap('[data-a="switch"]',()=>{ if(G.awaitKickoff==='h'){doKickoff();return;} if(G.poss==='h'){ if(G.phase==='moving') directionalPass(); else togglePassMode(); } else switchDefender(); });
   const xb=w.querySelector('[data-a="sprint"]');
   const on=e=>{e.preventDefault();G_sprint=true;xb.classList.add('held');};
   const off=()=>{G_sprint=false;xb.classList.remove('held');};
@@ -3297,19 +3297,20 @@ window.testSuperCine=function(goal=true){
   P3D.superCine({as,sk:G.ck,ds,isGoal:goal,onDone:()=>console.log('cine done')});
 };
 
-function manualShot(){
+function manualShot(kind){
   if(G.phase!=='moving'||!G.ck||G._scoringGoal)return;
+  const ak=(kind==='special')?'special':'shoot';
   const s=G.poss, ds=s==='h'?'a':'h';
   G_moveTarget=null;
   const _cpM=PP[s][G.ck]; if(!_cpM)return;
   clearInterval(G.di);
-  if(rollShotMiss(s)){shotMissed(s);return;}
+  if(rollShotMiss(s,ak)){shotMissed(s);return;}
   const _gkPosM=PP[ds]&&PP[ds]['GK']?PP[ds]['GK']:{x:goalXFor(s),y:H*.5};
   G.phase='pass_anim';
   G._shotTrail=true;
   shakeScreen(4,60);
   animateBallTo(_cpM.x,_cpM.y,_gkPosM.x,_gkPosM.y,()=>{
-    G._shotTrail=false; G.phase='idle'; opDuel(true);
+    G._shotTrail=false; G.phase='idle'; opDuel(true,ak);
   },45,true);
 }
 function togglePress(){
