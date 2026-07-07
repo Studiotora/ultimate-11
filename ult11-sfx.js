@@ -112,7 +112,7 @@
   };
 
   /* ---------- ENGINE WATCHER (auto-fire from game state, no game.js edits) ---------- */
-  let prevPhase=null, prevScoreH=null, prevScoreA=null, prevKick=false, matchLive=false;
+  let prevPhase=null, prevScoreH=null, prevScoreA=null, prevKick=false, matchLive=false, kickoffDone=false;
   const stepClock={};   // per-player footstep cadence
   function num(x){ return typeof x==='number'?x:0; }
   function watch(){
@@ -125,7 +125,7 @@
     const live=(G.phase==='moving'||G.phase==='pass_anim'||G.phase==='duel'||G.phase==='duel_result');
     if(live && !matchLive){ matchLive=true; buildCrowd();
       if(busCrowd) busCrowd.gain.linearRampToValueAtTime(SFX.crowd, (AC?AC.currentTime:0)+1.5);
-      SFX.whistle('kickoff'); }
+      if(!kickoffDone){ kickoffDone=true; SFX.whistle('kickoff'); } }
     if(!live && matchLive){ matchLive=false;
       if(busCrowd&&AC) busCrowd.gain.linearRampToValueAtTime(0, AC.currentTime+1.0); }
     if(busCrowd&&matchLive) busCrowd.gain.value=busCrowd.gain.value; // (ramp target set above)
@@ -163,5 +163,22 @@
     prevPhase=G.phase;
   }
   requestAnimationFrame(watch);
+
+  /* ---------- UI CLICK (soft synth blip for menu + in-game buttons) ---------- */
+  SFX.click=function(){
+    if(!SFX.on||!ensure()) return; resume();
+    if(AC.state==='suspended'){ AC.resume().catch(()=>{}); }
+    const t=AC.currentTime, v=SFX.master*0.35;
+    const o=AC.createOscillator(); o.type='triangle';
+    o.frequency.setValueAtTime(660,t); o.frequency.exponentialRampToValueAtTime(880,t+0.05);
+    const g=AC.createGain(); g.gain.setValueAtTime(v,t); g.gain.exponentialRampToValueAtTime(0.001,t+0.09);
+    o.connect(g); g.connect(busMaster); o.start(t); o.stop(t+0.1);
+  };
+  addEventListener('pointerdown',e=>{
+    const el=e.target&&e.target.closest&&e.target.closest(
+      'button,.btn,[role="button"],a,.menu-item,.tap,[data-sfx]');
+    if(el) SFX.click();
+  }, {passive:true, capture:true});
+
   console.log('[SFX] audio module active — whistle / crowd / steps / kick');
 })();
