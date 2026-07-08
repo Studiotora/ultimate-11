@@ -3211,7 +3211,7 @@ function _updateDpad(show){
   const atk=G.poss==='h';
   G_dpadEl.querySelector('[data-a="shoot"]').classList.toggle('dim',!atk);
   G_dpadEl.querySelector('[data-a="pass"]').classList.toggle('dim',!atk);
-  G_dpadEl.querySelector('[data-a="switch"]').classList.toggle('dim',atk);
+  G_dpadEl.querySelector('[data-a="switch"]').classList.remove('dim'); // ✕ never dims: PASS on attack, SWITCH on defence
 }
 // ── FIELD HUD CHIPS — controlled player + opponent (bottom-left) ──
 let _hudKeys='';
@@ -3297,8 +3297,24 @@ window.testSuperCine=function(goal=true){
   if(!G||!G.ck||G.phase==='idle')return console.warn('start a match first, need a carrier');
   const as=G.poss, ds=as==='h'?'a':'h';
   showSuperCineBanner(getSpecial(sq(as)[G.ck]),as);
-  P3D.superCine({as,sk:G.ck,ds,isGoal:goal,onDone:()=>console.log('cine done')});
+  P3D.superCine({as,sk:G.ck,ds,dir:dirFor(as),gx:goalXFor(as),isGoal:goal,onDone:()=>console.log('cine done')});
 };
+
+/* ── ?debug=1 — on-screen super-shot tracer (device has no devtools) ── */
+const U11_DBG=/[?&]debug=1/.test(location.search);
+window.U11DBG=function(msg){
+  if(!U11_DBG)return;
+  let el=document.getElementById('dbg-trace');
+  if(!el){
+    el=document.createElement('div');el.id='dbg-trace';
+    el.style.cssText='position:fixed;left:6px;top:64px;z-index:99999;font:700 11px monospace;'
+      +'color:#0f0;background:rgba(0,0,0,.72);padding:6px 8px;border-radius:6px;'
+      +'max-width:46vw;pointer-events:none;white-space:pre-wrap;';
+    document.body.appendChild(el);
+  }
+  el.textContent=(el.textContent+'\n'+msg).split('\n').slice(-14).join('\n');
+};
+if(U11_DBG)setTimeout(()=>U11DBG('game.js v26 loaded · sc2='+!!(window.P3D&&P3D.superCine2)),1500);
 
 /* ── SUPER-SHOT CINE v2 — media banners ───────────────────────────
    Same visual shell as showSpecialCutscene, but tries a video first
@@ -3372,7 +3388,7 @@ function showSaveBanner(gk,callback){
   }
   el.querySelector('.sb-sub').textContent=gk?gk.name.toUpperCase():'';
   el.style.display='flex';
-  el.animate([{opacity:0},{opacity:1}],{duration:160});
+  if(el.animate)el.animate([{opacity:0},{opacity:1}],{duration:160});
   clearTimeout(el._t);
   el._t=setTimeout(()=>{el.style.display='none';if(callback)callback();},1500);
 }
@@ -3385,17 +3401,21 @@ function superShotCine(){
   if(G.phase!=='moving'||!G.ck||G._scoringGoal)return true;
   const s=G.poss,ds=s==='h'?'a':'h';
   const carrier=sq(s)[G.ck],cp=PP[s]&&PP[s][G.ck];
-  if(!carrier||!cp)return false;
-  if(!(window.P3D&&P3D.on&&P3D.superCine2&&P3D.superCine2.start({as:s,sk:G.ck,ds})))return false;
+  if(!carrier||!cp){U11DBG('SSC: no carrier/pos → legacy');return false;}
+  if(rollShotMiss(s,'special')){U11DBG('SSC: miss roll');clearInterval(G.di);G_moveTarget=null;shotMissed(s);return true;}
+  if(!(window.P3D&&P3D.on&&P3D.superCine2&&P3D.superCine2.start({as:s,sk:G.ck,ds,dir:dirFor(s),gx:goalXFor(s)}))){U11DBG('SSC: start() failed → legacy');return false;}
+  U11DBG('SSC: start ok, hold cam');
   clearInterval(G.di);G_moveTarget=null;
-  if(rollShotMiss(s,'special')){try{P3D.superCine2.abort();}catch(e){}shotMissed(s);return true;}
   G.phase='pass_anim';
   const _gen=G.goalGen;
   const spec=getSpecial(carrier)||{l:'SUPER SHOT',i:'⚡'};
+  U11DBG('SSC: banner…');
   showCineMedia(carrier,spec,()=>{
-    if(G.goalGen!==_gen||G.phase!=='pass_anim'){try{P3D.superCine2.abort();}catch(e){}return;}
+    if(G.goalGen!==_gen||G.phase!=='pass_anim'){U11DBG('SSC: stale after banner');try{P3D.superCine2.abort();}catch(e){}return;}
+    U11DBG('SSC: fly');
     P3D.superCine2.fly(()=>{
       if(G.goalGen!==_gen){try{P3D.superCine2.abort();}catch(e){}return;}
+      U11DBG('SSC: arrived → duel');
       G.phase='idle';opDuel(true,'special');
     });
   },5000);
@@ -3405,6 +3425,7 @@ function superShotCine(){
 function manualShot(kind){
   if(G.phase!=='moving'||!G.ck||G._scoringGoal)return;
   const ak=(kind==='special')?'special':'shoot';
+  if(ak==='special')U11DBG('□ press: sc2='+!!(window.P3D&&P3D.superCine2)+' busy='+!!(window.P3D&&P3D.cineActive&&P3D.cineActive()));
   if(ak==='special'&&window.P3D&&P3D.on&&P3D.superCine2&&!(P3D.cineActive&&P3D.cineActive())){
     if(superShotCine())return;   // v2 cinematic took over; falls through on failure
   }
@@ -5337,7 +5358,7 @@ function resDuel(){
         else if(ak==='special'&&window.P3D&&P3D.on&&P3D.superCine){
           try{playDuelCutIn({atk:carrier,def:sq(ds)['GK'],as,ds,isShot:true},()=>{});}catch(e){}
           showSuperCineBanner(getSpecial(carrier),as);
-          P3D.superCine({as, sk:G.ck, ds, isGoal:true,
+          P3D.superCine({as, sk:G.ck, ds, dir:dirFor(as), gx:goalXFor(as), isGoal:true,
             onDone:()=>{ if(G.goalGen===_gen)afGoal(carrier,as,_gen); }});
         } else afGoal(carrier,as,_gen);
       } else {
@@ -5371,7 +5392,7 @@ function resDuel(){
         else if(ak==='special'&&window.P3D&&P3D.on&&P3D.superCine){
           try{playDuelCutIn({atk:carrier,def:sq(ds)['GK'],as,ds,isShot:true},()=>{});}catch(e){}
           showSuperCineBanner(getSpecial(carrier),as);
-          P3D.superCine({as, sk:G.ck, ds, isGoal:false,
+          P3D.superCine({as, sk:G.ck, ds, dir:dirFor(as), gx:goalXFor(as), isGoal:false,
             onDone:()=>{ if(G.goalGen===_gen)afSave(ds); }});
         } else afSave(ds);
       }

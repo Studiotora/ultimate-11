@@ -1153,8 +1153,9 @@
       const sp=PP[o.as]&&PP[o.as][o.sk], gp=PP[o.ds]&&PP[o.ds]['GK'];
       if(!sp||!gp){ o.onDone&&o.onDone(); return; }
       const W=(CV.width||1280);
-      const gx=(o.as==='h')?W*0.93:W*0.07;   // target goal-line x
-      cine={t:0,o,
+      const _dir=(o.dir!=null)?o.dir:((o.as==='h')?1:-1);      // engine attack dir (halves swap!)
+      const gx=(o.gx!=null)?o.gx:((_dir>0)?W*0.93:W*0.07);     // target goal-line x
+      cine={t:0,o,dir:_dir,
         fx:sp.x, fy:sp.y,          // engine-space flight endpoints
         tx:gp.x, ty:gp.y,
         nx:gx,   ny:gp.y,          // net point (goal outcome)
@@ -1165,6 +1166,7 @@
     P3D.cineActive=function(){ return !!cine; };
     function cineEnd(){
       if(!cine)return;
+      if(cine.v2)window.U11DBG&&U11DBG('[3D] cine v2 end');
       const r=cine.gkRestore;
       if(r){ const og=sprites[cine.o.ds+':GK'];
         if(og){ og.sprite.material.map=r.map; og.tex=r.map; og.sil.material.map=r.map;
@@ -1183,14 +1185,14 @@
     P3D.superCine2={
       active(){ return !!(cine&&cine.v2); },
       start(o){
-        if(cine||!P3D.on||typeof PP==='undefined')return false;
+        if(cine||!P3D.on||typeof PP==='undefined'){window.U11DBG&&U11DBG('[3D] start blocked: '+(cine?'cine busy':'no PP'));return false;}
         const sp=PP[o.as]&&PP[o.as][o.sk], gp=PP[o.ds]&&PP[o.ds]['GK'];
-        if(!sp||!gp)return false;
+        if(!sp||!gp){window.U11DBG&&U11DBG('[3D] start blocked: sp='+!!sp+' gp='+!!gp);return false;}
         const W=(CV.width||1280);
-        const dir=(o.as==='h')?1:-1;
-        const gx=(o.as==='h')?W*0.93:W*0.07;
+        const dir=(o.dir!=null)?o.dir:((o.as==='h')?1:-1);     // engine attack dir (halves swap!)
+        const gx=(o.gx!=null)?o.gx:((dir>0)?W*0.93:W*0.07);
         const stopX=gp.x-dir*W*0.045;                 // hold point just short of the keeper
-        cine={v2:true,mode:'hold',t:0,ft:0,ot:0,o,arrived:false,gkRestore:null,
+        cine={v2:true,mode:'hold',t:0,ft:0,ot:0,o,dir,arrived:false,gkRestore:null,
           fx:sp.x,fy:sp.y, tx:stopX,ty:gp.y, gx,gy:gp.y, kx:gp.x,ky:gp.y,
           col:o.color||'#ffd24a'};
         if(typeof ball!=='undefined'&&ball){ball.x=sp.x;ball.y=sp.y;ball.bz=0;}
@@ -1205,6 +1207,7 @@
     };
     function cineStep2(dt){
       const c=cine; if(!c)return;
+      if(c._lm!==c.mode){c._lm=c.mode;window.U11DBG&&U11DBG('[3D] cine v2 mode='+c.mode+' (frames running)');}
       c.t+=dt;
       if(typeof G==='undefined'||!G||typeof PP==='undefined'||!PP[c.o.as]){cineEnd();return;}
       const sid=c.o.as+':'+c.o.sk;
@@ -1246,7 +1249,7 @@
     }
     function cineCamera2(){
       const c=cine; if(!c)return;
-      const dir=(c.o.as==='h')?1:-1;
+      const dir=(c.dir!=null)?c.dir:((c.o.as==='h')?1:-1);
       const swx=ex2wx(c.fx),swz=ey2wz(c.fy);
       const gwx=ex2wx(c.gx),gwz=ey2wz(c.gy);
       if(c.mode==='hold'){
@@ -1319,7 +1322,7 @@
       const c=cine; if(!c)return;
       const swx=ex2wx(c.fx), swz=ey2wz(c.fy);
       const gwx=ex2wx(c.tx), gwz=ey2wz(c.ty);
-      const dir=(c.o.as==='h')?1:-1;           // attacking toward +x (h) or −x (a)
+      const dir=(c.dir!=null)?c.dir:((c.o.as==='h')?1:-1);   // engine attack dir (halves swap!)
       if(c.t<2.55){
         // PHASE A — frontal on the striker: goal-side, low, slow dolly-in.
         const dv=6.5-Math.min(2.5,c.t)*0.7;   // slow dolly-in
