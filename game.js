@@ -1059,6 +1059,7 @@ function exitToMenu(){
   try{clearInterval(G.mt);clearInterval(G.di);cancelAnimationFrame(raf);}catch(e){}
   if(G){G.phase='idle';G.paused=false;G.mt=null;G.di=null;G.pm=false;G.kickoffUntil=0;G.awaitKickoff=null;G.goalGen=(G.goalGen||0)+1;}
   ['kickoff-prompt','goal-banner','card-flash'].forEach(id=>{const e=document.getElementById(id);if(e)e.classList.remove('show');});
+  G._cineHold=false;
   try{if(window.P3D&&P3D.superCine2)P3D.superCine2.abort();}catch(e){}
   try{const sb=document.getElementById('save-banner');if(sb){clearTimeout(sb._t);sb.style.display='none';}}catch(e){}
   try{const sc=document.getElementById('special-cutscene');if(sc){sc.classList.remove('show');const f=document.getElementById('sc-face');if(f){const v=f.querySelector('video');if(v)v.pause();f.innerHTML='';}}}catch(e){}
@@ -1533,6 +1534,7 @@ function clampAllToPitch(){
 }
 function tick(dt=1){
   if(typeof pvpPumpInput==='function')pvpPumpInput();
+  if(G._cineHold)return;                       // super-shot cinematic: world frozen
   const s=G.poss,ds=s==='h'?'a':'h';
   const cp=PP[s][G.ck];if(!cp)return;
   const dir=dirFor(s);
@@ -3407,17 +3409,22 @@ function superShotCine(){
   U11DBG('SSC: start ok, hold cam');
   clearInterval(G.di);G_moveTarget=null;
   G.phase='pass_anim';
+  G._cineHold=true;                                  // freeze the whole engine
   const _gen=G.goalGen;
+  const _bail=why=>{U11DBG('SSC: '+why);G._cineHold=false;try{P3D.superCine2.abort();}catch(e){}};
+  setTimeout(()=>{ // watchdog — never leave the game stuck in the cinematic
+    if(G.goalGen===_gen&&G._cineHold&&G.phase==='pass_anim'){_bail('watchdog');G.phase='moving';}
+  },22000);
   const spec=getSpecial(carrier)||{l:'SUPER SHOT',i:'⚡'};
   U11DBG('SSC: wind-up hold 4.5s');
   setTimeout(()=>{
-    if(G.goalGen!==_gen||G.phase!=='pass_anim'){U11DBG('SSC: stale after hold');try{P3D.superCine2.abort();}catch(e){}return;}
+    if(G.goalGen!==_gen||G.phase!=='pass_anim'){_bail('stale after hold');return;}
     U11DBG('SSC: banner…');
     showCineMedia(carrier,spec,()=>{
-      if(G.goalGen!==_gen||G.phase!=='pass_anim'){U11DBG('SSC: stale after banner');try{P3D.superCine2.abort();}catch(e){}return;}
+      if(G.goalGen!==_gen||G.phase!=='pass_anim'){_bail('stale after banner');return;}
       U11DBG('SSC: fly');
       P3D.superCine2.fly(()=>{
-        if(G.goalGen!==_gen){try{P3D.superCine2.abort();}catch(e){}return;}
+        if(G.goalGen!==_gen){_bail('stale at arrival');return;}
         if(PVP.on){U11DBG('SSC: arrived → PvP duel');G.phase='idle';opDuel(true,'special');return;}
         U11DBG('SSC: arrived → silent resolve');
         silentShotDuel();
@@ -4092,6 +4099,7 @@ function gkShotLayout(on,def,ds){
 }
 
 function opDuel(isShot, committedAk){
+  if(G._cineHold&&committedAk!=='special')return;   // cinematic owns the game — no stray duels
   if(!isShot&&(G.phase==='duel'||G.phase==='duel_result'||G.phase==='pass_anim'))return;
   if(isShot){clearInterval(G.di);closeDuel();}
   G.phase='duel';G.pm=false;G._duelT=Date.now();$id('passhint').style.display='none';$id('pass-banner').style.display='none';
@@ -5450,6 +5458,7 @@ function resume(s,msg){
 }
 
 function afGoal(scorer,s,gen){
+  G._cineHold=false;
   // Ghost goal guard: generation must match current, and no goal already in flight
   if(gen!==undefined && gen!==G.goalGen)return;
   if(G._scoringGoal)return;
@@ -5475,6 +5484,7 @@ function afGoal(scorer,s,gen){
 }
 
 function afSave(ds){
+  G._cineHold=false;
   G.goalGen++;
   const q=sq(ds);
   const gk=q['GK'];
@@ -5756,7 +5766,7 @@ function updP(){
 function startMT(){
   clearInterval(G.mt);
   G.mt=setInterval(()=>{
-    if(G.paused)return;
+    if(G.paused||G._cineHold)return;
     if(G.phase==='idle')return;
     const inDuel=G.phase==='duel_result'||G.phase==='duel'||document.getElementById('duel-ov').classList.contains('show');
     if(inDuel&&Math.random()<0.55)return;
