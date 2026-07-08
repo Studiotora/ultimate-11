@@ -1253,13 +1253,13 @@
       const swx=ex2wx(c.fx),swz=ey2wz(c.fy);
       const gwx=ex2wx(c.gx),gwz=ey2wz(c.gy);
       if(c.mode==='hold'){
-        const dv=7.2-Math.min(1.6,c.t*0.28);          // slow dolly-in behind the shooter
-        camera.position.set(swx-dir*dv,3.0,swz+1.8);
-        camera.lookAt(swx+dir*6,1.1,swz);             // shooter's back + goal + GK framed
+        const dv=5.0-Math.min(0.9,c.t*0.18);          // low over-the-shoulder, slow dolly-in
+        camera.position.set(swx-dir*dv,1.7,swz+1.1);  // waist height, shooter slightly off-centre
+        camera.lookAt(swx+dir*10,1.6,swz-0.4);        // goal centred ahead, GK on his line
       }else{
         const b=c._bw||{x:swx,y:0.5,z:swz};
-        camera.position.set(b.x-dir*5.6,b.y+2.3,b.z+1.5);
-        camera.lookAt(gwx,1.0,gwz);
+        camera.position.set(b.x-dir*4.6,b.y+1.6,b.z+1.0);
+        camera.lookAt(gwx,1.2,gwz);
       }
     }
 
