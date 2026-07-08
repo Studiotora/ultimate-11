@@ -1059,6 +1059,9 @@ function exitToMenu(){
   try{clearInterval(G.mt);clearInterval(G.di);cancelAnimationFrame(raf);}catch(e){}
   if(G){G.phase='idle';G.paused=false;G.mt=null;G.di=null;G.pm=false;G.kickoffUntil=0;G.awaitKickoff=null;G.goalGen=(G.goalGen||0)+1;}
   ['kickoff-prompt','goal-banner','card-flash'].forEach(id=>{const e=document.getElementById(id);if(e)e.classList.remove('show');});
+  try{if(window.P3D&&P3D.superCine2)P3D.superCine2.abort();}catch(e){}
+  try{const sb=document.getElementById('save-banner');if(sb){clearTimeout(sb._t);sb.style.display='none';}}catch(e){}
+  try{const sc=document.getElementById('special-cutscene');if(sc){sc.classList.remove('show');const f=document.getElementById('sc-face');if(f){const v=f.querySelector('video');if(v)v.pause();f.innerHTML='';}}}catch(e){}
   if(typeof closeDuel==='function')closeDuel();
   if(typeof hideBusts==='function')hideBusts();
   hSq={};aSq={};PP={h:{},a:{}};PT={h:{},a:{}};
@@ -3297,9 +3300,114 @@ window.testSuperCine=function(goal=true){
   P3D.superCine({as,sk:G.ck,ds,isGoal:goal,onDone:()=>console.log('cine done')});
 };
 
+/* ── SUPER-SHOT CINE v2 — media banners ───────────────────────────
+   Same visual shell as showSpecialCutscene, but tries a video first
+   (assets/cutscene/{name}.webm → .mp4) and falls back to the PNG face.
+   Hard-capped by holdMs so a stalled video can never soft-lock. */
+function showCineMedia(pl,special,callback,holdMs,baseNames){
+  const sc=document.getElementById('special-cutscene');
+  if(!sc){if(callback)callback();return;}
+  const faceEl=document.getElementById('sc-face');
+  const lastName=pl?(pl.origName||pl.name).split('.').pop().toLowerCase().trim():null;
+  const bases=baseNames||(lastName?[lastName]:[]);
+  let done=false,tmr=null;
+  const finish=()=>{
+    if(done)return;done=true;clearTimeout(tmr);
+    const v=faceEl.querySelector('video');if(v){try{v.pause();}catch(e){}}
+    sc.classList.remove('show');faceEl.innerHTML='';
+    if(callback)callback();
+  };
+  faceEl.innerHTML='';
+  (function tryBase(i){
+    if(i>=bases.length){
+      if(lastName)faceEl.innerHTML=`<img src="assets/cutscene/${lastName}.png" alt="" draggable="false">`;
+      return;
+    }
+    const v=document.createElement('video');
+    v.muted=true;v.autoplay=true;v.playsInline=true;v.setAttribute('playsinline','');
+    v.style.cssText='max-width:100%;max-height:100%;display:block;margin:0 auto;';
+    let dead=false;
+    const fail=()=>{if(dead||done)return;dead=true;try{v.remove();}catch(e){}tryBase(i+1);};
+    const s1=document.createElement('source');s1.src='assets/cutscene/'+bases[i]+'.webm';s1.type='video/webm';
+    const s2=document.createElement('source');s2.src='assets/cutscene/'+bases[i]+'.mp4';s2.type='video/mp4';
+    s2.addEventListener('error',fail);
+    v.addEventListener('error',fail);
+    v.appendChild(s1);v.appendChild(s2);
+    v.addEventListener('ended',finish);
+    faceEl.appendChild(v);
+    if(v.play)v.play().catch(()=>{});
+  })(0);
+  sc.classList.remove('show');void sc.offsetWidth;sc.classList.add('show');
+  if(special){
+    say((pl?pl.name.split('.').pop():'')+'— '+(special.l||'Special')+'!');
+    shakeScreen(7,100);
+    impactText('⚡ '+(special.l||'SUPER SHOT')+'!','#f0c040','clamp(18px,38.4px,26px)');
+  }
+  tmr=setTimeout(finish,holdMs||5000);
+}
+function showGkCineMedia(gk,callback){
+  if(!gk){if(callback)callback();return;}
+  const spec=(typeof getGKSuper==='function')?getGKSuper(gk):null;
+  const ln=(gk.origName||gk.name).split('.').pop().toLowerCase().trim();
+  showCineMedia(gk,spec||{l:'SAVE ATTEMPT',i:'🧤'},callback,2600,[ln,'gk']);
+}
+function showSaveBanner(gk,callback){
+  let el=document.getElementById('save-banner');
+  if(!el){
+    el=document.createElement('div');el.id='save-banner';
+    el.style.cssText='position:fixed;inset:0;z-index:2600;display:none;align-items:center;'
+      +'justify-content:center;background:rgba(4,10,24,.72);pointer-events:none;';
+    el.innerHTML='<div style="text-align:center">'
+      +'<img class="sb-img" src="" alt="" style="max-width:48vw;max-height:44vh;display:none;'
+      +'filter:drop-shadow(0 14px 40px rgba(0,0,0,.7));">'
+      +'<div class="sb-title" style="font-family:\'Bebas Neue\',sans-serif;font-size:clamp(40px,9vw,90px);'
+      +'font-weight:900;color:#4db8ff;letter-spacing:.08em;text-shadow:0 0 26px rgba(77,184,255,.8),0 4px 10px #000">SAVED!</div>'
+      +'<div class="sb-sub" style="font-size:clamp(14px,2.4vw,22px);font-weight:800;color:#fff;'
+      +'text-shadow:0 2px 6px #000;margin-top:6px"></div></div>';
+    document.body.appendChild(el);
+    const im=el.querySelector('.sb-img');
+    im.onload=()=>{im.style.display='inline-block';};
+    im.onerror=()=>{im.style.display='none';};
+    im.src='assets/ui/gk_save.png';
+  }
+  el.querySelector('.sb-sub').textContent=gk?gk.name.toUpperCase():'';
+  el.style.display='flex';
+  el.animate([{opacity:0},{opacity:1}],{duration:160});
+  clearTimeout(el._t);
+  el._t=setTimeout(()=>{el.style.display='none';if(callback)callback();},1500);
+}
+/* ── SUPER-SHOT CINE v2 — entry (□ in open play) ──────────────────
+   Flow: camera behind shooter → skill banner (video, ~5s) → kick anim
+   + ball flight, camera chasing → GK duel menu at arrival → GK banner
+   video → result (goal banner / save banner). Returns false to let
+   manualShot fall back to the legacy path. */
+function superShotCine(){
+  if(G.phase!=='moving'||!G.ck||G._scoringGoal)return true;
+  const s=G.poss,ds=s==='h'?'a':'h';
+  const carrier=sq(s)[G.ck],cp=PP[s]&&PP[s][G.ck];
+  if(!carrier||!cp)return false;
+  if(!(window.P3D&&P3D.on&&P3D.superCine2&&P3D.superCine2.start({as:s,sk:G.ck,ds})))return false;
+  clearInterval(G.di);G_moveTarget=null;
+  if(rollShotMiss(s,'special')){try{P3D.superCine2.abort();}catch(e){}shotMissed(s);return true;}
+  G.phase='pass_anim';
+  const _gen=G.goalGen;
+  const spec=getSpecial(carrier)||{l:'SUPER SHOT',i:'⚡'};
+  showCineMedia(carrier,spec,()=>{
+    if(G.goalGen!==_gen||G.phase!=='pass_anim'){try{P3D.superCine2.abort();}catch(e){}return;}
+    P3D.superCine2.fly(()=>{
+      if(G.goalGen!==_gen){try{P3D.superCine2.abort();}catch(e){}return;}
+      G.phase='idle';opDuel(true,'special');
+    });
+  },5000);
+  return true;
+}
+
 function manualShot(kind){
   if(G.phase!=='moving'||!G.ck||G._scoringGoal)return;
   const ak=(kind==='special')?'special':'shoot';
+  if(ak==='special'&&window.P3D&&P3D.on&&P3D.superCine2&&!(P3D.cineActive&&P3D.cineActive())){
+    if(superShotCine())return;   // v2 cinematic took over; falls through on failure
+  }
   const s=G.poss, ds=s==='h'?'a':'h';
   G_moveTarget=null;
   const _cpM=PP[s][G.ck]; if(!_cpM)return;
@@ -4833,7 +4941,8 @@ function confirmDuel(){
   if(!PVP.on && !G.D.ak && G.D.as==='a') aiAtk();
   if(!PVP.on && !G.D.defA && G.D.ds==='a') aiDef();
   if(G.D.ak && G.D.defA){
-    if(isSuperAtk(G.D.ak)){
+    const _v2=!!(window.P3D&&P3D.superCine2&&P3D.superCine2.active());
+    if(isSuperAtk(G.D.ak)&&!_v2){
       const spec=G.D.ak==='special'?getSpecial(G.D.carrier):SUPER_NAMES[G.D.ak];
       if(spec){clearInterval(G.di);showSpecialCutscene(G.D.carrier,spec,()=>resDuel());return;}
     }
@@ -5218,7 +5327,14 @@ function resDuel(){
     if(['shoot','special'].includes(ak)&&win){
       if(G.D.isShot){
         // Was already a shot duel (vs GK) — score directly
-        if(ak==='special'&&window.P3D&&P3D.on&&P3D.superCine){
+        if(ak==='special'&&window.P3D&&P3D.on&&P3D.superCine2&&P3D.superCine2.active()){
+          closeDuel();
+          showGkCineMedia(sq(ds)['GK'],()=>{
+            if(G.goalGen!==_gen){try{P3D.superCine2.abort();}catch(e){}return;}
+            P3D.superCine2.finish({isGoal:true,onDone:()=>{ if(G.goalGen===_gen)afGoal(carrier,as,_gen); }});
+          });
+        }
+        else if(ak==='special'&&window.P3D&&P3D.on&&P3D.superCine){
           try{playDuelCutIn({atk:carrier,def:sq(ds)['GK'],as,ds,isShot:true},()=>{});}catch(e){}
           showSuperCineBanner(getSpecial(carrier),as);
           P3D.superCine({as, sk:G.ck, ds, isGoal:true,
@@ -5238,7 +5354,21 @@ function resDuel(){
       // BUG1 FIX: afSave only for GK duels. A blocked shot in a FIELD duel
       // is a turnover — never re-adjudicated by the keeper sequence.
       if(G.D.isShot){
-        if(ak==='special'&&window.P3D&&P3D.on&&P3D.superCine){
+        if(ak==='special'&&window.P3D&&P3D.on&&P3D.superCine2&&P3D.superCine2.active()){
+          closeDuel();
+          showGkCineMedia(sq(ds)['GK'],()=>{
+            if(G.goalGen!==_gen){try{P3D.superCine2.abort();}catch(e){}return;}
+            P3D.superCine2.finish({isGoal:false,onDone:()=>{
+              if(G.goalGen!==_gen)return;
+              showSaveBanner(sq(ds)['GK'],()=>{
+                if(G.goalGen!==_gen)return;
+                G._cineSaveLock=true;
+                afSave(ds);
+              });
+            }});
+          });
+        }
+        else if(ak==='special'&&window.P3D&&P3D.on&&P3D.superCine){
           try{playDuelCutIn({atk:carrier,def:sq(ds)['GK'],as,ds,isShot:true},()=>{});}catch(e){}
           showSuperCineBanner(getSpecial(carrier),as);
           P3D.superCine({as, sk:G.ck, ds, isGoal:false,
@@ -5307,6 +5437,9 @@ function afSave(ds){
   // Use actual chosen defence action — includes supersave
   const gkDefA=G.D.defA&&['save','punch','supersave'].includes(G.D.defA)?G.D.defA:(ak==='special'?'punch':'save');
   const isSuper=gkDefA==='supersave';
+  // Cine v2 flow: the save banner already announced the stop — outcome can't
+  // flip to a goal afterwards, and the GK cutscene already played as a video.
+  const _cineFlow=!!G._cineSaveLock; G._cineSaveLock=false;
   const gkPow=gk?calcDefencePower(gk,gkDefA,ak):80;
   // Deduct GK stamina — GK max is 2000
   if(gk){
@@ -5327,6 +5460,7 @@ function afSave(ds){
     else if(diff<25)outcome='spill';
     else outcome='goal';
   }
+  if(_cineFlow&&outcome==='goal')outcome='parry';
   const superName=isSuper&&gk?getGKSuper(gk).l:'';
   const outcomeText={catch:'CAUGHT!',parry:'PARRIED!',spill:'REBOUND!',goal:'GOAL!'};
   const outcomeDetail={
@@ -5410,8 +5544,9 @@ function afSave(ds){
     },30);
   }; // end doResolve
 
-  // Supersave: show GK cutscene first, then resolve
-  if(isSuper&&gk){
+  // Supersave: show GK cutscene first, then resolve.
+  // Cine v2 flow already played the GK banner video — go straight to resolve.
+  if(isSuper&&gk&&!_cineFlow){
     showSpecialCutscene(gk,getGKSuper(gk),doResolve);
   } else {
     doResolve();

@@ -1173,6 +1173,93 @@
       const cb=cine.o.onDone; cine=null;
       if(cb)cb();
     }
+    /* ════════ SUPER-SHOT CINEMATIC v2 — behind-the-shooter flow ════════
+       Phase-driven from game.js:
+         start({as,sk,ds})       → camera settles behind the shooter (hold)
+         fly(onArrive)           → kick anim + ball flight, camera chases ball
+         (wait)                  → ball holds short of GK while duel menu runs
+         finish({isGoal,onDone}) → ball into net / into GK hands, then end
+         abort()                 → immediate teardown, no callback */
+    P3D.superCine2={
+      active(){ return !!(cine&&cine.v2); },
+      start(o){
+        if(cine||!P3D.on||typeof PP==='undefined')return false;
+        const sp=PP[o.as]&&PP[o.as][o.sk], gp=PP[o.ds]&&PP[o.ds]['GK'];
+        if(!sp||!gp)return false;
+        const W=(CV.width||1280);
+        const dir=(o.as==='h')?1:-1;
+        const gx=(o.as==='h')?W*0.93:W*0.07;
+        const stopX=gp.x-dir*W*0.045;                 // hold point just short of the keeper
+        cine={v2:true,mode:'hold',t:0,ft:0,ot:0,o,arrived:false,gkRestore:null,
+          fx:sp.x,fy:sp.y, tx:stopX,ty:gp.y, gx,gy:gp.y, kx:gp.x,ky:gp.y,
+          col:o.color||'#ffd24a'};
+        if(typeof ball!=='undefined'&&ball){ball.x=sp.x;ball.y=sp.y;ball.bz=0;}
+        return true;
+      },
+      fly(onArrive){ if(cine&&cine.v2&&cine.mode==='hold'){cine.mode='fly';cine.ft=0;cine.onArrive=onArrive;} },
+      finish(o){
+        if(!(cine&&cine.v2)){o&&o.onDone&&o.onDone();return;}
+        cine.mode='out';cine.ot=0;cine.isGoal=!!o.isGoal;cine.o.onDone=o.onDone;
+      },
+      abort(){ if(cine&&cine.v2){cine.o.onDone=null;cineEnd();} }
+    };
+    function cineStep2(dt){
+      const c=cine; if(!c)return;
+      c.t+=dt;
+      if(typeof G==='undefined'||!G||typeof PP==='undefined'||!PP[c.o.as]){cineEnd();return;}
+      const sid=c.o.as+':'+c.o.sk;
+      const frac=(P3D.spriteFrac!=null?P3D.spriteFrac:0.045);
+      const d=PLEN*frac*0.21;
+      let bx=c.fx,by=c.fy,bz=0;
+      if(c.mode==='hold'){
+        forceCell(sid,ROW.up.run,0,false);            // back to camera, set stance
+      }else if(c.mode==='fly'||c.mode==='wait'){
+        if(c.mode==='fly'){
+          c.ft+=dt/1.6;
+          const kf=Math.min(3,Math.floor((c.ft*1.6)/0.14));
+          forceCell(sid,ROW.up.act,3+kf,false);       // kick frames, back view
+          if(c.ft>=1){
+            c.ft=1;c.mode='wait';
+            if(c.onArrive&&!c.arrived){c.arrived=true;const cb=c.onArrive;c.onArrive=null;setTimeout(cb,0);}
+          }
+        }
+        const ft=Math.min(1,c.ft);
+        const fe=ft*ft*(3-2*ft);
+        bx=c.fx+(c.tx-c.fx)*fe; by=c.fy+(c.ty-c.fy)*fe;
+        bz=46*3.2*fe*(1-fe)*0.7+8*Math.sin(fe*Math.PI);
+        if(c.mode==='wait')bz=4+Math.sin(c.t*6)*0.8;  // hover short of the keeper
+      }else if(c.mode==='out'){
+        c.ot+=dt;
+        const gt=Math.min(1,c.ot/0.55);
+        if(c.isGoal){ bx=c.tx+(c.gx-c.tx)*gt; by=c.ty+(c.gy-c.ty)*gt; bz=Math.max(0,4*(1-gt)); }
+        else        { bx=c.tx+(c.kx-c.tx)*gt; by=c.ty+(c.ky-c.ty)*gt; bz=4+6*gt; }
+        forceCell(c.o.ds+':GK',ROW.down.act,Math.min(6,3+Math.floor(c.ot/0.18)),false);
+        if(c.ot>=0.85){cineEnd();return;}
+      }
+      if(typeof ball!=='undefined'&&ball){ball.x=bx;ball.y=by;ball.bz=0;}
+      const W2=(CV.width||1280);
+      const bwx=ex2wx(Math.min(Math.max(bx,0.02*W2),0.98*W2)),bwz=ey2wz(by);
+      const bwy=0.05+bz*0.09;
+      ballMesh.scale.set(d,d,1); ballMesh.position.set(bwx,bwy,bwz);
+      if(c.mode==='fly'||(c.mode==='out'&&c.isGoal))spawnTrail(bwx,bwy+d*0.5,bwz,c.col,d*1.8);
+      c._bw={x:bwx,y:bwy,z:bwz};
+    }
+    function cineCamera2(){
+      const c=cine; if(!c)return;
+      const dir=(c.o.as==='h')?1:-1;
+      const swx=ex2wx(c.fx),swz=ey2wz(c.fy);
+      const gwx=ex2wx(c.gx),gwz=ey2wz(c.gy);
+      if(c.mode==='hold'){
+        const dv=7.2-Math.min(1.6,c.t*0.28);          // slow dolly-in behind the shooter
+        camera.position.set(swx-dir*dv,3.0,swz+1.8);
+        camera.lookAt(swx+dir*6,1.1,swz);             // shooter's back + goal + GK framed
+      }else{
+        const b=c._bw||{x:swx,y:0.5,z:swz};
+        camera.position.set(b.x-dir*5.6,b.y+2.3,b.z+1.5);
+        camera.lookAt(gwx,1.0,gwz);
+      }
+    }
+
     // timeline (s): 0–1.5 striker frontal + kick · 1.5 cut to GK ·
     // 1.35–2.6 flight · 2.6–3.6 outcome · 3.8 end
     function cineStep(dt){
@@ -1276,7 +1363,7 @@
       if(_cw&&_ch&&(_cw!==_lastW||_ch!==_lastH)){ _lastW=_cw;_lastH=_ch;resize(); }
       const now=performance.now(); const dt=Math.min(0.05,(now-lastTs)/1000); lastTs=now;
       syncSheets(); watchActions(); syncPlayers();
-      if(cine){ try{cineStep(dt); cineCamera();}catch(e){console.error('[P3D] cine error',e); cineEnd();} }
+      if(cine){ try{ if(cine.v2){cineStep2(dt);cineCamera2();} else {cineStep(dt);cineCamera();} }catch(e){console.error('[P3D] cine error',e); cineEnd();} }
       else    { syncBall(); updateCamera(dt); }
       tickTrail(dt);
       syncRef(dt);
