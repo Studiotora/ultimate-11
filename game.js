@@ -3409,17 +3409,41 @@ function superShotCine(){
   G.phase='pass_anim';
   const _gen=G.goalGen;
   const spec=getSpecial(carrier)||{l:'SUPER SHOT',i:'⚡'};
-  U11DBG('SSC: banner…');
-  showCineMedia(carrier,spec,()=>{
-    if(G.goalGen!==_gen||G.phase!=='pass_anim'){U11DBG('SSC: stale after banner');try{P3D.superCine2.abort();}catch(e){}return;}
-    U11DBG('SSC: fly');
-    P3D.superCine2.fly(()=>{
-      if(G.goalGen!==_gen){try{P3D.superCine2.abort();}catch(e){}return;}
-      U11DBG('SSC: arrived → duel');
-      G.phase='idle';opDuel(true,'special');
-    });
-  },5000);
+  U11DBG('SSC: wind-up hold 4.5s');
+  setTimeout(()=>{
+    if(G.goalGen!==_gen||G.phase!=='pass_anim'){U11DBG('SSC: stale after hold');try{P3D.superCine2.abort();}catch(e){}return;}
+    U11DBG('SSC: banner…');
+    showCineMedia(carrier,spec,()=>{
+      if(G.goalGen!==_gen||G.phase!=='pass_anim'){U11DBG('SSC: stale after banner');try{P3D.superCine2.abort();}catch(e){}return;}
+      U11DBG('SSC: fly');
+      P3D.superCine2.fly(()=>{
+        if(G.goalGen!==_gen){try{P3D.superCine2.abort();}catch(e){}return;}
+        if(PVP.on){U11DBG('SSC: arrived → PvP duel');G.phase='idle';opDuel(true,'special');return;}
+        U11DBG('SSC: arrived → silent resolve');
+        silentShotDuel();
+      });
+    },5000);
+  },4500);
   return true;
+}
+/* Committed super shot from the field button — no duel menu.
+   The AI keeper decides off-screen, then the normal resolution
+   (GK banner video → goal/save result) takes over. */
+function silentShotDuel(){
+  clearInterval(G.di);
+  G.phase='duel';G.pm=false;G._duelT=Date.now();
+  const as=G.poss,ds=as==='h'?'a':'h';
+  const carrier=sq(as)[G.ck];
+  const def=sq(ds)['GK'];
+  if(!carrier||!def){say('Shot blocked — no goalkeeper!');G.phase='moving';try{P3D.superCine2.abort();}catch(e){}return;}
+  G.D={carrier,def,dk:'GK',dk2:null,as,ds,isShot:true,ak:'special',pk:null,defA:null,is2v1:false,duelStage:1,_silent:true};
+  try{aiDef();}catch(e){}
+  if(!G.D.defA){
+    const canSuper=(typeof getGKSuper==='function')&&getGKSuper(def)&&(def.spirit||2000)>=(((typeof DEF_ACTIONS!=='undefined'&&DEF_ACTIONS['supersave'])||{}).cost||600);
+    G.D.defA=canSuper?'supersave':'save';
+  }
+  U11DBG('silent duel: GK '+G.D.defA);
+  resDuel();
 }
 
 function manualShot(kind){
@@ -5196,9 +5220,11 @@ function resDuel(){
   clearInterval(G.di);
   G.phase='duel_result';G.pm=false;
   $id('pass-banner').style.display='none';
-  document.getElementById('duel-ov').classList.add('show');
-  document.querySelectorAll('.dact3d').forEach(b=>b.classList.add('dact-dis'));
-  document.getElementById('dcfm').classList.remove('rdy');
+  if(!G.D._silent){
+    document.getElementById('duel-ov').classList.add('show');
+    document.querySelectorAll('.dact3d').forEach(b=>b.classList.add('dact-dis'));
+    document.getElementById('dcfm').classList.remove('rdy');
+  }
   const {carrier,def,dk,as,ds,isShot,ak,pk,defA}=G.D;
   let atkPow=calcAttackPower(carrier,ak,as);
   let defPow=calcDefencePower(def,defA,ak);
@@ -5300,7 +5326,8 @@ function resDuel(){
       aN+' '+(al[ak]||ak.toUpperCase())+' '+Math.round(atkPow)+'  vs  '+dN+' '+(dl[defA]||defA.toUpperCase())+' '+Math.round(defPow);
   }
   const ro=document.getElementById('duel-res');
-  ro.classList.add('show');say(badge+(det?' — '+det:''));
+  if(!G.D._silent)ro.classList.add('show');
+  say(badge+(det?' — '+det:''));
 
   // ── IMPACT FEEDBACK ─────────────────────────────────────
   // Shakes only — the floating texts duplicated the result badge.

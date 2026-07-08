@@ -1215,7 +1215,7 @@
       const d=PLEN*frac*0.21;
       let bx=c.fx,by=c.fy,bz=0;
       if(c.mode==='hold'){
-        forceCell(sid,ROW.up.run,0,false);            // back to camera, set stance
+        forceCell(sid,ROW.up.act,3,false);            // wind-up pose (leg up), back to camera
       }else if(c.mode==='fly'||c.mode==='wait'){
         if(c.mode==='fly'){
           c.ft+=dt/1.6;
