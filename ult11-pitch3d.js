@@ -1112,6 +1112,18 @@
        row0 = catch/center, row1 = dive left, row2 = dive right). Optional —
        falls back to the team sheet's action row until the asset exists. */
     let cine=null;
+    /* Drop-in cinematic sprites (optional — sheet frames used if missing):
+       assets/ps1/striker_windup.png  — single frame, back view, wind-up (transparent)
+       assets/ps1/gk_cine.png         — frontal GK sheet, 3 cols x 2 rows (transparent) */
+    let cineWindupTex=null,cineWindupAR=0.65,cineGkTex=null;
+    (function(){
+      const a=new Image();
+      a.onload=()=>{const t=new T.Texture(a);t.magFilter=T.NearestFilter;t.minFilter=T.NearestFilter;t.needsUpdate=true;cineWindupTex=t;cineWindupAR=a.width/a.height;};
+      a.src='assets/ps1/striker_windup.png';
+      const b=new Image();
+      b.onload=()=>{const t=new T.Texture(b);t.magFilter=T.NearestFilter;t.minFilter=T.NearestFilter;t.needsUpdate=true;cineGkTex=t;};
+      b.src='assets/ps1/gk_cine.png';
+    })();
     const DIVE={cols:5,rows:3};
     let diveSheet=null;
     (function(){ const im=new Image();
@@ -1167,6 +1179,9 @@
     function cineEnd(){
       if(!cine)return;
       if(cine.v2)window.U11DBG&&U11DBG('[3D] cine v2 end');
+      if(cine.shRestore){ const s2=cine.shRestore;
+        if(s2.g&&s2.g.sprite){ s2.g.sprite.material.map=s2.map; s2.g.sprite.material.needsUpdate=true;
+          if(s2.g.sil&&s2.silMap){ s2.g.sil.material.map=s2.silMap; s2.g.sil.material.needsUpdate=true; } } }
       const r=cine.gkRestore;
       if(r){ const og=sprites[cine.o.ds+':GK'];
         if(og){ og.sprite.material.map=r.map; og.tex=r.map; og.sil.material.map=r.map;
@@ -1215,8 +1230,28 @@
       const d=PLEN*frac*0.21;
       let bx=c.fx,by=c.fy,bz=0;
       if(c.mode==='hold'){
-        forceCell(sid,ROW.up.act,3,false);            // wind-up pose (leg up), back to camera
+        const g=sprites[sid];
+        if(cineWindupTex&&g&&g.sprite){                // dedicated wind-up sprite
+          if(!c.shRestore)c.shRestore={g,map:g.sprite.material.map,silMap:g.sil?g.sil.material.map:null};
+          if(g.sprite.material.map!==cineWindupTex){
+            cineWindupTex.repeat.set(1,1); cineWindupTex.offset.set(0,0);
+            g.sprite.material.map=cineWindupTex; g.sprite.material.needsUpdate=true;
+            if(g.sil){ g.sil.material.map=cineWindupTex; g.sil.material.needsUpdate=true; }
+          }
+          const hh=PLEN*frac;                          // override per-frame (syncPlayers resets scale)
+          g.sprite.scale.set(hh*cineWindupAR,hh,1);
+          if(g.sil)g.sil.scale.set(hh*cineWindupAR,hh,1);
+        }
+        else forceCell(sid,ROW.up.act,3,false);        // fallback: sheet wind-up, back view
       }else if(c.mode==='fly'||c.mode==='wait'){
+        if(c.shRestore&&!c._shBack){                  // shooter back on his sheet for kick frames
+          const r=c.shRestore;
+          if(r.g&&r.g.sprite){ r.g.sprite.material.map=r.map; r.g.sprite.material.needsUpdate=true;
+            if(r.g.sil&&r.silMap){ r.g.sil.material.map=r.silMap; r.g.sil.material.needsUpdate=true; } }
+          c._shBack=true;
+        }
+        if(!gkCineCell(c,0,0))forceCell(c.o.ds+':GK',ROW.down.run,0,false); // keeper set, facing the ball
+        cineGkNudge(c);                               // ...a step off his line
         if(c.mode==='fly'){
           c.ft+=dt/1.6;
           const kf=Math.min(3,Math.floor((c.ft*1.6)/0.14));
@@ -1236,7 +1271,9 @@
         const gt=Math.min(1,c.ot/0.55);
         if(c.isGoal){ bx=c.tx+(c.gx-c.tx)*gt; by=c.ty+(c.gy-c.ty)*gt; bz=Math.max(0,4*(1-gt)); }
         else        { bx=c.tx+(c.kx-c.tx)*gt; by=c.ty+(c.ky-c.ty)*gt; bz=4+6*gt; }
-        forceCell(c.o.ds+':GK',ROW.down.act,Math.min(6,3+Math.floor(c.ot/0.18)),false);
+        if(!gkCineCell(c,c.isGoal?2:1,c.isGoal?0:1))
+          forceCell(c.o.ds+':GK',ROW.down.act,Math.min(6,3+Math.floor(c.ot/0.18)),false);
+        cineGkNudge(c);
         if(c.ot>=0.85){cineEnd();return;}
       }
       if(typeof ball!=='undefined'&&ball){ball.x=bx;ball.y=by;ball.bz=0;}
@@ -1246,6 +1283,26 @@
       ballMesh.scale.set(d,d,1); ballMesh.position.set(bwx,bwy,bwz);
       if(c.mode==='fly'||(c.mode==='out'&&c.isGoal))spawnTrail(bwx,bwy+d*0.5,bwz,c.col,d*1.8);
       c._bw={x:bwx,y:bwy,z:bwz};
+    }
+    function gkCineCell(c,col,row){
+      const g=sprites[c.o.ds+':GK']; if(!g||!g.sprite||!cineGkTex)return false;
+      if(!c.gkRestore)c.gkRestore={map:g.sprite.material.map};
+      if(g.sprite.material.map!==cineGkTex){
+        g.sprite.material.map=cineGkTex; g.sprite.material.needsUpdate=true;
+        if(g.sil){ g.sil.material.map=cineGkTex; g.sil.material.needsUpdate=true; }
+      }
+      cineGkTex.repeat.set(1/3,1/2);
+      cineGkTex.offset.set(col/3,1-(row+1)/2);
+      return true;
+    }
+    function cineGkNudge(c){
+      const g=sprites[c.o.ds+':GK']; if(!g||!g.sprite)return;
+      const W=(CV.width||1280);
+      const d=(c.dir!=null)?c.dir:1;
+      const nx=c.kx-d*W*0.02;                       // between his line and the ball
+      const wx=ex2wx(nx), wz=ey2wz(c.ky);
+      g.sprite.position.x=wx; g.sprite.position.z=wz;
+      if(g.sil){ g.sil.position.x=wx; g.sil.position.z=wz; }
     }
     function cineCamera2(){
       const c=cine; if(!c)return;
