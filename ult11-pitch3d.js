@@ -788,9 +788,10 @@
           _qF.setFromAxisAngle(_AX,-Math.PI/2); _qS.setFromAxisAngle(_AY,az);
           o.sil.quaternion.copy(_qS).multiply(_qF);
           o.sil.material.opacity=Lt.shadow*0.8;
-          // mockup detail: soft dust puff behind ANY sprinting player.
+          // dust puff: BALL CARRIER only (every player was too noisy)
           const st2=stt[id];
-          if(st2 && (performance.now()-st2.moveT)<70){
+          const _isCarrier=(typeof G!=='undefined'&&G&&G.poss&&G.ck)&&(id===G.poss+':'+G.ck);
+          if(_isCarrier && st2 && (performance.now()-st2.moveT)<70){
             if(!st2._dustT || performance.now()-st2._dustT>140){
               st2._dustT=performance.now();
               const bdx=(st2.flip?1:-1);                 // behind = opposite facing
@@ -1115,6 +1116,32 @@
     /* Drop-in cinematic sprites (optional — sheet frames used if missing):
        assets/ps1/striker_windup.png  — single frame, back view, wind-up (transparent)
        assets/ps1/gk_cine.png         — frontal GK sheet, 3 cols x 2 rows (transparent) */
+    /* soft glow disc under the player you control (blue, P1) */
+    const selCv=document.createElement('canvas'); selCv.width=selCv.height=128;
+    (function(){ const g=selCv.getContext('2d');
+      const gr=g.createRadialGradient(64,64,10,64,64,62);
+      gr.addColorStop(0,'rgba(90,185,255,0.50)');
+      gr.addColorStop(0.65,'rgba(90,185,255,0.25)');
+      gr.addColorStop(1,'rgba(90,185,255,0)');
+      g.fillStyle=gr; g.beginPath(); g.arc(64,64,62,0,7); g.fill(); })();
+    const selTex=new T.Texture(selCv); selTex.needsUpdate=true;
+    const selMesh=new T.Mesh(new T.PlaneGeometry(1,1),
+      new T.MeshBasicMaterial({map:selTex,transparent:true,depthWrite:false,blending:T.AdditiveBlending}));
+    selMesh.rotation.x=-Math.PI/2; selMesh.renderOrder=2; selMesh.visible=false; scene.add(selMesh);
+    function updateSelGlow(){
+      try{
+        if(typeof G==='undefined'||!G||typeof PP==='undefined'||cine){selMesh.visible=false;return;}
+        let k=null;
+        if(G.poss==='h')k=G.ck;
+        else if(typeof ROLES!=='undefined'&&ROLES)k=ROLES.engager;
+        const p=k&&PP.h?PP.h[k]:null;
+        if(!p||(G.phase!=='moving'&&G.phase!=='idle')){selMesh.visible=false;return;}
+        const s=PLEN*(P3D.spriteFrac!=null?P3D.spriteFrac:0.045)*0.85;
+        selMesh.scale.set(s,s,1);
+        selMesh.position.set(ex2wx(p.x),0.03,ey2wz(p.y));
+        selMesh.visible=true;
+      }catch(e){selMesh.visible=false;}
+    }
     let cineWindupTex=null,cineWindupAR=0.65,cineGkTex=null;
     (function(){
       const a=new Image();
@@ -1270,11 +1297,21 @@
         c.ot+=dt;
         const gt=Math.min(1,c.ot/0.55);
         if(c.isGoal){ bx=c.tx+(c.gx-c.tx)*gt; by=c.ty+(c.gy-c.ty)*gt; bz=Math.max(0,4*(1-gt)); }
-        else        { bx=c.tx+(c.kx-c.tx)*gt; by=c.ty+(c.ky-c.ty)*gt; bz=4+6*gt; }
+        else{
+          const W3=(CV.width||1280), d3=(c.dir!=null)?c.dir:1;
+          const hx=c.kx-d3*W3*0.022;                 // the keeper's displayed (nudged) spot
+          bx=c.tx+(hx-c.tx)*gt; by=c.ty+(c.ky-c.ty)*gt;
+          bz=4*(1-gt)+3.4*gt;                        // settle into the gloves
+        }
         if(!gkCineCell(c,c.isGoal?2:1,c.isGoal?0:1))
           forceCell(c.o.ds+':GK',ROW.down.act,Math.min(6,3+Math.floor(c.ot/0.18)),false);
         cineGkNudge(c);
-        if(c.ot>=0.85){cineEnd();return;}
+        if(c.ot>=0.85&&!c._fired){                    // outcome shown — hand control to game.js,
+          c._fired=true;                              // keep the frontal camera until it releases us
+          const cb=c.o.onDone; c.o.onDone=null;
+          if(cb)setTimeout(cb,0);
+        }
+        if(c.ot>=12){cineEnd();return;}               // failsafe
       }
       if(typeof ball!=='undefined'&&ball){ball.x=bx;ball.y=by;ball.bz=0;}
       const W2=(CV.width||1280);
@@ -1315,6 +1352,11 @@
         const dv=6.8-Math.min(0.8,c.t*0.16);      // slow dolly-in
         camera.position.set(swx-dx*dv-dz*0.9, 2.4, swz-dz*dv+dx*0.9);
         camera.lookAt(swx+dx*Math.min(L*0.55,14), 1.15, swz+dz*Math.min(L*0.55,14));
+      }else if(c.mode==='out'){
+        // Outcome: FIXED frontal frame on the goal (goal + keeper + net), no motion.
+        let dx=swx-gwx,dz=swz-gwz;const L=Math.hypot(dx,dz)||1;dx/=L;dz/=L;
+        camera.position.set(gwx+dx*13,3.2,gwz+dz*13);
+        camera.lookAt(gwx,1.1,gwz);
       }else{
         // Chase: behind the ball along the ball→goal line.
         const b=c._bw||{x:swx,y:0.5,z:swz};
@@ -1427,6 +1469,7 @@
       if(_cw&&_ch&&(_cw!==_lastW||_ch!==_lastH)){ _lastW=_cw;_lastH=_ch;resize(); }
       const now=performance.now(); const dt=Math.min(0.05,(now-lastTs)/1000); lastTs=now;
       syncSheets(); watchActions(); syncPlayers();
+      updateSelGlow();
       if(cine){ try{ if(cine.v2){cineStep2(dt);cineCamera2();} else {cineStep(dt);cineCamera();} }catch(e){console.error('[P3D] cine error',e); cineEnd();} }
       else    { syncBall(); updateCamera(dt); }
       tickTrail(dt);

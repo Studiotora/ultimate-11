@@ -5460,6 +5460,7 @@ function resume(s,msg){
 
 function afGoal(scorer,s,gen){
   G._cineHold=false;
+  try{if(window.P3D&&P3D.superCine2)P3D.superCine2.abort();}catch(e){}
   // Ghost goal guard: generation must match current, and no goal already in flight
   if(gen!==undefined && gen!==G.goalGen)return;
   if(G._scoringGoal)return;
@@ -5486,6 +5487,7 @@ function afGoal(scorer,s,gen){
 
 function afSave(ds){
   G._cineHold=false;
+  try{if(window.P3D&&P3D.superCine2)P3D.superCine2.abort();}catch(e){}
   G.goalGen++;
   const q=sq(ds);
   const gk=q['GK'];
