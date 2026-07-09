@@ -2062,7 +2062,7 @@ function startAnim(){
     if(G.paused){draw();raf=requestAnimationFrame(loop);return;}
     if(G.phase==='duel' && typeof pvpDuelInput==='function') pvpDuelInput();
     if(G.phase==='moving')tick(dt);
-    if(G.phase==='pass_anim'){tickBallTravel(dt);tickPassMotion(dt);}
+    if(G.phase==='pass_anim'&&!G._cineHold){tickBallTravel(dt);tickPassMotion(dt);}
     // WATCHDOG — duel phase can never exceed 50s (countdown is 30s).
     // If a resolution path ever dies, force-recover instead of soft-locking.
     if(G.phase==='duel'&&G._duelT&&Date.now()-G._duelT>50000){
@@ -3454,6 +3454,7 @@ function silentShotDuel(){
 }
 
 function manualShot(kind){
+  if(window.P3D&&P3D.superCine2&&P3D.superCine2.active())return; // cinematic running — ignore
   if(G.phase!=='moving'||!G.ck||G._scoringGoal)return;
   const ak=(kind==='special')?'special':'shoot';
   if(ak==='special')U11DBG('□ press: sc2='+!!(window.P3D&&P3D.superCine2)+' busy='+!!(window.P3D&&P3D.cineActive&&P3D.cineActive()));
