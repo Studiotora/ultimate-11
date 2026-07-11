@@ -3425,9 +3425,8 @@ function superShotCine(){
       U11DBG('SSC: fly');
       P3D.superCine2.fly(()=>{
         if(G.goalGen!==_gen){_bail('stale at arrival');return;}
-        if(PVP.on){U11DBG('SSC: arrived → PvP duel');G.phase='idle';opDuel(true,'special');return;}
-        U11DBG('SSC: arrived → silent resolve');
-        silentShotDuel();
+        U11DBG('SSC: arrived → GK duel');
+        G.phase='idle';opDuel(true,'special');   // menu shows (CPU picks on-screen), then banner
       });
     },5000);
   },4500);
@@ -3554,9 +3553,16 @@ function handleCanvasInput(clientX, clientY){
   if(G.pm){
     for(const k of Object.keys(hSq)){
       if(k===G.ck||!hSq[k])continue;const p=PP.h[k];if(!p)continue;
-      const sx=perspX(p.x,p.y),sy=perspY(p.y);
-      const sc=perspScale(p.y);
-      if(Math.hypot(sx-mx,sy-my)<(CR+16)*sc){
+      let _hit=false;
+      if(window.P3D&&P3D.on&&P3D.playerScreenPos){
+        const s3=P3D.playerScreenPos('h',k);            // 3D-projected position
+        _hit=!!s3&&Math.hypot(s3.x-mx0,s3.y-my0)<s3.r+26;
+      }else{
+        const sx=perspX(p.x,p.y),sy=perspY(p.y);
+        const sc=perspScale(p.y);
+        _hit=Math.hypot(sx-mx,sy-my)<(CR+16)*sc;
+      }
+      if(_hit){
         G.D.pk=k;G.pm=false;
         $id('pass-banner').style.display='none';
         document.getElementById('duel-ov').classList.add('show');
@@ -3570,9 +3576,16 @@ function handleCanvasInput(clientX, clientY){
 
   for(const k of Object.keys(hSq)){
     if(k===G.ck||!hSq[k])continue;const p=PP.h[k];if(!p)continue;
-    const sx=perspX(p.x,p.y),sy=perspY(p.y);
-    const sc=perspScale(p.y);
-    if(Math.hypot(sx-mx,sy-my)<(CR+14)*sc){
+    let _hit2=false;
+    if(window.P3D&&P3D.on&&P3D.playerScreenPos){
+      const s3=P3D.playerScreenPos('h',k);
+      _hit2=!!s3&&Math.hypot(s3.x-mx0,s3.y-my0)<s3.r+22;
+    }else{
+      const sx=perspX(p.x,p.y),sy=perspY(p.y);
+      const sc=perspScale(p.y);
+      _hit2=Math.hypot(sx-mx,sy-my)<(CR+14)*sc;
+    }
+    if(_hit2){
       if(isOffside('h',k)){callOffside('h',k);return;} // flag goes up after the ball is played — real turnover
       iPas(k);return;
     }
@@ -3589,6 +3602,22 @@ CV.addEventListener('touchstart',e=>{
   const t=e.changedTouches[0];
   if(t)handleCanvasInput(t.clientX,t.clientY);
 },{passive:false});
+// 3D mode: CV is visibility:hidden and receives NO pointer events — listen on
+// the container instead. Only fires for taps on the bare pitch (target === the
+// container itself; buttons/joystick are child elements and are ignored).
+(function(){
+  const par=CV.parentNode; if(!par)return;
+  const cvHidden=()=>CV.style.visibility==='hidden';
+  par.addEventListener('click',e=>{
+    if(!cvHidden()||e.target!==par)return;
+    handleCanvasInput(e.clientX,e.clientY);
+  });
+  par.addEventListener('touchstart',e=>{
+    if(!cvHidden()||e.target!==par)return;
+    const t=e.changedTouches[0];
+    if(t)handleCanvasInput(t.clientX,t.clientY);
+  },{passive:true});
+})();
 
 function isOffside(side,receiverKey){
   const defSide=side==='h'?'a':'h';
