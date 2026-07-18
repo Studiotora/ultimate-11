@@ -647,6 +647,10 @@
     const ROW={down:{run:0,act:3}, up:{run:1,act:4}, side:{run:2,act:5}};
     const COL={idle:0, run:[1,6], pass:[0,3], shoot:[3,4]};
     const SHEETS={h:null,a:null}; const _sk={h:undefined,a:undefined};
+    let GK_SHEET=null;                                 // shared keeper sheet for BOTH teams
+    (function(){ const im=new Image();
+      im.onload=()=>GK_SHEET={img:im, cw:im.width/GRID.cols, ch:im.height/GRID.rows};
+      im.src='assets/ps1/gk.png'; })();
     function loadSheet(side,urls){
       let i=0; const next=()=>{ if(i>=urls.length){ if(!SHEETS[side])SHEETS[side]='none'; return; }
         const im=new Image(), u=urls[i++];
@@ -680,7 +684,7 @@
         new T.MeshBasicMaterial({map:tex,color:0x000000,transparent:true,alphaTest:0.5,
                                  opacity:P3D.light.shadow,depthWrite:false}));
       sil.renderOrder=2; scene.add(sil);
-      return sprites[id]={sprite:sp,shadow:sh,sil,tex};
+      return sprites[id]={sprite:sp,shadow:sh,sil,tex,_sheetImg:sheet.img};
     }
     function cellState(id,p,wx,wz){
       const now=performance.now();
@@ -752,12 +756,16 @@
         Object.keys(q).forEach(k=>{
           const pl=q[k], p=PP[s] && PP[s][k]; if(!pl||!p) return;
           const id=s+':'+k; seen.add(id);
-          const o=ensureSprite(id,sheet);
+          const useSheet=(k==='GK'&&GK_SHEET&&GK_SHEET.img.complete)?GK_SHEET:sheet;
+          const o=ensureSprite(id,useSheet);
+          if(o._sheetImg!==useSheet.img){         // (re)bind texture if the sheet changed
+            o.tex.image=useSheet.img; o.tex.needsUpdate=true; o._sheetImg=useSheet.img;
+          }
           // sprite height = fixed fraction of world pitch LENGTH (HD-2D scale).
           // P3D.spriteFrac defaults to ~0.045 of PLEN — tune in Camera Lab.
           const frac=(P3D.spriteFrac!=null?P3D.spriteFrac:0.045);
           const hWorld=PLEN*frac;
-          const wWorld=hWorld*(sheet.cw/sheet.ch);
+          const wWorld=hWorld*(useSheet.cw/useSheet.ch);
           // keep feet on the pitch: clamp x to the goal lines (GK sits at ~0.05 in
           // the engine, which would render BEHIND the goal line) and y to sidelines.
           const W=(CV.width||1280), H=(CV.height||720);
@@ -827,6 +835,15 @@
       _v3.set(wx,wy,wz).project(camera);
       return { x:(_v3.x*0.5+0.5)*w, y:(-_v3.y*0.5+0.5)*h, z:_v3.z };
     }
+    P3D.playerScreenPos=function(side,key){
+      const o=sprites[side+':'+key]; if(!o||!o.sprite||!o.sprite.visible)return null;
+      const sp=o.sprite.position;
+      const W=(CV.width||1280),H=(CV.height||720);
+      const foot=projectToScreen(sp.x,sp.y,sp.z,W,H);
+      const head=projectToScreen(sp.x,sp.y+o.sprite.scale.y,sp.z,W,H);
+      if(foot.z>1)return null;                         // behind the camera
+      return { x:foot.x, y:(foot.y+head.y)/2, r:Math.max(18,Math.abs(foot.y-head.y)*0.5) };
+    };
     function drawDebug(){
       ensureDbgCanvas();
       if(!P3D.debug){ if(dbgCv.style.display!=='none') dbgCv.style.display='none'; return; }
@@ -1073,6 +1090,14 @@
     function updateCamera(dt){
       const C=P3D.cam;
       camera.fov=C.fov; camera.updateProjectionMatrix();
+      // DUEL PASS-PICK: overhead tactical view so every teammate is visible/tappable
+      if(typeof G!=='undefined'&&G&&G.pm&&G.phase==='duel'){
+        const cp2=carrierPos();
+        const fx2=cp2?ex2wx(cp2.x)*0.4:0, fz2=cp2?ey2wz(cp2.y)*0.4:0;
+        camera.position.set(fx2, PLEN*0.60, fz2+8);
+        camera.lookAt(fx2, 0, fz2);
+        return;
+      }
       // FOCUS: during a pass/loose ball, follow the BALL (it leads to the
       // receiver); otherwise follow the carrier. This keeps far receivers framed.
       let fx=0,fz=0, cx01=0.5;
@@ -1142,6 +1167,86 @@
         selMesh.visible=true;
       }catch(e){selMesh.visible=false;}
     }
+    /* SAKUGA charge FX for the wind-up hold */
+    let fxCv=null,fxCtx=null,auraSp=null,ballGlowSp=null,_fxT=0,_fxLastCrackle=0;
+    function fxGradTex(col){
+      const c=document.createElement('canvas');c.width=c.height=128;
+      const g=c.getContext('2d');
+      const gr=g.createRadialGradient(64,64,4,64,64,62);
+      gr.addColorStop(0,col+'ee');gr.addColorStop(0.45,col+'66');gr.addColorStop(1,col+'00');
+      g.fillStyle=gr;g.beginPath();g.arc(64,64,62,0,7);g.fill();
+      const t=new T.Texture(c);t.needsUpdate=true;return t;
+    }
+    function ensureHoldFx(){
+      if(!fxCv){
+        fxCv=document.createElement('canvas');fxCv.width=CV.width||1280;fxCv.height=CV.height||720;
+        fxCv.id='cine-fx';
+        fxCv.style.cssText='position:absolute;inset:0;width:100%;height:100%;pointer-events:none;z-index:40;';
+        (CV.parentNode||document.body).appendChild(fxCv);
+        fxCtx=fxCv.getContext('2d');
+      }
+      if(!auraSp){
+        auraSp=new T.Sprite(new T.SpriteMaterial({map:fxGradTex('#ffd24a'),transparent:true,
+          blending:T.AdditiveBlending,depthWrite:false,opacity:0.85}));
+        auraSp.visible=false;scene.add(auraSp);
+        ballGlowSp=new T.Sprite(new T.SpriteMaterial({map:fxGradTex('#fff3b0'),transparent:true,
+          blending:T.AdditiveBlending,depthWrite:false,opacity:0.9}));
+        ballGlowSp.visible=false;scene.add(ballGlowSp);
+      }
+      fxCv.style.display='block';
+    }
+    function hideHoldFx(){
+      if(fxCv){fxCtx.clearRect(0,0,fxCv.width,fxCv.height);fxCv.style.display='none';}
+      if(auraSp)auraSp.visible=false;
+      if(ballGlowSp)ballGlowSp.visible=false;
+    }
+    function drawHoldFx(c,dt){
+      ensureHoldFx();
+      _fxT+=dt;
+      const W2=fxCv.width,H2=fxCv.height;
+      const swx=ex2wx(c.fx),swz=ey2wz(c.fy);
+      const sp=projectToScreen(swx,1.4,swz,W2,H2);
+      const g=fxCtx;
+      g.clearRect(0,0,W2,H2);
+      // vignette focus
+      const vg=g.createRadialGradient(sp.x,sp.y,H2*0.18,sp.x,sp.y,H2*0.85);
+      vg.addColorStop(0,'rgba(0,0,20,0)');vg.addColorStop(1,'rgba(0,0,20,0.55)');
+      g.fillStyle=vg;g.fillRect(0,0,W2,H2);
+      // converging anime speed lines (flickering)
+      g.save();g.globalCompositeOperation='lighter';
+      const N=26;
+      for(let i=0;i<N;i++){
+        const a=(i/N)*Math.PI*2+Math.sin(_fxT*3+i)*0.05;
+        const R=Math.hypot(W2,H2)*0.62;
+        const r1=R*(0.55+0.35*((i*2654435761>>>0)%100)/100);
+        const r0=H2*(0.16+0.05*Math.sin(_fxT*9+i*1.7));
+        const x1=sp.x+Math.cos(a)*r1,y1=sp.y+Math.sin(a)*r1;
+        const x0=sp.x+Math.cos(a)*r0,y0=sp.y+Math.sin(a)*r0;
+        const al=0.10+0.16*Math.abs(Math.sin(_fxT*7+i*2.3));
+        g.strokeStyle='rgba(255,244,200,'+al.toFixed(3)+')';
+        g.lineWidth=1.2+((i%3===0)?1.6:0);
+        g.beginPath();g.moveTo(x1,y1);g.lineTo(x0,y0);g.stroke();
+      }
+      g.restore();
+      // 3D: pulsing aura around the shooter + charge glow on the ball
+      const hh=PLEN*(P3D.spriteFrac!=null?P3D.spriteFrac:0.045);
+      const pu=1+0.14*Math.sin(_fxT*6);
+      auraSp.visible=true;auraSp.position.set(swx,hh*0.42,swz);
+      auraSp.scale.set(hh*1.5*pu,hh*1.6*pu,1);
+      auraSp.material.opacity=0.55+0.3*Math.abs(Math.sin(_fxT*6));
+      const bw=typeof ball!=='undefined'&&ball?{x:ex2wx(ball.x),z:ey2wz(ball.y)}:{x:swx,z:swz};
+      const chg=Math.min(1,_fxT/4.2);
+      ballGlowSp.visible=true;ballGlowSp.position.set(bw.x,0.35,bw.z);
+      const bs=hh*(0.35+0.5*chg)*(1+0.2*Math.sin(_fxT*10));
+      ballGlowSp.scale.set(bs,bs,1);
+      // energy crackle: sparks around the shooter every ~90ms
+      const now=performance.now();
+      if(now-_fxLastCrackle>90){
+        _fxLastCrackle=now;
+        const ox=(Math.random()-0.5)*hh*0.9, oz=(Math.random()-0.5)*hh*0.5;
+        spawnTrail(swx+ox,0.2+Math.random()*hh*0.8,swz+oz,'#ffd24a',hh*0.28);
+      }
+    }
     let cineWindupTex=null,cineWindupAR=0.65,cineGkTex=null;
     (function(){
       const a=new Image();
@@ -1205,6 +1310,7 @@
     P3D.cineActive=function(){ return !!cine; };
     function cineEnd(){
       if(!cine)return;
+      try{hideHoldFx();_fxT=0;}catch(e){}
       if(cine.v2)window.U11DBG&&U11DBG('[3D] cine v2 end');
       if(cine.shRestore){ const s2=cine.shRestore;
         if(s2.g&&s2.g.sprite){ s2.g.sprite.material.map=s2.map; s2.g.sprite.material.needsUpdate=true;
@@ -1240,7 +1346,19 @@
         if(typeof ball!=='undefined'&&ball){ball.x=sp.x;ball.y=sp.y;ball.bz=0;}
         return true;
       },
-      fly(onArrive){ if(cine&&cine.v2&&cine.mode==='hold'){cine.mode='fly';cine.ft=0;cine.onArrive=onArrive;} },
+      fly(onArrive){
+        if(!(cine&&cine.v2&&cine.mode==='hold'))return;
+        cine.mode='fly';cine.ft=0;cine.onArrive=onArrive;
+        try{ // kick burst flash (radial white), ~0.3s
+          let b=document.getElementById('cine-burst');
+          if(!b){ b=document.createElement('div'); b.id='cine-burst';
+            b.style.cssText='position:fixed;inset:0;z-index:55;pointer-events:none;'
+              +'background:radial-gradient(circle at 50% 55%, rgba(255,255,255,.95) 0%, rgba(255,240,180,.5) 22%, rgba(255,255,255,0) 60%);'
+              +'opacity:0;';
+            document.body.appendChild(b); }
+          if(b.animate)b.animate([{opacity:0,transform:'scale(.6)'},{opacity:1,transform:'scale(1)'},{opacity:0,transform:'scale(1.35)'}],{duration:320,easing:'ease-out'});
+        }catch(e){}
+      },
       finish(o){
         if(!(cine&&cine.v2)){o&&o.onDone&&o.onDone();return;}
         cine.mode='out';cine.ot=0;cine.isGoal=!!o.isGoal;cine.o.onDone=o.onDone;
@@ -1270,7 +1388,9 @@
           if(g.sil)g.sil.scale.set(hh*cineWindupAR,hh,1);
         }
         else forceCell(sid,ROW.up.act,3,false);        // fallback: sheet wind-up, back view
+        drawHoldFx(c,dt);                              // sakuga charge: lines/aura/glow
       }else if(c.mode==='fly'||c.mode==='wait'){
+        if(!c._fxOff){c._fxOff=true;_fxT=0;hideHoldFx();}
         if(c.shRestore&&!c._shBack){                  // shooter back on his sheet for kick frames
           const r=c.shRestore;
           if(r.g&&r.g.sprite){ r.g.sprite.material.map=r.map; r.g.sprite.material.needsUpdate=true;
@@ -1318,9 +1438,14 @@
       const bwx=ex2wx(Math.min(Math.max(bx,0.02*W2),0.98*W2)),bwz=ey2wz(by);
       const bwy=0.05+bz*0.09;
       ballMesh.scale.set(d,d,1); ballMesh.position.set(bwx,bwy,bwz);
-      if(c.mode==='fly'||(c.mode==='out'&&c.isGoal))spawnTrail(bwx,bwy+d*0.5,bwz,c.col,d*1.8);
+      if(c.mode==='fly'||(c.mode==='out'&&c.isGoal)){
+        spawnTrail(bwx,bwy+d*0.5,bwz,'#ffffff',d*1.3);      // hot core
+        spawnTrail(bwx,bwy+d*0.5,bwz,c.col,d*2.6);          // wide comet tail
+      }
       c._bw={x:bwx,y:bwy,z:bwz};
     }
+    // Cinematic keeper uses its own dedicated sheet (assets/ps1/gk_cine.png, 3x2):
+    //  top row: ready / lean / flying dive — bottom: low block / catch / sprawl.
     function gkCineCell(c,col,row){
       const g=sprites[c.o.ds+':GK']; if(!g||!g.sprite||!cineGkTex)return false;
       if(!c.gkRestore)c.gkRestore={map:g.sprite.material.map};

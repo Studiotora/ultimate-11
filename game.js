@@ -3316,7 +3316,7 @@ window.U11DBG=function(msg){
   }
   el.textContent=(el.textContent+'\n'+msg).split('\n').slice(-14).join('\n');
 };
-if(U11_DBG)setTimeout(()=>U11DBG('game.js v26 loaded · sc2='+!!(window.P3D&&P3D.superCine2)),1500);
+if(U11_DBG)setTimeout(()=>U11DBG('game.js loaded · sc2='+!!(window.P3D&&P3D.superCine2)),1500);
 
 /* ── SUPER-SHOT CINE v2 — media banners ───────────────────────────
    Same visual shell as showSpecialCutscene, but tries a video first
@@ -3367,7 +3367,7 @@ function showGkCineMedia(gk,callback){
   if(!gk){if(callback)callback();return;}
   const spec=(typeof getGKSuper==='function')?getGKSuper(gk):null;
   const ln=(gk.origName||gk.name).split('.').pop().toLowerCase().trim();
-  showCineMedia(gk,spec||{l:'SAVE ATTEMPT',i:'🧤'},callback,2600,[ln,'gk']);
+  showCineMedia(gk,spec||{l:'SAVE ATTEMPT',i:'🧤'},callback,2200,[ln,'gk']);
 }
 function showSaveBanner(gk,callback){
   let el=document.getElementById('save-banner');
@@ -3428,7 +3428,7 @@ function superShotCine(){
         U11DBG('SSC: arrived → GK duel');
         G.phase='idle';opDuel(true,'special');   // menu shows (CPU picks on-screen), then banner
       });
-    },5000);
+    },5200);
   },4500);
   return true;
 }
