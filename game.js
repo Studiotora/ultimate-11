@@ -3328,17 +3328,35 @@ function showCineMedia(pl,special,callback,holdMs,baseNames){
   const faceEl=document.getElementById('sc-face');
   const lastName=pl?(pl.origName||pl.name).split('.').pop().toLowerCase().trim():null;
   const bases=baseNames||(lastName?[lastName]:[]);
-  let done=false,tmr=null;
+  let done=false,shown=false,tmr=null,guard=null;
   const finish=()=>{
-    if(done)return;done=true;clearTimeout(tmr);
+    if(done)return;done=true;clearTimeout(tmr);clearTimeout(guard);
     const v=faceEl.querySelector('video');if(v){try{v.pause();}catch(e){}}
     sc.classList.remove('show');faceEl.innerHTML='';
     if(callback)callback();
   };
+  const reveal=()=>{                              // show ONLY once media is ready
+    if(shown||done)return;shown=true;
+    sc.classList.remove('show');void sc.offsetWidth;sc.classList.add('show');
+    if(special){
+      say((pl?pl.name.split('.').pop():'')+'— '+(special.l||'Special')+'!');
+      shakeScreen(7,100);
+      impactText('⚡ '+(special.l||'SUPER SHOT')+'!','#f0c040','clamp(18px,38.4px,26px)');
+    }
+    tmr=setTimeout(finish,holdMs||5000);
+  };
   faceEl.innerHTML='';
   (function tryBase(i){
-    if(i>=bases.length){
-      if(lastName)faceEl.innerHTML=`<img src="assets/cutscene/${lastName}.png" alt="" draggable="false">`;
+    if(i>=bases.length){                          // no video found → try the PNG face
+      if(!lastName){finish();return;}
+      const probe=new Image();
+      probe.onload=()=>{
+        if(done)return;
+        faceEl.innerHTML=`<img src="assets/cutscene/${lastName}.png" alt="" draggable="false">`;
+        reveal();
+      };
+      probe.onerror=()=>finish();                 // nothing to show → skip banner entirely
+      probe.src='assets/cutscene/'+lastName+'.png';
       return;
     }
     const v=document.createElement('video');
@@ -3351,17 +3369,12 @@ function showCineMedia(pl,special,callback,holdMs,baseNames){
     s2.addEventListener('error',fail);
     v.addEventListener('error',fail);
     v.appendChild(s1);v.appendChild(s2);
+    v.addEventListener('canplay',()=>{if(!dead)reveal();},{once:true});
     v.addEventListener('ended',finish);
     faceEl.appendChild(v);
     if(v.play)v.play().catch(()=>{});
   })(0);
-  sc.classList.remove('show');void sc.offsetWidth;sc.classList.add('show');
-  if(special){
-    say((pl?pl.name.split('.').pop():'')+'— '+(special.l||'Special')+'!');
-    shakeScreen(7,100);
-    impactText('⚡ '+(special.l||'SUPER SHOT')+'!','#f0c040','clamp(18px,38.4px,26px)');
-  }
-  tmr=setTimeout(finish,holdMs||5000);
+  guard=setTimeout(()=>{if(!shown&&!done)finish();},4000);  // nothing resolved → move on
 }
 function showGkCineMedia(gk,callback){
   if(!gk){if(callback)callback();return;}
@@ -4547,9 +4560,8 @@ function canSuper(pl,id){
 function getSpecial(pl){
   if(!pl)return null;
   if(!canSuper(pl,'special'))return null;             // SHO 85+ required
-  const n=pl.name||'';
-  for(const key of Object.keys(SPECIALS)){if(n.includes(key))return SPECIALS[key];}
-  return {l:'Power Strike', i:'⚡', c:300, generic:true};
+  // Named skills removed from screen — one generic label for everyone.
+  return {l:'SUPER SHOT', i:'⚡', c:300, generic:true};
 }
 
 // GK Super Save registry — every GK can attempt one, named per player
@@ -4568,9 +4580,8 @@ const GK_SUPERS={
 // Fallback for any GK not in registry
 function getGKSuper(pl){
   if(!pl)return null;
-  const n=pl.name||'';
-  for(const key of Object.keys(GK_SUPERS)){if(n.includes(key))return GK_SUPERS[key];}
-  return {l:'Super Save',i:'🧤'}; // every GK gets one
+  // Named GK skills removed from screen — generic label for every keeper.
+  return {l:'SUPER SAVE',i:'🧤'};
 }
 
 
