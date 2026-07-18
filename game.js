@@ -3416,6 +3416,9 @@ function superShotCine(){
     if(G.goalGen===_gen&&G._cineHold&&G.phase==='pass_anim'){_bail('watchdog');G.phase='moving';}
   },22000);
   const spec=getSpecial(carrier)||{l:'SUPER SHOT',i:'⚡'};
+  const _ln=(carrier.origName||carrier.name).split('.').pop().toLowerCase().trim();
+  const _tk=String((s==='h'?selHome:selAway)||'').toLowerCase();
+  const _bases=_tk?[_ln,_tk+'-shoot']:[_ln];       // player video → team video → PNG
   U11DBG('SSC: wind-up hold 4.5s');
   setTimeout(()=>{
     if(G.goalGen!==_gen||G.phase!=='pass_anim'){_bail('stale after hold');return;}
@@ -3428,7 +3431,7 @@ function superShotCine(){
         U11DBG('SSC: arrived → GK duel');
         G.phase='idle';opDuel(true,'special');   // menu shows (CPU picks on-screen), then banner
       });
-    },5200);
+    },5200,_bases);
   },4500);
   return true;
 }
@@ -3457,6 +3460,13 @@ function manualShot(kind){
   if(G.phase!=='moving'||!G.ck||G._scoringGoal)return;
   const ak=(kind==='special')?'special':'shoot';
   if(ak==='special')U11DBG('□ press: sc2='+!!(window.P3D&&P3D.superCine2)+' busy='+!!(window.P3D&&P3D.cineActive&&P3D.cineActive()));
+  if(ak==='special'){
+    const _c0=sq(G.poss)[G.ck];
+    if(_c0&&!canSuper(_c0,'special')){
+      say('⚡ Super shot locked — Shooting 85+ required ('+(_c0.sho||0)+')');
+      return;
+    }
+  }
   if(ak==='special'&&window.P3D&&P3D.on&&P3D.superCine2&&!(P3D.cineActive&&P3D.cineActive())){
     if(superShotCine())return;   // v2 cinematic took over; falls through on failure
   }
@@ -4525,11 +4535,20 @@ const SPECIALS={
   'Mancuso':    {l:'Fury Shot',        i:'🔴',c:400},
   'Vella':      {l:'Emerald Shot',     i:'💚',c:400},
 };
+/* Super skills are EARNED: the matching stat must be 85+ (GK supersave exempt). */
+const SUPER_STAT_REQ=85;
+function canSuper(pl,id){
+  if(!pl)return false;
+  if(id==='supersave')return pl.pos==='GK';
+  const st={'special':'sho','super-pass':'pas','super-one-two':'pas','super-dribble':'dri',
+            'super-tackle':'def','super-intercept':'def','super-block':'def'}[id];
+  return !!st && (pl[st]||0)>=SUPER_STAT_REQ;
+}
 function getSpecial(pl){
   if(!pl)return null;
+  if(!canSuper(pl,'special'))return null;             // SHO 85+ required
   const n=pl.name||'';
   for(const key of Object.keys(SPECIALS)){if(n.includes(key))return SPECIALS[key];}
-  // Generic super shot — every player who doesn't have a named special still has access to one.
   return {l:'Power Strike', i:'⚡', c:300, generic:true};
 }
 
@@ -4663,9 +4682,11 @@ function bldA(carrier,isShot){
     normals=[{id:'pass',l:'Pass',i:'↑'},{id:'dribble',l:'Dribble',i:'▶'}];
     if(prog0>.50)normals.push({id:'shoot',l:'Shoot',i:'⚽'});
     if(hasOneTwo)normals.push({id:'one-two',l:'1-2',i:'↑↑',ot:true});
-    specials=[{id:'super-pass'},{id:'super-dribble'}];
+    specials=[];
+    if(canSuper(carrier,'super-pass'))specials.push({id:'super-pass'});
+    if(canSuper(carrier,'super-dribble'))specials.push({id:'super-dribble'});
     if(prog0>.50){const spec=getSpecial(carrier);if(spec)specials.push({id:'special',l:spec.l,i:spec.i});}
-    if(hasOneTwo)specials.push({id:'super-one-two',ot:true});
+    if(hasOneTwo&&canSuper(carrier,'super-one-two'))specials.push({id:'super-one-two',ot:true});
   }
   const mkBtn=(id,lbl,icon,isSp,ot)=>{
     const cost=(ATK_ACTIONS[id]||{}).cost||0;
@@ -4717,7 +4738,9 @@ function bldD(def,ds,isShot){
     specials=[{id:'supersave',l:gkSuper.l,i:gkSuper.i,locked:sp<320}];
   }else{
     normals=[{id:'tackle',l:'Tackle',i:'🦵'},{id:'intercept',l:'Intercept',i:'✋'},{id:'block',l:'Block',i:'🛡'}];
-    specials=[{id:'super-tackle'},{id:'super-intercept'},{id:'super-block'}];
+    specials=[];
+    for(const sid2 of ['super-tackle','super-intercept','super-block'])
+      if(canSuper(def,sid2))specials.push({id:sid2});
   }
   const makeMenu=(cls,title,list,isSp)=>{
     const m=document.createElement('div');m.className='dmenu '+cls+' def';
@@ -4860,15 +4883,15 @@ function aiAtk(){
   // Cost is meaningful (160-220) so AI won't burn all stamina early.
   const sp=carrier?(carrier.spirit||1500):1500;
   const fresh=sp/1500 > 0.70;
-  if(fresh && canAfford('super-pass') && bestPass && !G.D.isShot){
+  if(fresh && canAfford('super-pass') && bestPass && !G.D.isShot && canSuper(carrier,'super-pass')){
     const w=(0.6 + pressure*2.0 + prog*0.8) * (bh.passBias||1) * 0.6;
     options.push({id:'super-pass',w});
   }
-  if(fresh && canAfford('super-dribble') && !G.D.isShot){
+  if(fresh && canAfford('super-dribble') && !G.D.isShot && canSuper(carrier,'super-dribble')){
     const w=(0.5 + pressure*1.6 + prog*0.6) * (bh.dribbleBias||1) * 0.6;
     options.push({id:'super-dribble',w});
   }
-  if(fresh && canAfford('super-one-two') && ot && !G.D.isShot){
+  if(fresh && canAfford('super-one-two') && ot && !G.D.isShot && canSuper(carrier,'super-one-two')){
     const w=(0.6 + pressure*1.8 + prog*0.7) * (bh.oneTwoBias||1) * 0.6;
     options.push({id:'super-one-two',w});
   }
@@ -4994,14 +5017,14 @@ function aiDef(){
     const dFresh=dSp/1500 > 0.65;
     const akIsSuper=isSuperAtk(ak);
     const dangerZone=prog>0.65; // attack is reaching dangerous areas
-    if(dFresh && dSp>=180){
+    if(dFresh && dSp>=180 && canSuper(def,'super-tackle')){
       const baseBoost = akIsSuper ? 2.4 : (dangerZone ? 1.0 : 0.4);
       opts.push({id:'super-tackle',    w: tackleW    * 0.45 * baseBoost});
     }
-    if(dFresh && dSp>=160){
+    if(dFresh && dSp>=160 && canSuper(def,'super-intercept')){
       opts.push({id:'super-intercept', w: interceptW * 0.45 * (akIsSuper?2.4:(dangerZone?1.0:0.4))});
     }
-    if(dFresh && dSp>=200){
+    if(dFresh && dSp>=200 && canSuper(def,'super-block')){
       opts.push({id:'super-block',     w: blockW     * 0.45 * (akIsSuper?2.4:(dangerZone?1.0:0.4))});
     }
 
@@ -5252,7 +5275,15 @@ function calcDefencePower(def,defA,attackAction){
 }
 
 function resDuel(){
-  if(G.phase!=='duel')return; // state safety — cutscene/timeout callbacks can land after teardown
+  if(G.phase!=='duel')return;
+  // stat-gate safety net — no unearned supers regardless of input path
+  if(G.D){
+    if(G.D.ak==='special'&&!canSuper(G.D.carrier,'special'))G.D.ak='shoot';
+    else if(G.D.ak&&isSuperAtk(G.D.ak)&&!canSuper(G.D.carrier,G.D.ak))
+      G.D.ak={'super-pass':'pass','super-dribble':'dribble','super-one-two':'one-two'}[G.D.ak]||G.D.ak;
+    if(G.D.defA&&isSuperDef(G.D.defA)&&!canSuper(G.D.def,G.D.defA))
+      G.D.defA=(G.D.def&&G.D.def.pos==='GK')?'save':'tackle';
+  } // state safety — cutscene/timeout callbacks can land after teardown
   if(!G.D.ak&&G.D.as==='h')return;
   if(!G.D.defA&&G.D.ds==='h')return;
   clearInterval(G.di);
