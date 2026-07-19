@@ -40,6 +40,20 @@
           lift:2 },          // extra camera height offset
     bowl:{ yOff:0, gap:0, rake:50, tierH:30, sharp:false, roof:true,
            openFront:true, mode:'crowd', tiers:{1:true,2:true,3:true} },
+    // ---- STADIUM VARIANT ----
+    // 'classic' = segmented photo-textured bowl (default)
+    // 'oval'    = elliptical lit bowl from ult11-bowl2.js (secondary stadium)
+    // Set via ?stadium=oval / ?stadium=classic (persists in localStorage),
+    // or at runtime: P3D.stadium='oval'; P3D._rebuildBowl();
+    stadium:(function(){
+      try{
+        const q=new URLSearchParams(location.search).get('stadium');
+        if(q==='oval'||q==='classic'){ localStorage.setItem('ue_stadium',q); return q; }
+        const s=localStorage.getItem('ue_stadium');
+        if(s==='oval'||s==='classic') return s;
+      }catch(e){}
+      return 'classic';
+    })(),
     spriteScale:1.9,     // (legacy) billboard height vs engine token radius CR
     spriteFrac:0.045,    // billboard height as fraction of world pitch LENGTH (HD-2D)
     // ---- LIGHTING / SHADOWS (Camera Lab → LIGHTING) ----
@@ -474,6 +488,12 @@
     function placeAllStadium(){
       if(!pitchMesh) return;
       scene.remove(bowlGroup); bowlGroup=new T.Group(); scene.add(bowlGroup);
+      // ---- OVAL secondary stadium (ult11-bowl2.js) ----
+      if(P3D.stadium==='oval' && window.U11_OVAL){
+        try{ window.U11_OVAL.build(T,bowlGroup,PLEN,PWID); }
+        catch(e){ /* fall through to classic on any failure */ }
+        if(bowlGroup.children.length) return;
+      }
       const S=P3D.bowl;
       // The sandbox was tuned at pitch 300x190. The live pitch is ~70x43, so
       // every absolute dimension must scale by U = PWID/190 to reproduce the
@@ -557,6 +577,7 @@
     function _rng(seed){ return ()=>{ seed=(seed*9301+49297)%233280; return seed/233280; }; }
     function placeFlags(){
       scene.remove(flagGroup); flagGroup=new T.Group(); scene.add(flagGroup);
+      if(P3D.stadium==='oval') return;   // flags are positioned for the classic 4-wall bowl
       if(!flagData) return;
       const S=P3D.bowl, U=PWID/190;
       const RUNOFF=6*U;
