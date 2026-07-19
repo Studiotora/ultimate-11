@@ -12,6 +12,11 @@
 /* ── LOCKED CONFIG ─────────────────────────────────────────── */
 var CFG={
   SEG:120,            // ellipse segments (mobile-friendly; 160 = smoother)
+  SPREAD_X:3,         // push all stands outward along pitch length (world units)
+  SPREAD_Z:3,         // push all stands outward along pitch width
+  OPEN_FRONT:true,    // cut the camera-side (+Z) arc so broadcast cam sees the pitch
+  OPEN_A0:0.38,       // arc removed: from OPEN_A0 to PI-OPEN_A0 (radians on the ellipse)
+  // URL overrides for phone tuning (no redeploy): ?ovalsx=5&ovalsz=7&ovalopen=0
   SEAT_SPACING:0.387, // world units (0.58 × 70/105)
   occupancy:0.5,      // fraction of seats holding a body
   floodCount:14,      // roof rim lamps
@@ -28,6 +33,14 @@ CFG.TIERS.forEach(function(t){
 });
 
 var TAU=Math.PI*2;
+(function urlTune(){
+  try{
+    var q=new URLSearchParams(location.search);
+    if(q.get('ovalsx')!=null) CFG.SPREAD_X=parseFloat(q.get('ovalsx'))||0;
+    if(q.get('ovalsz')!=null) CFG.SPREAD_Z=parseFloat(q.get('ovalsz'))||0;
+    if(q.get('ovalopen')!=null) CFG.OPEN_FRONT=q.get('ovalopen')!=='0';
+  }catch(e){}
+})();
 
 /* ── HELPERS ───────────────────────────────────────────────── */
 function canvasTexture(T,w,h,draw,repX,repY){
@@ -37,10 +50,12 @@ function canvasTexture(T,w,h,draw,repX,repY){
   if(repX||repY){t.wrapS=t.wrapT=T.RepeatWrapping;t.repeat.set(repX||1,repY||1);}
   t.anisotropy=4; return t;
 }
-function ringStrip(T,rx1,rz1,y1,rx2,rz2,y2,seg,mat,repU){
+function ringStrip(T,rx1,rz1,y1,rx2,rz2,y2,seg,mat,repU,a0,a1){
   var pos=[],uv=[],idx=[]; repU=repU||10;
+  if(a0==null){a0=0;a1=TAU;}
+  var span=a1-a0;
   for(var i=0;i<=seg;i++){
-    var a=(i/seg)*TAU,c=Math.cos(a),s=Math.sin(a);
+    var a=a0+(i/seg)*span,c=Math.cos(a),s=Math.sin(a);
     pos.push(rx1*c,y1,rz1*s, rx2*c,y2,rz2*s);
     uv.push((i/seg)*repU,0,(i/seg)*repU,1);
   }
@@ -80,6 +95,24 @@ var RAINBOW=['#5b21b6','#6d28d9','#7c3aed','#4f46e5','#4338ca','#2563eb','#0284c
 function build(T,group,PLEN,PWID){
   var k=PLEN/70;
   function sc(v){return v*k;}
+  var SPX=CFG.SPREAD_X*k, SPZ=CFG.SPREAD_Z*k;
+  var openF=CFG.OPEN_FRONT;
+  if(window.P3D && P3D.bowl && P3D.bowl.openFront===false) openF=false;
+  // arc pieces: full ring, or two arcs skipping the +Z (camera) side
+  var CUT0=CFG.OPEN_A0, CUT1=Math.PI-CFG.OPEN_A0;
+  function arcs(){ return openF ? [[CUT1,CUT0+TAU]] : [[0,TAU]]; }
+  function inCut(th){
+    if(!openF) return false;
+    th=((th%TAU)+TAU)%TAU;
+    return th>CUT0 && th<CUT1;
+  }
+  function addRS(rx1,rz1,y1,rx2,rz2,y2,seg,mat,repU){
+    arcs().forEach(function(A){
+      var frac=(A[1]-A[0])/TAU;
+      addRS(rx1,rz1,y1,rx2,rz2,y2,
+        Math.max(8,Math.round(seg*frac)),mat,(repU||10)*frac,A[0],A[1]);
+    });
+  }
   var seed=12345;
   function rng(){seed=(seed*16807)%2147483647;return seed/2147483647;}
   function sectionBaseColor(t,i2){
@@ -117,7 +150,7 @@ function build(T,group,PLEN,PWID){
     },10,1)});
 
   var TIERS=CFG.TIERS.map(function(t){
-    var o={rows:t.rows,rx:sc(t.rx),rz:sc(t.rz),y:sc(t.y),dr:sc(t.dr),dy:sc(t.dy),
+    var o={rows:t.rows,rx:sc(t.rx)+SPX,rz:sc(t.rz)+SPZ,y:sc(t.y),dr:sc(t.dr),dy:sc(t.dy),
       palette:t.palette,sections:t.sections};
     o.rxTop=o.rx+o.rows*o.dr; o.rzTop=o.rz+o.rows*o.dr; o.yTop=o.y+o.rows*o.dy;
     o.yIn=o.y-(1.2/t.dr)*t.dy*k*0.667-0.03;
@@ -129,36 +162,36 @@ function build(T,group,PLEN,PWID){
     var slabTex=stepTex.clone(); slabTex.needsUpdate=true; slabTex.repeat.set(110,t.rows);
     var slabMat=new T.MeshLambertMaterial({map:slabTex,side:T.DoubleSide});
     var u=sc(1);
-    group.add(ringStrip(T,t.rx-1.2*u,t.rz-1.2*u,t.yIn, t.rxTop+u,t.rzTop+u,t.yOut, SEG,slabMat,1));
+    addRS(t.rx-1.2*u,t.rz-1.2*u,t.yIn, t.rxTop+u,t.rzTop+u,t.yOut, SEG,slabMat,1);
     if(i===0){
-      group.add(ringStrip(T,t.rx-1.2*u,t.rz-1.2*u,0.05, t.rx-1.2*u,t.rz-1.2*u,t.yIn, SEG,MAT.concreteDark,60));
+      addRS(t.rx-1.2*u,t.rz-1.2*u,0.05, t.rx-1.2*u,t.rz-1.2*u,t.yIn, SEG,MAT.concreteDark,60);
     }else{
-      group.add(ringStrip(T,t.rx-1.2*u,t.rz-1.2*u,t.yIn-u, t.rx-1.2*u,t.rz-1.2*u,t.yIn, SEG,MAT.concreteDark,60));
+      addRS(t.rx-1.2*u,t.rz-1.2*u,t.yIn-u, t.rx-1.2*u,t.rz-1.2*u,t.yIn, SEG,MAT.concreteDark,60);
     }
-    group.add(ringStrip(T,t.rx-1.15*u,t.rz-1.15*u,t.yIn-0.02, t.rx-1.15*u,t.rz-1.15*u,t.yIn+0.85*u, SEG,MAT.rail,80));
+    addRS(t.rx-1.15*u,t.rz-1.15*u,t.yIn-0.02, t.rx-1.15*u,t.rz-1.15*u,t.yIn+0.85*u, SEG,MAT.rail,80);
     var wInX=(i===0)?t.rx-3.4*u:TIERS[i-1].rxTop+u;
     var wInZ=(i===0)?t.rz-3.4*u:TIERS[i-1].rzTop+u;
-    group.add(ringStrip(T,wInX,wInZ,t.yIn, t.rx-1.2*u,t.rz-1.2*u,t.yIn, SEG,MAT.concreteDark,40));
+    addRS(wInX,wInZ,t.yIn, t.rx-1.2*u,t.rz-1.2*u,t.yIn, SEG,MAT.concreteDark,40);
     var wallH=(i===2?2.6:1.2)*u*0.667;
-    group.add(ringStrip(T,t.rxTop+u,t.rzTop+u,t.yOut, t.rxTop+u,t.rzTop+u,t.yOut+wallH, SEG,MAT.concrete,60));
+    addRS(t.rxTop+u,t.rzTop+u,t.yOut, t.rxTop+u,t.rzTop+u,t.yOut+wallH, SEG,MAT.concrete,60);
     if(i<2){
       var nt=TIERS[i+1];
-      group.add(ringStrip(T,t.rxTop+u,t.rzTop+u,t.yOut+wallH, t.rxTop+u,t.rzTop+u,nt.yIn-u*0.667, SEG,glassMat,10));
-      group.add(ringStrip(T,t.rxTop+u,t.rzTop+u,nt.yIn-u*0.667, nt.rx-1.2*u,nt.rz-1.2*u,nt.yIn-u*0.667, SEG,MAT.concreteDark,40));
+      addRS(t.rxTop+u,t.rzTop+u,t.yOut+wallH, t.rxTop+u,t.rzTop+u,nt.yIn-u*0.667, SEG,glassMat,10);
+      addRS(t.rxTop+u,t.rzTop+u,nt.yIn-u*0.667, nt.rx-1.2*u,nt.rz-1.2*u,nt.yIn-u*0.667, SEG,MAT.concreteDark,40);
     }
   });
 
   /* roof ring */
-  var R={inRx:sc(CFG.ROOF.inRx),inRz:sc(CFG.ROOF.inRz),inY:sc(CFG.ROOF.inY),
-         outRx:sc(CFG.ROOF.outRx),outRz:sc(CFG.ROOF.outRz),outY:sc(CFG.ROOF.outY)};
-  group.add(ringStrip(T,R.inRx,R.inRz,R.inY, R.outRx,R.outRz,R.outY, SEG,
-    new T.MeshLambertMaterial({color:0x8f9ab0,side:T.DoubleSide}),1));
-  group.add(ringStrip(T,R.inRx,R.inRz,R.inY+0.6, R.outRx,R.outRz,R.outY+0.6, SEG,
-    new T.MeshLambertMaterial({color:0x232b3a,side:T.DoubleSide}),1));
-  group.add(ringStrip(T,R.outRx,R.outRz,R.outY, R.outRx,R.outRz,R.outY+0.6, SEG,MAT.concreteDark,80));
+  var R={inRx:sc(CFG.ROOF.inRx)+SPX,inRz:sc(CFG.ROOF.inRz)+SPZ,inY:sc(CFG.ROOF.inY),
+         outRx:sc(CFG.ROOF.outRx)+SPX,outRz:sc(CFG.ROOF.outRz)+SPZ,outY:sc(CFG.ROOF.outY)};
+  addRS(R.inRx,R.inRz,R.inY, R.outRx,R.outRz,R.outY, SEG,
+    new T.MeshLambertMaterial({color:0x8f9ab0,side:T.DoubleSide}),1);
+  addRS(R.inRx,R.inRz,R.inY+0.6, R.outRx,R.outRz,R.outY+0.6, SEG,
+    new T.MeshLambertMaterial({color:0x232b3a,side:T.DoubleSide}),1);
+  addRS(R.outRx,R.outRz,R.outY, R.outRx,R.outRz,R.outY+0.6, SEG,MAT.concreteDark,80);
   var t2=TIERS[2];
-  group.add(ringStrip(T,R.outRx,R.outRz,R.outY, t2.rxTop+sc(1),t2.rzTop+sc(1),t2.yOut+sc(1.73), SEG,
-    new T.MeshLambertMaterial({color:0x1a2233,side:T.DoubleSide}),60));
+  addRS(R.outRx,R.outRz,R.outY, t2.rxTop+sc(1),t2.rzTop+sc(1),t2.yOut+sc(1.73), SEG,
+    new T.MeshLambertMaterial({color:0x1a2233,side:T.DoubleSide}),60);
 
   /* roof rim lamps */
   var lampGlow=canvasTexture(T,128,128,function(x,w,h){
@@ -172,6 +205,7 @@ function build(T,group,PLEN,PWID){
   var lampMat=new T.MeshBasicMaterial({color:0xfff6dd});
   for(var li=0;li<CFG.floodCount;li++){
     var a=(li/CFG.floodCount)*TAU;
+    if(inCut(a)) continue;
     var lx=R.inRx*Math.cos(a),lz=R.inRz*Math.sin(a);
     var head=new T.Mesh(lampBox,lampMat);
     head.position.set(lx,R.inY-0.4,lz); head.lookAt(0,0,0); group.add(head);
@@ -206,6 +240,12 @@ function build(T,group,PLEN,PWID){
       var s0=s*Rw.perSec+AISLE/2+(Rw.perSec-AISLE-Rw.n*SP)/2;
       for(var q=0;q<Rw.n;q++){
         var th=thetaAt(Rw.tb,s0+(q+0.5)*SP);
+        if(inCut(th)){
+          dummy.position.set(0,-999,0); dummy.rotation.set(0,0,0);
+          dummy.scale.setScalar(0.0001); dummy.updateMatrix();
+          seatMesh.setMatrixAt(idx,dummy.matrix);
+          idx++; continue;
+        }
         var x=Rw.rx*Math.cos(th),z=Rw.rz*Math.sin(th);
         var yaw=Math.atan2(-x,-z);
         dummy.position.set(x,Rw.y,z);
