@@ -491,8 +491,11 @@
       // ---- OVAL secondary stadium (ult11-bowl2.js) ----
       if(P3D.stadium==='oval' && window.U11_OVAL){
         try{ window.U11_OVAL.build(T,bowlGroup,PLEN,PWID); }
-        catch(e){ /* fall through to classic on any failure */ }
+        catch(e){ if(/[?&]debug=1/.test(location.search)) alert('OVAL build failed: '+e.message); }
         if(bowlGroup.children.length) return;
+      }
+      if(P3D.stadium==='oval' && !window.U11_OVAL && /[?&]debug=1/.test(location.search)){
+        alert('OVAL selected but ult11-bowl2.js not loaded — check index.html script tag');
       }
       const S=P3D.bowl;
       // The sandbox was tuned at pitch 300x190. The live pitch is ~70x43, so
@@ -577,7 +580,9 @@
     function _rng(seed){ return ()=>{ seed=(seed*9301+49297)%233280; return seed/233280; }; }
     function placeFlags(){
       scene.remove(flagGroup); flagGroup=new T.Group(); scene.add(flagGroup);
-      if(P3D.stadium==='oval') return;   // flags are positioned for the classic 4-wall bowl
+      const OV=(P3D.stadium==='oval'&&window.U11_OVAL&&window.U11_OVAL._last)
+               ? window.U11_OVAL._last : null;
+      if(P3D.stadium==='oval'&&!OV) return;   // oval selected but not built yet
       if(!flagData) return;
       const S=P3D.bowl, U=PWID/190;
       const RUNOFF=6*U;
@@ -605,7 +610,33 @@
         m.rotation.order='YXZ';
         flagGroup.add(m);
       }
+      function addFlagOval(tex,theta,tierIdx,hJit,rng){
+        const t=OV.TIERS[Math.min(tierIdx,OV.TIERS.length-1)];
+        const fr=0.2+hJit*0.55;
+        const yC=t.y+fr*(t.yTop-t.y);
+        const rX=t.rx+fr*t.rows*t.dr-0.5, rZ=t.rz+fr*t.rows*t.dr-0.5;
+        const x=rX*Math.cos(theta), z=rZ*Math.sin(theta);
+        const leanT=Math.atan2(t.dr,t.dy);
+        const m=new T.Mesh(new T.PlaneGeometry(bw*(0.85+rng()*0.4),bh*(0.85+rng()*0.4)),
+          new T.MeshBasicMaterial({map:tex,side:T.DoubleSide,transparent:true}));
+        m.rotation.order='YXZ';
+        m.position.set(x,yC,z);
+        m.rotation.y=Math.atan2(-x,-z);
+        m.rotation.x=leanT;
+        m.rotation.z=(rng()-0.5)*0.25;
+        flagGroup.add(m);
+      }
       function scatter(tex,homeSide,rng){
+        if(OV){
+          // home end ≈ θ=π (−x), away end ≈ θ=0 (+x); ranges dodge the open-front cut
+          for(let i=0;i<10;i++){
+            const tier=rng()<0.55?0:1;
+            const th=homeSide ? Math.PI+(-0.30+rng()*1.60)
+                              : -1.25+rng()*1.55;
+            addFlagOval(tex,th,tier,rng(),rng);
+          }
+          return;
+        }
         // 10 flags per team, random spots on their half: back straight + own end,
         // mixed between lower (tier 0) and middle (tier 1) stands
         for(let i=0;i<10;i++){
@@ -978,24 +1009,51 @@
     P3D._drawHUD=drawHUD;
 
     /* ════════ BALL ════════ */
-    // ⚽ emoji ball — flat billboard rendered from a canvas, anchored at the
-    // ground point so it sits at the player's feet (no float, no oversize).
-    const ballCv=document.createElement('canvas'); ballCv.width=ballCv.height=128;
+    // Real sphere, not a billboard: it rolls (rotates about the axis
+    // perpendicular to travel), lifts with ball.bz, and drops a ground
+    // shadow that shrinks + fades with height.
+    const ballCv=document.createElement('canvas'); ballCv.width=256; ballCv.height=128;
     const bcx=ballCv.getContext('2d');
-    bcx.clearRect(0,0,128,128); bcx.font='104px serif';
-    bcx.textAlign='center'; bcx.textBaseline='middle';
-    bcx.fillText('⚽',64,70);
-    const ballTex=new T.Texture(ballCv); ballTex.needsUpdate=true;
+    bcx.fillStyle='#f4f6fa'; bcx.fillRect(0,0,256,128);
+    // classic panel look: staggered dark pentagons + seams
+    bcx.fillStyle='#141a24';
+    [[0.10,0.28],[0.36,0.22],[0.62,0.30],[0.86,0.20],
+     [0.22,0.66],[0.48,0.72],[0.74,0.64],[0.98,0.70]].forEach(function(p){
+      const x=p[0]*256, y=p[1]*128, r=17;
+      bcx.beginPath();
+      for(let a=0;a<5;a++){
+        const th=-Math.PI/2+a*Math.PI*2/5;
+        const vx=x+Math.cos(th)*r, vy=y+Math.sin(th)*r*0.82;
+        a?bcx.lineTo(vx,vy):bcx.moveTo(vx,vy);
+      }
+      bcx.closePath(); bcx.fill();
+    });
+    bcx.strokeStyle='rgba(20,26,36,.30)'; bcx.lineWidth=2;
+    bcx.beginPath(); bcx.moveTo(0,48); bcx.lineTo(256,44);
+    bcx.moveTo(0,92); bcx.lineTo(256,96); bcx.stroke();
+    const ballTex=new T.CanvasTexture(ballCv);
     ballTex.minFilter=T.LinearFilter; ballTex.magFilter=T.LinearFilter;
-    const ballMesh=new T.Sprite(new T.SpriteMaterial({map:ballTex,transparent:true,alphaTest:0.2}));
-    ballMesh.center.set(0.5,0);              // bottom-anchored at the ground point
+    const ballMesh=new T.Mesh(new T.SphereGeometry(0.5,18,14),
+      new T.MeshLambertMaterial({map:ballTex,color:0xffffff}));
     scene.add(ballMesh);
+    // soft blob shadow
+    const bShCv=document.createElement('canvas'); bShCv.width=bShCv.height=64;
+    const shx=bShCv.getContext('2d');
+    const shg=shx.createRadialGradient(32,32,1,32,32,31);
+    shg.addColorStop(0,'rgba(0,0,0,.55)'); shg.addColorStop(0.6,'rgba(0,0,0,.22)');
+    shg.addColorStop(1,'rgba(0,0,0,0)');
+    shx.fillStyle=shg; shx.fillRect(0,0,64,64);
+    const ballShadow=new T.Sprite(new T.SpriteMaterial({map:new T.CanvasTexture(bShCv),
+      transparent:true,depthWrite:false,opacity:0.45}));
+    scene.add(ballShadow);
+    let _bPrevX=null,_bPrevZ=null;
+    const _bAxis=new T.Vector3();
     function syncBall(){
       if(cine) return;   // cinematic drives the ball directly
       if(typeof ball==='undefined'||!ball) return;
       const frac=(P3D.spriteFrac!=null?P3D.spriteFrac:0.045);
       const d=PLEN*frac*0.21;                // ball ~0.21 of player sprite height
-      ballMesh.scale.set(d,d,1);
+      ballMesh.scale.setScalar(d);           // geometry r=0.5 → diameter d
       let bx=ball.x, by=ball.y;
       // Cosmetic: when a carrier is dribbling, pull the rendered ball toward his
       // feet so it doesn't read as detached (engine keeps it slightly ahead).
@@ -1006,8 +1064,24 @@
         const t=0.6;                         // 0 = true pos, 1 = on the sprite
         bx+=(cp.x-bx)*t; by+=(cp.y-by)*t;
       }
-      const bwy=0.05+((ball.bz||0)*0.09);
-      ballMesh.position.set(ex2wx(bx),bwy,ey2wz(by));
+      const r=d*0.5, hgt=Math.max(0,(ball.bz||0)*0.09);
+      const bwy=r+hgt;                       // resting on the turf, lifted by bz
+      const wx=ex2wx(bx), wz=ey2wz(by);
+      ballMesh.position.set(wx,bwy,wz);
+      // ROLL: rotate about the axis perpendicular to the direction of travel
+      if(_bPrevX!==null){
+        const ddx=wx-_bPrevX, ddz=wz-_bPrevZ, trav=Math.hypot(ddx,ddz);
+        if(trav>1e-4&&r>1e-6){
+          _bAxis.set(ddz,0,-ddx).normalize();
+          ballMesh.rotateOnWorldAxis(_bAxis,trav/r);
+        }
+      }
+      _bPrevX=wx; _bPrevZ=wz;
+      // shadow shrinks + fades as the ball climbs
+      const shs=d*1.35/(1+hgt*0.55);
+      ballShadow.position.set(wx,0.025,wz);
+      ballShadow.scale.set(shs,shs*0.55,1);
+      ballShadow.material.opacity=0.45/(1+hgt*0.8);
       // shot energy trail (3D replacement for the 2D _shotTrail glow)
       if(typeof G!=='undefined'&&G&&G._shotTrail){
         spawnTrail(ex2wx(bx),bwy+d*0.5,ey2wz(by),'#ffb040',d*1.5);

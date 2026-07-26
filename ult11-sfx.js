@@ -111,6 +111,81 @@
     src.connect(lp); lp.connect(g); g.connect(busMaster); src.start(t); src.stop(t+0.06);
   };
 
+  /* ---------- CROWD DUCK (let cutscene video audio breathe) ---------- */
+  let ducked=false;
+  SFX.duck=function(level,secs){
+    ducked=true;
+    if(!AC||!busCrowd) return;
+    const t=AC.currentTime;
+    busCrowd.gain.cancelScheduledValues(t);
+    busCrowd.gain.linearRampToValueAtTime(SFX.crowd*(level==null?0.22:level), t+(secs||0.25));
+  };
+  SFX.unduck=function(secs){
+    ducked=false;
+    if(!AC||!busCrowd) return;
+    const t=AC.currentTime;
+    busCrowd.gain.cancelScheduledValues(t);
+    busCrowd.gain.linearRampToValueAtTime(SFX.crowd, t+(secs||0.6));
+  };
+
+  /* ---------- CINEMATIC ONE-SHOTS (super shot) ---------- */
+  function noiseBuf(secs,shape){
+    const N=Math.max(1,Math.floor(AC.sampleRate*secs));
+    const b=AC.createBuffer(1,N,AC.sampleRate), d=b.getChannelData(0);
+    for(let i=0;i<N;i++){ const e=shape?shape(i/N):1; d[i]=(Math.random()*2-1)*e; }
+    return b;
+  }
+  SFX.windup=function(secs){
+    if(!SFX.on||!ensure()) return; resume();
+    const dur=secs||4.0, t=AC.currentTime, v=SFX.master*0.30;
+    const o=AC.createOscillator(); o.type='sawtooth';
+    o.frequency.setValueAtTime(70,t); o.frequency.exponentialRampToValueAtTime(480,t+dur);
+    const lp=AC.createBiquadFilter(); lp.type='lowpass';
+    lp.frequency.setValueAtTime(300,t); lp.frequency.exponentialRampToValueAtTime(3200,t+dur);
+    const g=AC.createGain();
+    g.gain.setValueAtTime(0.0001,t);
+    g.gain.exponentialRampToValueAtTime(v,t+dur*0.85);
+    g.gain.exponentialRampToValueAtTime(0.0001,t+dur);
+    o.connect(lp); lp.connect(g); g.connect(busMaster);
+    o.start(t); o.stop(t+dur+0.05);
+    SFX._windupOsc=o;
+  };
+  SFX.windupStop=function(){ try{ if(SFX._windupOsc) SFX._windupOsc.stop(); }catch(e){} SFX._windupOsc=null; };
+  SFX.whoosh=function(secs){
+    if(!SFX.on||!ensure()) return; resume();
+    const dur=secs||0.9, t=AC.currentTime, v=SFX.master*0.5;
+    const src=AC.createBufferSource(); src.buffer=noiseBuf(dur,x=>Math.sin(Math.PI*x));
+    const bp=AC.createBiquadFilter(); bp.type='bandpass'; bp.Q.value=1.1;
+    bp.frequency.setValueAtTime(1800,t); bp.frequency.exponentialRampToValueAtTime(320,t+dur);
+    const g=AC.createGain(); g.gain.value=v;
+    src.connect(bp); bp.connect(g); g.connect(busMaster);
+    src.start(t); src.stop(t+dur);
+  };
+  SFX.impact=function(){
+    if(!SFX.on||!ensure()) return; resume();
+    const t=AC.currentTime, v=SFX.master*0.85;
+    const o=AC.createOscillator(); o.type='sine';
+    o.frequency.setValueAtTime(120,t); o.frequency.exponentialRampToValueAtTime(38,t+0.22);
+    const g=AC.createGain(); g.gain.setValueAtTime(v,t); g.gain.exponentialRampToValueAtTime(0.001,t+0.28);
+    o.connect(g); g.connect(busMaster); o.start(t); o.stop(t+0.3);
+    const src=AC.createBufferSource(); src.buffer=noiseBuf(0.18,x=>Math.pow(1-x,2));
+    const lp=AC.createBiquadFilter(); lp.type='lowpass'; lp.frequency.value=1400;
+    const ng=AC.createGain(); ng.gain.value=v*0.6;
+    src.connect(lp); lp.connect(ng); ng.connect(busMaster); src.start(t); src.stop(t+0.18);
+  };
+  SFX.save=function(){
+    if(!SFX.on||!ensure()) return; resume();
+    const t=AC.currentTime, v=SFX.master*0.7;
+    const src=AC.createBufferSource(); src.buffer=noiseBuf(0.14,x=>Math.pow(1-x,1.6));
+    const bp=AC.createBiquadFilter(); bp.type='bandpass'; bp.frequency.value=900; bp.Q.value=0.7;
+    const g=AC.createGain(); g.gain.value=v;
+    src.connect(bp); bp.connect(g); g.connect(busMaster); src.start(t); src.stop(t+0.14);
+    const o=AC.createOscillator(); o.type='sine';
+    o.frequency.setValueAtTime(210,t); o.frequency.exponentialRampToValueAtTime(80,t+0.13);
+    const og=AC.createGain(); og.gain.setValueAtTime(v*0.7,t); og.gain.exponentialRampToValueAtTime(0.001,t+0.16);
+    o.connect(og); og.connect(busMaster); o.start(t); o.stop(t+0.17);
+  };
+
   /* ---------- ENGINE WATCHER (auto-fire from game state, no game.js edits) ---------- */
   let prevPhase=null, prevScoreH=null, prevScoreA=null, prevKick=false, matchLive=false, kickoffDone=false;
   const stepClock={};   // per-player footstep cadence
@@ -124,28 +199,24 @@
     // crowd on only during live match phases
     const live=(G.phase==='moving'||G.phase==='pass_anim'||G.phase==='duel'||G.phase==='duel_result');
     if(live && !matchLive){ matchLive=true; buildCrowd();
-      if(busCrowd) busCrowd.gain.linearRampToValueAtTime(SFX.crowd, (AC?AC.currentTime:0)+1.5);
+      if(busCrowd&&!ducked) busCrowd.gain.linearRampToValueAtTime(SFX.crowd, (AC?AC.currentTime:0)+1.5);
       if(!kickoffDone){ kickoffDone=true; SFX.whistle('kickoff'); } }
     if(!live && matchLive){ matchLive=false;
-      if(busCrowd&&AC) busCrowd.gain.linearRampToValueAtTime(0, AC.currentTime+1.0); }
-    if(busCrowd&&matchLive) busCrowd.gain.value=busCrowd.gain.value; // (ramp target set above)
+      if(busCrowd&&AC&&!ducked) busCrowd.gain.linearRampToValueAtTime(0, AC.currentTime+1.0); }
 
     // ball kick — on entering pass_anim
     const kicking=(G.phase==='pass_anim');
-    if(kicking&&!prevKick){
+    if(kicking&&!prevKick&&!G._cineHold){
       const shot=!!(G._shotTrail||G._shotZone);
       SFX.ballKick(shot?1.0:0.55);
     }
     prevKick=kicking;
 
-    // goal detection — score changed
-    if(typeof G.score==='object'&&G.score){
-      const sh=num(G.score.h), sa=num(G.score.a);
-      if(prevScoreH!==null && (sh>prevScoreH||sa>prevScoreA)){ SFX.whistle('goal'); }
+    // goal detection — the engine only keeps G.hG / G.aG
+    {
+      const sh=num(G.hG), sa=num(G.aG);
+      if(prevScoreH!==null && (sh>prevScoreH||sa>prevScoreA)){ SFX.impact(); SFX.whistle('goal'); }
       prevScoreH=sh; prevScoreA=sa;
-    } else if(typeof scoreH!=='undefined'){
-      if(prevScoreH!==null && (num(scoreH)>prevScoreH||num(scoreA)>prevScoreA)){ SFX.whistle('goal'); }
-      prevScoreH=num(scoreH); prevScoreA=num(scoreA);
     }
 
     // footstep stomps — cadence per moving player

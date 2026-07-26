@@ -3332,11 +3332,13 @@ function showCineMedia(pl,special,callback,holdMs,baseNames){
   const finish=()=>{
     if(done)return;done=true;clearTimeout(tmr);clearTimeout(guard);
     const v=faceEl.querySelector('video');if(v){try{v.pause();}catch(e){}}
+    try{if(window.SFX&&SFX.unduck)SFX.unduck();}catch(e){}
     sc.classList.remove('show');faceEl.innerHTML='';
     if(callback)callback();
   };
   const reveal=()=>{                              // show ONLY once media is ready
     if(shown||done)return;shown=true;
+    try{if(window.SFX&&SFX.duck)SFX.duck(0.18,0.2);}catch(e){}
     sc.classList.remove('show');void sc.offsetWidth;sc.classList.add('show');
     if(special){
       say((pl?pl.name.split('.').pop():'')+'— '+(special.l||'Special')+'!');
@@ -3360,21 +3362,47 @@ function showCineMedia(pl,special,callback,holdMs,baseNames){
       return;
     }
     const v=document.createElement('video');
-    v.muted=true;v.autoplay=true;v.playsInline=true;v.setAttribute('playsinline','');
+    v.muted=false;v.volume=1;v.autoplay=true;v.playsInline=true;v.setAttribute('playsinline','');
+    v.setAttribute('autoplay','');v.setAttribute('webkit-playsinline','');
+    v.preload='auto';                        // 'metadata' never reaches canplay on some phones
     v.style.cssText='max-width:100%;max-height:100%;display:block;margin:0 auto;';
     let dead=false;
-    const fail=()=>{if(dead||done)return;dead=true;try{v.remove();}catch(e){}tryBase(i+1);};
+    const fail=(why)=>{if(dead||done)return;dead=true;U11DBG('CINE: '+bases[i]+' '+(why||'error'));try{v.remove();}catch(e){}tryBase(i+1);};
     const s1=document.createElement('source');s1.src='assets/cutscene/'+bases[i]+'.webm';s1.type='video/webm';
     const s2=document.createElement('source');s2.src='assets/cutscene/'+bases[i]+'.mp4';s2.type='video/mp4';
-    s2.addEventListener('error',fail);
-    v.addEventListener('error',fail);
+    s2.addEventListener('error',()=>fail('mp4 missing'));
+    v.addEventListener('error',()=>fail('media error'));
     v.appendChild(s1);v.appendChild(s2);
-    v.addEventListener('canplay',()=>{if(!dead)reveal();},{once:true});
+    // reveal on the FIRST usable signal — canplay alone is unreliable on mobile
+    const kick=()=>{ if(dead||done)return; cineVidPlay(v); reveal(); };
+    ['loadedmetadata','loadeddata','canplay','playing'].forEach(function(ev){
+      v.addEventListener(ev,kick,{once:true}); });
     v.addEventListener('ended',finish);
     faceEl.appendChild(v);
-    if(v.play)v.play().catch(()=>{});
+    try{v.load();}catch(e){}                 // sources were appended after creation
+    cineVidPlay(v);
+    // if it is clearly downloading, give it room instead of killing the banner
+    guard=setTimeout(()=>{
+      if(shown||done)return;
+      if(v.readyState>=1||v.networkState===2){
+        U11DBG('CINE: slow load, extending');
+        guard=setTimeout(()=>{if(!shown&&!done){U11DBG('CINE: gave up (12s)');finish();}},7000);
+        return;
+      }
+      U11DBG('CINE: no signal in 5s');finish();
+    },5000);
   })(0);
-  guard=setTimeout(()=>{if(!shown&&!done)finish();},4000);  // nothing resolved → move on
+}
+// unmuted first (the clip keeps its own audio); if the browser blocks it, retry muted
+function cineVidPlay(v){
+  if(!v||!v.play)return;
+  const p=v.play();
+  if(p&&p.catch)p.catch(()=>{
+    U11DBG('CINE: unmuted autoplay blocked -> muted');
+    v.muted=true;
+    const p2=v.play();
+    if(p2&&p2.catch)p2.catch(()=>U11DBG('CINE: play refused'));
+  });
 }
 function showGkCineMedia(gk,callback){
   if(!gk){if(callback)callback();return;}
@@ -3423,6 +3451,7 @@ function superShotCine(){
   clearInterval(G.di);G_moveTarget=null;
   G.phase='pass_anim';
   G._cineHold=true;                                  // freeze the whole engine
+  try{if(window.SFX&&SFX.windup)SFX.windup(4.3);}catch(e){}
   const _gen=G.goalGen;
   const _bail=why=>{U11DBG('SSC: '+why);G._cineHold=false;try{P3D.superCine2.abort();}catch(e){}};
   setTimeout(()=>{ // watchdog — never leave the game stuck in the cinematic
@@ -3439,6 +3468,7 @@ function superShotCine(){
     showCineMedia(carrier,spec,()=>{
       if(G.goalGen!==_gen||G.phase!=='pass_anim'){_bail('stale after banner');return;}
       U11DBG('SSC: fly');
+      try{if(window.SFX){SFX.windupStop&&SFX.windupStop();SFX.ballKick(1);SFX.whoosh&&SFX.whoosh(1.0);}}catch(e){}
       P3D.superCine2.fly(()=>{
         if(G.goalGen!==_gen){_bail('stale at arrival');return;}
         U11DBG('SSC: arrived → GK duel');
@@ -3664,6 +3694,17 @@ function passDuration(fx,fy,tx,ty,base){
   const d=Math.hypot(tx-fx,ty-fy);
   return Math.round(clamp(base + (d/W)*90, base, base*3.5));
 }
+/* ══════ LOCKED · BALL PHYSICS ══════
+   Vertical axis only — horizontal travel/timing is untouched so every
+   onArrive gate (duels, goals, cine) fires exactly as before.
+   ball.bz = height in 2D px units; P3D maps it to world height. */
+const BALLPHYS={
+  g:0.075,          // gravity per frame
+  rest:0.52,        // bounce restitution
+  minBounce:0.25,   // below this vertical speed it stops bouncing
+  shotLift:1.05,    // launch speed of a shot (x distance factor)
+  loosePop:0.55     // deflections / loose balls hop a little
+};
 let ballTravel={active:false,fx:0,fy:0,tx:0,ty:0,progress:0,duration:60,onArrive:null};
 function animateBallTo(fromX,fromY,toX,toY,onArrive,duration,flat){
   // Physical roll: launch the ball with a velocity sized so it COASTS to the
@@ -3674,9 +3715,11 @@ function animateBallTo(fromX,fromY,toX,toY,onArrive,duration,flat){
   const fr=flat?0.945:0.975;                       // friction (higher = more even speed)
   const v0=distp*(1-fr)/(1-Math.pow(fr,dur));
   const arc=flat?0:Math.min(34, 6 + (distp/W)*70); // shots flat; passes loft w/ distance
+  const lift=flat ? BALLPHYS.shotLift*(0.45+(distp/W)*0.85) : 0;   // shots are no longer dead flat
   ballTravel={active:true, fx:fromX, fy:fromY, tx:toX, ty:toY,
               x:fromX, y:fromY, vx:(dx/distp)*v0, vy:(dy/distp)*v0,
-              fr, dur, progress:0, onArrive, rolled:0, total:distp, arc};
+              fr, dur, progress:0, onArrive, rolled:0, total:distp, arc,
+              bz:0, bvz:lift};
   ball.x=fromX; ball.y=fromY; ball.tx=fromX; ball.ty=fromY; ball.bz=0;
   G.phase='pass_anim';
 }
@@ -3684,7 +3727,8 @@ function animateBallVel(fromX,fromY,vx,vy,onArrive){
   // Free roll with an explicit launch velocity (deflections / loose balls).
   ballTravel={active:true, fx:fromX, fy:fromY, tx:fromX+vx*8, ty:fromY+vy*8,
               x:fromX, y:fromY, vx, vy, fr:0.93, dur:120, progress:0,
-              onArrive, rolled:0, total:1e9, loose:true};
+              onArrive, rolled:0, total:1e9, loose:true,
+              bz:0, bvz:BALLPHYS.loosePop};
   ball.x=fromX; ball.y=fromY; G.phase='pass_anim';
 }
 // Keep players moving during a pass — runs and defensive shape continue at reduced pace
@@ -3716,13 +3760,20 @@ function tickBallTravel(dt=1){
     b.rolled+=Math.hypot(b.vx,b.vy);
     b.vx*=b.fr; b.vy*=b.fr;
     b.progress++;
+    // vertical: launch -> gravity -> bounce -> settle
+    b.bz=(b.bz||0)+(b.bvz||0);
+    b.bvz=(b.bvz||0)-BALLPHYS.g;
+    if(b.bz<=0){
+      b.bz=0;
+      b.bvz=(-b.bvz>BALLPHYS.minBounce)?-b.bvz*BALLPHYS.rest:0;
+    }
   }
   ball.x=b.x; ball.y=b.y; ball.tx=ball.x; ball.ty=ball.y;
-  ball.bz=0;
+  ball.bz=b.bz||0;
   const arrivedTarget = !b.loose && (b.rolled>=b.total*0.985 || b.progress>=b.dur);
   const stalled = (b.vx*b.vx+b.vy*b.vy) < 0.02 || b.progress>=(b.dur+40);
   if(arrivedTarget || stalled){
-    if(!b.loose){ ball.x=b.tx; ball.y=b.ty; ball.tx=ball.x; ball.ty=ball.y; }
+    if(!b.loose){ ball.x=b.tx; ball.y=b.ty; ball.tx=ball.x; ball.ty=ball.y; ball.bz=0; }
     b.active=false;
     if(b.onArrive)b.onArrive();
   }
@@ -5558,6 +5609,7 @@ function afGoal(scorer,s,gen){
 
 function afSave(ds){
   G._cineHold=false;
+  try{if(window.SFX&&SFX.save)SFX.save();}catch(e){}
   try{if(window.P3D&&P3D.superCine2)P3D.superCine2.abort();}catch(e){}
   G.goalGen++;
   const q=sq(ds);
