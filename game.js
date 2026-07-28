@@ -1625,7 +1625,7 @@ function tick(dt=1){
   // The AI carrier used to only ever drive at goal (it passed solely inside
   // duels). Here it can choose to pass while dribbling: when pressured AND a
   // clearly better-open teammate exists. Gated to CPU; cooldown stops spam.
-  if(s!=='h' && G.phase==='moving' && Date.now()>=(G.kickoffUntil||0)
+  if(isCpuSide(s) && G.phase==='moving' && Date.now()>=(G.kickoffUntil||0)
      && Date.now()>=(G._cpuPassAt||0) && !G._scoringGoal && !(progress>.88 && centrality>.35)){
     const defDist=nearestDefenderDistance(s,cp);
     const pressure=clamp(1-defDist/(W*ENGINE_CONFIG.ai.pressureRadius),0,1);
@@ -1653,8 +1653,10 @@ function tick(dt=1){
   // manualShot), so they can keep dribbling, cross, or pass instead of being
   // force-fired the moment they cross the box edge. This also lets the human
   // run all the way to the goal line instead of stopping at the .88 gate.
-  if(shotGate&&s!=='h'&&G.phase==='moving'&&Date.now()>=(G.kickoffUntil||0)&&!G._scoringGoal){
+  if(shotGate&&isCpuSide(s)&&G.phase==='moving'&&Date.now()>=(G.kickoffUntil||0)&&!G._scoringGoal){
     clearInterval(G.di);
+    // CPU super shot → exactly the same v2 cinematic the human gets on □
+    if(cpuWantsSuperCine(s)&&superShotCine())return;
     if(rollShotMiss(s)){shotMissed(s);return;}
     G.phase='pass_anim';
     const _gkPos2=PP[ds]&&PP[ds]['GK']?PP[ds]['GK']:{x:goalXFor(s),y:H*.5};
@@ -2813,8 +2815,8 @@ function pvpPumpInput(){
   if(edge1('south')) pvpSwitch(1);
   if(edge2('south')) pvpSwitch(2);
   if(G.phase==='moving'){
-    if(G.poss==='h'){ if(edge1('north'))manualShot(); if(edge1('west'))directionalPass(); }
-    else            { if(edge2('north'))manualShot(); if(edge2('west'))directionalPass(); }
+    if(G.poss==='h'){ if(edge1('north'))manualShot(); if(edge1('west'))directionalPass(); if(edge1('r1'))manualShot('special'); }
+    else            { if(edge2('north'))manualShot(); if(edge2('west'))directionalPass(); if(edge2('r1'))manualShot('special'); }
   }
   for(const n of ['south','north','west','east','r1']){
     _pvpPrev[0][n]=P1_down(n);
@@ -3446,7 +3448,7 @@ function superShotCine(){
   const carrier=sq(s)[G.ck],cp=PP[s]&&PP[s][G.ck];
   if(!carrier||!cp){U11DBG('SSC: no carrier/pos → legacy');return false;}
   if(rollShotMiss(s,'special')){U11DBG('SSC: miss roll');clearInterval(G.di);G_moveTarget=null;shotMissed(s);return true;}
-  if(!(window.P3D&&P3D.on&&P3D.superCine2&&P3D.superCine2.start({as:s,sk:G.ck,ds,dir:dirFor(s),gx:goalXFor(s)}))){U11DBG('SSC: start() failed → legacy');return false;}
+  if(!(window.P3D&&P3D.on&&P3D.superCine2&&P3D.superCine2.start({as:s,sk:G.ck,ds,dir:dirFor(s),gx:goalXFor(s),asKey:(s==='h'?selHome:selAway),dsKey:(ds==='h'?selHome:selAway)}))){U11DBG('SSC: start() failed → legacy');return false;}
   U11DBG('SSC: start ok, hold cam');
   clearInterval(G.di);G_moveTarget=null;
   G.phase='pass_anim';
@@ -3498,6 +3500,27 @@ function silentShotDuel(){
   resDuel();
 }
 
+/* ── CPU SUPER SHOT ───────────────────────────────────────────────
+   The AI used to fire specials only INSIDE a duel (light banner only).
+   At the open-play shot gate it now takes the full behind-the-shooter
+   cinematic — same code path, same asset chain, mirrored for its side.
+   Gated by the same 85+ stat requirement and stamina cost the human
+   pays, plus a cooldown so it stays a highlight and not a spam. */
+function cpuWantsSuperCine(s){
+  if(!(window.P3D&&P3D.on&&P3D.superCine2))return false;
+  if(P3D.cineActive&&P3D.cineActive())return false;
+  if(Date.now()<(G._cpuCineAt||0))return false;
+  const carrier=sq(s)[G.ck];
+  if(!carrier||carrier.pos==='GK')return false;
+  if(!getSpecial(carrier)||!canSuper(carrier,'special'))return false;
+  if((carrier.spirit||1500)<((ATK_ACTIONS.special&&ATK_ACTIONS.special.cost)||400))return false;
+  const bh=(typeof getBehaviorProfile==='function')?getBehaviorProfile(carrier):{};
+  const chance=clamp(0.30*(bh.specialBias||1),0.10,0.75);
+  if(Math.random()>=chance)return false;
+  G._cpuCineAt=Date.now()+CPU_CINE_COOLDOWN;   // burn the cooldown either way
+  U11DBG('SSC: CPU super shot ('+(carrier.origName||carrier.name)+')');
+  return true;
+}
 function manualShot(kind){
   if(window.P3D&&P3D.superCine2&&P3D.superCine2.active())return; // cinematic running — ignore
   if(G.phase!=='moving'||!G.ck||G._scoringGoal)return;
@@ -3698,6 +3721,10 @@ function passDuration(fx,fy,tx,ty,base){
    Vertical axis only — horizontal travel/timing is untouched so every
    onArrive gate (duels, goals, cine) fires exactly as before.
    ball.bz = height in 2D px units; P3D maps it to world height. */
+const CPU_CINE_COOLDOWN=20000;   // min ms between CPU super-shot cinematics
+// A side is CPU-controlled only when it isn't the human's and PvP is off.
+// (Before this, PvP's away HUMAN got auto-passed and auto-fired by the AI gates.)
+function isCpuSide(s){ return s!=='h' && !(typeof PVP!=='undefined'&&PVP&&PVP.on); }
 const BALLPHYS={
   g:0.075,          // gravity per frame
   rest:0.52,        // bounce restitution
@@ -5416,7 +5443,7 @@ function resDuel(){
     def.spirit=Math.max(0,(def.spirit||defMax)-spend);
   }
   G.duels++;
-  if(as==='h')G.hDuels++; else G.aDuels++;
+  { const wSide=win?as:ds; if(wSide==='h')G.hDuels++; else G.aDuels++; }  // winner, not entrant
   if(['shoot','special'].includes(ak)){G.shots++; if(as==='h')G.hShots++; else G.aShots++;}
   updH();
   if(win&&dk)scd(ds,dk);        // loser: full cooldown
@@ -5573,6 +5600,15 @@ function resDuel(){
 
 function closeDuel(){killCutIn();G._duelT=0;try{gkShotLayout(false);}catch(e){}try{Object.values(hSq).forEach(p=>{if(p)p._pending2v1=false;});Object.values(aSq).forEach(p=>{if(p)p._pending2v1=false;});}catch(e){}try{document.getElementById('s-match').classList.remove('duel-live');}catch(e){}document.getElementById('duel-ov').classList.remove('show');document.getElementById('duel-res').classList.remove('show');G.pm=false;$id('pass-banner').style.display='none';const d2=document.getElementById('dpd2-wrap');if(d2)d2.remove();}
 function resume(s,msg){
+  // SOFT-LOCK GUARD: resume() is the one gate every "play continues" route
+  // passes through. If a super-shot duel ever exits by any path other than
+  // afGoal/afSave (e.g. the resolution-error recovery below), _cineHold would
+  // stay true and tick() would return forever — match frozen. Clear it here.
+  if(G._cineHold){
+    G._cineHold=false;
+    try{if(window.P3D&&P3D.superCine2)P3D.superCine2.abort();}catch(e){}
+    U11DBG('SSC: cleared cine hold via resume()');
+  }
   closeDuel(); if(msg)say(msg); G.phase='idle'; $id('passhint').style.display='none';
   // Grace period after duel — no new duel or shot gate can fire for 2.5s
   G.kickoffUntil=Date.now()+2500;

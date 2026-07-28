@@ -5,7 +5,10 @@
 
    CONTRACT (important):
      • game.js stays the single source of truth. This layer never
-       moves a player, never passes, never touches G/PP/ball.
+       moves a player, never passes, never touches G/PP.
+       ONE exception: during a super-shot cinematic it drives ball.x/y/bz
+       directly — the engine is frozen by G._cineHold for the duration, so
+       there is no contest for ball authority.
        It ONLY reads PP[s][k].{x,y}, ball.{x,y}, G.* each frame and
        draws billboards + stadium + ball in 3D.
      • Toggle: window.P3D.on = true/false   (default OFF)
@@ -1342,21 +1345,68 @@
         spawnTrail(swx+ox,0.2+Math.random()*hh*0.8,swz+oz,'#ffd24a',hh*0.28);
       }
     }
-    let cineWindupTex=null,cineWindupAR=0.65,cineGkTex=null;
-    (function(){
-      const a=new Image();
-      a.onload=()=>{const t=new T.Texture(a);t.magFilter=T.NearestFilter;t.minFilter=T.NearestFilter;t.needsUpdate=true;cineWindupTex=t;cineWindupAR=a.width/a.height;};
-      a.src='assets/ps1/striker_windup.png';
-      const b=new Image();
-      b.onload=()=>{const t=new T.Texture(b);t.magFilter=T.NearestFilter;t.minFilter=T.NearestFilter;t.needsUpdate=true;cineGkTex=t;};
-      b.src='assets/ps1/gk_cine.png';
-    })();
+    /* ════════ CINEMATIC SPRITE ASSETS — PER TEAM, WITH FALLBACK ════════
+       Both sides now run this cinematic (human □ and CPU), so the wind-up
+       striker and the cinematic keeper must be able to wear the right kit.
+       Each slot tries the team file first, then the shared default:
+
+         wind-up striker   assets/ps1/{teamkey}_windup.png
+                        →  assets/ps1/striker_windup.png
+         cinematic GK      assets/ps1/{teamkey}_gk_cine.png     (3 cols x 2 rows)
+                        →  assets/ps1/gk_cine.png
+         GK dive sheet     assets/ps1/{teamkey}_gk_dive.png     (5 cols x 3 rows)
+                        →  assets/ps1/gk_dive.png
+
+       teamkey is the engine key, lower-case (japan, brazil, club07 …).
+       The striker slot uses the ATTACKING team's key, both GK slots use the
+       DEFENDING team's key. Missing files simply fall through — nothing to
+       wire up, drop a PNG in and it is picked up on the next cinematic.
+       Cutscene video for the skill banner is unchanged:
+         assets/cutscene/{lastname}.webm | .mp4 | .png
+         assets/cutscene/{teamkey}-shoot.webm | .mp4 | .png   (team fallback) */
     const DIVE={cols:5,rows:3};
-    let diveSheet=null;
-    (function(){ const im=new Image();
-      im.onload=()=>diveSheet={img:im,cw:im.width/DIVE.cols,ch:im.height/DIVE.rows};
-      im.onerror=()=>diveSheet='none';
-      im.src='assets/ps1/gk_dive.png'; })();
+    let cineWindupTex=null,cineWindupAR=0.65,cineGkTex=null,diveSheet=null;
+    const _cineTexCache={}, _cineSheetCache={};
+    function _cineTex(url,cb){
+      if(_cineTexCache[url]!==undefined){cb(_cineTexCache[url]);return;}
+      const im=new Image();
+      im.onload=()=>{
+        const t=new T.Texture(im);
+        t.magFilter=T.NearestFilter;t.minFilter=T.NearestFilter;t.needsUpdate=true;
+        _cineTexCache[url]={tex:t,ar:(im.height?im.width/im.height:0.65)};
+        cb(_cineTexCache[url]);
+      };
+      im.onerror=()=>{_cineTexCache[url]='none';cb('none');};
+      im.src=url;
+    }
+    function _cineSheet(url,cb){
+      if(_cineSheetCache[url]!==undefined){cb(_cineSheetCache[url]);return;}
+      const im=new Image();
+      im.onload=()=>{_cineSheetCache[url]={img:im,cw:im.width/DIVE.cols,ch:im.height/DIVE.rows};
+                     cb(_cineSheetCache[url]);};
+      im.onerror=()=>{_cineSheetCache[url]='none';cb('none');};
+      im.src=url;
+    }
+    function _chain(urls,loader,cb){
+      (function nxt(i){
+        if(i>=urls.length){cb(null);return;}
+        loader(urls[i],r=>{ (r&&r!=='none')?cb(r):nxt(i+1); });
+      })(0);
+    }
+    function _keyChain(key,teamFile,defFile){
+      const k=(key||'').toString().toLowerCase();
+      return k?['assets/ps1/'+k+teamFile,'assets/ps1/'+defFile]:['assets/ps1/'+defFile];
+    }
+    // Called from start(): repoint the three slots at this fixture's teams.
+    function cineLoadFor(asKey,dsKey){
+      _chain(_keyChain(asKey,'_windup.png','striker_windup.png'),_cineTex,
+        r=>{ if(r){cineWindupTex=r.tex;cineWindupAR=r.ar||0.65;} });
+      _chain(_keyChain(dsKey,'_gk_cine.png','gk_cine.png'),_cineTex,
+        r=>{ if(r)cineGkTex=r.tex; });
+      _chain(_keyChain(dsKey,'_gk_dive.png','gk_dive.png'),_cineSheet,
+        r=>{ diveSheet=r||'none'; });
+    }
+    cineLoadFor(null,null);   // warm the shared defaults at boot
     // trail pool — additive fading ghosts behind the ball
     const TRAIL=[];
     function spawnTrail(x,y,z,col,size){
@@ -1435,6 +1485,14 @@
         const dir=(o.dir!=null)?o.dir:((o.as==='h')?1:-1);     // engine attack dir (halves swap!)
         const gx=(o.gx!=null)?o.gx:((dir>0)?W*0.93:W*0.07);
         const stopX=gp.x-dir*W*0.045;                 // hold point just short of the keeper
+        try{
+          // game.js declares selHome/selAway as top-level `let` — reachable by
+          // bare name from a later script, NOT via window.*
+          const _sh=(typeof selHome!=='undefined')?selHome:null;
+          const _sa=(typeof selAway!=='undefined')?selAway:null;
+          cineLoadFor(o.asKey!=null?o.asKey:(o.as==='h'?_sh:_sa),
+                      o.dsKey!=null?o.dsKey:(o.ds==='h'?_sh:_sa));
+        }catch(e){}
         cine={v2:true,mode:'hold',t:0,ft:0,ot:0,o,dir,arrived:false,gkRestore:null,
           fx:sp.x,fy:sp.y, tx:stopX,ty:gp.y, gx,gy:gp.y, kx:gp.x,ky:gp.y,
           col:o.color||'#ffd24a'};
