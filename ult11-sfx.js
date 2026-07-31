@@ -190,9 +190,13 @@
   let prevPhase=null, prevScoreH=null, prevScoreA=null, prevKick=false, matchLive=false, kickoffDone=false;
   const stepClock={};   // per-player footstep cadence
   function num(x){ return typeof x==='number'?x:0; }
+  let _lastStepScan=0;
   function watch(){
     requestAnimationFrame(watch);
     if(!SFX.on||typeof G==='undefined'||!G){ return; }
+    // idle-cheap: outside a live match there's nothing to synth — bail before
+    // touching the audio graph so the menu costs nothing.
+    if(!G.mt && !matchLive){ return; }
     ensure();
     // keep bus gains live
     if(busMaster) busMaster.gain.value=SFX.master;
@@ -219,8 +223,9 @@
       prevScoreH=sh; prevScoreA=sa;
     }
 
-    // footstep stomps — cadence per moving player
-    if(live && typeof PP!=='undefined'){
+    // footstep stomps — cadence per moving player (throttled ~30Hz, not per frame)
+    if(live && typeof PP!=='undefined' && performance.now()-_lastStepScan>=33){
+      _lastStepScan=performance.now();
       const now=performance.now();
       ['h','a'].forEach(s=>{ const side=PP[s]; if(!side)return;
         for(const k in side){ const p=side[k]; if(!p)continue;

@@ -4747,6 +4747,7 @@ function clearDim(container){
 function bldA(carrier,isShot){
   const sp=carrier?Math.round(carrier.spirit||1500):1500;
   const el=document.getElementById('abtns'),ih=G.D.as==='h';
+  if(!PVP.on){ el.style.display=''; const _cf=document.getElementById('dcfm'); if(_cf)_cf.style.display=''; }  // undo any PvP conceal
   el.innerHTML='';
   const atkSection=document.getElementById('atk-section');
   if(atkSection)atkSection.style.display=ih?'':'none';
@@ -4803,7 +4804,9 @@ function bldA(carrier,isShot){
 }
 
 function bldD(def,ds,isShot){
-  const el=document.getElementById('dbtns');el.innerHTML='';
+  const el=document.getElementById('dbtns');
+  if(!PVP.on) el.style.display='';   // undo any PvP conceal
+  el.innerHTML='';
   const ih=ds==='h';
   const defSection=document.getElementById('def-section');
   if(defSection)defSection.style.display=ih?'':'none';
@@ -7129,6 +7132,43 @@ initHomeSlots();
 // Everything is applied INLINE so a stale cached stylesheet can never
 // leave the box unscaled/cropped.
 const VP_DESIGN_W=1280, VP_DESIGN_H=720;
+
+/* ══════ DEVICE CLASS + TOUCH-BOOST ══════
+   The whole game is one 1280×720 layout scaled to fit, so on a phone every
+   tap target shrinks with it. We detect the device once and expose:
+     • a root class  .ue-phone / .ue-tablet / .ue-desktop
+     • CSS var --tb  (touch-boost)  used by tap-target sizing in style.css
+   A player override (Settings → UI SIZE) wins over auto-detect when set. */
+function detectDeviceKind(){
+  try{
+    const nav=navigator, ua=nav.userAgent||'';
+    const coarse=matchMedia('(pointer:coarse)').matches;
+    const noHover=matchMedia('(hover:none)').matches;
+    const touchPts=(nav.maxTouchPoints||0)>0||'ontouchstart' in window;
+    const uaPhone=/Android.*Mobile|iPhone|iPod|Windows Phone/i.test(ua);
+    const uaTablet=/iPad|Android(?!.*Mobile)|Tablet/i.test(ua)||
+                   (nav.platform==='MacIntel'&&(nav.maxTouchPoints||0)>1); // iPadOS 13+
+    const minEdge=Math.min(screen.width||9999,screen.height||9999);
+    const isTouch=coarse||noHover||touchPts||uaPhone||uaTablet;
+    if(!isTouch) return 'desktop';
+    if(uaTablet||minEdge>=600) return 'tablet';
+    return 'phone';
+  }catch(e){ return 'desktop'; }
+}
+// 'auto' | 'phone' | 'tablet' | 'desktop' — persisted player override
+function uiSizePref(){ try{ return localStorage.getItem('ue_uisize')||'auto'; }catch(e){ return 'auto'; } }
+function effectiveDeviceKind(){ const p=uiSizePref(); return p==='auto'?detectDeviceKind():p; }
+function boostFor(kind){ return kind==='phone'?1.35 : kind==='tablet'?1.18 : 1; }
+window.applyUiScale=function(){
+  const kind=effectiveDeviceKind(), tb=boostFor(kind);
+  const r=document.documentElement;
+  r.style.setProperty('--tb', tb.toFixed(3));
+  r.classList.remove('ue-phone','ue-tablet','ue-desktop');
+  r.classList.add('ue-'+kind);
+  window.UE_DEVICE=kind;
+};
+applyUiScale();
+
 function fitViewport(){
   const iw=(window.visualViewport?window.visualViewport.width:window.innerWidth)||window.innerWidth;
   const ih=(window.visualViewport?window.visualViewport.height:window.innerHeight)||window.innerHeight;

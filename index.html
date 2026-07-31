@@ -12,7 +12,7 @@
 <title>Ultimate Eleven - Football Strategy Game | Beta</title>
 <meta name="description" content="Ultimate Eleven - A Captain Tsubasa inspired football strategy game with 11 vs 11 gameplay">
 <link href="https://fonts.googleapis.com/css2?family=Anton&family=Barlow+Condensed:ital,wght@0,500;0,600;0,700;0,800;1,700;1,800&family=Permanent+Marker&family=Bebas+Neue&family=Rajdhani:wght@600;700&family=Orbitron:wght@400;700&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="style.css?v=30">
+<link rel="stylesheet" href="style.css?v=31">
 <style>
 /* CAREER MODE - inline to bypass cache */
 #s-career-clubs{background:radial-gradient(ellipse 80% 50% at 50% 0%,rgba(30,114,220,.08),transparent 60%),#06080e;overflow:hidden;}
@@ -675,6 +675,15 @@
             <input type="range" class="ae-range" id="setVol" min="0" max="100" step="1" oninput="setMasterVol(this.value)">
           </div>
           <div class="ae-set-row">
+            <div class="ae-set-lbl"><div class="ae-set-name">UI SIZE</div><div class="ae-set-desc">BUTTON SIZE · AUTO DETECTS YOUR DEVICE</div></div>
+            <div class="ae-uisize" id="uiSizeCtl">
+              <button data-sz="auto" onclick="setUiSize('auto')">AUTO</button>
+              <button data-sz="desktop" onclick="setUiSize('desktop')">SMALL</button>
+              <button data-sz="tablet" onclick="setUiSize('tablet')">MED</button>
+              <button data-sz="phone" onclick="setUiSize('phone')">LARGE</button>
+            </div>
+          </div>
+          <div class="ae-set-row">
             <div class="ae-set-lbl"><div class="ae-set-name">MENU MUSIC</div><div class="ae-set-desc">PLAY THEME ON THE HOME SCREEN</div></div>
             <div class="ae-tog" id="togMenuMusic" onclick="toggleMenuMusic()"></div>
           </div>
@@ -708,7 +717,7 @@
   <script>
   (function(){
     var K='ue_settings_v1';
-    var def={vol:70,menuMusic:true,matchMusic:true,ps1:true,debug:false};
+    var def={vol:70,menuMusic:true,matchMusic:true,ps1:true,debug:false,uisize:'auto'};
     var S=load();
     function load(){try{return Object.assign({},def,JSON.parse(localStorage.getItem(K))||{});}catch(e){return Object.assign({},def);}}
     function save(){try{localStorage.setItem(K,JSON.stringify(S));}catch(e){}}
@@ -724,7 +733,15 @@
     function syncUI(){
       var sv=document.getElementById('setVol'); if(sv)sv.value=S.vol;
       setTog('togMenuMusic',S.menuMusic);setTog('togMatchMusic',S.matchMusic);setTog('togPS1',S.ps1);setTog('togDebug',S.debug);
+      var ctl=document.getElementById('uiSizeCtl');
+      if(ctl)ctl.querySelectorAll('button').forEach(function(b){b.classList.toggle('on',b.dataset.sz===(S.uisize||'auto'));});
     }
+    window.setUiSize=function(v){
+      S.uisize=v; save();
+      try{ if(v==='auto')localStorage.removeItem('ue_uisize'); else localStorage.setItem('ue_uisize',v); }catch(e){}
+      if(typeof window.applyUiScale==='function')window.applyUiScale();
+      syncUI();
+    };
     window.openSettings=function(){apply();syncUI();var m=document.getElementById('aeSettings');if(m)m.classList.add('show');};
     window.closeSettings=function(){var m=document.getElementById('aeSettings');if(m)m.classList.remove('show');};
     window.setMasterVol=function(v){S.vol=+v;save();apply();};
@@ -758,6 +775,10 @@
         var orig=window[fn];
         if(typeof orig==='function'){window[fn]=function(){var r=orig.apply(this,arguments);setTimeout(apply,30);return r;};}
       });
+      // mirror persisted UI size into the key game.js reads, then apply
+      try{ if(S.uisize&&S.uisize!=='auto')localStorage.setItem('ue_uisize',S.uisize);
+           else localStorage.removeItem('ue_uisize'); }catch(e){}
+      if(typeof window.applyUiScale==='function')window.applyUiScale();
       apply();syncUI();
     }
     if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',boot);else boot();
@@ -1547,7 +1568,7 @@
   </div>
 </div>
 
-<script src="game.js?v=42" defer></script>
+<script src="game.js?v=44" defer></script>
 <!-- ps1-mod.js removed: P3D is the only renderer, its post-FX drew into the hidden 2D canvas.
      Re-add this line to restore it: <script src="ps1-mod.js?v=1" defer></script> -->
 <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js" defer></script>
@@ -1563,9 +1584,9 @@
 <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/postprocessing/MaskPass.js" defer></script>
 <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/postprocessing/UnrealBloomPass.js" defer></script>
 <script src="ult11-bowl2.js?v=4" defer></script>
-<script src="ult11-pitch3d.js?v=23" defer></script>
-<script src="ult11-sfx.js?v=4" defer></script>
-<script src="ult11-camlab.js?v=1" defer></script>
+<script src="ult11-pitch3d.js?v=24" defer></script>
+<script src="ult11-sfx.js?v=5" defer></script>
+<script src="ult11-camlab.js?v=2" defer></script>
 <script src="ult11-team.js?v=5" defer></script>
 <script src="ult11-custom.js?v=3" defer></script>
 <script src="ult11-cup.js?v=2" defer></script>

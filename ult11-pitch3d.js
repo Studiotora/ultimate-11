@@ -72,6 +72,16 @@
     fx:{ on:true, bloom:0.55, bloomRadius:0.5, bloomThresh:0.82, tilt:0.45, vignette:0.5,
          rays:0.55, rayDecay:0.95, raySamples:60,
          sat:1.0, contrast:1.0, lift:0.0, split:0.0 },   // grade: saturation/contrast/lift + warm-cool split-tone
+    // ---- QUALITY / PERFORMANCE ----
+    // 'auto' watches the framerate and steps quality down (then back up) to
+    // hold ~55fps. Force a tier with ?q=low|med|high (great for a stable
+    // trailer capture). 'high' = full FX + 2x DPR; 'low' = no post-FX, 1x DPR.
+    quality:(function(){
+      try{ const q=new URLSearchParams(location.search).get('q');
+        if(['low','med','high','auto'].includes(q)) return q; }catch(e){}
+      return 'auto';
+    })(),
+    _tier:'high',        // the live tier auto mode is currently applying
     debug:false,         // sprite/shadow debug overlay (Camera Lab)
     ready:true
   };
@@ -1734,9 +1744,17 @@
        reads P3D.on each frame is immune to load order / draw ownership. */
     let lastTs=performance.now();
     let _lastW=0,_lastH=0;
+    function _matchActive(){
+      // cheap: the match screen carries .active only while a match is on-screen
+      const el=document.getElementById('s-match');
+      return !!(el && el.classList.contains('active'));
+    }
     function loop3d(){
       requestAnimationFrame(loop3d);
-      if(!P3D.on){
+      // Idle in menus: P3D.on is intentionally locked true, so without this the
+      // full 5-pass composer would render 60fps behind every menu. Skip all
+      // render work unless the match screen is actually showing.
+      if(!P3D.on || !_matchActive()){
         if(gl.style.display!=='none'){ gl.style.display='none'; if(P3D.suppress2D)CV.style.visibility=''; }
         if(hudCv && hudCv.style.display!=='none') hudCv.style.display='none';
         return;
@@ -1746,6 +1764,7 @@
       const _cw=CV.clientWidth,_ch=CV.clientHeight;
       if(_cw&&_ch&&(_cw!==_lastW||_ch!==_lastH)){ _lastW=_cw;_lastH=_ch;resize(); }
       const now=performance.now(); const dt=Math.min(0.05,(now-lastTs)/1000); lastTs=now;
+      monitorQuality(now);
       syncSheets(); watchActions(); syncPlayers();
       updateSelGlow();
       if(cine){ try{ if(cine.v2){cineStep2(dt);cineCamera2();} else {cineStep(dt);cineCamera();} }catch(e){console.error('[P3D] cine error',e); cineEnd();} }
@@ -1852,7 +1871,49 @@
       composer.setSize(w,h);
       if(bloomPass) bloomPass.setSize(w,h);
     }
+    /* ════════ ADAPTIVE QUALITY ════════
+       Three tiers change two things: renderer pixel ratio, and how many
+       post passes run. In 'auto' we sample frame time and step down when
+       we're slow, back up when we have headroom — with hysteresis so it
+       never oscillates. Manual tiers (?q=) pin it and skip the monitor. */
+    const QTIERS={
+      high:{ dpr:Math.min(devicePixelRatio,2), fx:true,  rays:true,  grade:true  },
+      med :{ dpr:Math.min(devicePixelRatio,1.5), fx:true,  rays:false, grade:true  },
+      low :{ dpr:1,                              fx:false, rays:false, grade:false }
+    };
+    let _curTier=null;
+    function applyTier(name){
+      const t=QTIERS[name]||QTIERS.high; if(name===_curTier) return;
+      _curTier=name; P3D._tier=name;
+      try{
+        renderer.setPixelRatio(t.dpr);
+        if(composer){ composer.setPixelRatio(t.dpr); composer.setSize(CV.clientWidth||CV.width, CV.clientHeight||CV.height); }
+        // rays + grade are the heaviest passes — toggle them per tier
+        if(rayPass)   rayPass.enabled   = t.rays  && (P3D.fx.rays>0.001);
+        if(gradePass) gradePass.enabled = t.grade;
+        P3D.fx.on = t.fx;   // low tier drops the whole composer (see loop3d)
+        if(typeof resize==='function') resize();
+      }catch(e){ console.warn('[P3D] applyTier failed',e); }
+    }
+    // frame-time monitor (auto mode only)
+    let _fpsAcc=0,_fpsN=0,_fpsCheck=0,_downAt=0,_fpsLast=0;
+    function monitorQuality(now){
+      if(P3D.quality!=='auto'){ applyTier(P3D.quality); return; }
+      if(!_fpsLast){ _fpsLast=now; return; }
+      const fdt=now-_fpsLast; _fpsLast=now;
+      if(fdt>0){ _fpsAcc+=1000/fdt; _fpsN++; }
+      if(now-_fpsCheck>800){                 // evaluate ~1x/sec
+        const fps=_fpsN? _fpsAcc/_fpsN : 60;
+        _fpsAcc=0;_fpsN=0;_fpsCheck=now;
+        const order=['low','med','high'], i=order.indexOf(_curTier||'high');
+        if(fps<48 && i>0){ applyTier(order[i-1]); _downAt=now; }        // struggling → drop
+        else if(fps>58 && i<2 && now-_downAt>4000){ applyTier(order[i+1]); } // headroom → recover
+      }
+    }
+    P3D._applyTier=applyTier;
+
     function applyFx(){
+    
       if(!composer) return;
       if(bloomPass){ bloomPass.strength=P3D.fx.bloom; bloomPass.radius=P3D.fx.bloomRadius; bloomPass.threshold=P3D.fx.bloomThresh; }
       if(hTilt&&vTilt){ const b=P3D.fx.tilt*0.0035; hTilt.uniforms.h.value=b; vTilt.uniforms.v.value=b; }
@@ -1873,6 +1934,7 @@
 
     applyLight();      // set initial sun / ambient / fog / pitch glow
     resize();
+    applyTier(P3D.quality==='auto'?'high':P3D.quality);   // start high, auto steps down if needed
     P3D.ready=true;
     console.log('[P3D] 2.5D renderer ready — toggle via the 2.5D button or window.P3D.on=true');
   }
