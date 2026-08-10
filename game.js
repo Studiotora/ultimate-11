@@ -1201,11 +1201,112 @@ const MAX_OFFBALL_STEP=()=>Math.max(0.26,W*.00058);  // off-ball
 // Stat-aware field speed: SPD stat scales pace, low stamina slows everyone
 function fieldSpdMult(pl){
   if(!pl)return 1.0;
-  const base=clamp(0.60+(gs(pl,'spd')-60)*0.010,0.70,1.30);
+  // Centred so an average 72-SPD player sits at ~1.0; a 94 flyer reaches
+  // ~1.32 and a 55 centre-back ~0.75 — a ~75% spread, wide enough that pace
+  // is a genuine weapon without making the base game feel slow.
+  const base=clamp(1.0+(gs(pl,'spd')-72)*0.0145,0.75,1.35);
   const maxSp=pl.pos==='GK'?2000:1500;
   const fat=clamp(0.88+((pl.spirit||maxSp)/maxSp)*0.12,0.88,1.0);
   return base*fat;
 }
+/* ══════════════ LOCKED · AI REALISM ══════════════
+   Four systems that turn chess-piece movement into football movement.
+   Tunable here; engine logic below must not hardcode these numbers.
+
+   1 MOMENTUM   players accelerate and decelerate instead of snapping to
+                full speed. Heavier/slower players take longer to turn, so
+                a winger genuinely beats a centre-back off the mark.
+   2 REACTION   nobody reacts on the same frame the ball moves. Each player
+                has a personal lag (better players react quicker) before
+                they respond to a new situation.
+   3 ANTICIPATION defenders lead the carrier by an amount scaled to their
+                own reading of the game, instead of a flat constant.
+   4 ERROR      small per-player positional noise so marking is imperfect
+                and the shape breathes. Removes the "magnetic" feel.        */
+const AI_REAL={
+  accel:0.16,        // how fast velocity approaches target (0-1 per frame)
+  decel:0.28,        // faster than accel — players stop quicker than they start
+  turnPenalty:0.55,  // extra drag when reversing direction (hard cuts cost you)
+  reactMinMs:70,     // fastest possible reaction (elite)
+  reactMaxMs:280,    // slowest (poor awareness)
+  anticipMin:0.02,   // lead as fraction of W — poor reader
+  anticipMax:0.085,  // elite reader
+  errorAmp:0.010,    // positional noise as fraction of W
+  errorHz:0.35       // how fast that noise drifts
+};
+
+/* Per-player physical state, keyed side:slot. Holds velocity (for momentum),
+   the next timestamp the player is allowed to re-read the situation, and a
+   personal noise phase so error doesn't sync across the team. */
+const _phys={};
+function physOf(side,k,pl){
+  const id=side+':'+k;
+  let ph=_phys[id];
+  if(!ph){
+    ph=_phys[id]={vx:0,vy:0,nextReact:0,tx:0,ty:0,seed:Math.random()*1000};
+    if(pl){ ph.tx=0; ph.ty=0; }
+  }
+  return ph;
+}
+function resetPhysics(){ for(const k in _phys) delete _phys[k]; }
+
+// Awareness 0..1 from the stats that describe reading the game.
+function awarenessOf(pl){
+  if(!pl)return 0.5;
+  const def=gs(pl,'def')||60, tec=gs(pl,'tec')||60;
+  return clamp(((def+tec)/2-50)/45,0,1);
+}
+// Personal reaction lag in ms — better players re-read the play sooner.
+function reactionMsFor(pl){
+  const a=awarenessOf(pl);
+  return AI_REAL.reactMaxMs-(AI_REAL.reactMaxMs-AI_REAL.reactMinMs)*a;
+}
+// How far ahead of the carrier a defender aims.
+function anticipationFor(pl){
+  const a=awarenessOf(pl);
+  return W*(AI_REAL.anticipMin+(AI_REAL.anticipMax-AI_REAL.anticipMin)*a);
+}
+/* Slow-drifting positional error, unique per player. Marking is never
+   pixel-perfect, and the wobble makes the shape look alive. */
+function aiNoise(ph,axis){
+  const t=Date.now()*0.001*AI_REAL.errorHz+ph.seed;
+  return (axis?Math.sin(t*1.3):Math.cos(t))*W*AI_REAL.errorAmp;
+}
+/* Gate: has this player "noticed" the situation change yet?
+   Returns true when he is allowed to update his target this frame. */
+function canReact(side,k,pl){
+  const ph=physOf(side,k,pl), now=Date.now();
+  if(now<ph.nextReact)return false;
+  ph.nextReact=now+reactionMsFor(pl)*(0.75+Math.random()*0.5);
+  return true;
+}
+
+/* MOMENTUM MOVE — the heart of the realism pass.
+   Instead of jumping straight at the target, we steer a velocity vector
+   toward the desired direction, so there is acceleration, deceleration and
+   a real cost to changing direction. */
+function moveMomentum(cur,ph,tx,ty,maxStep,pl,dt=1){
+  const dx=tx-cur.x, dy=ty-cur.y;
+  const d=Math.hypot(dx,dy);
+  if(d<0.5){ // arrived — bleed off speed rather than stopping dead
+    ph.vx*=(1-AI_REAL.decel); ph.vy*=(1-AI_REAL.decel);
+    cur.x+=ph.vx*dt; cur.y+=ph.vy*dt;
+    return;
+  }
+  const desiredX=(dx/d)*maxStep, desiredY=(dy/d)*maxStep;
+  // reversing direction costs extra — you cannot cut 180° at full pace
+  const dot=(ph.vx*desiredX+ph.vy*desiredY);
+  const spd=Math.hypot(ph.vx,ph.vy);
+  const turning=(spd>0.01&&dot<0)?AI_REAL.turnPenalty:1;
+  const rate=(Math.hypot(desiredX,desiredY)>spd?AI_REAL.accel:AI_REAL.decel)*turning;
+  ph.vx+=(desiredX-ph.vx)*rate*dt;
+  ph.vy+=(desiredY-ph.vy)*rate*dt;
+  // never overshoot the target in one frame
+  const vlen=Math.hypot(ph.vx,ph.vy);
+  if(vlen>d){ const sc=d/vlen; ph.vx*=sc; ph.vy*=sc; }
+  cur.x+=ph.vx*dt; cur.y+=ph.vy*dt;
+}
+
 function moveTowards(cur,targetX,targetY,ease,maxStep){
   const dx=targetX-cur.x,dy=targetY-cur.y;
   const d=Math.hypot(dx,dy);
@@ -1242,6 +1343,7 @@ function iPos(){
       PT[s][k]={x:px,y:py};
     });
   });ball={x:W/2,y:H/2,tx:W/2,ty:H/2};trail=[];
+  resetPhysics();   // clear momentum/reaction state so nothing carries over
 }
 function makeG(){return {half:1,tL:2400,hG:0,aG:0,poss:'h',ck:null,chk:null,mom:50,duels:0,shots:0,hP:0,tP:0,phase:'idle',mt:null,di:null,D:{},pm:false,kickoffUntil:0,pressing:false,goalGen:0,paused:false,subsUsed:0,reds:{h:0,a:0},hShots:0,aShots:0,hDuels:0,aDuels:0,hFouls:0,aFouls:0,hOff:0,aOff:0};}
 let G=makeG();
@@ -1640,7 +1742,13 @@ function tick(dt=1){
         const threshold = pressure>0.6 ? -0.2 : 0.4; // under heavy press, accept tighter lanes
         if(lane>threshold){
           clearInterval(G.di);
-          G._cpuPassAt=Date.now()+1400; // cooldown so it doesn't ping-pong
+          // Stat-driven decision cadence: a high passing/technique player
+          // gets his head up again sooner. Range ~0.85s (elite) to ~1.9s.
+          {
+            const _dm=sq(s)[G.ck];
+            const _q=clamp((((gs(_dm,'pas')||60)+(gs(_dm,'tec')||60))/2-50)/45,0,1);
+            G._cpuPassAt=Date.now()+(1900-1050*_q);
+          }
           afPass(s,tk);
           return;
         }
@@ -1689,14 +1797,23 @@ function tick(dt=1){
       let ux,uy;
       if(manualDef){ux=_defVec.x;uy=_defVec.y;}
       else{
-        // Predictive chase: aim where the carrier is GOING, not where he was
-        const lead=W*0.05;
+        /* Predictive chase. The lead is no longer a flat constant: a defender
+           who reads the game well aims much further ahead of the carrier,
+           a poor one lunges at where the ball already was. Reaction gating
+           means he also commits to that read for a beat instead of
+           re-aiming every single frame — which is what lets a quick change
+           of direction actually beat him. */
+        const _engPl0=sq(ds)[ROLES.engager];
+        const _ph=physOf(ds,ROLES.engager,_engPl0);
+        const lead=anticipationFor(_engPl0);
         const _carV=_manualInputForSide(G.poss);
         const _lx=_carV?_carV.x:dirFor(G.poss);
         const _ly=_carV?_carV.y:0;
-        const targetX=cp.x+_lx*lead;
-        const targetY=cp.y+_ly*lead;
-        const dx=targetX-dp2.x,dy=targetY-dp2.y;
+        if(canReact(ds,ROLES.engager,_engPl0)||!_ph.tx){
+          _ph.tx=cp.x+_lx*lead+aiNoise(_ph,0);
+          _ph.ty=cp.y+_ly*lead+aiNoise(_ph,1);
+        }
+        const dx=_ph.tx-dp2.x,dy=_ph.ty-dp2.y;
         const dd=Math.hypot(dx,dy)||1;
         ux=dx/dd;uy=dy/dd;
       }
@@ -1707,8 +1824,12 @@ function tick(dt=1){
       const sprintMult=(_sprintForSide(ds))?1.22:1.08; // AI chase slightly hotter
       const manualMult=manualDef?1.3:1.0;
       const step=MAX_DEF_STEP()*pressMult*sprintMult*manualMult*fieldSpdMult(engPl)*dt;
-      dp2.x=clamp(dp2.x+ux*step,W*.01,W*.99);
-      dp2.y=clamp(dp2.y+uy*step,H*.03,H*.97);
+      // momentum: steer velocity toward the chase direction rather than
+      // teleporting along it, so acceleration and turning both cost time
+      const _ephy=physOf(ds,ROLES.engager,engPl);
+      moveMomentum(dp2,_ephy,dp2.x+ux*step*8,dp2.y+uy*step*8,step,engPl,dt);
+      dp2.x=clamp(dp2.x,W*.01,W*.99);
+      dp2.y=clamp(dp2.y,H*.03,H*.97);
       if(Date.now()>=(G.kickoffUntil||0) && dist(dp2,cp)<IR()){G.chk=ROLES.engager;opDuel(false);return;}
     }
   }
@@ -1720,9 +1841,12 @@ function tick(dt=1){
     if(dp2){
       const dx=cp.x-dp2.x,dy=cp.y-dp2.y;
       const dd=Math.hypot(dx,dy)||1;
-      const step=MAX_DEF_STEP()*0.80*fieldSpdMult(sq(ds)[ROLES.cover])*dt;
-      dp2.x=clamp(dp2.x+(dx/dd)*step,W*.01,W*.99);
-      dp2.y=clamp(dp2.y+(dy/dd)*step,H*.03,H*.97);
+      const _cvPl=sq(ds)[ROLES.cover];
+      const step=MAX_DEF_STEP()*0.80*fieldSpdMult(_cvPl)*dt;
+      const _cphy=physOf(ds,ROLES.cover,_cvPl);
+      moveMomentum(dp2,_cphy,dp2.x+(dx/dd)*step*8,dp2.y+(dy/dd)*step*8,step,_cvPl,dt);
+      dp2.x=clamp(dp2.x,W*.01,W*.99);
+      dp2.y=clamp(dp2.y,H*.03,H*.97);
     }
   }
 
@@ -1758,7 +1882,24 @@ function moveOffBall(s,ds,dt=1){
   const STRIKER_SPEED = W * 0.00062 * dt;
   const TRACK_SPEED   = W * 0.00048 * dt;
   function spdMult(pl){return fieldSpdMult(pl);}
-  function glide(cur,tx,ty,spd,pl){
+  /* glide() now carries the realism layer for EVERY off-ball player on both
+     teams: a personal reaction lag before the target updates, slow positional
+     noise so marking is human, and momentum so nobody snaps to speed.
+     `side`/`key` are optional — without them it degrades to the old behaviour,
+     so any legacy call site still works. */
+  function glide(cur,tx,ty,spd,pl,side,key){
+    if(side&&key){
+      const ph=physOf(side,key,pl);
+      // Re-read the play only when reaction allows; otherwise keep running at
+      // the last committed target (this is what makes players look committed
+      // to a run instead of twitching every frame).
+      if(canReact(side,key,pl)||!ph.tx){
+        ph.tx=tx+aiNoise(ph,0);
+        ph.ty=ty+aiNoise(ph,1);
+      }
+      moveMomentum(cur,ph,ph.tx,ph.ty,spd*(pl?spdMult(pl):1.0),pl,1);
+      return;
+    }
     const dx=tx-cur.x,dy=ty-cur.y;
     const d=Math.hypot(dx,dy);
     if(d<1)return;
@@ -1791,7 +1932,7 @@ function moveOffBall(s,ds,dt=1){
     }
 
     // Cooling down — return to formation position
-    if(ocd(s,k)){glide(cur,p.x*W,p.y*H,DRIFT_SPEED*0.6,pl);return;}
+    if(ocd(s,k)){glide(cur,p.x*W,p.y*H,DRIFT_SPEED*0.6,pl,s,k);return;}
 
     const zone=zo(k);
     const isStriker=k==='ST';
@@ -1822,7 +1963,7 @@ function moveOffBall(s,ds,dt=1){
         ty = p.y*H;
       }
       const spd = k===ROLES.runner1||k===ROLES.runner2 ? STRIKER_SPEED : SUPPORT_SPEED*0.9;
-      glide(cur,tx,ty,spd,pl);
+      glide(cur,tx,ty,spd,pl,s,k);
       return;
     }
 
@@ -1833,21 +1974,21 @@ function moveOffBall(s,ds,dt=1){
         const offset = k===ROLES.runner1 ? W*0.12 : W*0.08;
         const tx = aheadOf(cp.x, offset);
         const ty = lerp(p.y*H, cp.y, 0.25);
-        glide(cur, dir>0?clamp(tx,W*.15,W*.85):clamp(tx,W*.15,W*.85), ty, SUPPORT_SPEED, pl);
+        glide(cur, dir>0?clamp(tx,W*.15,W*.85):clamp(tx,W*.15,W*.85), ty, SUPPORT_SPEED, pl,s,k);
         return;
       }
       // Holding mid — stay slightly behind carrier as an outlet (e.g. CM1)
       if(k==='CM1'){
         const tx = cp.x - dir*W*0.10;
         const ty = lerp(p.y*H, H*0.5, 0.15);
-        glide(cur, dir>0?clamp(tx,W*.10,W*.75):clamp(tx,W*.25,W*.90), ty, DRIFT_SPEED*1.4, pl);
+        glide(cur, dir>0?clamp(tx,W*.10,W*.75):clamp(tx,W*.25,W*.90), ty, DRIFT_SPEED*1.4, pl,s,k);
         return;
       }
       // Other mids: hold shape, drift slightly with play
       const baseProgress = clamp(carrierProg - 0.15, 0.30, 0.60);
       const tx = (dir>0 ? baseProgress : 1-baseProgress) * W;
       const ty = p.y*H;
-      glide(cur,clamp(tx,W*.20,W*.80),ty,DRIFT_SPEED,pl);
+      glide(cur,clamp(tx,W*.20,W*.80),ty,DRIFT_SPEED,pl,s,k);
       return;
     }
 
@@ -1860,7 +2001,7 @@ function moveOffBall(s,ds,dt=1){
         // Overlap run
         const tx = aheadOf(cp.x, W*0.06);
         const ty = p.y*H;
-        glide(cur,dir>0?clamp(tx,W*.40,W*.85):clamp(tx,W*.15,W*.60),ty,SUPPORT_SPEED*0.85,pl);
+        glide(cur,dir>0?clamp(tx,W*.40,W*.85):clamp(tx,W*.15,W*.60),ty,SUPPORT_SPEED*0.85,pl,s,k);
         return;
       }
       // Normal: hold defensive line based on carrier progress. Stance shifts
@@ -1870,7 +2011,7 @@ function moveOffBall(s,ds,dt=1){
       const cap = dir>0 ? W*(0.48+stA*0.07) : W*(0.52-stA*0.07);
       const final = dir>0 ? Math.min(tx, cap) : Math.max(tx, cap);
       const ty = p.y*H;
-      glide(cur,final,ty,DRIFT_SPEED*1.2,pl);
+      glide(cur,final,ty,DRIFT_SPEED*1.2,pl,s,k);
       return;
     }
   });
@@ -1917,14 +2058,14 @@ function moveOffBall(s,ds,dt=1){
       return;
     }
 
-    if(ocd(ds,k)){glide(cur,p.x*W,p.y*H,DRIFT_SPEED*0.6,pl);return;}
+    if(ocd(ds,k)){glide(cur,p.x*W,p.y*H,DRIFT_SPEED*0.6,pl,ds,k);return;}
 
     // Cover — sits between carrier and own goal, second line of defense
     if(k===ROLES.cover){
       const dgx=ownGoalXFor(ds);
       const tx=clamp(lerp(cp.x,dgx,0.35),W*.04,W*.96);
       const ty=lerp(p.y*H,cp.y,0.35);
-      glide(cur,tx,ty,ROLE_SPEED*1.1,pl);
+      glide(cur,tx,ty,ROLE_SPEED*1.1,pl,ds,k);
       return;
     }
 
@@ -1943,11 +2084,11 @@ function moveOffBall(s,ds,dt=1){
         // Position between ball and threat
         const tx = lerp(cp.x, tp.x, 0.55);
         const ty = lerp(cp.y, tp.y, 0.55);
-        glide(cur,tx,ty,ROLE_SPEED*1.0,pl);
+        glide(cur,tx,ty,ROLE_SPEED*1.0,pl,ds,k);
       } else {
         const tx=clamp(lerp(cp.x,dgx,0.55),W*.04,W*.96);
         const ty=lerp(H*.5,cp.y,0.25);
-        glide(cur,tx,ty,ROLE_SPEED*0.9,pl);
+        glide(cur,tx,ty,ROLE_SPEED*0.9,pl,ds,k);
       }
       return;
     }
@@ -1967,14 +2108,14 @@ function moveOffBall(s,ds,dt=1){
           const predictX = cp.x + ahead*W*0.03;
           const tx = lerp(predictX,dgx,0.15);
           const ty = lerp(cp.y,H*0.5,0.10);
-          glide(cur,tx,ty,TRACK_SPEED*1.15,pl);
+          glide(cur,tx,ty,TRACK_SPEED*1.15,pl,ds,k);
           return;
         }
         // Stay goal-side of the attacker — bunkering teams sag toward goal (zonal feel)
         const goalSideBias = 0.18 + threatLevel*0.12 + bunker*0.15;
         const tx=lerp(tgt.x,dgx,goalSideBias);
         const ty=lerp(tgt.y,H*0.5,0.08);
-        glide(cur,tx,ty,TRACK_SPEED*0.9,pl);
+        glide(cur,tx,ty,TRACK_SPEED*0.9,pl,ds,k);
         return;
       }
     }
@@ -2010,7 +2151,7 @@ function moveOffBall(s,ds,dt=1){
         tx = p.x*W;
       }
     }
-    glide(cur,clamp(tx,W*.06,W*.94),clamp(ty,H*.05,H*.95),DRIFT_SPEED*1.3,pl);
+    glide(cur,clamp(tx,W*.06,W*.94),clamp(ty,H*.05,H*.95),DRIFT_SPEED*1.3,pl,ds,k);
   });
 }
 

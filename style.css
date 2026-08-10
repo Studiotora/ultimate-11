@@ -3418,3 +3418,70 @@ html,body{overscroll-behavior:none;}
 .pz-mbar{height:6px;background:rgba(255,255,255,.08);border-radius:3px;overflow:hidden;display:flex}
 .pz-mbar .h{background:linear-gradient(90deg,#0c4182,#2882f0)}
 .pz-mbar .a{background:linear-gradient(90deg,#f03030,#7d1212)}
+
+/* ═══════════════════════════════════════════════════════════════════════
+   TOUCH-BOOST — enlarge tap targets on phones/tablets only.
+   game.js detectDeviceKind() sets .ue-phone / .ue-tablet on <html> and a
+   --tb multiplier (phone 1.35, tablet 1.18, desktop 1.0). Desktop keeps
+   .ue-desktop where --tb resolves to 1, so these rules are inert there.
+   Only INTERACTIVE controls grow — body text, headers and layout are left
+   alone so nothing reflows or crowds. min-height floors guarantee a
+   comfortable target even after the 1280→screen downscale.
+   ═══════════════════════════════════════════════════════════════════════ */
+:root{--tb:1;}
+
+/* --- main menu rows --- */
+html.ue-phone .hm-item,html.ue-tablet .hm-item{
+  padding-top:calc(13px*var(--tb));padding-bottom:calc(13px*var(--tb));min-height:calc(46px*var(--tb));}
+
+/* --- generic back / ghost buttons --- */
+html.ue-phone .back-btn,html.ue-tablet .back-btn,
+html.ue-phone .bkbtn,html.ue-tablet .bkbtn{
+  padding:calc(6px*var(--tb)) calc(13px*var(--tb));font-size:calc(9px*var(--tb));min-height:calc(30px*var(--tb));}
+
+/* --- category / formation / action pills --- */
+html.ue-phone .ts-cat-btn,html.ue-tablet .ts-cat-btn,
+html.ue-phone .tm-fbtn,html.ue-tablet .tm-fbtn,
+html.ue-phone .tm-formation-btn,html.ue-tablet .tm-formation-btn{
+  padding:calc(8px*var(--tb)) calc(12px*var(--tb));min-height:calc(34px*var(--tb));}
+html.ue-phone .tm-action-btn,html.ue-tablet .tm-action-btn{
+  padding:calc(11px*var(--tb)) calc(13px*var(--tb));min-height:calc(42px*var(--tb));font-size:calc(15px*var(--tb));}
+
+/* --- customize / cup list items + tabs + buttons --- */
+html.ue-phone .cz-tab,html.ue-tablet .cz-tab{
+  padding:calc(6px*var(--tb)) calc(12px*var(--tb));min-height:calc(32px*var(--tb));}
+html.ue-phone .cz-item,html.ue-tablet .cz-item,
+html.ue-phone .cup-item,html.ue-tablet .cup-item{
+  padding:calc(9px*var(--tb)) calc(12px*var(--tb));min-height:calc(40px*var(--tb));}
+html.ue-phone .cz-b,html.ue-tablet .cz-b,
+html.ue-phone .cz-back,html.ue-tablet .cz-back,
+html.ue-phone .cup-comp,html.ue-tablet .cup-comp{
+  padding:calc(9px*var(--tb)) calc(15px*var(--tb));min-height:calc(40px*var(--tb));}
+
+/* --- career management tiles --- */
+html.ue-phone .cr-mgmt-btn,html.ue-tablet .cr-mgmt-btn{
+  padding:calc(10px*var(--tb)) calc(10px*var(--tb));min-height:calc(52px*var(--tb));}
+
+/* --- pause button (match HUD) --- */
+html.ue-phone #s-match .pause-btn.aaa-pause,html.ue-tablet #s-match .pause-btn.aaa-pause{
+  padding:calc(7px*var(--tb)) calc(12px*var(--tb))!important;min-height:calc(34px*var(--tb))!important;}
+
+/* --- DUEL ACTION BUTTONS — the most-tapped, smallest control in play ---
+   Grow the face padding + icon so the whole plate scales up together. */
+html.ue-phone .dact3d-face,html.ue-tablet .dact3d-face{
+  padding:calc(8px*var(--tb)) calc(13px*var(--tb));}
+html.ue-phone .dact3d-img,html.ue-tablet .dact3d-img{
+  width:calc(48px*var(--tb))!important;max-width:none!important;}
+
+/* --- pause-menu option rows (if reachable on touch) --- */
+html.ue-phone .pz-opt,html.ue-tablet .pz-opt{min-height:calc(46px*var(--tb));}
+
+/* --- on real phones, also give the virtual joystick a touch more room --- */
+html.ue-phone #vjoy-base{transform:scale(calc(0.5 + 0.5*var(--tb)));transform-origin:bottom left;}
+
+/* UI-SIZE control in Settings (segmented buttons) */
+.ae-uisize{display:flex;gap:6px}
+.ae-uisize button{flex:1;padding:8px 6px;border-radius:7px;border:1px solid rgba(255,255,255,.14);
+  background:#0b1524;color:#cfd8e3;font-family:'Orbitron',sans-serif;font-size:9px;font-weight:700;
+  letter-spacing:.1em;cursor:pointer;transition:.15s}
+.ae-uisize button.on{background:linear-gradient(180deg,#ffd566,#f0c040 55%,#a8771a);color:#1a0f00;border-color:#ffe28a}
