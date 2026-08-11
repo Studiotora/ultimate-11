@@ -1227,8 +1227,8 @@ const AI_REAL={
   accel:0.16,        // how fast velocity approaches target (0-1 per frame)
   decel:0.28,        // faster than accel — players stop quicker than they start
   turnPenalty:0.55,  // extra drag when reversing direction (hard cuts cost you)
-  reactMinMs:70,     // fastest possible reaction (elite)
-  reactMaxMs:280,    // slowest (poor awareness)
+  reactMinMs:60,     // fastest possible reaction (elite)
+  reactMaxMs:190,    // slowest (poor awareness) — 280 was a visible lag on defence
   anticipMin:0.02,   // lead as fraction of W — poor reader
   anticipMax:0.085,  // elite reader
   errorAmp:0.010,    // positional noise as fraction of W
@@ -1279,6 +1279,24 @@ function canReact(side,k,pl){
   if(now<ph.nextReact)return false;
   ph.nextReact=now+reactionMsFor(pl)*(0.75+Math.random()*0.5);
   return true;
+}
+
+/* RECOVERY SPRINT — when a defender is beaten (the ball has got goal-side of
+   him) he must turn and chase at full tilt, not jog back in shape. Returns a
+   speed multiplier: 1.0 when in position, up to RECOVER_MAX when stranded
+   upfield of the ball. This is what stops a single beaten defender from
+   taking himself out of the play permanently. */
+const RECOVER_MAX=1.85;
+function recoveryMult(ds,k,cur){
+  try{
+    const cp=PP[G.poss]&&PP[G.poss][G.ck];
+    if(!cp||!cur)return 1;
+    const ddir=dirFor(ds);
+    // how far upfield of the ball this defender is, in his own attacking sense
+    const beatenBy=ddir>0 ? (cur.x-cp.x) : (cp.x-cur.x);
+    if(beatenBy<=0)return 1;                       // still goal-side: fine
+    return 1+Math.min(1,beatenBy/(W*0.22))*(RECOVER_MAX-1);
+  }catch(e){ return 1; }
 }
 
 /* MOMENTUM MOVE — the heart of the realism pass.
@@ -1681,7 +1699,10 @@ function tick(dt=1){
   const carrMult=fieldSpdMult(carrierPl);
   const mvMag=Math.hypot(mv.x,mv.y);
   if(mvMag>0.0001){
-    let capMult=(s==='h')?2.25:1.45;
+    // was 2.25 (human) — combined with the 1.2 sprint and up to 1.35 pace it
+    // made the carrier ~2x faster than ANY defender, so nobody could ever be
+    // caught. Now pace difference decides the footrace, not a blanket boost.
+    let capMult=(s==='h')?1.82:1.58;
     if(_sprintForSide(s))capMult*=1.20; // sprint held (per side in PvP)
     const cap=MAX_CARRIER_STEP()*capMult*carrMult*dt;
     const step=Math.min(mvMag*dt,cap);
@@ -1821,9 +1842,9 @@ function tick(dt=1){
       const pressMult=((G.pressing&&ds==='h')||cpuPress)?1.5:1.0;
       const engPl=sq(ds)[ROLES.engager];
       if(engPl && _sprintForSide(ds)) engPl.spirit=Math.max(0,(engPl.spirit||1500)-0.5*dt); // sprint costs stamina on defense too
-      const sprintMult=(_sprintForSide(ds))?1.22:1.08; // AI chase slightly hotter
+      const sprintMult=(_sprintForSide(ds))?1.34:1.30; // AI commits to the chase
       const manualMult=manualDef?1.3:1.0;
-      const step=MAX_DEF_STEP()*pressMult*sprintMult*manualMult*fieldSpdMult(engPl)*dt;
+      const step=MAX_DEF_STEP()*pressMult*sprintMult*manualMult*fieldSpdMult(engPl)*recoveryMult(ds,ROLES.engager,dp2)*dt;
       // momentum: steer velocity toward the chase direction rather than
       // teleporting along it, so acceleration and turning both cost time
       const _ephy=physOf(ds,ROLES.engager,engPl);
@@ -1842,7 +1863,7 @@ function tick(dt=1){
       const dx=cp.x-dp2.x,dy=cp.y-dp2.y;
       const dd=Math.hypot(dx,dy)||1;
       const _cvPl=sq(ds)[ROLES.cover];
-      const step=MAX_DEF_STEP()*0.80*fieldSpdMult(_cvPl)*dt;
+      const step=MAX_DEF_STEP()*0.92*fieldSpdMult(_cvPl)*recoveryMult(ds,ROLES.cover,dp2)*dt;
       const _cphy=physOf(ds,ROLES.cover,_cvPl);
       moveMomentum(dp2,_cphy,dp2.x+(dx/dd)*step*8,dp2.y+(dy/dd)*step*8,step,_cvPl,dt);
       dp2.x=clamp(dp2.x,W*.01,W*.99);
@@ -1877,10 +1898,10 @@ function moveOffBall(s,ds,dt=1){
 
   // Speeds
   const DRIFT_SPEED   = W * 0.00020 * dt;
-  const ROLE_SPEED    = W * 0.00034 * dt;
+  const ROLE_SPEED    = W * 0.00046 * dt;   // cover/blocker were jogging
   const SUPPORT_SPEED = W * 0.00046 * dt;
   const STRIKER_SPEED = W * 0.00062 * dt;
-  const TRACK_SPEED   = W * 0.00048 * dt;
+  const TRACK_SPEED   = W * 0.00062 * dt;   // was .00048 — could not live with a sprinter
   function spdMult(pl){return fieldSpdMult(pl);}
   /* glide() now carries the realism layer for EVERY off-ball player on both
      teams: a personal reaction lag before the target updates, slow positional
@@ -2023,7 +2044,16 @@ function moveOffBall(s,ds,dt=1){
   const stD=teamStance(ds);
   const bunker=Math.max(0,-stD), dchase=Math.max(0,stD);
   // Shared defensive-line height — mids tether to this so the block stays compact.
-  const defLineProg=clamp(carrierProg-0.20 - bunker*0.06 + dchase*0.04, 0.06, 0.40);
+  /* The line is expressed in the DEFENDING side's own frame (0 = own goal).
+     The attacker sits at (1-carrierProg) in that same frame, so the line must
+     TRACK BACK as he advances. The old formula (carrierProg-0.20, capped 0.40)
+     moved the line the WRONG WAY and stranded it upfield: once the carrier
+     passed ~65% the defence was physically unable to drop, so anyone through
+     the line ran unopposed at goal. Now the line sits a shrinking gap in front
+     of the attacker and retreats with him. */
+  const attPosOwnFrame=1-carrierProg;
+  const lineGap=0.13*(1-carrierProg*0.55);        // gap tightens near our goal
+  const defLineProg=clamp(attPosOwnFrame+lineGap - bunker*0.05 + dchase*0.05, 0.085, 0.62);
   const assignedDefs=new Set([ROLES.engager,ROLES.cover,ROLES.blocker]);
   const freeAtk=validOutfieldKeys(s).filter(k=>k!==G.ck);
 
@@ -2108,14 +2138,16 @@ function moveOffBall(s,ds,dt=1){
           const predictX = cp.x + ahead*W*0.03;
           const tx = lerp(predictX,dgx,0.15);
           const ty = lerp(cp.y,H*0.5,0.10);
-          glide(cur,tx,ty,TRACK_SPEED*1.15,pl,ds,k);
+          glide(cur,tx,ty,TRACK_SPEED*1.45*recoveryMult(ds,k,cur),pl,ds,k);
           return;
         }
         // Stay goal-side of the attacker — bunkering teams sag toward goal (zonal feel)
         const goalSideBias = 0.18 + threatLevel*0.12 + bunker*0.15;
         const tx=lerp(tgt.x,dgx,goalSideBias);
-        const ty=lerp(tgt.y,H*0.5,0.08);
-        glide(cur,tx,ty,TRACK_SPEED*0.9,pl,ds,k);
+        // was lerp(...,H*0.5,0.08) — pulled markers infield, leaving the wide
+        // man free. Track his actual lane instead.
+        const ty=lerp(tgt.y,H*0.5,0.02);
+        glide(cur,tx,ty,TRACK_SPEED*1.25*recoveryMult(ds,k,cur),pl,ds,k);
         return;
       }
     }
@@ -2126,8 +2158,10 @@ function moveOffBall(s,ds,dt=1){
     if(zone==='def'){
       // Defensive line uses the shared stance-aware height
       tx = (ddir>0 ? defLineProg : 1-defLineProg) * W;
-      // Ball-side shift
-      ty = lerp(p.y*H, cp.y, 0.18);
+      // Ball-side shift. At 0.18 the block barely slid across, so running down
+      // a touchline simply bypassed everyone. A real back line shuttles hard
+      // toward the ball; 0.50 keeps shape while genuinely closing the flank.
+      ty = lerp(p.y*H, cp.y, 0.50);
       // ELASTIC ANCHORING: if the engager is a fellow defender who stepped
       // out, tuck toward his vacated formation slot to cover the hole.
       if(ROLES.engager&&zo(ROLES.engager)==='def'){
