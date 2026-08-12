@@ -1363,7 +1363,7 @@ function iPos(){
   });ball={x:W/2,y:H/2,tx:W/2,ty:H/2};trail=[];
   resetPhysics();   // clear momentum/reaction state so nothing carries over
 }
-function makeG(){return {half:1,tL:2400,hG:0,aG:0,poss:'h',ck:null,chk:null,mom:50,duels:0,shots:0,hP:0,tP:0,phase:'idle',mt:null,di:null,D:{},pm:false,kickoffUntil:0,pressing:false,goalGen:0,paused:false,subsUsed:0,reds:{h:0,a:0},hShots:0,aShots:0,hDuels:0,aDuels:0,hFouls:0,aFouls:0,hOff:0,aOff:0};}
+function makeG(){return {half:1,tL:2400,hG:0,aG:0,poss:'h',ck:null,chk:null,mom:50,duels:0,shots:0,hP:0,tP:0,phase:'idle',mt:null,di:null,D:{},pm:false,kickoffUntil:0,_resT:0,pressing:false,goalGen:0,paused:false,subsUsed:0,reds:{h:0,a:0},hShots:0,aShots:0,hDuels:0,aDuels:0,hFouls:0,aFouls:0,hOff:0,aOff:0};}
 let G=makeG();
 function setC(k,s){G.poss=s;G.ck=k;G.tP++;if(s==='h')G.hP++;updP();updH();}
 // ═══════════════════════════════════════════════════════════════
@@ -1871,14 +1871,22 @@ function tick(dt=1){
     }
   }
 
-  // Any defender within tackle range also triggers duel — prevents carrier running through defenders
+  /* Any defender within tackle range triggers the duel — and if that side is
+     human-controlled, control TRANSFERS to him so the player is always the man
+     making the challenge (previously the duel opened but you were still
+     "being" the old engager, which felt like the game ignored you). */
   if(Date.now()>=(G.kickoffUntil||0)){
     const defQ=sq(ds);
     for(const k of Object.keys(defQ)){
       if(!defQ[k]||k===ROLES.engager||k==='GK'||ocd(ds,k))continue;
       const dp=PP[ds][k];if(!dp)continue;
       if(dist(dp,cp)<IR()*1.05){
+        const wasEngager=ROLES.engager;
         ROLES.engager=k;G.chk=k;
+        if(!isCpuSide(ds)&&wasEngager!==k){
+          // tell the player he now controls the challenger
+          try{ if(typeof flashControlSwitch==='function')flashControlSwitch(ds,k); }catch(e){}
+        }
         opDuel(false);return;
       }
     }
@@ -2057,6 +2065,22 @@ function moveOffBall(s,ds,dt=1){
   const assignedDefs=new Set([ROLES.engager,ROLES.cover,ROLES.blocker]);
   const freeAtk=validOutfieldKeys(s).filter(k=>k!==G.ck);
 
+  /* Pick the 2 closest free defenders to the ball as secondary pressers.
+     Scaled by how dangerous the situation is: deep in our half more bodies
+     commit to the ball. Keeps the block honest without abandoning shape. */
+  const _pressers=new Set();
+  {
+    const pressCount = carrierProg>0.62 ? 2 : carrierProg>0.35 ? 1 : 1;
+    const cands=[];
+    Object.keys(sq(ds)).forEach(k=>{
+      if(!sq(ds)[k]||k==='GK'||assignedDefs.has(k)||ocd(ds,k)||!PP[ds][k])return;
+      cands.push({k,d:dist(PP[ds][k],cp)});
+    });
+    cands.sort((a,b)=>a.d-b.d);
+    // only commit defenders who are realistically in range of the ball
+    cands.slice(0,pressCount).forEach(c=>{ if(c.d<W*0.30) _pressers.add(c.k); });
+  }
+
   // Build marker map — each free defender marks nearest free attacker
   const markerMap={};
   const usedAtk=new Set();
@@ -2152,6 +2176,19 @@ function moveOffBall(s,ds,dt=1){
       }
     }
 
+    /* SECONDARY PRESS — the nearest free defenders actively close the ball
+       instead of retreating to a formation slot. This is the fix for
+       "my teammates run backwards while the opponent attacks": only the
+       engager used to chase, so everyone else looked disinterested. */
+    if(_pressers.has(k)){
+      const dgx2=ownGoalXFor(ds);
+      // approach from the goal side so we never get skinned by simply arriving
+      const tx=lerp(cp.x,dgx2,0.10);
+      const ty=lerp(cp.y,H*0.5,0.05);
+      glide(cur,tx,ty,TRACK_SPEED*1.30*recoveryMult(ds,k,cur),pl,ds,k);
+      return;
+    }
+
     // Unmarked — shift with play into defensive shape
     const zone=zo(k);
     let tx=p.x*W, ty=p.y*H;
@@ -2240,11 +2277,33 @@ function startAnim(){
     if(G.phase==='duel' && typeof pvpDuelInput==='function') pvpDuelInput();
     if(G.phase==='moving')tick(dt);
     if(G.phase==='pass_anim'&&!G._cineHold){tickBallTravel(dt);tickPassMotion(dt);}
-    // WATCHDOG — duel phase can never exceed 50s (countdown is 30s).
-    // If a resolution path ever dies, force-recover instead of soft-locking.
+    /* WATCHDOG — 50s was far too long to sit staring at a stuck overlay, and
+       it only covered phase==='duel'. The reported symptom (menu stays open
+       after LOSING a duel until the opponent shoots) is a resolution path
+       that never reached resume(). Now: 12s for an open duel (the countdown
+       is 30s but it is refreshed on input, so a live duel keeps _duelT warm),
+       and a separate 4s guard for a duel_result overlay that was never
+       dismissed. Both force a clean recover instead of soft-locking. */
     if(G.phase==='duel'&&G._duelT&&Date.now()-G._duelT>50000){
       console.warn('duel watchdog fired — force resuming');
       G._duelT=0;closeDuel();resume(G.poss);
+    }
+    // stuck RESULT overlay: the duel is over but nothing dismissed the panel
+    if(G._resT&&Date.now()-G._resT>4000){
+      const _ro=document.getElementById('duel-res');
+      if(_ro&&_ro.classList.contains('show')){
+        console.warn('duel-result watchdog fired — force closing');
+        G._resT=0;closeDuel();
+        if(G.phase!=='moving'&&G.phase!=='pass_anim')resume(G.poss);
+      } else G._resT=0;
+    }
+    // orphaned overlay: duel panel visible while the match is already running
+    if((G.phase==='moving')&&Date.now()>=(G.kickoffUntil||0)){
+      const _ov=document.getElementById('duel-ov');
+      if(_ov&&_ov.classList.contains('show')){
+        console.warn('orphaned duel overlay while moving — closing');
+        closeDuel();
+      }
     }
     if(G.phase==='moving'&&G.ck&&PP[G.poss]&&PP[G.poss][G.ck]){
       const _cp=PP[G.poss][G.ck];
@@ -5662,7 +5721,7 @@ function resDuel(){
       aN+' '+(al[ak]||ak.toUpperCase())+' '+Math.round(atkPow)+'  vs  '+dN+' '+(dl[defA]||defA.toUpperCase())+' '+Math.round(defPow);
   }
   const ro=document.getElementById('duel-res');
-  if(!G.D._silent)ro.classList.add('show');
+  if(!G.D._silent){ro.classList.add('show');G._resT=Date.now();}
   say(badge+(det?' — '+det:''));
 
   // ── IMPACT FEEDBACK ─────────────────────────────────────
@@ -5776,7 +5835,7 @@ function resDuel(){
   },950);
 }
 
-function closeDuel(){killCutIn();G._duelT=0;try{gkShotLayout(false);}catch(e){}try{Object.values(hSq).forEach(p=>{if(p)p._pending2v1=false;});Object.values(aSq).forEach(p=>{if(p)p._pending2v1=false;});}catch(e){}try{document.getElementById('s-match').classList.remove('duel-live');}catch(e){}document.getElementById('duel-ov').classList.remove('show');document.getElementById('duel-res').classList.remove('show');G.pm=false;$id('pass-banner').style.display='none';const d2=document.getElementById('dpd2-wrap');if(d2)d2.remove();}
+function closeDuel(){killCutIn();G._duelT=0;G._resT=0;try{gkShotLayout(false);}catch(e){}try{Object.values(hSq).forEach(p=>{if(p)p._pending2v1=false;});Object.values(aSq).forEach(p=>{if(p)p._pending2v1=false;});}catch(e){}try{document.getElementById('s-match').classList.remove('duel-live');}catch(e){}document.getElementById('duel-ov').classList.remove('show');document.getElementById('duel-res').classList.remove('show');G.pm=false;$id('pass-banner').style.display='none';const d2=document.getElementById('dpd2-wrap');if(d2)d2.remove();}
 function resume(s,msg){
   // SOFT-LOCK GUARD: resume() is the one gate every "play continues" route
   // passes through. If a super-shot duel ever exits by any path other than
@@ -5876,7 +5935,7 @@ function afSave(ds){
     document.getElementById('rdet').style.color='#cce8ff';
     document.getElementById('ract').textContent=(isSuper?'⭐ SUPER SAVE — ':'')+(G._shotZone?G._shotZone+' · ':'')+' SHOT '+Math.round(shotPow)+' vs GK '+Math.round(gkPow);
     const ro=document.getElementById('duel-res');
-    ro.classList.add('show');
+    ro.classList.add('show');G._resT=Date.now();
     say(outcomeText[outcome]+' — '+outcomeDetail[outcome]);
     if(outcome==='goal'){
       const as=ds==='h'?'a':'h';
@@ -6067,6 +6126,17 @@ function afTurn(ns){
   if((defA==='tackle'||defA==='block')&&rollFoul(ns===attSide?G.D.ds:attSide, dk, attSide, 0.05))return;
   G_moveTarget=null;G_laneTarget=null; const winnerKey=G.D.dk||null, pk=pickCarrierAfterWin(ns,winnerKey); G.poss=ns; G.ck=pk; G.tP++; if(ns==='h')G.hP++; if(PP[ns][pk]){ball.tx=PP[ns][pk].x;ball.ty=PP[ns][pk].y;} updP();
   const q=sq(ns); resume(ns,(q[pk]?q[pk].name:'Player')+' wins the ball!');
+}
+/* CONTROL SWITCH FLASH — when a tackle transfers control to a different
+   defender, say so. Without this the duel just opened and the player had no
+   idea he was now a different man on the pitch. */
+function flashControlSwitch(side,k){
+  try{
+    const pl=sq(side)[k]; if(!pl)return;
+    const nm=(pl.name||'').split('.').pop().trim()||'PLAYER';
+    if(typeof impactText==='function'){ impactText('▶ '+nm.toUpperCase(),'#5ab9ff','clamp(14px,26px,20px)'); }
+    else if(typeof say==='function'){ say('Now controlling '+nm); }
+  }catch(e){}
 }
 function updP(){
   const iH=G.poss==='h';

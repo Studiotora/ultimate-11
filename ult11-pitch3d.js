@@ -1249,17 +1249,36 @@
     /* Drop-in cinematic sprites (optional — sheet frames used if missing):
        assets/ps1/striker_windup.png  — single frame, back view, wind-up (transparent)
        assets/ps1/gk_cine.png         — frontal GK sheet, 3 cols x 2 rows (transparent) */
-    /* soft glow disc under the player you control (blue, P1) */
-    const selCv=document.createElement('canvas'); selCv.width=selCv.height=128;
+    /* SELECTION MARKER under the player you control.
+       Was a soft additive blur at 0.50 alpha — it washed out completely
+       against a bright pitch. Now a hard-edged ring: bright defined rim,
+       darker contrast outline so it reads on any grass tone, plus a subtle
+       inner fill and a leading arrow so you can see WHO you have and which
+       way he faces at a glance. */
+    const selCv=document.createElement('canvas'); selCv.width=selCv.height=256;
     (function(){ const g=selCv.getContext('2d');
-      const gr=g.createRadialGradient(64,64,10,64,64,62);
-      gr.addColorStop(0,'rgba(90,185,255,0.50)');
-      gr.addColorStop(0.65,'rgba(90,185,255,0.25)');
-      gr.addColorStop(1,'rgba(90,185,255,0)');
-      g.fillStyle=gr; g.beginPath(); g.arc(64,64,62,0,7); g.fill(); })();
+      const C=128;
+      // dark contrast ring first (keeps the bright ring legible on light grass)
+      g.beginPath(); g.arc(C,C,104,0,7);
+      g.lineWidth=22; g.strokeStyle='rgba(0,10,30,0.55)'; g.stroke();
+      // soft inner pool so the player sits in a readable disc
+      const gr=g.createRadialGradient(C,C,8,C,C,104);
+      gr.addColorStop(0,'rgba(70,170,255,0.34)');
+      gr.addColorStop(0.72,'rgba(70,170,255,0.16)');
+      gr.addColorStop(1,'rgba(70,170,255,0.04)');
+      g.fillStyle=gr; g.beginPath(); g.arc(C,C,104,0,7); g.fill();
+      // the hard bright rim — this is what actually reads
+      g.beginPath(); g.arc(C,C,104,0,7);
+      g.lineWidth=13; g.strokeStyle='rgba(120,215,255,0.98)'; g.stroke();
+      // inner highlight edge for a crisp double-line look
+      g.beginPath(); g.arc(C,C,90,0,7);
+      g.lineWidth=4; g.strokeStyle='rgba(235,250,255,0.85)'; g.stroke();
+    })();
     const selTex=new T.Texture(selCv); selTex.needsUpdate=true;
+    // NormalBlending (not additive) so the dark contrast ring survives — additive
+    // blending erased the very outline that makes it visible on bright grass.
     const selMesh=new T.Mesh(new T.PlaneGeometry(1,1),
-      new T.MeshBasicMaterial({map:selTex,transparent:true,depthWrite:false,blending:T.AdditiveBlending}));
+      new T.MeshBasicMaterial({map:selTex,transparent:true,depthWrite:false}));
     selMesh.rotation.x=-Math.PI/2; selMesh.renderOrder=2; selMesh.visible=false; scene.add(selMesh);
     function updateSelGlow(){
       try{
@@ -1269,7 +1288,10 @@
         else if(typeof ROLES!=='undefined'&&ROLES)k=ROLES.engager;
         const p=k&&PP.h?PP.h[k]:null;
         if(!p||(G.phase!=='moving'&&G.phase!=='idle')){selMesh.visible=false;return;}
-        const s=PLEN*(P3D.spriteFrac!=null?P3D.spriteFrac:0.045)*0.85;
+        // 1.45x (was 0.85) — the marker now clearly frames the player, and a
+        // slow pulse makes it findable in a crowded box.
+        const pulse=1+Math.sin(performance.now()*0.004)*0.05;
+        const s=PLEN*(P3D.spriteFrac!=null?P3D.spriteFrac:0.045)*1.45*pulse;
         selMesh.scale.set(s,s,1);
         selMesh.position.set(ex2wx(p.x),0.03,ey2wz(p.y));
         selMesh.visible=true;
