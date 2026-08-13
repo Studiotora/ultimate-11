@@ -12,7 +12,7 @@
 <title>Ultimate Eleven - Football Strategy Game | Beta</title>
 <meta name="description" content="Ultimate Eleven - A Captain Tsubasa inspired football strategy game with 11 vs 11 gameplay">
 <link href="https://fonts.googleapis.com/css2?family=Anton&family=Barlow+Condensed:ital,wght@0,500;0,600;0,700;0,800;1,700;1,800&family=Permanent+Marker&family=Bebas+Neue&family=Rajdhani:wght@600;700&family=Orbitron:wght@400;700&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="style.css?v=31">
+<link rel="stylesheet" href="style.css?v=32">
 <style>
 /* CAREER MODE - inline to bypass cache */
 #s-career-clubs{background:radial-gradient(ellipse 80% 50% at 50% 0%,rgba(30,114,220,.08),transparent 60%),#06080e;overflow:hidden;}
@@ -225,229 +225,61 @@
 .ht-sub-spirit{font-size:9px;margin-left:auto;}
 
 
-/* ==================== NEW HOME MENU (cinematic) ==================== */
-#s-home{overflow:hidden;color:#fff;background-size:cover;background-position:center 15%;background-color:#050b1a;}
-.hm-overlay{position:absolute;inset:0;z-index:1;pointer-events:none;background:linear-gradient(90deg,rgba(2,6,20,.1) 0%,rgba(2,6,20,.25) 30%,rgba(2,6,20,.72) 52%,rgba(2,6,20,.95) 100%),linear-gradient(180deg,rgba(2,6,20,.45) 0%,transparent 18%,transparent 72%,rgba(2,6,20,.98) 100%);}
-.hm-scanlines{position:absolute;inset:0;z-index:2;pointer-events:none;background-image:repeating-linear-gradient(0deg,transparent,transparent 3px,rgba(0,0,0,.04) 3px,rgba(0,0,0,.04) 4px);}
-#hm-canvas{position:absolute;inset:0;z-index:3;pointer-events:none;}
-.hm-content{position:absolute;inset:0;z-index:10;display:flex;flex-direction:column;}
-.hm-topbar{display:flex;align-items:center;justify-content:space-between;padding:12px 24px 10px;border-bottom:1px solid rgba(245,166,35,.15);background:linear-gradient(180deg,rgba(2,6,20,.8),transparent);flex-shrink:0;}
-.hm-logo-text{font-family:'Bebas Neue',sans-serif;font-size:clamp(18px,28.16px,26px);letter-spacing:.2em;color:#F5A623;text-shadow:0 0 20px rgba(245,166,35,.6);line-height:1;}
-.hm-logo-jp{font-size:9px;letter-spacing:.3em;color:rgba(255,255,255,.35);}
-.hm-profile{display:flex;align-items:center;gap:12px;}
-.hm-avatar{width:38px;height:38px;border-radius:50%;background:linear-gradient(135deg,#1a3a6a,#0d1f3a);border:2px solid #F5A623;display:flex;align-items:center;justify-content:center;font-size:18px;box-shadow:0 0 14px rgba(245,166,35,.4);position:relative;flex-shrink:0;}
-.hm-online-dot{position:absolute;bottom:1px;right:1px;width:8px;height:8px;border-radius:50%;background:#22c55e;border:2px solid rgba(2,6,20,.9);box-shadow:0 0 6px #22c55e;}
-.hm-profile-info{text-align:right;}
-.hm-profile-name{font-family:'Bebas Neue',sans-serif;font-size:14px;letter-spacing:.1em;color:#fff;line-height:1;}
-.hm-profile-sub{font-size:10px;color:rgba(255,255,255,.4);letter-spacing:.05em;}
-.hm-currency{display:flex;flex-direction:column;gap:3px;border-left:1px solid rgba(255,255,255,.1);padding-left:12px;}
-.hm-currency-row{display:flex;align-items:center;gap:5px;font-family:'Rajdhani',sans-serif;font-size:12px;font-weight:700;color:#fff;}
-.hm-nav{position:absolute;right:0;top:50%;transform:translateY(-50%);width:clamp(300px,460.8px,440px);display:flex;flex-direction:column;}
-.hm-nav-item{display:flex;align-items:center;gap:14px;padding:0 22px 0 18px;height:clamp(46px,50.4px,58px);cursor:pointer;position:relative;background:rgba(5,10,30,.38);border-left:4px solid transparent;border-bottom:1px solid rgba(255,255,255,.05);transition:background .15s,border-color .15s;backdrop-filter:blur(8px);-webkit-backdrop-filter:blur(8px);}
-.hm-nav-item.hm-active,.hm-nav-item:hover:not(.locked){background:rgba(10,20,50,.72);border-left-color:var(--gold);}
-.hm-nav-item.hm-active::before{content:'';position:absolute;left:0;top:0;bottom:0;width:4px;background:var(--gold);box-shadow:0 0 18px var(--gold),0 0 40px rgba(240,192,64,.4);}
-.hm-nav-item.locked{opacity:.45;cursor:not-allowed;}
-.hm-nav-icon{width:26px;text-align:center;flex-shrink:0;}
-.hm-nav-icon svg{width:20px;height:20px;fill:none;stroke:rgba(255,255,255,.5);stroke-width:1.8;transition:stroke .15s;vertical-align:middle;}
-.hm-nav-item.hm-active .hm-nav-icon svg,.hm-nav-item:hover:not(.locked) .hm-nav-icon svg{stroke:var(--gold);}
-.hm-nav-label{font-family:'Bebas Neue',sans-serif;font-size:clamp(16px,25.6px,22px);letter-spacing:.12em;color:rgba(255,255,255,.55);flex:1;transition:color .15s;}
-.hm-nav-item.hm-active .hm-nav-label,.hm-nav-item:hover:not(.locked) .hm-nav-label{color:#fff;}
-.hm-nav-chevron{font-family:'Bebas Neue',sans-serif;font-size:20px;color:var(--gold);opacity:0;transition:opacity .15s;}
-.hm-nav-item.hm-active .hm-nav-chevron,.hm-nav-item:hover:not(.locked) .hm-nav-chevron{opacity:1;}
-@keyframes hmRowIn{from{opacity:0;transform:translateX(40px)}to{opacity:1;transform:translateX(0)}}
-.hm-nav-item{animation:hmRowIn .4s both;}
-.hm-nav-item:nth-child(1){animation-delay:.25s}.hm-nav-item:nth-child(2){animation-delay:.30s}.hm-nav-item:nth-child(3){animation-delay:.35s}.hm-nav-item:nth-child(4){animation-delay:.40s}.hm-nav-item:nth-child(5){animation-delay:.45s}.hm-nav-item:nth-child(6){animation-delay:.50s}.hm-nav-item:nth-child(7){animation-delay:.55s}
-.hm-bottom{display:flex;align-items:flex-end;justify-content:space-between;padding:8px 24px 12px;background:linear-gradient(180deg,transparent,rgba(2,6,20,.9));flex-shrink:0;}
-.hm-bottom-left{display:flex;align-items:flex-end;gap:10px;}
-#hm-sprite{image-rendering:crisp-edges;filter:drop-shadow(0 4px 8px rgba(0,0,0,.6));flex-shrink:0;}
-.hm-logo-stack{display:flex;flex-direction:column;}
-.hm-season-badge{display:flex;align-items:center;gap:6px;background:rgba(200,16,46,.15);border:1px solid rgba(200,16,46,.4);border-radius:3px;padding:4px 9px;margin-bottom:8px;align-self:flex-start;}
-.hm-season-dot{width:7px;height:7px;border-radius:50%;background:#C8102E;}
-.hm-season-label{font-family:'Rajdhani',sans-serif;font-size:10px;font-weight:700;letter-spacing:.12em;color:#ff4d6a;text-transform:uppercase;}
-.hm-logo-main{font-family:'Bebas Neue',sans-serif;font-size:clamp(30px,57.6px,52px);line-height:.88;letter-spacing:.06em;text-shadow:4px 4px 0 rgba(0,0,0,.8),0 0 40px rgba(245,166,35,.5);-webkit-text-stroke:1px rgba(245,166,35,.45);}
-.hm-logo-main .ult{color:var(--gold);display:block;}.hm-logo-main .elv{color:#fff;display:block;}
-.hm-logo-redline{height:3px;background:linear-gradient(90deg,#C8102E 60%,transparent);margin-top:4px;border-radius:2px;}
-.hm-logo-jp2{font-size:9px;letter-spacing:.28em;color:rgba(255,255,255,.35);margin-top:4px;}
-.hm-stats-row{display:flex;gap:7px;margin-top:8px;}
-.hm-stat-card{display:flex;flex-direction:column;align-items:center;padding:5px 9px;background:rgba(5,12,35,.65);border:1px solid rgba(255,255,255,.07);border-radius:6px;backdrop-filter:blur(12px);-webkit-backdrop-filter:blur(12px);gap:1px;min-width:50px;}
-.hm-stat-icon{font-size:11px;}.hm-stat-val{font-family:'Bebas Neue',sans-serif;font-size:14px;letter-spacing:.05em;color:#fff;}
-.hm-stat-lbl{font-size:8px;letter-spacing:.1em;color:rgba(255,255,255,.35);text-transform:uppercase;}
-.hm-hints{display:flex;gap:18px;align-items:center;padding-bottom:4px;}
-.hm-hint-item{display:flex;align-items:center;gap:5px;font-size:11px;letter-spacing:.06em;color:rgba(255,255,255,.4);}
-.hm-hint-key{color:rgba(255,255,255,.6);}
-@media(max-width:900px){
-  .hm-nav{width:54%;top:8px;transform:none;}
-  .hm-nav-item{height:38px;padding:0 14px 0 12px;gap:10px;}
-  .hm-nav-label{font-size:14px;letter-spacing:.1em;}
-  .hm-nav-icon svg{width:16px;height:16px;}
-  .hm-nav-chevron{font-size:14px;}
-  .hm-topbar{padding:8px 12px 6px;}
-  .hm-logo-text{font-size:14px;letter-spacing:.16em;}
-  .hm-logo-jp{font-size:7px;}
-  .hm-profile{gap:8px;}
-  .hm-profile-name{font-size:12px;}
-  .hm-profile-sub{font-size:8px;}
-  .hm-avatar{width:32px;height:32px;font-size:15px;}
-  .hm-currency{padding-left:8px;gap:1px;}
-  .hm-currency-row{font-size:10px;}
-  .hm-bottom{padding:6px 12px 8px;}
-  .hm-bottom-left{gap:8px;}
-  #hm-sprite{width:64px !important;height:64px !important;}
-  .hm-stats-row{gap:4px;margin-top:4px;}
-  .hm-stat-card{padding:3px 6px;min-width:42px;}
-  .hm-stat-val{font-size:11px;}
-  .hm-stat-lbl{font-size:7px;}
-  .hm-season-badge{padding:2px 6px;margin-bottom:4px;}
-  .hm-season-label{font-size:8px;}
-  .hm-hints{gap:8px;}
-  .hm-hint-item{font-size:9px;}
-}
-@media(max-height:480px){
-  .hm-nav-item{height:34px;}
-  .hm-nav-label{font-size:13px;}
-  #hm-sprite{display:none;}
-}
+/* ==== OLD HOME MENU LAYOUT REMOVED — replaced by home-menu.css ====
+   Kept below: settings modal, toast and form controls, which the
+   surviving #aeSettings / #hmProfileModal markup still depends on. */
 
-/* ============================================================
-   AAA HOME MENU v2 — featured panels, profile bar, icon row
-   ============================================================ */
-/* Re-balance the cinematic overlay: darken the LEFT (panels) so the
-   right side shows off the key art. */
-#s-home{background-position:72% 20%;}
-#s-home .hm-overlay{background:
-  linear-gradient(90deg,rgba(2,6,16,.96) 0%,rgba(2,6,16,.82) 36%,rgba(2,6,16,.44) 64%,rgba(2,6,16,.12) 100%),
-  linear-gradient(180deg,rgba(2,6,16,.5) 0%,transparent 20%,transparent 68%,rgba(2,6,16,.96) 100%);}
-.ae-home{position:absolute;inset:0;z-index:10;display:flex;flex-direction:column;font-family:'Rajdhani',sans-serif;}
-/* ---- TOP BAR ---- */
-.ae-top{display:flex;align-items:center;justify-content:space-between;gap:16px;padding:12px 22px;flex-shrink:0;}
-.ae-brand{display:flex;align-items:center;gap:12px;}
-.ae-crest{width:42px;height:42px;flex-shrink:0;display:flex;align-items:center;justify-content:center;font-family:'Bebas Neue',sans-serif;font-size:23px;color:#04060c;background:linear-gradient(150deg,#ffe488,#f0c040 46%,#8a5e0c);border-radius:9px;box-shadow:0 0 22px rgba(240,192,64,.45),inset 0 1px 0 rgba(255,255,255,.6);transform:skewX(-7deg);}
-.ae-crest span{transform:skewX(7deg);display:block;}
-.ae-brand-name{font-family:'Bebas Neue',sans-serif;font-size:clamp(17px,26.88px,26px);letter-spacing:.18em;color:#fff;line-height:1;text-shadow:0 0 18px rgba(240,192,64,.4);}
-.ae-brand-jp{font-family:'Orbitron',sans-serif;font-size:8px;letter-spacing:.32em;color:rgba(255,255,255,.32);margin-top:3px;}
-.ae-top-right{display:flex;align-items:center;gap:14px;}
-.ae-profile{display:flex;align-items:center;gap:10px;cursor:pointer;padding:5px 8px;border-radius:10px;transition:.15s;}
-.ae-profile:hover{background:rgba(255,255,255,.06);}
-.ae-pf-info{text-align:right;display:flex;flex-direction:column;align-items:flex-end;}
-.ae-pf-name{font-family:'Bebas Neue',sans-serif;font-size:16px;letter-spacing:.1em;color:#fff;line-height:1;}
-.ae-pf-rank{font-family:'Orbitron',sans-serif;font-size:7px;letter-spacing:.16em;color:rgba(255,255,255,.42);margin:3px 0;}
-.ae-xp{width:96px;height:3px;border-radius:2px;background:rgba(255,255,255,.14);overflow:hidden;}
-.ae-xp-fill{height:100%;width:72%;background:linear-gradient(90deg,#f0c040,#ffe488);box-shadow:0 0 8px rgba(240,192,64,.7);}
-.ae-avatar{width:42px;height:42px;border-radius:50%;flex-shrink:0;display:flex;align-items:center;justify-content:center;font-size:20px;background:linear-gradient(135deg,#1a3a6a,#0d1f3a);border:2px solid #f0c040;box-shadow:0 0 14px rgba(240,192,64,.4);position:relative;}
-.ae-online{position:absolute;bottom:1px;right:1px;width:9px;height:9px;border-radius:50%;background:#22c55e;border:2px solid #050b1a;}
-.ae-curr{display:flex;flex-direction:column;gap:5px;padding-left:14px;border-left:1px solid rgba(255,255,255,.1);}
-.ae-curr-row{display:flex;align-items:center;gap:6px;font-family:'Rajdhani',sans-serif;font-weight:700;font-size:13px;color:#fff;}
-.ae-curr-row>span{min-width:42px;}
-.ae-plus{width:18px;height:18px;border-radius:5px;background:rgba(240,192,64,.16);border:1px solid rgba(240,192,64,.4);color:#f0c040;font-size:12px;line-height:1;display:flex;align-items:center;justify-content:center;padding:0;}
-.ae-plus:hover{background:rgba(240,192,64,.3);}
-.ae-icobtn{width:38px;height:38px;border-radius:9px;background:rgba(255,255,255,.05);border:1px solid rgba(255,255,255,.12);display:flex;align-items:center;justify-content:center;}
-.ae-icobtn svg{width:20px;height:20px;fill:none;stroke:rgba(255,255,255,.6);stroke-width:1.8;}
-.ae-icobtn:hover{border-color:var(--gold);background:rgba(240,192,64,.12);}
-.ae-icobtn:hover svg{stroke:var(--gold);}
-/* ---- BODY ---- */
-.ae-body{flex:1;display:flex;gap:18px;padding:2px 22px 2px;min-height:0;}
-.ae-left{width:clamp(360px,537.6px,560px);display:flex;flex-direction:column;gap:10px;min-height:0;}
-.ae-panels{flex:1;display:flex;flex-direction:column;align-items:flex-start;gap:10px;min-height:0;}
-.ae-panels .ae-panel:nth-child(1){width:100%}.ae-panels .ae-panel:nth-child(2){width:calc(100% - var(--slant))}.ae-panels .ae-panel:nth-child(3){width:calc(100% - 2 * var(--slant))}.ae-panels .ae-panel:nth-child(4){width:calc(100% - 3 * var(--slant))}
-.ae-panel{position:relative;flex:1;min-height:0;cursor:pointer;text-align:left;display:block;padding:0;border:none;background:var(--ac);
-  --slant:clamp(20px,35.84px,40px);
-  clip-path:polygon(0 0,100% 0,calc(100% - var(--slant)) 100%,0 100%);
-  filter:drop-shadow(0 0 9px var(--ac)) drop-shadow(0 0 3px var(--ac)) drop-shadow(0 4px 9px rgba(0,0,0,.5));
-  transition:transform .2s cubic-bezier(.16,1,.3,1),filter .2s;animation:aePanelIn .5s both;}
-.ae-panel.ae-hero{flex:1;}
-@keyframes aePanelIn{from{opacity:0;transform:translateX(-26px)}to{opacity:1;transform:translateX(0)}}
-.ae-panels .ae-panel:nth-child(1){animation-delay:.05s}.ae-panels .ae-panel:nth-child(2){animation-delay:.11s}.ae-panels .ae-panel:nth-child(3){animation-delay:.17s}.ae-panels .ae-panel:nth-child(4){animation-delay:.23s}
-.ae-pin{position:absolute;inset:2px;clip-path:polygon(0 0,100% 0,calc(100% - var(--slant)) 100%,0 100%);background:#070c16;overflow:hidden;}
-.ae-panel:hover{transform:translateX(9px);filter:drop-shadow(0 0 22px var(--ac)) drop-shadow(0 0 7px var(--ac)) drop-shadow(0 8px 22px rgba(0,0,0,.55));}
-.ae-part{position:absolute;inset:0;background-size:160% auto;background-position:20% 42%;z-index:0;transition:transform .55s cubic-bezier(.16,1,.3,1);}
-.ae-panel:hover .ae-part{transform:none;}
-.ae-pgrad{position:absolute;inset:0;z-index:1;background:linear-gradient(90deg,rgba(6,10,22,.98) 0%,rgba(6,10,22,.93) 34%,rgba(6,10,22,.55) 64%,rgba(6,10,22,.1) 100%);}
-.ae-pcontent{position:relative;z-index:3;height:100%;display:flex;flex-direction:column;justify-content:center;gap:3px;padding:0 22px;}
-.ae-pnum{font-family:'Orbitron',sans-serif;font-size:8px;letter-spacing:.26em;color:var(--ac);opacity:.85;}
-.ae-ptitle{font-family:'Anton',sans-serif;font-weight:400;font-size:clamp(22px,38.4px,40px);letter-spacing:.012em;line-height:.88;color:#fff;text-transform:uppercase;transform:skewX(-8deg);transform-origin:left center;text-shadow:3px 3px 0 rgba(0,0,0,.55),0 2px 16px rgba(0,0,0,.7);}
-.ae-hero .ae-ptitle{font-size:clamp(32px,58.88px,58px);}
-.ae-pjp{font-family:'Orbitron',sans-serif;font-size:8px;letter-spacing:.24em;color:rgba(255,255,255,.4);margin-top:1px;}
-.ae-psub{font-family:'Rajdhani',sans-serif;font-weight:600;font-size:11px;letter-spacing:.1em;color:rgba(255,255,255,.62);margin-top:7px;text-transform:uppercase;}
-.ae-pcta{position:absolute;right:14px;top:50%;transform:translateY(-50%);z-index:4;font-family:'Bebas Neue',sans-serif;font-size:18px;color:var(--ac);opacity:0;transition:.2s;}
-.ae-panel:hover .ae-pcta{opacity:1;right:18px;}
-.ae-badge{position:absolute;top:11px;left:22px;z-index:4;font-family:'Orbitron',sans-serif;font-size:7px;letter-spacing:.2em;padding:3px 7px;border-radius:3px;}
-.ae-badge.new{color:#04060c;background:var(--gold);box-shadow:0 0 12px rgba(240,192,64,.6);}
-.ae-badge.soon{color:rgba(255,255,255,.8);background:rgba(255,255,255,.1);border:1px solid rgba(255,255,255,.22);}
-.ae-panel.ae-soon{cursor:default;}
-.ae-panel.ae-soon .ae-part{filter:grayscale(.5) brightness(.6);}
-.ae-panel.ae-soon:hover{transform:none;filter:drop-shadow(0 0 9px var(--ac)) drop-shadow(0 0 3px var(--ac)) drop-shadow(0 4px 9px rgba(0,0,0,.5));}
-.ae-panel.ae-soon:hover .ae-part{transform:none;}
-/* ── Mode loading screen (shown 5s after clicking a home banner) ── */
-#hm-loader{position:fixed;inset:0;z-index:99990;background:#050b1a;opacity:0;pointer-events:none;transition:opacity .35s ease;}
-#hm-loader.show{opacity:1;pointer-events:auto;}
-#hm-loader .hml-img{position:absolute;inset:0;background-size:cover;background-position:center 40%;}
-#hm-loader .hml-grad{position:absolute;inset:0;background:linear-gradient(180deg,rgba(5,11,26,.30) 0%,rgba(5,11,26,.55) 55%,rgba(5,11,26,.96) 100%);}
-#hm-loader .hml-foot{position:absolute;left:0;right:0;bottom:9%;display:flex;flex-direction:column;align-items:center;gap:14px;padding:0 8%;text-align:center;}
-#hm-loader .hml-label{font-family:'Bebas Neue',sans-serif;font-size:clamp(28px,5vw,58px);letter-spacing:3px;color:#fff;text-shadow:0 2px 18px rgba(0,0,0,.85);}
-#hm-loader .hml-bar{width:min(520px,72%);height:5px;border-radius:4px;background:rgba(255,255,255,.16);overflow:hidden;}
-#hm-loader .hml-bar i{display:block;height:100%;width:0;background:linear-gradient(90deg,var(--gold,#f0c040),#fff);}
-#hm-loader .hml-tip{font-family:'Orbitron',sans-serif;font-size:12px;letter-spacing:3px;color:rgba(240,192,64,.85);}
-/* ---- ICON ROW ---- */
-.ae-icons{display:flex;gap:8px;flex-shrink:0;}
-.ae-ico{flex:1;display:flex;flex-direction:column;align-items:center;gap:6px;padding:10px 6px;background:rgba(8,13,24,.72);border:1px solid rgba(255,255,255,.1);border-radius:10px;cursor:pointer;transition:.15s;}
-.ae-ico svg{width:22px;height:22px;fill:none;stroke:rgba(255,255,255,.6);stroke-width:1.7;}
-.ae-ico span{font-family:'Orbitron',sans-serif;font-size:7px;letter-spacing:.13em;color:rgba(255,255,255,.5);text-align:center;line-height:1.35;}
-.ae-ico:hover{border-color:var(--gold);background:rgba(240,192,64,.1);transform:translateY(-2px);}
-.ae-ico:hover svg{stroke:var(--gold);}
-.ae-ico:hover span{color:var(--gold);}
-.ae-right{flex:1;position:relative;min-height:0;}
-/* ---- BOTTOM BAR ---- */
-.ae-bottom{display:flex;align-items:flex-end;justify-content:space-between;padding:4px 24px 12px;flex-shrink:0;}
-.ae-bl{display:flex;align-items:center;gap:12px;}
-.ae-season{display:flex;align-items:center;gap:7px;font-family:'Orbitron',sans-serif;font-size:8px;letter-spacing:.2em;color:rgba(255,255,255,.5);}
-.ae-season-dot{width:7px;height:7px;border-radius:50%;background:var(--red);box-shadow:0 0 8px var(--red);}
-.ae-hints{display:flex;gap:16px;}
-.ae-hint{display:flex;align-items:center;gap:6px;font-family:'Orbitron',sans-serif;font-size:9px;letter-spacing:.12em;color:rgba(255,255,255,.4);}
-.ae-hint b{display:inline-flex;width:18px;height:18px;align-items:center;justify-content:center;border-radius:50%;background:rgba(255,255,255,.14);color:#fff;font-size:9px;font-family:'Rajdhani',sans-serif;font-weight:700;}
 /* ---- TOAST ---- */
 .ae-toast{position:absolute;left:50%;bottom:84px;transform:translateX(-50%) translateY(18px);z-index:60;background:rgba(6,10,22,.97);border:1px solid var(--gold);border-radius:8px;padding:10px 24px;font-family:'Bebas Neue',sans-serif;font-size:16px;letter-spacing:.12em;color:var(--gold);opacity:0;pointer-events:none;transition:.3s cubic-bezier(.16,1,.3,1);box-shadow:0 10px 34px rgba(0,0,0,.6);}
+
 .ae-toast.show{opacity:1;transform:translateX(-50%) translateY(0);}
+
 /* ---- SETTINGS MODAL ---- */
 .ae-modal{display:none;position:absolute;inset:0;z-index:9998;background:rgba(2,6,16,.82);backdrop-filter:blur(10px);-webkit-backdrop-filter:blur(10px);align-items:center;justify-content:center;}
+
 .ae-modal.show{display:flex;animation:aeFade .2s both;}
-@keyframes aeFade{from{opacity:0}to{opacity:1}}
+
 .ae-modal-card{width:min(450px,1177.6px);max-height:633.6px;overflow:auto;background:linear-gradient(180deg,#0a1322,#060b16);border:1px solid rgba(240,192,64,.35);border-radius:14px;box-shadow:0 0 50px rgba(0,0,0,.7);animation:aePop .26s cubic-bezier(.16,1,.3,1) both;}
-@keyframes aePop{from{opacity:0;transform:scale(.94) translateY(10px)}to{opacity:1;transform:none}}
+
 .ae-modal-hd{display:flex;align-items:center;justify-content:space-between;padding:15px 20px;border-bottom:1px solid rgba(255,255,255,.08);position:sticky;top:0;background:#0a1322;}
+
 .ae-modal-title{font-family:'Bebas Neue',sans-serif;font-size:22px;letter-spacing:.16em;color:var(--gold);}
+
 .ae-modal-title small{display:block;font-family:'Orbitron',sans-serif;font-size:7px;letter-spacing:.24em;color:#48586a;margin-top:2px;}
+
 .ae-modal-x{width:30px;height:30px;border-radius:8px;background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.14);color:#fff;font-size:15px;}
+
 .ae-modal-x:hover{border-color:var(--red);color:var(--red);}
+
 .ae-modal-body{padding:6px 20px 18px;}
+
 .ae-set-row{display:flex;align-items:center;justify-content:space-between;gap:14px;padding:13px 2px;border-bottom:1px solid rgba(255,255,255,.06);}
+
 .ae-set-lbl{display:flex;flex-direction:column;gap:3px;}
+
 .ae-set-name{font-family:'Bebas Neue',sans-serif;font-size:16px;letter-spacing:.07em;color:#eceff4;}
+
 .ae-set-desc{font-family:'Orbitron',sans-serif;font-size:7px;letter-spacing:.1em;color:#48586a;}
+
 .ae-tog{width:46px;height:26px;border-radius:13px;background:rgba(255,255,255,.12);border:1px solid rgba(255,255,255,.18);position:relative;cursor:pointer;transition:.2s;flex-shrink:0;}
+
 .ae-tog::after{content:'';position:absolute;top:2px;left:2px;width:20px;height:20px;border-radius:50%;background:#fff;transition:.2s;}
+
 .ae-tog.on{background:var(--gold);border-color:var(--gold);}
+
 .ae-tog.on::after{left:22px;background:#04060c;}
+
 .ae-range{width:130px;accent-color:var(--gold);cursor:pointer;}
+
 .ae-set-btn{padding:8px 16px;border-radius:7px;font-family:'Bebas Neue',sans-serif;font-size:14px;letter-spacing:.1em;cursor:pointer;border:1px solid;}
+
 .ae-set-btn.danger{color:var(--red);border-color:rgba(220,32,32,.5);background:rgba(220,32,32,.08);}
+
 .ae-set-btn.danger:hover{background:rgba(220,32,32,.22);}
+
 .ae-set-btn.ghost{color:#fff;border-color:rgba(255,255,255,.2);background:rgba(255,255,255,.05);}
+
 .ae-set-btn.ghost:hover{border-color:var(--gold);color:var(--gold);}
-/* ---- responsive ---- */
-@media(max-width:900px){
-  .ae-left{width:54%;}
-  .ae-ptitle{font-size:clamp(17px,43.52px,24px);}
-  .ae-hero .ae-ptitle{font-size:clamp(22px,58.88px,30px);}
-  .ae-brand-name{font-size:15px;}
-  .ae-curr,.ae-pf-rank{display:none;}
-  .ae-body{gap:10px;padding:2px 12px;}
-  .ae-top,.ae-bottom{padding-left:12px;padding-right:12px;}
-}
-@media(max-height:470px){
-  #hm-sprite{display:none;}
-  .ae-psub{display:none;}
-  .ae-panel.ae-hero{flex:1;}
-}
 
 /* ============================================================
    DUEL v2 — floating menus, see-through cards, foot rings
@@ -549,117 +381,123 @@
 
 <!-- HOME MENU -->
 <div id="s-home" class="screen">
-  <div class="hm-overlay"></div>
-  <div class="hm-scanlines"></div>
-  <canvas id="hm-canvas"></canvas>
-  <div class="ae-home">
-    <!-- TOP BAR -->
-    <header class="ae-top">
-      <div class="ae-brand">
-        <div class="ae-crest"><span>11</span></div>
-        <div><div class="ae-brand-name">ULTIMATE ELEVEN</div><div class="ae-brand-jp">アルティメットイレブン</div></div>
-      </div>
-      <div class="ae-top-right">
-        <div class="ae-profile" onclick="openProfileEdit()" title="Edit profile">
-          <div class="ae-pf-info">
-            <div class="ae-pf-name" id="hmProfileName">TSUBASA</div>
-            <div class="ae-pf-rank">MANAGER · RANK 47</div>
-            <div class="ae-xp"><div class="ae-xp-fill"></div></div>
-          </div>
-          <div class="ae-avatar"><span id="hmProfileAvatar">⚽</span><div class="ae-online"></div></div>
-        </div>
-        <div class="ae-curr">
-          <div class="ae-curr-row"><span class="ae-curr-ic">🏆</span><span>12,840</span><button class="ae-plus" onclick="aeToast('Store — coming soon')">+</button></div>
-          <div class="ae-curr-row"><span class="ae-curr-ic">💎</span><span>340</span><button class="ae-plus" onclick="aeToast('Store — coming soon')">+</button></div>
-        </div>
-        <button class="ae-icobtn" onclick="openSettings()" title="Settings"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 11-2.83 2.83l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-4 0v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 11-2.83-2.83l.06-.06a1.65 1.65 0 00.33-1.82 1.65 1.65 0 00-1.51-1H3a2 2 0 010-4h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 112.83-2.83l.06.06a1.65 1.65 0 001.82.33H9a1.65 1.65 0 001-1.51V3a2 2 0 014 0v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 112.83 2.83l-.06.06a1.65 1.65 0 00-.33 1.82V9a1.65 1.65 0 001.51 1H21a2 2 0 010 4h-.09a1.65 1.65 0 00-1.51 1z"/></svg></button>
-      </div>
-    </header>
+<div class="ue-home">
 
-    <!-- BODY -->
-    <div class="ae-body">
-      <div class="ae-left">
-        <div class="ae-panels">
-          <!-- 01 FRIENDLY MATCH (hero) -->
-          <button class="ae-panel ae-hero" style="--ac:var(--gold)" onclick="showSc('s-ts')">
-            <span class="ae-pin">
-              <span class="ae-part" style="background-image:url('assets/home/banners/friendly.png')"></span>
-              <span class="ae-pgrad"></span>
-              <span class="ae-pcontent">
-                <span class="ae-pnum">01 · QUICK PLAY</span>
-                <span class="ae-ptitle">FRIENDLY MATCH</span>
-                <span class="ae-pjp">フレンドリーマッチ</span>
-                <span class="ae-psub">Jump straight into an 11 v 11 kick-off</span>
-              </span>
-              <span class="ae-pcta">▶</span>
-            </span>
-          </button>
-          <!-- 02 TOURNAMENT -->
-          <button class="ae-panel" style="--ac:var(--red)" onclick="cupOpen()">
-            <span class="ae-pin">
-              <span class="ae-part" style="background-image:url('assets/home/banners/tournament.png')"></span>
-              <span class="ae-pgrad"></span>
-              <span class="ae-pcontent">
-                <span class="ae-pnum">02 · KNOCKOUT CUP</span>
-                <span class="ae-ptitle">TOURNAMENT</span>
-                <span class="ae-pjp">トーナメント</span>
-                <span class="ae-psub">World Cup · Euro · Champions League</span>
-              </span>
-              <span class="ae-pcta">▶</span>
-            </span>
-          </button>
-          <!-- 03 MASTER LEAGUE -->
-          <button class="ae-panel" style="--ac:var(--sp)" onclick="showSc('s-career-clubs')">
-            <span class="ae-pin">
-              <span class="ae-part" style="background-image:url('assets/home/banners/masterleague.png')"></span>
-              <span class="ae-pgrad"></span>
-              <span class="ae-pcontent">
-                <span class="ae-pnum">03 · MANAGE YOUR CLUB</span>
-                <span class="ae-ptitle">MASTER LEAGUE</span>
-                <span class="ae-pjp">マスターリーグ</span>
-              </span>
-              <span class="ae-pcta">▶</span>
-            </span>
-          </button>
-          <!-- 04 STORY MODE -->
-          <button class="ae-panel" style="--ac:#a259ff" onclick="storyOpen()">
-            <span class="ae-pin">
-              <span class="ae-part" style="background-image:url('assets/home/banners/storymode.png')"></span>
-              <span class="ae-pgrad"></span>
-              <span class="ae-pcontent">
-                <span class="ae-pnum">04 · THE ROAD TO GLORY</span>
-                <span class="ae-ptitle">STORY MODE</span>
-                <span class="ae-pjp">ストーリーモード</span>
-                <span class="ae-psub">La Nuova Stella — from school pitch to World Cup</span>
-              </span>
-              <span class="ae-pcta">▶</span>
-            </span>
-            <span class="ae-badge new">NEW</span>
-          </button>
-        </div>
-        <!-- ICON ROW -->
-        <div class="ae-icons">
-          <button class="ae-ico" onclick="openWorld()"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><path d="M2 12h20M12 2c-3 4-3 12 0 20M12 2c3 4 3 12 0 20"/></svg><span>AROUND<br>THE WORLD</span></button>
-          <button class="ae-ico" onclick="czOpen()"><svg viewBox="0 0 24 24"><path d="M20.38 3.46L16 2a4 4 0 01-8 0L3.62 3.46l2.22 5.42L8 8v13h8V8l2.16.88z"/></svg><span>CUSTOMIZE</span></button>
-          <button class="ae-ico" onclick="openSettings()"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 11-2.83 2.83l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-4 0v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 11-2.83-2.83l.06-.06a1.65 1.65 0 00.33-1.82 1.65 1.65 0 00-1.51-1H3a2 2 0 010-4h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 112.83-2.83l.06.06a1.65 1.65 0 001.82.33H9a1.65 1.65 0 001-1.51V3a2 2 0 014 0v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 112.83 2.83l-.06.06a1.65 1.65 0 00-.33 1.82V9a1.65 1.65 0 001.51 1H21a2 2 0 010 4h-.09a1.65 1.65 0 00-1.51 1z"/></svg><span>SETTINGS</span></button>
-          <button class="ae-ico" onclick="camLabStart()"><svg viewBox="0 0 24 24"><path d="M23 19a2 2 0 01-2 2H3a2 2 0 01-2-2V8a2 2 0 012-2h4l2-3h6l2 3h4a2 2 0 012 2z"/><circle cx="12" cy="13" r="4"/></svg><span>CAMERA<br>LAB</span></button>
-        </div>
+  <!-- background art + atmosphere (all decorative) -->
+  <div class="ue-art"></div>
+  <div class="ue-halo"></div>
+  <div class="ue-bloom"></div>
+  <div class="ue-vig"></div>
+  <div class="ue-scan"></div>
+  <div class="ue-sweepband"></div>
+  <div class="ue-conf"><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i></div>
+
+  <!-- TOP BAR -->
+  <header class="ue-top">
+    <div class="ue-burger" onclick="openSettings()"><span></span><span></span><span></span></div>
+    <button class="ue-icobtn" onclick="openSettings()" title="Settings"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"></circle><path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 11-2.83 2.83l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-4 0v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 11-2.83-2.83l.06-.06a1.65 1.65 0 00.33-1.82 1.65 1.65 0 00-1.51-1H3a2 2 0 010-4h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 112.83-2.83l.06.06a1.65 1.65 0 001.82.33H9a1.65 1.65 0 001-1.51V3a2 2 0 014 0v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 112.83 2.83l-.06.06a1.65 1.65 0 00-.33 1.82V9a1.65 1.65 0 001.51 1H21a2 2 0 010 4h-.09a1.65 1.65 0 00-1.51 1z"></path></svg></button>
+    <button class="ue-icobtn" onclick="aeToast('Inbox — coming soon')" title="Inbox"><svg viewBox="0 0 24 24"><path d="M4 5h16v14H4z"></path><path d="M4 6l8 6 8-6"></path></svg><span class="ue-badge">3</span></button>
+
+    <div class="ue-top-right">
+      <div class="ue-coin"><i>U</i><span id="hmCoins">125,250</span></div>
+      <div class="ue-lvl">
+        <b id="hmLevel">LVL 24</b>
+        <div class="ue-xp"><span id="hmXpText">18,450 / 21,000</span><div><i id="hmXpFill"></i></div></div>
       </div>
-      <div class="ae-right"></div>
+      <div class="ue-me" onclick="openProfileEdit()">
+        <div style="text-align:right">
+          <div class="ue-me-name" id="hmProfileName">Striker11</div>
+          <div class="ue-me-sub">ELITE PLAYER</div>
+        </div>
+        <div class="ue-av" id="hmProfileAvatar"></div>
+      </div>
+    </div>
+  </header>
+
+  <!-- BODY -->
+  <div class="ue-body">
+
+    <div class="ue-left">
+      <div class="ue-logo">
+        <div class="ue-ghost">11</div>
+        <div class="ue-logo-in"><b>ULTIMATE</b><b>ELEVEN</b></div>
+        <div class="ue-tagline">DREAM. STRIVE. BECOME LEGEND.</div>
+      </div>
+
+      <nav class="ue-nav">
+        <button class="ue-item active" onclick="showSc('s-ts')">
+          <svg viewBox="0 0 24 24" style="stroke:#03102a"><circle cx="12" cy="12" r="9"></circle><circle cx="12" cy="12" r="3.6"></circle></svg>
+          <span><span class="ue-item-l">FRIENDLY MATCH</span><span class="ue-item-s" style="display:block">PLAY NOW · 11 v 11</span></span>
+          <span class="ue-play">&#9654;</span>
+        </button>
+
+        <button class="ue-item" onclick="aeToast('Create Player — coming soon')">
+          <svg viewBox="0 0 24 24"><circle cx="10" cy="7" r="3.4"></circle><path d="M3 20v-1.5A4.5 4.5 0 017.5 14h5a4.5 4.5 0 014.5 4.5V20M19 5v6M22 8h-6"></path></svg>
+          <span><span class="ue-item-l">CREATE PLAYER</span><span class="ue-item-s" style="display:block">BUILD YOUR OWN STAR</span></span>
+        </button>
+
+        <button class="ue-item" onclick="czOpen()">
+          <svg viewBox="0 0 24 24"><path d="M20.4 3.5L16 2a4 4 0 01-8 0L3.6 3.5l2.2 5.4L8 8v13h8V8l2.2.9z"></path></svg>
+          <span><span class="ue-item-l">CUSTOMIZE</span><span class="ue-item-s" style="display:block">EDIT PLAYERS &amp; TEAMS</span></span>
+        </button>
+
+        <button class="ue-item" onclick="openWorld()">
+          <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"></circle><path d="M3 12h18M12 3c-3 4-3 14 0 18M12 3c3 4 3 14 0 18"></path></svg>
+          <span><span class="ue-item-l">AROUND THE WORLD</span><span class="ue-item-s" style="display:block">GLOBAL CHALLENGES</span></span>
+        </button>
+
+        <button class="ue-item" onclick="openSettings()">
+          <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"></circle><path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 11-2.83 2.83l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-4 0v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 11-2.83-2.83l.06-.06a1.65 1.65 0 00.33-1.82 1.65 1.65 0 00-1.51-1H3a2 2 0 010-4h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 112.83-2.83l.06.06a1.65 1.65 0 001.82.33H9a1.65 1.65 0 001-1.51V3a2 2 0 014 0v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 112.83 2.83l-.06.06a1.65 1.65 0 00-.33 1.82V9a1.65 1.65 0 001.51 1H21a2 2 0 010 4h-.09a1.65 1.65 0 00-1.51 1z"></path></svg>
+          <span><span class="ue-item-l">SETTINGS</span><span class="ue-item-s" style="display:block">AUDIO · CONTROLS · DISPLAY</span></span>
+        </button>
+
+        <button class="ue-item" onclick="camLabStart()">
+          <svg viewBox="0 0 24 24"><path d="M23 19a2 2 0 01-2 2H3a2 2 0 01-2-2V8a2 2 0 012-2h4l2-3h6l2 3h4a2 2 0 012 2z"></path><circle cx="12" cy="13" r="4"></circle></svg>
+          <span><span class="ue-item-l">CAMERA LAB</span><span class="ue-item-s" style="display:block">BROADCAST ANGLES</span></span>
+        </button>
+      </nav>
     </div>
 
-    <!-- BOTTOM BAR -->
-    <footer class="ae-bottom">
-      <div class="ae-bl">
-        <canvas id="hm-sprite" width="100" height="100"></canvas>
-        <div class="ae-season"><span class="ae-season-dot"></span>SEASON 3 · WORLD CUP ARC</div>
+    <div class="ue-right">
+      <div class="ue-tiles">
+        <button class="ue-tile" onclick="cupOpen()">
+          <span class="ue-tile-art" style="background-image:url('assets/home/banners/tournament.png')"></span>
+          <span class="ue-tile-scrim"></span>
+          <span class="ue-tile-txt"><h4>ULTIMATE<br>LEAGUE</h4><p class="gold">SEASON 1</p><p>ENDS IN 18 DAYS</p></span>
+        </button>
+        <button class="ue-tile" onclick="showSc('s-career-clubs')">
+          <span class="ue-tile-art" style="background-image:url('assets/home/banners/masterleague.png')"></span>
+          <span class="ue-tile-scrim"></span>
+          <span class="ue-tile-txt"><h4>MASTER<br>LEAGUE</h4><p>CONTINUE<br>MATCHDAY 14</p></span>
+        </button>
+        <button class="ue-tile" onclick="storyOpen()">
+          <span class="ue-tile-art" style="background-image:url('assets/home/banners/storymode.png')"></span>
+          <span class="ue-tile-scrim"></span>
+          <span class="ue-tile-txt"><h4>STORY<br>MODE</h4><p>NEW CHAPTER<br><span class="acc">UNLOCK YOUR EGO</span></p></span>
+        </button>
       </div>
-      <div class="ae-hints">
-        <div class="ae-hint"><b>✓</b> SELECT</div>
-        <div class="ae-hint"><b>✕</b> BACK</div>
-      </div>
-    </footer>
+    </div>
+  </div>
 
+  <!-- script tagline over the art -->
+  <div class="ue-script"><b>EVERY<br>MATCH.</b><b>EVERY<br>DREAM.</b></div>
+
+  <!-- foreground confetti (parallax) -->
+  <div class="ue-conf front"><i></i><i></i><i></i><i></i><i></i></div>
+
+  <!-- FOOTER HINTS -->
+  <footer class="ue-hints">
+    <div class="ue-hint a"><i>A</i>SELECT</div>
+    <div class="ue-hint b"><i>B</i>BACK</div>
+    <div class="ue-hint"><i>Y</i>NEWS</div>
+    <div class="ue-hints-right">
+      <div class="ue-dots"><i class="on"></i><i></i><i></i><i></i></div>
+      <div class="ue-online"><svg viewBox="0 0 24 24"><circle cx="9" cy="8" r="3"></circle><path d="M3 20v-1a4 4 0 014-4h4a4 4 0 014 4v1M17 11a3 3 0 100-6"></path></svg><span id="hmOnline">6</span></div>
+    </div>
+  </footer>
+
+</div>
+<div class="ue-home-modals">
     <div class="ae-toast" id="aeToastEl"></div>
 
     <!-- SETTINGS MODAL -->
@@ -1600,7 +1438,12 @@
   function hmStart(){
     var el=document.getElementById('s-home');
     if(!el)return;
-    el.style.backgroundImage="url('"+_H+"')";
+    /* NEW HOME MENU: the background is now owned by .ue-art inside .ue-home
+       (home-menu.css). Setting an inline background-image here would sit on
+       top of it and defeat the new art/ken-burns layer, so it is disabled.
+       The particle canvas / sprite / loader wiring below are all null-guarded
+       and simply no-op now that the old hm- and ae-panel markup is gone. */
+    if(!document.querySelector('#s-home .ue-home')) el.style.backgroundImage="url('"+_H+"')";
     var cvs=document.getElementById('hm-canvas');
     if(cvs&&!cvs._i){cvs._i=true;var ctx=cvs.getContext('2d'),pts=[],f=0;
       function rsz(){cvs.width=cvs.offsetWidth;cvs.height=cvs.offsetHeight;}rsz();
