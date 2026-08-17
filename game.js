@@ -1363,7 +1363,7 @@ function iPos(){
   });ball={x:W/2,y:H/2,tx:W/2,ty:H/2};trail=[];
   resetPhysics();   // clear momentum/reaction state so nothing carries over
 }
-function makeG(){return {half:1,tL:2400,hG:0,aG:0,poss:'h',ck:null,chk:null,mom:50,duels:0,shots:0,hP:0,tP:0,phase:'idle',mt:null,di:null,D:{},pm:false,kickoffUntil:0,_resT:0,pressing:false,goalGen:0,paused:false,subsUsed:0,reds:{h:0,a:0},hShots:0,aShots:0,hDuels:0,aDuels:0,hFouls:0,aFouls:0,hOff:0,aOff:0};}
+function makeG(){return {half:1,tL:2400,hG:0,aG:0,poss:'h',ck:null,chk:null,mom:50,duels:0,shots:0,hP:0,tP:0,phase:'idle',mt:null,di:null,D:{},pm:false,kickoffUntil:0,_resT:0,_fkGen:0,pressing:false,goalGen:0,paused:false,subsUsed:0,reds:{h:0,a:0},hShots:0,aShots:0,hDuels:0,aDuels:0,hFouls:0,aFouls:0,hOff:0,aOff:0};}
 let G=makeG();
 function setC(k,s){G.poss=s;G.ck=k;G.tP++;if(s==='h')G.hP++;updP();updH();}
 // ═══════════════════════════════════════════════════════════════
@@ -2288,6 +2288,20 @@ function startAnim(){
       console.warn('duel watchdog fired — force resuming');
       G._duelT=0;closeDuel();resume(G.poss);
     }
+    // watchdogs are stuck-state catchers, not per-frame logic — 4Hz is plenty
+    // and keeps getElementById out of the 60fps path.
+    const _wnow=Date.now();
+    if(!G._wdT||_wnow-G._wdT>250){ G._wdT=_wnow;
+    // STRANDED IDLE: phase 'idle' with the kickoff grace long expired means a
+    // delayed restart was cancelled (foul/free-kick recovery, etc). Rather than
+    // sit frozen until the next event, put the ball back in play.
+    if(G.phase==='idle'&&G.mt&&!G._cineHold&&!G.paused&&
+       G.kickoffUntil&&Date.now()-G.kickoffUntil>2500){
+      console.warn('stranded idle watchdog — resuming play');
+      G.kickoffUntil=Date.now()+400;
+      closeDuel();
+      resume(G.poss||'h');
+    }
     // stuck RESULT overlay: the duel is over but nothing dismissed the panel
     if(G._resT&&Date.now()-G._resT>4000){
       const _ro=document.getElementById('duel-res');
@@ -2305,6 +2319,7 @@ function startAnim(){
         closeDuel();
       }
     }
+    }  // end watchdog throttle
     if(G.phase==='moving'&&G.ck&&PP[G.poss]&&PP[G.poss][G.ck]){
       const _cp=PP[G.poss][G.ck];
       const _dir=dirFor(G.poss);
@@ -3687,7 +3702,7 @@ function superShotCine(){
   clearInterval(G.di);G_moveTarget=null;
   G.phase='pass_anim';
   G._cineHold=true;                                  // freeze the whole engine
-  try{if(window.SFX&&SFX.windup)SFX.windup(4.3);}catch(e){}
+  // (windup sfx is (re)started below once SSC_HOLD is known)
   const _gen=G.goalGen;
   const _bail=why=>{U11DBG('SSC: '+why);G._cineHold=false;try{P3D.superCine2.abort();}catch(e){}};
   setTimeout(()=>{ // watchdog — never leave the game stuck in the cinematic
@@ -3697,7 +3712,27 @@ function superShotCine(){
   const _ln=(carrier.origName||carrier.name).split('.').pop().toLowerCase().trim();
   const _tk=String((s==='h'?selHome:selAway)||'').toLowerCase();
   const _bases=_tk?[_ln,_tk+'-shoot']:[_ln];       // player video → team video → PNG
-  U11DBG('SSC: wind-up hold 4.5s');
+  /* WIND-UP HOLD — halved from 4500ms. The hold is only a camera/charge beat
+     before the skill banner; 4.5s made every super shot feel like a loading
+     screen. We also PREFETCH the clip during the hold so the video is already
+     buffered when the banner opens — the perceived wait drops much further
+     than the 2.25s the timer alone saves. */
+  const SSC_HOLD=2250;
+  try{
+    _bases.forEach(b=>{
+      ['webm','mp4'].forEach(ext=>{
+        const l=document.createElement('link');
+        l.rel='prefetch'; l.as='video';
+        l.href='assets/cutscene/'+b+'.'+ext;
+        l.onerror=()=>l.remove();
+        document.head.appendChild(l);
+        setTimeout(()=>{try{l.remove();}catch(e){}},15000);
+      });
+    });
+  }catch(e){}
+  try{if(window.SFX&&SFX.windup)SFX.windupStop&&SFX.windupStop();}catch(e){}
+  try{if(window.SFX&&SFX.windup)SFX.windup(SSC_HOLD/1000+0.1);}catch(e){}
+  U11DBG('SSC: wind-up hold '+SSC_HOLD+'ms');
   setTimeout(()=>{
     if(G.goalGen!==_gen||G.phase!=='pass_anim'){_bail('stale after hold');return;}
     U11DBG('SSC: banner…');
@@ -3711,7 +3746,7 @@ function superShotCine(){
         G.phase='idle';opDuel(true,'special');   // menu shows (CPU picks on-screen), then banner
       });
     },5200,_bases);
-  },4500);
+  },SSC_HOLD);
   return true;
 }
 /* Committed super shot from the field button — no duel menu.
@@ -4063,7 +4098,7 @@ function iPas(tk){
         G.poss=closestSide;G.ck=closestKey;G.tP++;if(closestSide==='h')G.hP++;
         ball.x=lx;ball.y=ly;ball.tx=lx;ball.ty=ly;
         updP();G.phase='idle';
-        setTimeout(()=>{asnC();G.phase='moving';if(closestSide==='h')$id('passhint').style.display='block';},200);
+        setTimeout(()=>liveResume(closestSide),200);
       },passDuration(fp2.x,fp2.y,lx,ly,24));
     }else{
       // Clean steal
@@ -4071,7 +4106,7 @@ function iPas(tk){
       animateBallTo(fp2.x,fp2.y,iPos.x,iPos.y,()=>{
         G.poss=ds;G.ck=ic;G.tP++;if(PP[ds][ic]){ball.x=PP[ds][ic].x;ball.y=PP[ds][ic].y;ball.tx=ball.x;ball.ty=ball.y;}
         updP();G.phase='idle';
-        setTimeout(()=>{asnC();G.phase='moving';},200);
+        setTimeout(()=>liveResume(null),200);
       },passDuration(fp2.x,fp2.y,iPos.x,iPos.y,26));
     }
   } else {
@@ -4079,7 +4114,7 @@ function iPas(tk){
     animateBallTo(fp2.x,fp2.y,tp.x,tp.y,()=>{
       setC(tk,s); ball.x=tp.x;ball.y=tp.y;ball.tx=tp.x;ball.ty=tp.y;
       G.phase='idle';
-      setTimeout(()=>{asnC();G.phase='moving';if(G.poss==='h')$id('passhint').style.display='block';},120);
+      setTimeout(()=>liveResume(G.poss),120);
     },passDuration(fp2.x,fp2.y,tp.x,tp.y,28));
   }
 }
@@ -5836,6 +5871,15 @@ function resDuel(){
 }
 
 function closeDuel(){killCutIn();G._duelT=0;G._resT=0;try{gkShotLayout(false);}catch(e){}try{Object.values(hSq).forEach(p=>{if(p)p._pending2v1=false;});Object.values(aSq).forEach(p=>{if(p)p._pending2v1=false;});}catch(e){}try{document.getElementById('s-match').classList.remove('duel-live');}catch(e){}document.getElementById('duel-ov').classList.remove('show');document.getElementById('duel-res').classList.remove('show');G.pm=false;$id('pass-banner').style.display='none';const d2=document.getElementById('dpd2-wrap');if(d2)d2.remove();}
+/* SAFE DELAYED RESTART — several restarts fire on a 120-950ms setTimeout.
+   Without a guard they can land after the whistle, after exitToMenu(), or
+   while paused/in a cinematic, waking a dead match. Route them all here. */
+function liveResume(sideForHint){
+  if(!G||!G.mt||G.paused||G._cineHold)return;      // match gone or frozen
+  if(G.phase==='duel'||G.phase==='duel_result')return; // a duel took over
+  asnC(); G.phase='moving';
+  if(sideForHint==='h'){const ph=$id('passhint');if(ph)ph.style.display='block';}
+}
 function resume(s,msg){
   // SOFT-LOCK GUARD: resume() is the one gate every "play continues" route
   // passes through. If a super-shot duel ever exits by any path other than
@@ -5953,7 +5997,7 @@ function afSave(ds){
         const outlet=bestTeammateFor(ds,'GK','pass')||['CB1','CB2','LB','RB','CM2'].find(k=>q[k]);
         if(outlet){G.ck=outlet;G.tP++;if(ds==='h')G.hP++;if(PP[ds][outlet]){ball.tx=PP[ds][outlet].x;ball.ty=PP[ds][outlet].y;}}
         updP();G.kickoffUntil=Date.now()+1800;
-        setTimeout(()=>{asnC();G.phase='moving';if(ds==='h')$id('passhint').style.display='block';},500);
+        setTimeout(()=>liveResume(ds),500);
       },900);
       return;
     }
@@ -5974,7 +6018,7 @@ function afSave(ds){
         G.poss=ds;G.ck=bestKey||'CB1';G.tP++;if(ds==='h')G.hP++;
         if(PP[ds][G.ck]){PP[ds][G.ck].x=clearX;PP[ds][G.ck].y=safeY;}
         updP();G.kickoffUntil=Date.now()+1800;
-        setTimeout(()=>{asnC();G.phase='moving';if(ds==='h')$id('passhint').style.display='block';},500);
+        setTimeout(()=>liveResume(ds),500);
       },30);
       return;
     }
@@ -5997,7 +6041,7 @@ function afSave(ds){
       const winner=sq(bSide)[bKey];
       say((winner?winner.name:'—')+' wins the rebound!');
       G.kickoffUntil=Date.now()+1800;
-      setTimeout(()=>{asnC();G.phase='moving';},500);
+      setTimeout(()=>liveResume(null),500);
     },30);
   }; // end doResolve
 
@@ -6037,7 +6081,7 @@ function afPass(s,tk){
             if(ipos){ball.x=ipos.x;ball.y=ipos.y;ball.tx=ipos.x;ball.ty=ipos.y;}
           }
           updP();G.phase='idle';
-          setTimeout(()=>{asnC();G.phase='moving';$id('passhint').style.display='block';},950);
+          setTimeout(()=>liveResume('h'),950);
         },passDuration(fp2.x,fp2.y,ipos.x,ipos.y,26));
         return;
       }
@@ -6056,7 +6100,7 @@ function afPass(s,tk){
       if(np){ball.x=np.x;ball.y=np.y;ball.tx=np.x;ball.ty=np.y;}
       G_moveTarget=null;G_laneTarget=null;
       G.phase='idle';
-      setTimeout(()=>{asnC();G.phase='moving';if(G.poss==='h')$id('passhint').style.display='block';},120);
+      setTimeout(()=>liveResume(G.poss),120);
     },passDuration(fpA.x,fpA.y,tpA.x,tpA.y,28));
     return;
   }
@@ -6492,7 +6536,10 @@ function rollFoul(defSide,defSlot,attSide,prob){
   // central Y band. Same convention as the box-defender duel boost.
   const ownGx=ownGoalXFor(defSide);
   const inBox=Math.abs(defPos.x-ownGx)<W*0.20 && defPos.y>H*0.30 && defPos.y<H*0.70;
-  const _fgen=G.goalGen;
+  // Dedicated token — NOT goalGen. goalGen is bumped by afGoal/afSave/afTurn
+  // (afTurn bumps it one line before calling us), which used to cancel this
+  // recovery and soft-lock the match in phase 'idle'.
+  const _fk=++G._fkGen;
   const isPK=inBox&&Math.random()<0.4;
   if(defSide==='h')G.hFouls++; else G.aFouls++;
   const foulName=defPl?defPl.name.split('.').pop():'Defender';
@@ -6517,7 +6564,7 @@ function rollFoul(defSide,defSlot,attSide,prob){
   showFreeKickPause(isPK?'PENALTY!':'FREE KICK',foulName, isPK?3500:3200);
   // Award possession to attacking team at foul position after the pause
   setTimeout(()=>{
-    if(G.goalGen!==_fgen)return; // state safety — match may have been torn down
+    if(G._fkGen!==_fk||!G.mt)return; // state safety — match may have been torn down
     G.poss=attSide;
     // Find the nearest attacking field player (not GK) to take the free kick
     const attQ=sq(attSide);
@@ -6554,7 +6601,7 @@ function rollFoul(defSide,defSlot,attSide,prob){
       });
       updP();
       setTimeout(()=>{
-        if(G.goalGen!==_fgen)return;
+        if(G._fkGen!==_fk||!G.mt)return;
         G.phase='idle';
         opDuel(true); // shooter (human or AI) picks the strike; GK answers
       },900);
