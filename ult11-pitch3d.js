@@ -708,18 +708,63 @@
     /* ════════ PLAYER BILLBOARDS (reuse assets/ps1 sheets) ════════
        Same 7×6 grid + facing logic as ps1-mod. We keep a sprite per
        (side,key) and update its cell from engine movement each frame. */
-    const GRID={cols:7,rows:6};
+    /* ════════ SPRITE SHEET LAYOUTS ════════
+       Two layouts are supported so old and new art can coexist while you
+       redraw. Which one a sheet uses is auto-detected from its pixel aspect
+       ratio on load (cell height is the same in both, only column count
+       differs), so a 10-col sheet upgrades itself with no config.
+
+       LEGACY  7 cols x 6 rows        NEW  10 cols x 6 rows
+         col0      idle (1 frame)       col0-1   idle (2 frames)
+         col1-6    run  (6 frames)      col2-9   run  (8 frames)
+       Rows are identical in both:
+         row0 DOWN-run  row1 UP-run  row2 SIDE-run
+         row3 DOWN-act  row4 UP-act  row5 SIDE-act
+       Action band (rows 3-5): cols 0-2 = pass, cols 3-6 = shoot.
+       SIDE views face screen-RIGHT and are mirrored in-engine.            */
+    const LAYOUTS={
+      7 :{cols:7 , rows:6, idle:[0,1], run:[1,6], pass:[0,3], shoot:[3,4]},
+      10:{cols:10, rows:6, idle:[0,2], run:[2,8], pass:[0,3], shoot:[3,4]}
+    };
+    const GRID=LAYOUTS[7];        // default/fallback for anything unmeasured
+    function layoutFor(img){
+      /* Rows are always 6. A cell is authored square-ish, so:
+           cols ~= imageWidth / (imageHeight / 6)
+         We snap that to the nearest supported layout, so a 7-col sheet stays
+         legacy and a 10-col sheet is picked up automatically. Anything wildly
+         off falls back to legacy rather than shredding the UVs. */
+      if(!img||!img.width||!img.height) return GRID;
+      const measured=img.width/(img.height/6);
+      let best=GRID,bestErr=Infinity;
+      for(const k in LAYOUTS){
+        const err=Math.abs(LAYOUTS[k].cols-measured);
+        if(err<bestErr){bestErr=err;best=LAYOUTS[k];}
+      }
+      return bestErr<=1.5?best:GRID;    // >1.5 cols off = unrecognised art
+    }
+    /* run cadence — scales with how fast the player is actually moving, so a
+       jog and a sprint read differently instead of one constant tempo. */
+    const ANIM={
+      runFpsMin:9,        // slow jog
+      runFpsMax:17,       // flat-out sprint
+      idleFps:2.2,        // breath / weight shift
+      moveHoldMs:220      // how long after last motion we still count as running
+    };
     const ROW={down:{run:0,act:3}, up:{run:1,act:4}, side:{run:2,act:5}};
     const COL={idle:0, run:[1,6], pass:[0,3], shoot:[3,4]};
     const SHEETS={h:null,a:null}; const _sk={h:undefined,a:undefined};
     let GK_SHEET=null;                                 // shared keeper sheet for BOTH teams
     (function(){ const im=new Image();
-      im.onload=()=>GK_SHEET={img:im, cw:im.width/GRID.cols, ch:im.height/GRID.rows};
+      im.onload=()=>{const L=layoutFor(im);
+        GK_SHEET={img:im, L, cw:im.width/L.cols, ch:im.height/L.rows};};
       im.src='assets/ps1/gk.png'; })();
     function loadSheet(side,urls){
       let i=0; const next=()=>{ if(i>=urls.length){ if(!SHEETS[side])SHEETS[side]='none'; return; }
         const im=new Image(), u=urls[i++];
-        im.onload=()=>SHEETS[side]={img:im, cw:im.width/GRID.cols, ch:im.height/GRID.rows};
+        im.onload=()=>{const L=layoutFor(im);
+          SHEETS[side]={img:im, L, cw:im.width/L.cols, ch:im.height/L.rows};
+          console.log('[P3D] '+side+' sheet '+u+' '+im.width+'x'+im.height+' → '+L.cols+' cols ('+(L.run[1])+' run, '+(L.idle[1])+' idle)');
+        };
         im.onerror=next; im.src=u; }; next();
     }
     function syncSheets(){
@@ -736,7 +781,8 @@
       if(sprites[id]) return sprites[id];
       const tex=new T.Texture(sheet.img);
       tex.magFilter=T.NearestFilter; tex.minFilter=T.NearestFilter;
-      tex.repeat.set(1/GRID.cols,1/GRID.rows); tex.needsUpdate=true;
+      const _L=sheet.L||GRID;
+      tex.repeat.set(1/_L.cols,1/_L.rows); tex.needsUpdate=true;
       const sp=new T.Sprite(new T.SpriteMaterial({map:tex,transparent:true,alphaTest:0.5}));
       sp.center.set(0.5,0); scene.add(sp);
       // soft round CONTACT shadow under the feet
@@ -749,11 +795,20 @@
         new T.MeshBasicMaterial({map:tex,color:0x000000,transparent:true,alphaTest:0.5,
                                  opacity:P3D.light.shadow,depthWrite:false}));
       sil.renderOrder=2; scene.add(sil);
-      return sprites[id]={sprite:sp,shadow:sh,sil,tex,_sheetImg:sheet.img};
+      return sprites[id]={sprite:sp,shadow:sh,sil,tex,_sheetImg:sheet.img,_L:(sheet.L||GRID)};
     }
-    function cellState(id,p,wx,wz){
+    function cellState(id,p,wx,wz,L){
+      L=L||GRID;
       const now=performance.now();
-      const prev=stt[id]||{rx:p.x,ry:p.y,face:'side',flip:false,moveT:-1e9};
+      const prev=stt[id]||{rx:p.x,ry:p.y,face:'side',flip:false,moveT:-1e9,
+                           spd:0,lx:p.x,ly:p.y,lt:now,phase:Math.random()*1000};
+      /* measured speed (engine px per second) — drives run cadence so a jog
+         and a sprint animate at different tempos. Smoothed so the legs don't
+         stutter when the engine's momentum layer eases velocity. */
+      const dtS=Math.max(1,now-(prev.lt||now))/1000;
+      const inst=Math.hypot(p.x-(prev.lx??p.x),p.y-(prev.ly??p.y))/dtS;
+      const spd=(prev.spd||0)*0.82+inst*0.18;
+      prev.spd=spd; prev.lx=p.x; prev.ly=p.y; prev.lt=now;
       const ddx=p.x-prev.rx, ddy=p.y-prev.ry, dist=Math.hypot(ddx,ddy);
       const thresh=(CV.width||1280)*0.0015;
       let {rx,ry,face,flip,moveT}=prev;
@@ -774,21 +829,38 @@
         }
         moveT=now; rx=p.x; ry=p.y;
       }
-      stt[id]={rx,ry,face,flip,moveT};
+      stt[id]={rx,ry,face,flip,moveT,
+               spd:prev.spd,lx:prev.lx,ly:prev.ly,lt:prev.lt,phase:prev.phase};
       const band=ROW[face]||ROW.side;
       // one-shot pass/shoot animation override (action band, same facing) —
       // same mechanism as ps1-mod's PS1_action, ported to the 3D billboards.
       const act=ACT[id];
       if(act){
-        const rng=COL[act.name], dur=act.name==='shoot'?480:360, el=now-act.t0;
+        const rng=(act.name==='shoot'?L.shoot:L.pass), dur=act.name==='shoot'?480:360, el=now-act.t0;
         if(el<dur){ const fi=Math.min(rng[1]-1, Math.floor(el/dur*rng[1]));
           return {row:band.act, col:rng[0]+fi, flip}; }
         delete ACT[id];
       }
-      const running=(now-moveT)<220;
-      let col=COL.idle;
-      if(running){ const R=COL.run; col=R[0]+(Math.floor(now/1000*11)%R[1]); }
-      return {row:band.run, col, flip};
+      const running=(now-moveT)<ANIM.moveHoldMs;
+      if(running){
+        /* SPEED-SCALED RUN. Cadence ramps from runFpsMin (jog) to runFpsMax
+           (sprint) against the measured speed, so the legs match the pace
+           instead of one fixed 11fps loop. */
+        const ref=(CV.width||1280)*0.30;                  // ~ full sprint px/s
+        const t=Math.max(0,Math.min(1,(prev.spd||0)/ref));
+        const fps=ANIM.runFpsMin+(ANIM.runFpsMax-ANIM.runFpsMin)*t;
+        const R=L.run;                                     // [startCol, frameCount]
+        return {row:band.run, col:R[0]+(Math.floor(now/1000*fps)%R[1]), flip};
+      }
+      /* IDLE. A single frame can never animate — with a 2+ frame idle band we
+         cycle slowly (breath / weight shift). Per-player phase offset so a
+         whole team doesn't bob in lockstep. */
+      const I=L.idle;                                      // [startCol, frameCount]
+      if(I[1]>1){
+        const fi=Math.floor((now+prev.phase*370)/1000*ANIM.idleFps)%I[1];
+        return {row:band.run, col:I[0]+fi, flip};
+      }
+      return {row:band.run, col:I[0], flip};
     }
     /* one-shot action triggers — auto-detected from engine phase transitions */
     const ACT={};
@@ -837,10 +909,11 @@
           const cx=Math.min(Math.max(p.x,0.07*W),0.93*W);
           const cy=Math.min(Math.max(p.y,0.01*H),0.99*H);
           const wx=ex2wx(cx), wz=ey2wz(cy);
-          const st=cellState(id,p,wx,wz);
+          const st=cellState(id,p,wx,wz,(o._L||GRID));
           // Mirror via UV, not scale: THREE.Sprite ignores negative scale.x.
           // flip → repeat.x negative + offset shifted one cell to the right edge.
-          const cw=1/GRID.cols, ch=1/GRID.rows;
+          const _L=(o._L||GRID);
+          const cw=1/_L.cols, ch=1/_L.rows;
           const ox=st.col*cw, oy=1-(st.row+1)*ch;
           if(st.flip){ o.tex.repeat.set(-cw,ch); o.tex.offset.set(ox+cw,oy); }
           else       { o.tex.repeat.set( cw,ch); o.tex.offset.set(ox,   oy); }
@@ -1463,7 +1536,8 @@
     // force a sprite to an explicit sheet cell (used on shooter + GK)
     function forceCell(id,row,col,flip){
       const o=sprites[id]; if(!o)return;
-      const cw=1/GRID.cols, ch=1/GRID.rows;
+      const _L=(o._L||GRID);
+      const cw=1/_L.cols, ch=1/_L.rows;
       const ox=col*cw, oy=1-(row+1)*ch;
       if(flip){ o.tex.repeat.set(-cw,ch); o.tex.offset.set(ox+cw,oy); }
       else    { o.tex.repeat.set( cw,ch); o.tex.offset.set(ox,oy); }
