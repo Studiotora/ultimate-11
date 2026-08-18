@@ -748,7 +748,8 @@
       return {img:im,L,cw,ch};
     }
     /* run cadence scales with real movement speed; idle gets a slow breath */
-    const ANIM={runFpsMin:9, runFpsMax:17, idleFps:2.2, moveHoldMs:220};
+    const ANIM={runFpsMin:6, runFpsMax:10.5, idleFps:2.2, moveHoldMs:220};
+    P3D.anim=ANIM;                 // live tune: P3D.anim.runFpsMax=12
     const ROW={down:{run:0,act:3}, up:{run:1,act:4}, side:{run:2,act:5}};
     const COL={idle:0, run:[1,6], pass:[0,3], shoot:[3,4]};
     const SHEETS={h:null,a:null}; const _sk={h:undefined,a:undefined};
@@ -769,8 +770,8 @@
     function syncSheets(){
       const hk=(typeof selHome!=='undefined'&&selHome)?String(selHome).toLowerCase():null;
       const ak=(typeof selAway!=='undefined'&&selAway)?String(selAway).toLowerCase():null;
-      if(hk!==_sk.h){ _sk.h=hk; loadSheet('h', hk?['assets/ps1/'+hk+'.png','assets/ps1/home.png']:['assets/ps1/home.png']); }
-      if(ak!==_sk.a){ _sk.a=ak; loadSheet('a', ak?['assets/ps1/'+ak+'.png','assets/ps1/away.png']:['assets/ps1/away.png']); }
+      if(hk!==_sk.h){ _sk.h=hk; SHEETS.h=null; loadSheet('h', hk?['assets/ps1/'+hk+'.png','assets/ps1/home.png']:['assets/ps1/home.png']); }
+      if(ak!==_sk.a){ _sk.a=ak; SHEETS.a=null; loadSheet('a', ak?['assets/ps1/'+ak+'.png','assets/ps1/away.png']:['assets/ps1/away.png']); }
     }
     syncSheets();
 
