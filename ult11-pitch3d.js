@@ -732,6 +732,21 @@
       }
       return bestErr<=1.5?best:GRID;
     }
+    /* Build a sheet record. Cells are SPEC'D SQUARE, so the billboard aspect is
+       derived from the LAYOUT, never from raw image dims — a mis-exported sheet
+       used to collapse players into 1px slivers. Aspect is also hard-clamped. */
+    function mkSheet(im,url){
+      const L=layoutFor(im);
+      let cw=im.width/L.cols, ch=im.height/L.rows;
+      const ar=cw/ch;
+      if(!isFinite(ar)||ar<0.5||ar>2.0){        // malformed sheet → force square cell
+        console.warn('[P3D] sheet '+(url||'')+' '+im.width+'x'+im.height+
+          ' gives cell aspect '+ar.toFixed(3)+' at '+L.cols+'x'+L.rows+
+          ' — forcing SQUARE cells. Re-export as '+(L.cols*ch|0)+'x'+(L.rows*ch|0)+'.');
+        cw=ch;
+      }
+      return {img:im,L,cw,ch};
+    }
     /* run cadence scales with real movement speed; idle gets a slow breath */
     const ANIM={runFpsMin:9, runFpsMax:17, idleFps:2.2, moveHoldMs:220};
     const ROW={down:{run:0,act:3}, up:{run:1,act:4}, side:{run:2,act:5}};
@@ -739,16 +754,15 @@
     const SHEETS={h:null,a:null}; const _sk={h:undefined,a:undefined};
     let GK_SHEET=null;                                 // shared keeper sheet for BOTH teams
     (function(){ const im=new Image();
-      im.onload=()=>{const L=layoutFor(im);GK_SHEET={img:im,L,cw:im.width/L.cols,ch:im.height/L.rows};};
+      im.onload=()=>{GK_SHEET=mkSheet(im,'assets/ps1/gk.png');};
       im.src='assets/ps1/gk.png'; })();
     function loadSheet(side,urls){
       let i=0; const next=()=>{ if(i>=urls.length){ if(!SHEETS[side])SHEETS[side]='none'; return; }
         const im=new Image(), u=urls[i++];
-        im.onload=()=>{const L=layoutFor(im);
-          SHEETS[side]={img:im,L,cw:im.width/L.cols,ch:im.height/L.rows};
+        im.onload=()=>{const S=mkSheet(im,u); SHEETS[side]=S; const L=S.L;
           console.log('[P3D] '+side+' sheet '+u+' '+im.width+'x'+im.height+
             ' -> '+L.cols+' cols x '+L.rows+' rows, cell '+
-            (im.width/L.cols).toFixed(0)+'x'+(im.height/L.rows).toFixed(0)+
+            S.cw.toFixed(0)+'x'+S.ch.toFixed(0)+
             ', run '+JSON.stringify(L.run)+' idle '+JSON.stringify(L.idle));};
         im.onerror=next; im.src=u; }; next();
     }
@@ -874,12 +888,15 @@
           const o=ensureSprite(id,useSheet);
           if(o._sheetImg!==useSheet.img){         // (re)bind texture if the sheet changed
             o.tex.image=useSheet.img; o.tex.needsUpdate=true; o._sheetImg=useSheet.img;
+            o._L=useSheet.L||GRID;                 // layout MUST follow the image
           }
           // sprite height = fixed fraction of world pitch LENGTH (HD-2D scale).
           // P3D.spriteFrac defaults to ~0.045 of PLEN — tune in Camera Lab.
           const frac=(P3D.spriteFrac!=null?P3D.spriteFrac:0.045);
           const hWorld=PLEN*frac;
-          const wWorld=hWorld*(useSheet.cw/useSheet.ch);
+          let _ar=useSheet.cw/useSheet.ch;
+          if(!isFinite(_ar)||_ar<0.5||_ar>2.0) _ar=1;   // never let a sheet collapse a player
+          const wWorld=hWorld*_ar;
           // keep feet on the pitch: clamp x to the goal lines (GK sits at ~0.05 in
           // the engine, which would render BEHIND the goal line) and y to sidelines.
           const W=(CV.width||1280), H=(CV.height||720);
