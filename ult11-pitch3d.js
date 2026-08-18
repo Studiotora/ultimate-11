@@ -67,6 +67,7 @@
             warmth:0.55,  // 0 cool → 1 warm (tints fog, key light, glow)
             shadow:0.40,  // player shadow opacity
             shadowLen:1.0,// player shadow stretch (with elev)
+            castSil:true, // stretched silhouette cast shadow — P3D.light.castSil=false to kill
             glow:0.45 },  // warm sun-pool intensity on the pitch (0 = off)
     // ---- POST-PROCESSING (Camera Lab → POST FX); needs the post scripts in index.html ----
     fx:{ on:true, bloom:0.55, bloomRadius:0.5, bloomThresh:0.82, tilt:0.45, vignette:0.5,
@@ -745,7 +746,10 @@
         const im=new Image(), u=urls[i++];
         im.onload=()=>{const L=layoutFor(im);
           SHEETS[side]={img:im,L,cw:im.width/L.cols,ch:im.height/L.rows};
-          console.log('[P3D] '+side+' sheet '+u+' '+im.width+'x'+im.height+' -> '+L.cols+' cols');};
+          console.log('[P3D] '+side+' sheet '+u+' '+im.width+'x'+im.height+
+            ' -> '+L.cols+' cols x '+L.rows+' rows, cell '+
+            (im.width/L.cols).toFixed(0)+'x'+(im.height/L.rows).toFixed(0)+
+            ', run '+JSON.stringify(L.run)+' idle '+JSON.stringify(L.idle));};
         im.onerror=next; im.src=u; }; next();
     }
     function syncSheets(){
@@ -906,6 +910,7 @@
           o.sil.scale.set(wWorld, projLen, 1);
           _qF.setFromAxisAngle(_AX,-Math.PI/2); _qS.setFromAxisAngle(_AY,az);
           o.sil.quaternion.copy(_qS).multiply(_qF);
+          o.sil.visible = (Lt.castSil!==false);
           o.sil.material.opacity=Lt.shadow*0.8;
           // dust puff: BALL CARRIER only (every player was too noisy)
           const st2=stt[id];
