@@ -709,62 +709,43 @@
        Same 7×6 grid + facing logic as ps1-mod. We keep a sprite per
        (side,key) and update its cell from engine movement each frame. */
     /* ════════ SPRITE SHEET LAYOUTS ════════
-       Two layouts are supported so old and new art can coexist while you
-       redraw. Which one a sheet uses is auto-detected from its pixel aspect
-       ratio on load (cell height is the same in both, only column count
-       differs), so a 10-col sheet upgrades itself with no config.
-
-       LEGACY  7 cols x 6 rows        NEW  10 cols x 6 rows
-         col0      idle (1 frame)       col0-1   idle (2 frames)
-         col1-6    run  (6 frames)      col2-9   run  (8 frames)
-       Rows are identical in both:
-         row0 DOWN-run  row1 UP-run  row2 SIDE-run
-         row3 DOWN-act  row4 UP-act  row5 SIDE-act
-       Action band (rows 3-5): cols 0-2 = pass, cols 3-6 = shoot.
-       SIDE views face screen-RIGHT and are mirrored in-engine.            */
+       Two layouts supported so old and new art coexist. Which one a sheet uses
+       is auto-detected from its pixel dimensions on load.
+         LEGACY 7 cols: col0 idle(1), col1-6 run(6)
+         NEW   10 cols: col0-1 idle(2), col2-9 run(8)
+       Rows are identical: 0 DOWN-run 1 UP-run 2 SIDE-run
+                           3 DOWN-act 4 UP-act 5 SIDE-act
+       Action band: cols 0-2 pass, cols 3-6 shoot. SIDE faces RIGHT. */
     const LAYOUTS={
       7 :{cols:7 , rows:6, idle:[0,1], run:[1,6], pass:[0,3], shoot:[3,4]},
       10:{cols:10, rows:6, idle:[0,2], run:[2,8], pass:[0,3], shoot:[3,4]}
     };
-    const GRID=LAYOUTS[7];        // default/fallback for anything unmeasured
+    const GRID=LAYOUTS[7];                 // fallback for unmeasured sheets
     function layoutFor(img){
-      /* Rows are always 6. A cell is authored square-ish, so:
-           cols ~= imageWidth / (imageHeight / 6)
-         We snap that to the nearest supported layout, so a 7-col sheet stays
-         legacy and a 10-col sheet is picked up automatically. Anything wildly
-         off falls back to legacy rather than shredding the UVs. */
       if(!img||!img.width||!img.height) return GRID;
-      const measured=img.width/(img.height/6);
+      const measured=img.width/(img.height/6);   // rows are always 6
       let best=GRID,bestErr=Infinity;
       for(const k in LAYOUTS){
-        const err=Math.abs(LAYOUTS[k].cols-measured);
-        if(err<bestErr){bestErr=err;best=LAYOUTS[k];}
+        const e=Math.abs(LAYOUTS[k].cols-measured);
+        if(e<bestErr){bestErr=e;best=LAYOUTS[k];}
       }
-      return bestErr<=1.5?best:GRID;    // >1.5 cols off = unrecognised art
+      return bestErr<=1.5?best:GRID;
     }
-    /* run cadence — scales with how fast the player is actually moving, so a
-       jog and a sprint read differently instead of one constant tempo. */
-    const ANIM={
-      runFpsMin:9,        // slow jog
-      runFpsMax:17,       // flat-out sprint
-      idleFps:2.2,        // breath / weight shift
-      moveHoldMs:220      // how long after last motion we still count as running
-    };
+    /* run cadence scales with real movement speed; idle gets a slow breath */
+    const ANIM={runFpsMin:9, runFpsMax:17, idleFps:2.2, moveHoldMs:220};
     const ROW={down:{run:0,act:3}, up:{run:1,act:4}, side:{run:2,act:5}};
     const COL={idle:0, run:[1,6], pass:[0,3], shoot:[3,4]};
     const SHEETS={h:null,a:null}; const _sk={h:undefined,a:undefined};
     let GK_SHEET=null;                                 // shared keeper sheet for BOTH teams
     (function(){ const im=new Image();
-      im.onload=()=>{const L=layoutFor(im);
-        GK_SHEET={img:im, L, cw:im.width/L.cols, ch:im.height/L.rows};};
+      im.onload=()=>{const L=layoutFor(im);GK_SHEET={img:im,L,cw:im.width/L.cols,ch:im.height/L.rows};};
       im.src='assets/ps1/gk.png'; })();
     function loadSheet(side,urls){
       let i=0; const next=()=>{ if(i>=urls.length){ if(!SHEETS[side])SHEETS[side]='none'; return; }
         const im=new Image(), u=urls[i++];
         im.onload=()=>{const L=layoutFor(im);
-          SHEETS[side]={img:im, L, cw:im.width/L.cols, ch:im.height/L.rows};
-          console.log('[P3D] '+side+' sheet '+u+' '+im.width+'x'+im.height+' → '+L.cols+' cols ('+(L.run[1])+' run, '+(L.idle[1])+' idle)');
-        };
+          SHEETS[side]={img:im,L,cw:im.width/L.cols,ch:im.height/L.rows};
+          console.log('[P3D] '+side+' sheet '+u+' '+im.width+'x'+im.height+' -> '+L.cols+' cols');};
         im.onerror=next; im.src=u; }; next();
     }
     function syncSheets(){
@@ -802,13 +783,11 @@
       const now=performance.now();
       const prev=stt[id]||{rx:p.x,ry:p.y,face:'side',flip:false,moveT:-1e9,
                            spd:0,lx:p.x,ly:p.y,lt:now,phase:Math.random()*1000};
-      /* measured speed (engine px per second) — drives run cadence so a jog
-         and a sprint animate at different tempos. Smoothed so the legs don't
-         stutter when the engine's momentum layer eases velocity. */
+      // smoothed speed drives run cadence (jog vs sprint)
       const dtS=Math.max(1,now-(prev.lt||now))/1000;
-      const inst=Math.hypot(p.x-(prev.lx??p.x),p.y-(prev.ly??p.y))/dtS;
-      const spd=(prev.spd||0)*0.82+inst*0.18;
-      prev.spd=spd; prev.lx=p.x; prev.ly=p.y; prev.lt=now;
+      const inst=Math.hypot(p.x-(prev.lx==null?p.x:prev.lx),p.y-(prev.ly==null?p.y:prev.ly))/dtS;
+      prev.spd=(prev.spd||0)*0.82+inst*0.18;
+      prev.lx=p.x; prev.ly=p.y; prev.lt=now;
       const ddx=p.x-prev.rx, ddy=p.y-prev.ry, dist=Math.hypot(ddx,ddy);
       const thresh=(CV.width||1280)*0.0015;
       let {rx,ry,face,flip,moveT}=prev;
@@ -829,8 +808,7 @@
         }
         moveT=now; rx=p.x; ry=p.y;
       }
-      stt[id]={rx,ry,face,flip,moveT,
-               spd:prev.spd,lx:prev.lx,ly:prev.ly,lt:prev.lt,phase:prev.phase};
+      stt[id]={rx,ry,face,flip,moveT,spd:prev.spd,lx:prev.lx,ly:prev.ly,lt:prev.lt,phase:prev.phase};
       const band=ROW[face]||ROW.side;
       // one-shot pass/shoot animation override (action band, same facing) —
       // same mechanism as ps1-mod's PS1_action, ported to the 3D billboards.
@@ -843,20 +821,15 @@
       }
       const running=(now-moveT)<ANIM.moveHoldMs;
       if(running){
-        /* SPEED-SCALED RUN. Cadence ramps from runFpsMin (jog) to runFpsMax
-           (sprint) against the measured speed, so the legs match the pace
-           instead of one fixed 11fps loop. */
-        const ref=(CV.width||1280)*0.30;                  // ~ full sprint px/s
+        // cadence ramps with measured speed instead of a fixed 11fps
+        const ref=(CV.width||1280)*0.30;
         const t=Math.max(0,Math.min(1,(prev.spd||0)/ref));
         const fps=ANIM.runFpsMin+(ANIM.runFpsMax-ANIM.runFpsMin)*t;
-        const R=L.run;                                     // [startCol, frameCount]
+        const R=L.run;
         return {row:band.run, col:R[0]+(Math.floor(now/1000*fps)%R[1]), flip};
       }
-      /* IDLE. A single frame can never animate — with a 2+ frame idle band we
-         cycle slowly (breath / weight shift). Per-player phase offset so a
-         whole team doesn't bob in lockstep. */
-      const I=L.idle;                                      // [startCol, frameCount]
-      if(I[1]>1){
+      const I=L.idle;
+      if(I[1]>1){   // 2-frame idle, phase-offset per player so nobody syncs
         const fi=Math.floor((now+prev.phase*370)/1000*ANIM.idleFps)%I[1];
         return {row:band.run, col:I[0]+fi, flip};
       }
