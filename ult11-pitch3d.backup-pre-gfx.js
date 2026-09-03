@@ -24,11 +24,8 @@
      <script src="ult11-pitch3d.js"></script>
    (three.js can also be lazy-loaded — this file will inject it if THREE is missing.)
 
-   ASSETS (see ASSET-PATHS.md): stand PNGs live under assets/stadium/ and
-   the existing assets/ps1/ sheets are reused for players. The PITCH is
-   procedural pixel turf by default (P3D.pixelPitch=true, P3D.pitchPx);
-   set P3D.pixelPitch=false to load assets/stadium/pitch.png again.
-   GFX UPGRADE PACK toggles: P3D.gfx.{sky,masts,lamps,boards,flags,flashes}.
+   ASSETS (see ASSET-PATHS.md): all PNGs live under assets/stadium/ and
+   the existing assets/ps1/ sheets are reused for players.
    ============================================================ */
 (function(){
   const P3D = window.P3D = {
@@ -87,15 +84,6 @@
     })(),
     _tier:'high',        // the live tier auto mode is currently applying
     debug:false,         // sprite/shadow debug overlay (Camera Lab)
-    // ---- GFX UPGRADE PACK ----
-    pixelPitch:true,     // procedural pixel-art turf instead of assets/stadium/pitch.png
-    pitchPx:768,         // turf texture width in texels (lower = chunkier pixels)
-    gfx:{ sky:true, masts:true, lamps:true, boards:true, flags:true, flashes:true },
-    // super-shot cinematic camera (console-tunable): hold = charging aura, chase = ball flight
-    cine:{ holdDist:9.6, holdHeight:1.55, holdSide:1.1, holdLookAhead:20, holdLookY:1.25,
-           chaseDist:7.5, chaseHeight:2.4, chaseLookY:1.0 },
-    // sprite animation cadence (frames per second) — console-tunable
-    anim:{ runFpsMin:8, runFpsMax:13, idleFps:3, shootMs:720, passMs:520 },
     ready:true
   };
   // 2.5D is the ONLY renderer now — lock the flag so nothing (camlab,
@@ -280,87 +268,11 @@
         L(gL,ey,gL+0.01,ey); x.fillText('y'+Math.round(ey*(CV.height||720)), u(gL)+8, py); }
       const tex=new T.CanvasTexture(c); tex.anisotropy=8; return tex;
     }
-    /* ════════ PIXEL PITCH (procedural — no PNG) ════════
-       Chunky ordered-dither turf drawn at P3D.pitchPx texels across the
-       playable rect, nearest-filtered so every texel stays a crisp square
-       under the camera. Markings come from the SAME engine constants as the
-       debug pitch, so play still lines up 1:1. Toggle: P3D.pixelPitch. */
-    function makePixelPitchTex(){
-      const cw=Math.max(256,Math.round(P3D.pitchPx||768)), ch=Math.round(cw*0.641);
-      const c=document.createElement('canvas'); c.width=cw; c.height=ch;
-      const x=c.getContext('2d'); x.imageSmoothingEnabled=false;
-      let seed=7; const rnd=()=>{seed=(seed*16807)%2147483647;return seed/2147483647;};
-      const EX0=0.07,EX1=0.93,EY0=0.01,EY1=0.99;
-      const u=ex=>((ex-EX0)/(EX1-EX0))*cw, v=ey=>((ey-EY0)/(EY1-EY0))*ch;
-      // 1) mow stripes — 14 bands, light/dark
-      const NB=14, bw=cw/NB, LIGHT=[76,142,60], DARK=[62,124,50];
-      for(let i=0;i<NB;i++){ const col=(i%2)?DARK:LIGHT;
-        x.fillStyle='rgb('+col[0]+','+col[1]+','+col[2]+')'; x.fillRect(Math.round(i*bw),0,Math.ceil(bw)+1,ch); }
-      // 2) pixel grain — 2-texel cells, plus a cross-mow checker and worn patches
-      const cell=Math.max(2,Math.round(cw/384));
-      const img=x.getImageData(0,0,cw,ch), d=img.data;
-      for(let py=0;py<ch;py+=cell){
-        for(let px=0;px<cw;px+=cell){
-          const r=rnd(); let dv=0;
-          if(r<0.10)dv=15; else if(r<0.22)dv=7; else if(r<0.34)dv=-6; else if(r<0.40)dv=-13;
-          dv+=(Math.floor((py/ch)*8)%2)?3:-3;                       // cross-mow bands
-          const ex=px/cw, ey=py/ch;
-          let wear=Math.max(0,1-Math.hypot((ex-0.5)*2.2,(ey-0.5)*1.4)*3)*0.5;   // centre circle
-          if((ex<0.13||ex>0.87)&&Math.abs(ey-0.5)<0.26) wear+=0.35*(1-Math.abs(ey-0.5)/0.26); // goalmouths
-          wear*=0.6+0.4*rnd();
-          for(let yy=0;yy<cell;yy++)for(let xx=0;xx<cell;xx++){
-            const i=((py+yy)*cw+(px+xx))*4; if(i>=d.length)continue;
-            d[i]  =Math.max(0,Math.min(255,d[i]  +dv+wear*40));
-            d[i+1]=Math.max(0,Math.min(255,d[i+1]+dv+wear*10));
-            d[i+2]=Math.max(0,Math.min(255,d[i+2]+dv*0.6-wear*14));
-          }
-        }
-      }
-      x.putImageData(img,0,0);
-      // 3) crisp pixel markings (rects + sampled arcs, snapped to the cell grid)
-      const LW=cell*2, snap=q=>Math.round(q/cell)*cell;
-      x.fillStyle='#f3f5ee';
-      const HL=(x1,y1,x2,y2)=>{ const ax=snap(u(x1)),ay=snap(v(y1)),bx=snap(u(x2)),by=snap(v(y2));
-        if(ax===bx) x.fillRect(ax-LW/2,Math.min(ay,by)-LW/2,LW,Math.abs(by-ay)+LW);
-        else        x.fillRect(Math.min(ax,bx)-LW/2,ay-LW/2,Math.abs(bx-ax)+LW,LW); };
-      const ARC=(cxp,cyp,r,a0,a1)=>{ const n=Math.max(24,Math.round(r*2.5));
-        for(let i=0;i<=n;i++){ const a=a0+(a1-a0)*i/n;
-          x.fillRect(snap(cxp+Math.cos(a)*r)-LW/2,snap(cyp+Math.sin(a)*r)-LW/2,LW,LW); } };
-      const DOT=(cxp,cyp)=>x.fillRect(snap(cxp)-LW,snap(cyp)-LW,LW*2,LW*2);
-      const gL=0.07,gR=0.93,Yt=0.01,Yb=0.99, sx=cw/(EX1-EX0);
-      HL(gL,Yt,gR,Yt); HL(gL,Yb,gR,Yb); HL(gL,Yt,gL,Yb); HL(gR,Yt,gR,Yb); HL(0.5,Yt,0.5,Yb);
-      const cr=0.085*sx; ARC(u(0.5),v(0.5),cr,0,Math.PI*2); DOT(u(0.5),v(0.5));
-      const pa=0.16, ga=0.06;
-      HL(gR,0.22,gR-pa,0.22); HL(gR-pa,0.22,gR-pa,0.78); HL(gR-pa,0.78,gR,0.78);
-      HL(gL,0.22,gL+pa,0.22); HL(gL+pa,0.22,gL+pa,0.78); HL(gL+pa,0.78,gL,0.78);
-      HL(gR,0.38,gR-ga,0.38); HL(gR-ga,0.38,gR-ga,0.62); HL(gR-ga,0.62,gR,0.62);
-      HL(gL,0.38,gL+ga,0.38); HL(gL+ga,0.38,gL+ga,0.62); HL(gL+ga,0.62,gL,0.62);
-      DOT(u(gR-0.11),v(0.5)); DOT(u(gL+0.11),v(0.5));
-      const dA=Math.acos(Math.min(1,(0.05*sx)/cr));                 // penalty-arc "D" outside the box
-      ARC(u(gR-0.11),v(0.5),cr,Math.PI-dA,Math.PI+dA); ARC(u(gL+0.11),v(0.5),cr,-dA,dA);
-      const qr=cw*0.012;                                            // corner quadrants
-      ARC(u(gL),v(Yt),qr,0,Math.PI/2); ARC(u(gR),v(Yt),qr,Math.PI/2,Math.PI);
-      ARC(u(gR),v(Yb),qr,Math.PI,Math.PI*1.5); ARC(u(gL),v(Yb),qr,Math.PI*1.5,Math.PI*2);
-      const tex=new T.CanvasTexture(c);
-      tex.magFilter=T.NearestFilter; tex.minFilter=T.LinearMipmapLinearFilter; tex.anisotropy=8;
-      return tex;
-    }
-    function makeApronTex(){
-      const c=document.createElement('canvas'); c.width=c.height=256; const x=c.getContext('2d');
-      x.fillStyle='#3a7030'; x.fillRect(0,0,256,256);
-      let seed=99; const rnd=()=>{seed=(seed*16807)%2147483647;return seed/2147483647;};
-      for(let py=0;py<256;py+=2)for(let px=0;px<256;px+=2){ const r=rnd(); if(r<0.5)continue;
-        x.fillStyle=r<0.7?'#34662c':r<0.85?'#3f7a36':r<0.95?'#457f3b':'#2c5a26'; x.fillRect(px,py,2,2); }
-      const t=new T.CanvasTexture(c); t.wrapS=t.wrapT=T.RepeatWrapping;
-      t.magFilter=T.NearestFilter; t.minFilter=T.LinearMipmapLinearFilter; t.anisotropy=8; return t;
-    }
     function buildApron(){
       if(apronMesh) scene.remove(apronMesh);
       const aL=PLEN*2.4, aW=PWID*2.4;
-      let mat;
-      if(P3D.pixelPitch!==false){ const t=makeApronTex(); t.repeat.set(aL/24,aW/24); mat=new T.MeshBasicMaterial({map:t}); }
-      else mat=new T.MeshBasicMaterial({color:0x4c8c3f});
-      apronMesh=new T.Mesh(new T.PlaneGeometry(aL,aW),mat);
+      apronMesh=new T.Mesh(new T.PlaneGeometry(aL,aW),
+        new T.MeshBasicMaterial({color:0x4c8c3f}));
       apronMesh.rotation.x=-Math.PI/2; apronMesh.position.y=-0.05;
       scene.add(apronMesh);
     }
@@ -594,7 +506,7 @@
       if(P3D.stadium==='oval' && window.U11_OVAL){
         try{ window.U11_OVAL.build(T,bowlGroup,PLEN,PWID); }
         catch(e){ if(/[?&]debug=1/.test(location.search)) alert('OVAL build failed: '+e.message); }
-        if(bowlGroup.children.length){ _bowlInfo={type:'oval'}; try{buildExtras();}catch(e){console.warn('[P3D] extras',e);} return; }
+        if(bowlGroup.children.length) return;
       }
       if(P3D.stadium==='oval' && !window.U11_OVAL && /[?&]debug=1/.test(location.search)){
         alert('OVAL selected but ult11-bowl2.js not loaded — check index.html script tag');
@@ -615,7 +527,7 @@
       const mode = S.mode||'crowd';
       const DIAG=['#2f6bd6','#8a3fd6','#d63f54'];
 
-      let yB=(S.yOff||0)*U, ihl=baseHL, ihw=baseHW, prevTop=null; const tierInfo=[];
+      let yB=(S.yOff||0)*U, ihl=baseHL, ihw=baseHW, prevTop=null;
       for(let n=1;n<=3;n++){
         if(S.tiers && S.tiers[n]===false){ yB+=th*0.92; ihl+=out*0.92; ihw+=out*0.92; continue; }
         const key=TIER_KEY[n-1], idx=n-1;
@@ -633,7 +545,6 @@
         };
         bowlGroup.add(buildTierSegmented(ihl,ihw,r, yB,yB+th, out,
           {backMat, texFor, openFront:of, sharp:S.sharp}));
-        tierInfo.push({yB,yT:yB+th,ihl,ihw});
         prevTop={ y:yB+th, ihl:ihl+out, ihw:ihw+out };
         yB+=th*0.92; ihl+=out*0.92; ihw+=out*0.92;
       }
@@ -649,9 +560,6 @@
         bowlGroup.add(buildTierSegmented(ihl-out*0.5,ihw-out*0.5,r, roofY-1,roofY, -(out*1.3),
           {backMat:new T.MeshBasicMaterial({color:'#fff7e0', side:T.DoubleSide}), texFor:null, openFront:of, sharp:S.sharp}));
       }
-      _bowlInfo={type:'classic',baseHL,baseHW,r,th,out,of,U,sharp:S.sharp,tiers:tierInfo,
-                 roofY:(S.roof!==false)?yB+th*0.35:null,topHL:ihl,topHW:ihw,yTop:yB};
-      try{ buildExtras(); }catch(e){ console.warn('[P3D] extras failed',e); }
     }
     P3D._rebuildBowl=function(){placeAllStadium();placeFlags();};   // Camera Lab calls this
 
@@ -681,7 +589,7 @@
       (function tryN(i){ if(!srcs||i>=srcs.length)return cb(null);
         const im=new Image(); im.onload=()=>cb(im); im.onerror=()=>tryN(i+1); im.src=srcs[i]; })(0);
     }
-    P3D.setTeamFlags=function(d){ flagData=d; placeFlags(); try{buildBoards();placeCornerFlags();}catch(e){} };
+    P3D.setTeamFlags=function(d){ flagData=d; placeFlags(); };
     // deterministic pseudo-random per match so flags scatter but don't jitter
     function _rng(seed){ return ()=>{ seed=(seed*9301+49297)%233280; return seed/233280; }; }
     function placeFlags(){
@@ -773,420 +681,12 @@
       placeFlags();
     };
 
-
-    /* ════════════════════════════════════════════════════════════════
-       GFX UPGRADE PACK — sky dome, floodlight masts, roof lamp strip,
-       scrolling LED perimeter boards, corner flags, crowd camera flashes,
-       plus the particle / ring / ribbon pools shared by the super-shot
-       aura and the ball comet. Toggles: P3D.gfx.*  Rebuilt with the bowl.
-       ════════════════════════════════════════════════════════════════ */
-    let _bowlInfo=null, extrasGroup=null, boardGroup=null, cornerGroup=null;
-    let boardTex=null, flashPts=null, skyMesh=null;
-    const MASTS=[], CFLAGS=[];
-    function gfxOn(k){ return !(P3D.gfx&&P3D.gfx[k]===false); }
-    function haloTex(){
-      if(!haloTex._t) haloTex._t=makeRadialTex([[0,'rgba(255,255,255,1)'],[0.18,'rgba(255,244,214,0.55)'],[0.5,'rgba(255,225,170,0.14)'],[1,'rgba(255,215,150,0)']]);
-      return haloTex._t;
-    }
-    function ringTex(){
-      if(ringTex._t) return ringTex._t;
-      const c=document.createElement('canvas'); c.width=c.height=256; const x=c.getContext('2d');
-      const g=x.createRadialGradient(128,128,70,128,128,128);
-      g.addColorStop(0,'rgba(255,255,255,0)'); g.addColorStop(0.55,'rgba(255,255,255,0)');
-      g.addColorStop(0.72,'rgba(255,255,255,1)'); g.addColorStop(0.82,'rgba(255,255,255,0.9)'); g.addColorStop(1,'rgba(255,255,255,0)');
-      x.fillStyle=g; x.fillRect(0,0,256,256);
-      const t=new T.CanvasTexture(c); t.minFilter=T.LinearFilter; ringTex._t=t; return t;
-    }
-    function flameTex(){
-      if(flameTex._t) return flameTex._t;
-      const c=document.createElement('canvas'); c.width=128; c.height=256; const x=c.getContext('2d');
-      const blob=(cy,sy,r,a)=>{ x.save(); x.translate(64,cy); x.scale(1,sy);
-        const g=x.createRadialGradient(0,0,2,0,0,r);
-        g.addColorStop(0,'rgba(255,255,255,'+a+')'); g.addColorStop(0.4,'rgba(255,255,255,'+(a*0.5)+')');
-        g.addColorStop(0.75,'rgba(255,255,255,'+(a*0.14)+')'); g.addColorStop(1,'rgba(255,255,255,0)');
-        x.fillStyle=g; x.beginPath(); x.arc(0,0,r,0,7); x.fill(); x.restore(); };
-      blob(170,1.4,60,0.95); blob(95,1.9,34,0.75); blob(40,2.2,16,0.5);
-      const t=new T.CanvasTexture(c); t.minFilter=T.LinearFilter; flameTex._t=t; return t;
-    }
-    /* team colour for aura / trail: sampled from the kit on the sprite sheet
-       (idle cell), falling back to the HUD colours when the canvas is tainted. */
-    const _kitCache=new WeakMap();
-    function kitColorOf(sheet){
-      if(!sheet||sheet==='none'||!sheet.img||!sheet.img.complete) return null;
-      if(_kitCache.has(sheet.img)) return _kitCache.get(sheet.img);
-      let out=null;
-      try{
-        const c=document.createElement('canvas'); c.width=c.height=48; const x=c.getContext('2d');
-        x.drawImage(sheet.img,0,0,sheet.cw,sheet.ch,0,0,48,48);
-        const d=x.getImageData(0,0,48,48).data, bins=new Array(24).fill(0);
-        for(let i=0;i<d.length;i+=4){
-          if(d[i+3]<140) continue;
-          const r=d[i]/255,g=d[i+1]/255,b=d[i+2]/255,mx=Math.max(r,g,b),mn=Math.min(r,g,b),l=(mx+mn)/2;
-          const s=(mx===mn)?0:(mx-mn)/(1-Math.abs(2*l-1));
-          if(s<0.45||l<0.22||l>0.82) continue;
-          let h; if(mx===r)h=((g-b)/(mx-mn))%6; else if(mx===g)h=(b-r)/(mx-mn)+2; else h=(r-g)/(mx-mn)+4;
-          h=((h*60)+360)%360;
-          if(h>15&&h<50&&l>0.45) continue;                    // skin tones
-          bins[Math.floor(h/15)%24]++;
-        }
-        let best=0; for(let i=1;i<24;i++) if(bins[i]>bins[best]) best=i;
-        if(bins[best]>20){ const col=new T.Color().setHSL((best*15+7.5)/360,0.92,0.56); out='#'+col.getHexString(); }
-      }catch(e){ out=null; }
-      _kitCache.set(sheet.img,out); return out;
-    }
-    function sideColor(s){
-      try{ const k=kitColorOf(SHEETS[s]); if(k) return k; }catch(e){}
-      if(flagData) return s==='h'?(flagData.homeCol||'#1e72dc'):(flagData.awayCol||'#c22020');
-      return s==='h'?'#1e72dc':'#c22020';
-    }
-    /* sky dome — dusk gradient with a warm horizon band + stars, unfogged */
-    function buildSky(){
-      if(skyMesh||!gfxOn('sky')) return;
-      const c=document.createElement('canvas'); c.width=1024; c.height=512; const x=c.getContext('2d');
-      const g=x.createLinearGradient(0,0,0,512);
-      g.addColorStop(0,'#05081a'); g.addColorStop(0.30,'#0f1d3d'); g.addColorStop(0.44,'#2a3f6e');
-      g.addColorStop(0.492,'#8a6a70'); g.addColorStop(0.512,'#d9925a'); g.addColorStop(0.56,'#3b3350'); g.addColorStop(1,'#0a0d16');
-      x.fillStyle=g; x.fillRect(0,0,1024,512);
-      for(let i=0;i<260;i++){ const sy=Math.pow(Math.random(),1.6)*205, a=0.25+Math.random()*0.75;
-        x.fillStyle='rgba(255,255,255,'+a.toFixed(2)+')'; const s=Math.random()<0.12?2:1; x.fillRect(Math.random()*1024,sy,s,s); }
-      const t=new T.CanvasTexture(c); t.minFilter=T.LinearFilter; t.magFilter=T.LinearFilter;
-      skyMesh=new T.Mesh(new T.SphereGeometry(900,32,16),new T.MeshBasicMaterial({map:t,side:T.BackSide,fog:false,depthWrite:false}));
-      skyMesh.renderOrder=-10; scene.add(skyMesh);
-    }
-    /* crowd camera flashes — one Points draw call, per-point phase, strobe in the shader */
-    function buildFlashes(spots){
-      if(flashPts){ scene.remove(flashPts); flashPts.geometry.dispose(); flashPts.material.dispose(); flashPts=null; }
-      if(!gfxOn('flashes')||!spots.length) return;
-      const n=spots.length, pos=new Float32Array(n*3), ph=new Float32Array(n), sp=new Float32Array(n);
-      spots.forEach((s,i)=>{ pos[i*3]=s[0]; pos[i*3+1]=s[1]; pos[i*3+2]=s[2]; ph[i]=Math.random()*100; sp[i]=0.6+Math.random()*1.4; });
-      const g=new T.BufferGeometry();
-      g.setAttribute('position',new T.BufferAttribute(pos,3));
-      g.setAttribute('phase',new T.BufferAttribute(ph,1));
-      g.setAttribute('spd',new T.BufferAttribute(sp,1));
-      const m=new T.ShaderMaterial({transparent:true,depthWrite:false,blending:T.AdditiveBlending,
-        uniforms:{time:{value:0},scale:{value:1}},
-        vertexShader:[
-          'attribute float phase; attribute float spd; uniform float time; uniform float scale; varying float vA;',
-          'void main(){ float t=fract((time*spd+phase)*0.13);',
-          '  float a=smoothstep(0.0,0.006,t)*(1.0-smoothstep(0.006,0.032,t)); vA=a;',
-          '  vec4 mv=modelViewMatrix*vec4(position,1.0);',
-          '  gl_PointSize=(2.5+12.0*a)*scale*(75.0/max(1.0,-mv.z)); gl_Position=projectionMatrix*mv; }'].join('\n'),
-        fragmentShader:[
-          'varying float vA; void main(){ vec2 d=gl_PointCoord-0.5; float r=length(d);',
-          '  float k=smoothstep(0.5,0.05,r); gl_FragColor=vec4(vec3(1.0,0.97,0.9)*k*vA*1.6,k*vA); }'].join('\n')});
-      flashPts=new T.Points(g,m); flashPts.frustumCulled=false; scene.add(flashPts);
-    }
-    /* masts, roof lamps, flash spots — rebuilt whenever the bowl is */
-    function buildExtras(){
-      buildSky();
-      if(extrasGroup){ scene.remove(extrasGroup); extrasGroup=null; }
-      extrasGroup=new T.Group(); scene.add(extrasGroup); MASTS.length=0;
-      const B=_bowlInfo; if(!B) return;
-      const spots=[];
-      if(B.type==='classic'){
-        const r=B.r, th=B.th, out=B.out, of=B.of;
-        B.tiers.forEach((t,ti)=>{
-          const N=[150,110,80][ti]||60;
-          for(let i=0;i<N;i++){
-            const v=Math.random(), y=t.yB+v*th+0.3, o=v*(out-0.6)-0.35, w=Math.random();
-            if(w<0.5)       spots.push([(Math.random()*2-1)*(t.ihl-r*0.7), y, -(t.ihw+o)]);
-            else if(w<0.75) spots.push([-(t.ihl+o), y, (Math.random()*2-1)*(t.ihw-r*0.7)]);
-            else            spots.push([ (t.ihl+o), y, (Math.random()*2-1)*(t.ihw-r*0.7)]);
-          }
-        });
-        if(B.roofY!=null && gfxOn('lamps')){
-          const iy=B.roofY+1.25, hl=B.topHL-out*1.4+0.4, hw=B.topHW-out*1.4+0.4;
-          extrasGroup.add(buildTierSegmented(hl,hw,r, iy-0.12,iy+0.18, 0,
-            {backMat:new T.MeshBasicMaterial({color:'#fff1cf',side:T.DoubleSide,fog:false}),texFor:null,openFront:of,sharp:B.sharp}));
-          const lampGeo=new T.BoxGeometry(1.4,0.42,0.5), lampMat=new T.MeshBasicMaterial({color:'#fff8e6',fog:false});
-          const halo=new T.SpriteMaterial({map:haloTex(),color:'#ffe9bf',transparent:true,opacity:0.7,depthWrite:false,blending:T.AdditiveBlending,fog:false});
-          const put=(x,z)=>{ const m=new T.Mesh(lampGeo,lampMat); m.position.set(x,iy-0.45,z); m.lookAt(0,0,0); extrasGroup.add(m);
-            const h=new T.Sprite(halo); h.position.set(x,iy-0.45,z); h.scale.set(7,7,1); extrasGroup.add(h); };
-          for(let i=0;i<9;i++) put(-hl*0.85+(i/8)*hl*1.7, -hw);
-          for(let i=0;i<5;i++){ put(-hl, -hw*0.8+(i/4)*hw*1.6); put(hl, -hw*0.8+(i/4)*hw*1.6); }
-          if(!of) for(let i=0;i<9;i++) put(-hl*0.85+(i/8)*hl*1.7, hw);
-        }
-        if(gfxOn('masts')){
-          const top=(B.roofY!=null?B.roofY:B.yTop)+13, mx=B.topHL+out*0.6+3, mz=B.topHW+out*0.6+3;
-          const mastMat=new T.MeshLambertMaterial({color:'#38414f'}), headMat=new T.MeshLambertMaterial({color:'#1c2230'});
-          const lampMat=new T.MeshBasicMaterial({color:'#fffaf0',fog:false});
-          const haloM=new T.SpriteMaterial({map:haloTex(),color:'#fff0cc',transparent:true,opacity:0.95,depthWrite:false,blending:T.AdditiveBlending,fog:false});
-          [[-mx,-mz],[mx,-mz],[-mx,mz],[mx,mz]].forEach(([x,z])=>{
-            const pole=new T.Mesh(new T.BoxGeometry(0.55,top,0.55),mastMat); pole.position.set(x,top/2,z); extrasGroup.add(pole);
-            const head=new T.Group(); head.position.set(x,top,z); head.lookAt(0,4,0);
-            head.add(new T.Mesh(new T.BoxGeometry(4.2,2.4,0.4),headMat));
-            for(let i=0;i<4;i++)for(let j=0;j<2;j++){ const l=new T.Mesh(new T.BoxGeometry(0.8,0.8,0.3),lampMat); l.position.set(-1.5+i,-0.55+j*1.1,0.3); head.add(l); }
-            extrasGroup.add(head);
-            const h=new T.Sprite(haloM.clone()); h.material.opacity=0.7; h.position.set(x,top,z); h.scale.set(12,12,1); extrasGroup.add(h); MASTS.push(h);
-            const h2=new T.Sprite(haloM.clone()); h2.material.opacity=0.22; h2.position.set(x,top,z); h2.scale.set(34,34,1); extrasGroup.add(h2);
-          });
-        }
-      } else if(B.type==='oval' && window.U11_OVAL && window.U11_OVAL._last){
-        const O=window.U11_OVAL._last, TAU=Math.PI*2;
-        const inCut=th=>{ if(!O.openF) return false; th=((th%TAU)+TAU)%TAU; return th>O.CUT0&&th<O.CUT1; };
-        O.TIERS.forEach((t,ti)=>{
-          const N=[220,140,120][ti]||80;
-          for(let i=0;i<N;i++){
-            const th=Math.random()*TAU; if(inCut(th)) continue;
-            const fr=Math.random(), rx=t.rx+fr*t.rows*t.dr-0.5, rz=t.rz+fr*t.rows*t.dr-0.5;
-            spots.push([rx*Math.cos(th), t.y+fr*(t.yTop-t.y)+0.5, rz*Math.sin(th)]);
-          }
-        });
-      }
-      buildFlashes(spots);
-      buildBoards(); placeCornerFlags();
-    }
-    /* LED perimeter boards — team panels + branding, scrolling, per-wall repeats */
-    function makeBoardTex(){
-      const hc=(flagData&&flagData.homeCol)||'#1e72dc', ac=(flagData&&flagData.awayCol)||'#c22020';
-      let hn='HOME', an='AWAY';
-      try{ if(typeof HT!=='undefined'&&HT&&HT.name) hn=HT.name; if(typeof AT!=='undefined'&&AT&&AT.name) an=AT.name; }catch(e){}
-      const c=document.createElement('canvas'); c.width=2048; c.height=128; const x=c.getContext('2d');
-      const panels=[
-        {bg:hc,fg:'#ffffff',txt:hn.toUpperCase()},   {bg:'#0b0e16',fg:'#ffd24a',txt:'ULTIMATE ELEVEN'},
-        {bg:ac,fg:'#ffffff',txt:an.toUpperCase()},   {bg:'#101826',fg:'#7fd7ff',txt:'\u26A1 SUPER SHOT'},
-        {bg:hc,fg:'#ffffff',txt:hn.toUpperCase()},   {bg:'#0b0e16',fg:'#ffd24a',txt:'ULTIMATE ELEVEN'},
-        {bg:ac,fg:'#ffffff',txt:an.toUpperCase()},   {bg:'#16121e',fg:'#ff8ad0',txt:'HD-2D ARENA'}];
-      const pw=c.width/panels.length;
-      x.textAlign='center'; x.textBaseline='middle';
-      panels.forEach((p,i)=>{
-        x.fillStyle=p.bg; x.fillRect(i*pw,0,pw,128);
-        const g=x.createLinearGradient(0,0,0,128); g.addColorStop(0,'rgba(255,255,255,0.22)'); g.addColorStop(0.5,'rgba(255,255,255,0)'); g.addColorStop(1,'rgba(0,0,0,0.35)');
-        x.fillStyle=g; x.fillRect(i*pw,0,pw,128);
-        x.font='bold 64px "Bebas Neue",Impact,sans-serif'; x.fillStyle=p.fg;
-        x.shadowColor=p.fg; x.shadowBlur=16; x.fillText(p.txt,i*pw+pw/2,66,pw-30); x.shadowBlur=0;
-        x.fillStyle='rgba(0,0,0,0.55)'; x.fillRect(i*pw-3,0,6,128);
-      });
-      x.fillStyle='rgba(0,0,0,0.28)';
-      for(let yy=0;yy<128;yy+=4) x.fillRect(0,yy,c.width,1);
-      for(let xx=0;xx<c.width;xx+=4) x.fillRect(xx,0,1,128);
-      const t=new T.CanvasTexture(c); t.wrapS=T.RepeatWrapping; t.wrapT=T.ClampToEdgeWrapping; t.anisotropy=8; return t;
-    }
-    function buildBoards(){
-      if(boardGroup){ scene.remove(boardGroup); boardGroup=null; }
-      if(!gfxOn('boards')||!_bowlInfo) return;
-      let hl,hw,r,y0;
-      if(_bowlInfo.type==='classic'){ hl=_bowlInfo.baseHL-0.35; hw=_bowlInfo.baseHW-0.35; r=_bowlInfo.r; y0=(P3D.bowl.yOff||0)*_bowlInfo.U; }
-      else { const O=window.U11_OVAL&&window.U11_OVAL._last; if(!O) return; const t0=O.TIERS[0]; hl=t0.rx-2.2; hw=t0.rz-2.2; r=Math.min(hl,hw)*0.9; y0=0; }
-      boardGroup=new T.Group(); scene.add(boardGroup);
-      boardTex=makeBoardTex();
-      const mat=new T.MeshBasicMaterial({map:boardTex,side:T.DoubleSide,fog:false});
-      const H=1.0;
-      const walls=[[-hl+r,-hw, hl-r,-hw],[hl,-hw+r, hl,hw-r],[hl-r,hw, -hl+r,hw],[-hl,hw-r, -hl,-hw+r]];
-      walls.forEach(([ax,az,bx,bz])=>{
-        const len=Math.hypot(bx-ax,bz-az), rep=Math.max(1,Math.round(len/(H*16)));
-        boardGroup.add(buildStraightWall(ax,az,bx,bz, y0+0.04, y0+0.04+H, 0.15, mat, rep));
-      });
-      const cap=new T.MeshBasicMaterial({color:'#0b0e16',side:T.DoubleSide});
-      [[hl-r,-hw+r,-Math.PI/2],[hl-r,hw-r,0],[-hl+r,hw-r,Math.PI/2],[-hl+r,-hw+r,Math.PI]].forEach(([cx,cz,a0])=>{
-        boardGroup.add(buildCorner(cx,cz,r,a0, y0+0.04,y0+0.04+H, 0.15, cap, false));
-      });
-    }
-    /* corner flags in team colours (home = left end, away = right end) */
-    function placeCornerFlags(){
-      if(cornerGroup){ scene.remove(cornerGroup); cornerGroup=null; } CFLAGS.length=0;
-      if(!gfxOn('flags')) return;
-      cornerGroup=new T.Group(); scene.add(cornerGroup);
-      const hc=(flagData&&flagData.homeCol)||'#1e72dc', ac=(flagData&&flagData.awayCol)||'#c22020';
-      const poleG=new T.CylinderGeometry(0.05,0.05,1.7,6), poleM=new T.MeshLambertMaterial({color:'#f2f2f2'});
-      [[-1,-1],[-1,1],[1,-1],[1,1]].forEach(([sx,sz])=>{
-        const x=sx*PLEN/2, z=sz*PWID/2;
-        const p=new T.Mesh(poleG,poleM); p.position.set(x,0.85,z); cornerGroup.add(p);
-        const fg=new T.PlaneGeometry(0.75,0.45); fg.translate(0.375,0,0);
-        const f=new T.Mesh(fg,new T.MeshBasicMaterial({color:sx<0?hc:ac,side:T.DoubleSide}));
-        f.position.set(x,1.45,z); f.userData.ph=Math.random()*6; cornerGroup.add(f); CFLAGS.push(f);
-      });
-    }
-    /* ── particle pool (embers, sparks) ── */
-    const PARTS=[];
-    function spawnPart(x,y,z,vx,vy,vz,col,size,life,grav){
-      let p=PARTS.find(p=>!p.alive);
-      if(!p){ if(PARTS.length>=300) return;
-        if(!spawnPart._tex) spawnPart._tex=fxGradTex('#ffffff');
-        const m=new T.SpriteMaterial({map:spawnPart._tex,color:col,transparent:true,opacity:1,blending:T.AdditiveBlending,depthWrite:false,fog:false});
-        p={sp:new T.Sprite(m),alive:false}; scene.add(p.sp); PARTS.push(p); }
-      p.alive=true; p.life=life; p.max=life; p.vx=vx; p.vy=vy; p.vz=vz; p.g=grav||0; p.size=size;
-      p.sp.material.color.set(col); p.sp.visible=true; p.sp.position.set(x,y,z); p.sp.scale.set(size,size,1);
-    }
-    function tickParts(dt){
-      for(const p of PARTS){ if(!p.alive) continue;
-        p.life-=dt; if(p.life<=0){ p.alive=false; p.sp.visible=false; continue; }
-        p.vy-=p.g*dt; const s=p.sp.position; s.x+=p.vx*dt; s.y+=p.vy*dt; s.z+=p.vz*dt;
-        if(s.y<0.03&&p.g>0){ s.y=0.03; p.vy=-p.vy*0.35; p.vx*=0.7; p.vz*=0.7; }
-        const f=p.life/p.max; p.sp.material.opacity=Math.min(1,f*1.4); const k=p.size*(0.35+0.65*f); p.sp.scale.set(k,k,1); }
-    }
-    /* ── expanding ground rings (shockwaves) ── */
-    const RINGS=[];
-    function spawnRing(x,z,col,from,to,life,y){
-      let r=RINGS.find(r=>!r.alive);
-      if(!r){ const m=new T.MeshBasicMaterial({map:ringTex(),color:col,transparent:true,opacity:1,blending:T.AdditiveBlending,depthWrite:false,side:T.DoubleSide,fog:false});
-        r={m:new T.Mesh(new T.PlaneGeometry(1,1),m),alive:false}; r.m.rotation.x=-Math.PI/2; r.m.renderOrder=3; scene.add(r.m); RINGS.push(r); }
-      r.alive=true; r.life=life; r.max=life; r.from=from; r.to=to;
-      r.m.material.color.set(col); r.m.visible=true; r.m.position.set(x,y!=null?y:0.06,z); r.m.scale.set(from,from,1);
-    }
-    function tickRings(dt){
-      for(const r of RINGS){ if(!r.alive) continue; r.life-=dt; if(r.life<=0){ r.alive=false; r.m.visible=false; continue; }
-        const t=1-r.life/r.max, e=1-Math.pow(1-t,2.2), s=r.from+(r.to-r.from)*e; r.m.scale.set(s,s,1); r.m.material.opacity=(1-t)*0.9; }
-    }
-    /* ── one-shot flash sprites ── */
-    const FLASHES=[];
-    function spawnFlash(x,y,z,size,col){
-      const fl=new T.Sprite(new T.SpriteMaterial({map:fxGradTex(col||'#ffffff'),transparent:true,opacity:1,blending:T.AdditiveBlending,depthWrite:false,fog:false}));
-      fl.position.set(x,y,z); fl.scale.set(size,size,1); scene.add(fl); FLASHES.push({sp:fl,life:0.26,max:0.26});
-    }
-    function tickFlashes(dt){
-      for(let i=FLASHES.length-1;i>=0;i--){ const f=FLASHES[i]; f.life-=dt;
-        if(f.life<=0){ scene.remove(f.sp); f.sp.material.dispose(); FLASHES.splice(i,1); continue; }
-        f.sp.material.opacity=(f.life/f.max)*0.85; const s=f.sp.scale.x*(1+dt*3.5); f.sp.scale.set(s,s,1); }
-    }
-    /* ── camera-facing ribbon trail (comet tail) ── */
-    function makeRibbon(maxN,col){
-      const g=new T.BufferGeometry();
-      const pos=new Float32Array(maxN*2*3), colr=new Float32Array(maxN*2*3);
-      g.setAttribute('position',new T.BufferAttribute(pos,3)); g.setAttribute('color',new T.BufferAttribute(colr,3));
-      const idx=[]; for(let i=0;i<maxN-1;i++){ const a=i*2; idx.push(a,a+1,a+2, a+1,a+3,a+2); } g.setIndex(idx);
-      const m=new T.MeshBasicMaterial({vertexColors:true,transparent:true,blending:T.AdditiveBlending,depthWrite:false,side:T.DoubleSide,fog:false});
-      const mesh=new T.Mesh(g,m); mesh.frustumCulled=false; mesh.visible=false; scene.add(mesh);
-      return {mesh,pts:[],maxN,col:new T.Color(col),width:0.6,g,pos,colr};
-    }
-    function ribbonPush(R,x,y,z){ R.pts.push({x,y,z,t:performance.now()}); if(R.pts.length>R.maxN) R.pts.shift(); }
-    function ribbonUpdate(R,now){
-      const LIFE=300;
-      while(R.pts.length&&now-R.pts[0].t>LIFE) R.pts.shift();
-      const n=R.pts.length;
-      if(n<2){ R.mesh.visible=false; return; }
-      R.mesh.visible=true;
-      const cp=camera.position;
-      for(let i=0;i<n;i++){
-        const p=R.pts[i], q=R.pts[Math.min(n-1,i+1)], o=R.pts[Math.max(0,i-1)];
-        let tx=q.x-o.x,ty=q.y-o.y,tz=q.z-o.z; const tl=Math.hypot(tx,ty,tz)||1; tx/=tl;ty/=tl;tz/=tl;
-        let vx=cp.x-p.x,vy=cp.y-p.y,vz=cp.z-p.z; const vl=Math.hypot(vx,vy,vz)||1; vx/=vl;vy/=vl;vz/=vl;
-        let sx=ty*vz-tz*vy, sy=tz*vx-tx*vz, sz=tx*vy-ty*vx; const sl=Math.hypot(sx,sy,sz)||1; sx/=sl;sy/=sl;sz/=sl;
-        const f=i/(n-1), age=Math.max(0,1-(now-p.t)/LIFE);
-        const w=R.width*(0.08+0.92*f*f)*age, b=age*age*(0.12+0.88*f*f);
-        const k=i*6;
-        R.pos[k]=p.x+sx*w; R.pos[k+1]=p.y+sy*w; R.pos[k+2]=p.z+sz*w;
-        R.pos[k+3]=p.x-sx*w; R.pos[k+4]=p.y-sy*w; R.pos[k+5]=p.z-sz*w;
-        const mw=f*f*f;
-        const r=R.col.r+(1-R.col.r)*mw, gg=R.col.g+(1-R.col.g)*mw, bb=R.col.b+(1-R.col.b)*mw;
-        R.colr[k]=r*b; R.colr[k+1]=gg*b; R.colr[k+2]=bb*b; R.colr[k+3]=r*b; R.colr[k+4]=gg*b; R.colr[k+5]=bb*b;
-      }
-      const last=R.pts[n-1];
-      for(let i=n;i<R.maxN;i++){ const k=i*6;
-        R.pos[k]=R.pos[k+3]=last.x; R.pos[k+1]=R.pos[k+4]=last.y; R.pos[k+2]=R.pos[k+5]=last.z;
-        for(let j=0;j<6;j++) R.colr[k+j]=0; }
-      R.g.attributes.position.needsUpdate=true; R.g.attributes.color.needsUpdate=true;
-    }
-    /* ── SHOT STYLE — who is shooting decides how the ball travels ──
-       power  (PWR well above TEC): flat, fast, straight drive, topspin
-       curve  (TEC well above PWR): slower banana that bows away from the
-              goal centre and curls back in, side-spin
-       normal: mild arc in between. Also shapes the comet tail. */
-    function shotStyleFor(pl){
-      if(!pl) return {kind:'normal',curve:0.45,loft:0.6,speed:1.05};
-      const pwr=pl.pwr||pl.pow||50, tec=pl.tec||50;
-      if(pwr>=tec+6) return {kind:'power', curve:0.08, loft:0.32, speed:1.35};
-      if(tec>=pwr+6) return {kind:'curve', curve:1.0,  loft:0.75, speed:0.88};
-      return {kind:'normal',curve:0.45,loft:0.6,speed:1.05};
-    }
-    // perpendicular to the shot line, flipped so the bow goes AWAY from the
-    // goal centre first (the ball then curls back in — an in-swinger)
-    function shotPerp(fx,fy,tx,ty){
-      const dx=tx-fx, dy=ty-fy, L=Math.hypot(dx,dy)||1;
-      let px=-dy/L, py=dx/L;
-      const Hh=(CV.height||720), toward=Hh*0.5-fy;
-      const sideSign=(Math.abs(toward)<Hh*0.04)?(Math.random()<0.5?1:-1):-Math.sign(toward);
-      if(Math.sign(py)!==sideSign){ px=-px; py=-py; }
-      return {px,py,L};
-    }
-    let _os={bt:null};   // open-play shot state (style + bend axis for the current ballTravel)
-    /* ── ball FX: comet (shots) + resting halo (open play) ── */
-    let shotRibbon=null, ballGlow=null, ballCore=null, ballHalo=null, _lastFxBall=null;
-    function ensureBallFx(){
-      if(shotRibbon) return;
-      shotRibbon=makeRibbon(40,'#ffd24a');
-      const mk=(col,op)=>{ const s=new T.Sprite(new T.SpriteMaterial({map:fxGradTex(col),transparent:true,opacity:op,blending:T.AdditiveBlending,depthWrite:false,fog:false})); s.visible=false; scene.add(s); return s; };
-      ballGlow=mk('#ffb040',0.9); ballCore=mk('#ffffff',0.95); ballHalo=mk('#ffd24a',0.28);
-    }
-    function shotBallFx(c,x,y,z,d,hot,warm){
-      ensureBallFx();
-      const col=(c&&c.col)||'#ffd24a';
-      ballHalo.visible=false;
-      if(warm&&!hot){
-        const pu=1+0.18*Math.sin(performance.now()*0.008);
-        ballGlow.visible=true; ballGlow.material.color.set(col); ballGlow.material.opacity=0.16; ballGlow.position.set(x,y,z); ballGlow.scale.set(d*1.5*pu,d*1.5*pu,1);
-        ballCore.visible=false; _lastFxBall={x,y,z}; return;
-      }
-      ballGlow.material.opacity=0.6;
-      if(hot){
-        const kind=(c&&c.style&&c.style.kind)||(_os.st&&_os.st.kind)||'normal';
-        shotRibbon.col.set(col); shotRibbon.width=d*(kind==='power'?0.65:kind==='curve'?1.1:0.9); ribbonPush(shotRibbon,x,y,z);
-        const pu=1+0.25*Math.sin(performance.now()*0.03);
-        ballGlow.visible=true; ballGlow.material.color.set(col); ballGlow.position.set(x,y,z); ballGlow.scale.set(d*2.2*pu,d*2.2*pu,1);
-        ballCore.visible=true; ballCore.material.opacity=0.55; ballCore.position.set(x,y,z); ballCore.scale.set(d*1.25,d*1.25,1);
-        if(_lastFxBall){ const dx=x-_lastFxBall.x, dy=y-_lastFxBall.y, dz=z-_lastFxBall.z, L=Math.hypot(dx,dy,dz);
-          if(L>0.02){ const nS=kind==='curve'?3:kind==='power'?1:2; for(let i=0;i<nS;i++){ const j=()=>(Math.random()-0.5)*(kind==='power'?1.2:3);
-            spawnPart(x-dx*0.3,y,z-dz*0.3, -dx/L*2+j(), 1+j(), -dz/L*2+j(), Math.random()<0.5?'#ffffff':col,
-                      d*(0.35+Math.random()*0.35), 0.28+Math.random()*0.22, 9); } } }
-      } else { ballGlow.visible=false; ballCore.visible=false; }
-      _lastFxBall={x,y,z};
-    }
-    function openPlayBallFx(x,y,z,d,shooting){
-      ensureBallFx();
-      if(shooting){ const col=(typeof G!=='undefined'&&G&&G.poss)?sideColor(G.poss):'#ffd24a'; shotBallFx({col},x,y,z,d,true); }
-      else {
-        if(ballGlow.visible){ ballGlow.visible=false; ballCore.visible=false; } _lastFxBall=null;
-        ballHalo.visible=!cine; ballHalo.position.set(x,y,z); const s=d*2.4; ballHalo.scale.set(s,s,1);
-      }
-    }
-    /* ── super-shot punctuation ── */
-    function kickBurst(c){
-      const x=ex2wx(c.fx), z=ey2wz(c.fy), hh=PLEN*(P3D.spriteFrac||0.045);
-      spawnRing(x,z,'#ffffff',hh*0.3,hh*4.5,0.45); spawnRing(x,z,c.col,hh*0.5,hh*7,0.7);
-      spawnFlash(x,hh*0.4,z,hh*1.1,'#ffffff');
-      for(let i=0;i<34;i++){ const a=Math.random()*Math.PI*2, sp=4+Math.random()*9;
-        spawnPart(x,0.3+Math.random()*0.6,z, Math.cos(a)*sp, 2+Math.random()*6, Math.sin(a)*sp,
-                  Math.random()<0.4?'#ffffff':c.col, hh*(0.06+Math.random()*0.08), 0.4+Math.random()*0.4, 12); }
-      try{ if(typeof shakeScreen==='function') shakeScreen(9,160); }catch(e){}
-    }
-    function impactBurst(c,x,y,z,d){
-      const hh=PLEN*(P3D.spriteFrac||0.045);
-      if(c.isGoal){
-        spawnRing(x,z,'#ffffff',d,hh*5,0.5,0.08); spawnRing(x,z,c.col,d,hh*8,0.8,0.08);
-        spawnFlash(x,y,z,hh*1.8,'#ffffff');
-        for(let i=0;i<48;i++){ const a=Math.random()*Math.PI*2, b=Math.random()*Math.PI, sp=3+Math.random()*8;
-          spawnPart(x,y,z, Math.sin(b)*Math.cos(a)*sp, Math.abs(Math.cos(b))*sp+2, Math.sin(b)*Math.sin(a)*sp,
-                    Math.random()<0.5?'#ffffff':c.col, d*(0.4+Math.random()*0.6), 0.5+Math.random()*0.5, 10); }
-        try{ if(typeof shakeScreen==='function') shakeScreen(7,220); }catch(e){}
-      } else {
-        spawnRing(x,z,'#cfe6ff',d,hh*2.5,0.4,0.08);
-        for(let i=0;i<14;i++){ const a=Math.random()*Math.PI*2, sp=1+Math.random()*3;
-          spawnPart(x,y,z, Math.cos(a)*sp, 1+Math.random()*3, Math.sin(a)*sp, '#dfefff', d*(0.3+Math.random()*0.4), 0.3+Math.random()*0.3, 8); }
-        try{ if(typeof shakeScreen==='function') shakeScreen(3,90); }catch(e){}
-      }
-      if(ballGlow){ ballGlow.visible=false; ballCore.visible=false; }
-    }
-    function tickGfx(dt,now){
-      if(flashPts){ flashPts.material.uniforms.time.value=now*0.001; flashPts.material.uniforms.scale.value=renderer.getPixelRatio(); }
-      if(boardTex) boardTex.offset.x-=dt*0.045;
-      for(const f of CFLAGS) f.rotation.y=Math.sin(now*0.003+f.userData.ph)*0.45+(f.position.x<0?0.3:Math.PI-0.3);
-      for(const h of MASTS) h.material.opacity=0.6+0.12*Math.sin(now*0.02+h.position.x);
-      tickParts(dt); tickRings(dt); tickFlashes(dt);
-      if(shotRibbon) ribbonUpdate(shotRibbon,now);
-      if(cine&&ballHalo) ballHalo.visible=false;
-    }
-    P3D.gfxRebuild=function(){ try{ buildExtras(); }catch(e){ console.warn('[P3D] gfxRebuild',e); } };
-    // debug handles (console): sheet layouts, cell resolver, live sprites, loaded sheets
-    P3D._dbg=function(){ return {LAYOUTS,cellOf,sprites,SHEETS,GK_SHEET}; };
-
     /* ---- initial pitch + stadium build (safe here: all bowl consts above are
        now initialized, so placeAllStadium won't hit a temporal dead zone).
        Default = assets/stadium/pitch.png. Set window.DEBUG_PITCH3D=true for the
        procedural debug pitch with engine coordinate ticks. ---- */
     if(window.DEBUG_PITCH3D===true){
       buildPitch(makeDebugPitchTex(), 1.56);
-    } else if(P3D.pixelPitch!==false){
-      buildPitch(makePixelPitchTex(), 1.56);              // pixel turf — no PNG needed
     } else {
       loader.load('assets/stadium/pitch.png',
         t=>buildPitch(t, t.image.width/t.image.height),
@@ -1217,73 +717,20 @@
        Rows are identical: 0 DOWN-run 1 UP-run 2 SIDE-run
                            3 DOWN-act 4 UP-act 5 SIDE-act
        Action band: cols 0-2 pass, cols 3-6 shoot. SIDE faces RIGHT. */
-    /* V3 12-col sheet — ONE ANIMATION PER ROW (12 frames each, SIDE faces RIGHT):
-         row 0 idle FRONT   row 1 idle BACK    row 2 shoot/pass (side)
-         row 3 run SIDE     row 4 run SOUTH    row 5 run NORTH
-       Rows you have not drawn yet can hold duplicates; they are just picked by
-       facing. pass = first 8 frames of the shoot row, shoot = all 12.
-       Detected by aspect (w/h ≈ 1.47) or by putting "12x6" in the file name. */
     const LAYOUTS={
       7 :{cols:7 , rows:6, idle:[0,1], run:[1,6], pass:[0,3], shoot:[3,4]},
-      10:{cols:10, rows:6, idle:[0,2], run:[2,8], pass:[0,3], shoot:[3,4]},
-      12:{cols:12, rows:6, idle:[0,12], run:[0,12], pass:[0,8], shoot:[0,12], idleFps:4, fpsScale:0.9,
-          rowFor:{ idle:{down:0, up:1, side:0}, run:{side:3, down:4, up:5}, act:{down:2, up:2, side:2} }}
+      10:{cols:10, rows:6, idle:[0,2], run:[2,8], pass:[0,3], shoot:[3,4]}
     };
     const GRID=LAYOUTS[7];                 // fallback for unmeasured sheets
-    /* Scan every cell's alpha once per sheet: where the feet are (padB = empty
-       fraction below the lowest opaque pixel), the body's horizontal centre
-       (cx) and its height fraction (h). Sprites are then anchored at the FEET
-       instead of the cell edge, so padded sheets never float, and scaled so a
-       player is the same world height whatever the cell padding. */
-    function measureSheet(sheet){
-      try{
-        const img=sheet.img, L=sheet.L||GRID, cols=L.cols, rows=L.rows;
-        const sc=Math.min(1,1400/img.width);
-        const c=document.createElement('canvas');
-        c.width=Math.max(1,Math.round(img.width*sc)); c.height=Math.max(1,Math.round(img.height*sc));
-        const x=c.getContext('2d',{willReadFrequently:true}); x.drawImage(img,0,0,c.width,c.height);
-        const d=x.getImageData(0,0,c.width,c.height).data, Wc=c.width;
-        const cw=c.width/cols, ch=c.height/rows, anchor=new Array(cols*rows);
-        for(let r=0;r<rows;r++)for(let q=0;q<cols;q++){
-          const x0=Math.floor(q*cw), x1=Math.floor((q+1)*cw), y0=Math.floor(r*ch), y1=Math.floor((r+1)*ch);
-          let minX=1e9,maxX=-1,minY=1e9,maxY=-1;
-          for(let yy=y0;yy<y1;yy++){ let has=false;
-            for(let xx=x0;xx<x1;xx++){ if(d[(yy*Wc+xx)*4+3]>40){ has=true; if(xx<minX)minX=xx; if(xx>maxX)maxX=xx; } }
-            if(has){ if(yy<minY)minY=yy; maxY=yy; } }
-          anchor[r*cols+q]=(maxX<0)?{cx:0.5,padB:0,h:1}
-            :{cx:((minX+maxX)/2-x0)/cw, padB:(y1-1-maxY)/ch, h:(maxY-minY+1)/ch};
-        }
-        sheet.anchor=anchor;
-        const i0=cellOf(L,'down','idle',0), ref=anchor[i0.row*cols+i0.col];
-        sheet.hRef=Math.max(0.5,Math.min(1,ref?ref.h:1));
-        console.log('[P3D] sheet measured: body '+Math.round(sheet.hRef*100)+'% of cell, feet pad '+Math.round((ref?ref.padB:0)*100)+'%');
-      }catch(e){ sheet.anchor=null; sheet.hRef=1; console.warn('[P3D] sheet measure failed (tainted canvas?)',e); }
-    }
-    function layoutFor(img,url){
+    function layoutFor(img){
       if(!img||!img.width||!img.height) return GRID;
-      const m=/(\d+)x6/.exec(url||'');        // explicit: name it team.12x6.png
-      if(m&&LAYOUTS[+m[1]]) return LAYOUTS[+m[1]];
-      if(P3D.forceLayout&&LAYOUTS[P3D.forceLayout]) return LAYOUTS[P3D.forceLayout];
-      const asp=img.width/img.height;
-      if(asp>1.33&&asp<1.58) return LAYOUTS[12];   // 12 cols of ~166x226 cells
-      const measured=img.width/(img.height/6);   // rows are always 6 (square-ish cells)
+      const measured=img.width/(img.height/6);   // rows are always 6
       let best=GRID,bestErr=Infinity;
-      for(const k of [7,10]){
+      for(const k in LAYOUTS){
         const e=Math.abs(LAYOUTS[k].cols-measured);
         if(e<bestErr){bestErr=e;best=LAYOUTS[k];}
       }
       return bestErr<=1.5?best:GRID;
-    }
-    // resolve (facing, animation, frame index) → sheet cell for any layout
-    function cellOf(L,face,anim,idx){
-      L=L||GRID;
-      const rng=L[anim]||L.run;
-      const col=rng[0]+Math.min(rng[1]-1,Math.max(0,idx|0));
-      let row;
-      if(L.rowFor){ const grp=(anim==='pass'||anim==='shoot')?'act':anim; const r=L.rowFor[grp]||L.rowFor.run;
-        row=(r[face]!=null?r[face]:r.side); }
-      else { const band=ROW[face]||ROW.side; row=(anim==='pass'||anim==='shoot')?band.act:band.run; }
-      return {row,col};
     }
     /* run cadence scales with real movement speed; idle gets a slow breath */
     const ANIM={runFpsMin:9, runFpsMax:17, idleFps:2.2, moveHoldMs:220};
@@ -1292,14 +739,13 @@
     const SHEETS={h:null,a:null}; const _sk={h:undefined,a:undefined};
     let GK_SHEET=null;                                 // shared keeper sheet for BOTH teams
     (function(){ const im=new Image();
-      im.onload=()=>{const L=layoutFor(im,'assets/ps1/gk.png');GK_SHEET={img:im,L,cw:im.width/L.cols,ch:im.height/L.rows};measureSheet(GK_SHEET);};
+      im.onload=()=>{const L=layoutFor(im);GK_SHEET={img:im,L,cw:im.width/L.cols,ch:im.height/L.rows};};
       im.src='assets/ps1/gk.png'; })();
     function loadSheet(side,urls){
       let i=0; const next=()=>{ if(i>=urls.length){ if(!SHEETS[side])SHEETS[side]='none'; return; }
         const im=new Image(), u=urls[i++];
-        im.onload=()=>{const L=layoutFor(im,u);
+        im.onload=()=>{const L=layoutFor(im);
           SHEETS[side]={img:im,L,cw:im.width/L.cols,ch:im.height/L.rows};
-          measureSheet(SHEETS[side]);
           console.log('[P3D] '+side+' sheet '+u+' '+im.width+'x'+im.height+
             ' -> '+L.cols+' cols x '+L.rows+' rows, cell '+
             (im.width/L.cols).toFixed(0)+'x'+(im.height/L.rows).toFixed(0)+
@@ -1367,16 +813,14 @@
         moveT=now; rx=p.x; ry=p.y;
       }
       stt[id]={rx,ry,face,flip,moveT,spd:prev.spd,lx:prev.lx,ly:prev.ly,lt:prev.lt,phase:prev.phase};
-      if(L.rowFor&&face!=='side') flip=false;   // dedicated front/back rows are never mirrored
       const band=ROW[face]||ROW.side;
       // one-shot pass/shoot animation override (action band, same facing) —
       // same mechanism as ps1-mod's PS1_action, ported to the 3D billboards.
       const act=ACT[id];
       if(act){
-        const A=P3D.anim||ANIM;
-        const rng=(act.name==='shoot'?L.shoot:L.pass), dur=(act.name==='shoot'?(A.shootMs||720):(A.passMs||520))*Math.max(0.6,rng[1]/8), el=now-act.t0;
+        const rng=(act.name==='shoot'?L.shoot:L.pass), dur=act.name==='shoot'?480:360, el=now-act.t0;
         if(el<dur){ const fi=Math.min(rng[1]-1, Math.floor(el/dur*rng[1]));
-          const cc=cellOf(L,face,act.name,fi); return {row:cc.row, col:cc.col, flip}; }
+          return {row:band.act, col:rng[0]+fi, flip}; }
         delete ACT[id];
       }
       const running=(now-moveT)<ANIM.moveHoldMs;
@@ -1384,17 +828,16 @@
         // cadence ramps with measured speed instead of a fixed 11fps
         const ref=(CV.width||1280)*0.30;
         const t=Math.max(0,Math.min(1,(prev.spd||0)/ref));
-        const A=P3D.anim||ANIM;
-        const fps=(A.runFpsMin+(A.runFpsMax-A.runFpsMin)*t)*(L.fpsScale||1);
+        const fps=ANIM.runFpsMin+(ANIM.runFpsMax-ANIM.runFpsMin)*t;
         const R=L.run;
-        const cc=cellOf(L,face,'run',Math.floor(now/1000*fps)%R[1]); return {row:cc.row, col:cc.col, flip};
+        return {row:band.run, col:R[0]+(Math.floor(now/1000*fps)%R[1]), flip};
       }
       const I=L.idle;
-      if(I[1]>1){   // multi-frame idle, phase-offset per player so nobody syncs
-        const fi=Math.floor((now+prev.phase*370)/1000*((P3D.anim&&P3D.anim.idleFps)||L.idleFps||ANIM.idleFps))%I[1];
-        const cc=cellOf(L,face,'idle',fi); return {row:cc.row, col:cc.col, flip};
+      if(I[1]>1){   // 2-frame idle, phase-offset per player so nobody syncs
+        const fi=Math.floor((now+prev.phase*370)/1000*ANIM.idleFps)%I[1];
+        return {row:band.run, col:I[0]+fi, flip};
       }
-      const cc=cellOf(L,face,'idle',0); return {row:cc.row, col:cc.col, flip};
+      return {row:band.run, col:I[0], flip};
     }
     /* one-shot action triggers — auto-detected from engine phase transitions */
     const ACT={};
@@ -1435,9 +878,8 @@
           // sprite height = fixed fraction of world pitch LENGTH (HD-2D scale).
           // P3D.spriteFrac defaults to ~0.045 of PLEN — tune in Camera Lab.
           const frac=(P3D.spriteFrac!=null?P3D.spriteFrac:0.045);
-          const hWorld=PLEN*frac/(useSheet.hRef||1);      // body height stays constant across sheets
+          const hWorld=PLEN*frac;
           const wWorld=hWorld*(useSheet.cw/useSheet.ch);
-          o._anchor=useSheet.anchor||null; o._cols=(o._L||GRID).cols;
           // keep feet on the pitch: clamp x to the goal lines (GK sits at ~0.05 in
           // the engine, which would render BEHIND the goal line) and y to sidelines.
           const W=(CV.width||1280), H=(CV.height||720);
@@ -1452,10 +894,6 @@
           const ox=st.col*cw, oy=1-(st.row+1)*ch;
           if(st.flip){ o.tex.repeat.set(-cw,ch); o.tex.offset.set(ox+cw,oy); }
           else       { o.tex.repeat.set( cw,ch); o.tex.offset.set(ox,   oy); }
-          // anchor the sprite at the FEET of this exact frame (not the cell edge)
-          const an=o._anchor&&o._anchor[st.row*_L.cols+st.col];
-          const padB=an?an.padB:0, acx=an?(st.flip?1-an.cx:an.cx):0.5;
-          o.sprite.center.set(acx,padB);
           o.sprite.scale.set(wWorld, hWorld, 1);
           o.sprite.position.set(wx,0.05,wz);
           // ---- shadows ----
@@ -1468,7 +906,7 @@
           o.shadow.material.opacity=Lt.shadow*0.55;
           // SILHOUETTE cast: lay the sprite flat, stretch away from the sun
           const projLen=hWorld*(0.55+(1-el)*Lt.shadowLen*2.6);
-          o.sil.position.set(wx+cdx*projLen*(0.5-padB), 0.045, wz+cdz*projLen*(0.5-padB));
+          o.sil.position.set(wx+cdx*projLen*0.5, 0.045, wz+cdz*projLen*0.5);
           o.sil.scale.set(wWorld, projLen, 1);
           _qF.setFromAxisAngle(_AX,-Math.PI/2); _qS.setFromAxisAngle(_AY,az);
           o.sil.quaternion.copy(_qS).multiply(_qF);
@@ -1690,23 +1128,7 @@
         const t=0.6;                         // 0 = true pos, 1 = on the sprite
         bx+=(cp.x-bx)*t; by+=(cp.y-by)*t;
       }
-      let hgtMul=1;
-      try{
-        const shooting=!!(typeof G!=='undefined'&&G&&G._shotTrail);
-        if(shooting&&typeof ballTravel!=='undefined'&&ballTravel&&ballTravel.active){
-          const bt=ballTravel;
-          if(_os.bt!==bt){                   // a new shot → pick the shooter's style once
-            const s=G.poss, pl=(typeof sq==='function'&&G.ck&&sq(s))?sq(s)[G.ck]:null;
-            const st=shotStyleFor(pl), pp=shotPerp(bt.fx,bt.fy,bt.tx,bt.ty);
-            _os={bt,st,px:pp.px,py:pp.py,L:pp.L,amt:(CV.width||1280)*0.05*st.curve};
-            window.U11DBG&&U11DBG('[3D] open-play shot style: '+st.kind);
-          }
-          const t=Math.min(1,Math.hypot(bx-_os.bt.fx,by-_os.bt.fy)/_os.L);
-          const off=Math.sin(Math.PI*t)*_os.amt;
-          bx+=_os.px*off; by+=_os.py*off; hgtMul=_os.st.loft;
-        } else if(!shooting) _os.bt=null;
-      }catch(e){}
-      const r=d*0.5, hgt=Math.max(0,(ball.bz||0)*0.09)*hgtMul;
+      const r=d*0.5, hgt=Math.max(0,(ball.bz||0)*0.09);
       const bwy=r+hgt;                       // resting on the turf, lifted by bz
       const wx=ex2wx(bx), wz=ey2wz(by);
       ballMesh.position.set(wx,bwy,wz);
@@ -1725,7 +1147,9 @@
       ballShadow.scale.set(shs,shs*0.55,1);
       ballShadow.material.opacity=0.45/(1+hgt*0.8);
       // shot energy trail (3D replacement for the 2D _shotTrail glow)
-      try{ openPlayBallFx(wx,bwy,wz,d,!!(typeof G!=='undefined'&&G&&G._shotTrail)); }catch(e){}
+      if(typeof G!=='undefined'&&G&&G._shotTrail){
+        spawnTrail(ex2wx(bx),bwy+d*0.5,ey2wz(by),'#ffb040',d*1.5);
+      }
     }
 
     /* ════════ REFEREE ════════
@@ -1924,16 +1348,8 @@
         selMesh.visible=true;
       }catch(e){selMesh.visible=false;}
     }
-    /* ════════ SAKUGA CHARGE FX — wind-up hold (v2, layered) ════════
-       2D overlay: focus vignette, team-tinted converging speed lines,
-       strobing lightning arcs off the shooter.  3D: white core + two
-       flickering team-colour flame sprites, twin counter-rotating floor
-       rings, pulsing floor pool, an additive glowing copy of the shooter's
-       own sprite cell, rising embers, periodic ground shockwaves, and the
-       charge glow on the ball. Everything scales with `chg` (0→1 over the
-       hold) so the build-up reads before the kick. */
-    let fxCv=null,fxCtx=null,_fxT=0,_fxLastCrackle=0,_fxLastRing=0;
-    let auraCore=null,auraFlame=null,auraFlame2=null,auraRing1=null,auraRing2=null,auraFloor=null,auraSil=null,ballGlowSp=null;
+    /* SAKUGA charge FX for the wind-up hold */
+    let fxCv=null,fxCtx=null,auraSp=null,ballGlowSp=null,_fxT=0,_fxLastCrackle=0;
     function fxGradTex(col){
       const c=document.createElement('canvas');c.width=c.height=128;
       const g=c.getContext('2d');
@@ -1950,116 +1366,67 @@
         (CV.parentNode||document.body).appendChild(fxCv);
         fxCtx=fxCv.getContext('2d');
       }
-      if(!auraCore){
-        const spr=(tex,col,op)=>{ const s=new T.Sprite(new T.SpriteMaterial({map:tex,color:col,transparent:true,opacity:op,blending:T.AdditiveBlending,depthWrite:false,fog:false})); s.visible=false; scene.add(s); return s; };
-        auraCore=spr(fxGradTex('#ffffff'),'#fff6d5',0.4);
-        auraFlame=spr(flameTex(),'#ffd24a',0.8);   auraFlame.center.set(0.5,0.1);
-        auraFlame2=spr(flameTex(),'#ffffff',0.5);  auraFlame2.center.set(0.5,0.1);
-        const flat=(tex,col,op)=>{ const m=new T.Mesh(new T.PlaneGeometry(1,1),new T.MeshBasicMaterial({map:tex,color:col,transparent:true,opacity:op,blending:T.AdditiveBlending,depthWrite:false,side:T.DoubleSide,fog:false}));
-          m.rotation.x=-Math.PI/2; m.renderOrder=3; m.visible=false; scene.add(m); return m; };
-        auraRing1=flat(ringTex(),'#ffd24a',0.9); auraRing2=flat(ringTex(),'#ffffff',0.6); auraFloor=flat(fxGradTex('#ffffff'),'#ffd24a',0.5);
-        auraSil=new T.Sprite(new T.SpriteMaterial({transparent:true,opacity:0.4,blending:T.AdditiveBlending,depthWrite:false,fog:false,alphaTest:0.4}));
-        auraSil.center.set(0.5,0); auraSil.visible=false; scene.add(auraSil);
-        ballGlowSp=spr(fxGradTex('#fff3b0'),'#ffffff',0.9);
+      if(!auraSp){
+        auraSp=new T.Sprite(new T.SpriteMaterial({map:fxGradTex('#ffd24a'),transparent:true,
+          blending:T.AdditiveBlending,depthWrite:false,opacity:0.85}));
+        auraSp.visible=false;scene.add(auraSp);
+        ballGlowSp=new T.Sprite(new T.SpriteMaterial({map:fxGradTex('#fff3b0'),transparent:true,
+          blending:T.AdditiveBlending,depthWrite:false,opacity:0.9}));
+        ballGlowSp.visible=false;scene.add(ballGlowSp);
       }
       fxCv.style.display='block';
     }
     function hideHoldFx(){
-      try{ applyFx(); }catch(e){}
       if(fxCv){fxCtx.clearRect(0,0,fxCv.width,fxCv.height);fxCv.style.display='none';}
-      [auraCore,auraFlame,auraFlame2,auraRing1,auraRing2,auraFloor,auraSil,ballGlowSp].forEach(o=>{ if(o) o.visible=false; });
+      if(auraSp)auraSp.visible=false;
+      if(ballGlowSp)ballGlowSp.visible=false;
     }
     function drawHoldFx(c,dt){
       ensureHoldFx();
-      if(bloomPass){ bloomPass.strength=P3D.fx.bloom*0.4; bloomPass.threshold=Math.max(P3D.fx.bloomThresh,0.93); }
       _fxT+=dt;
-      const col=c.col||'#ffd24a';
       const W2=fxCv.width,H2=fxCv.height;
       const swx=ex2wx(c.fx),swz=ey2wz(c.fy);
-      const hh=PLEN*(P3D.spriteFrac!=null?P3D.spriteFrac:0.045);
-      const chg=Math.min(1,_fxT/2.0);                        // charge 0→1 across the hold
-      const sp=projectToScreen(swx,hh*0.5,swz,W2,H2);
-      const cc=new T.Color(col), cr=Math.round(cc.r*255), cgn=Math.round(cc.g*255), cb=Math.round(cc.b*255);
+      const sp=projectToScreen(swx,1.4,swz,W2,H2);
       const g=fxCtx;
       g.clearRect(0,0,W2,H2);
-      // focus vignette — deepens as the charge builds
-      const vg=g.createRadialGradient(sp.x,sp.y,H2*0.16,sp.x,sp.y,H2*0.9);
-      vg.addColorStop(0,'rgba(0,0,20,0)');vg.addColorStop(1,'rgba(0,0,20,'+(0.35+0.35*chg).toFixed(2)+')');
+      // vignette focus
+      const vg=g.createRadialGradient(sp.x,sp.y,H2*0.18,sp.x,sp.y,H2*0.85);
+      vg.addColorStop(0,'rgba(0,0,20,0)');vg.addColorStop(1,'rgba(0,0,20,0.55)');
       g.fillStyle=vg;g.fillRect(0,0,W2,H2);
+      // converging anime speed lines (flickering)
       g.save();g.globalCompositeOperation='lighter';
-      // converging speed lines, team-tinted at the rim → white at the core
-      const N=18+Math.round(12*chg);
+      const N=26;
       for(let i=0;i<N;i++){
         const a=(i/N)*Math.PI*2+Math.sin(_fxT*3+i)*0.05;
         const R=Math.hypot(W2,H2)*0.62;
         const r1=R*(0.55+0.35*((i*2654435761>>>0)%100)/100);
-        const r0=H2*(0.15+0.05*Math.sin(_fxT*9+i*1.7));
+        const r0=H2*(0.16+0.05*Math.sin(_fxT*9+i*1.7));
         const x1=sp.x+Math.cos(a)*r1,y1=sp.y+Math.sin(a)*r1;
         const x0=sp.x+Math.cos(a)*r0,y0=sp.y+Math.sin(a)*r0;
-        const al=(0.05+0.11*Math.abs(Math.sin(_fxT*7+i*2.3)))*(0.5+0.5*chg);
-        const lg=g.createLinearGradient(x1,y1,x0,y0);
-        lg.addColorStop(0,'rgba('+cr+','+cgn+','+cb+',0)');lg.addColorStop(1,'rgba(255,248,225,'+al.toFixed(3)+')');
-        g.strokeStyle=lg; g.lineWidth=1.0+((i%3===0)?1.4:0)+0.6*chg;
+        const al=0.10+0.16*Math.abs(Math.sin(_fxT*7+i*2.3));
+        g.strokeStyle='rgba(255,244,200,'+al.toFixed(3)+')';
+        g.lineWidth=1.2+((i%3===0)?1.6:0);
         g.beginPath();g.moveTo(x1,y1);g.lineTo(x0,y0);g.stroke();
       }
-      // lightning arcs snapping off the shooter (strobe)
-      const bolts=(Math.random()<(0.35+0.5*chg))?(1+Math.floor(Math.random()*3)):0;
-      const bodyR=Math.max(24,Math.abs(projectToScreen(swx,hh,swz,W2,H2).y-projectToScreen(swx,0,swz,W2,H2).y));
-      for(let b=0;b<bolts;b++){
-        const a=Math.random()*Math.PI*2;
-        const ox=sp.x+Math.cos(a)*bodyR*0.25, oy=sp.y+(Math.random()-0.5)*bodyR;
-        const len=bodyR*(0.5+Math.random()*1.1), segs=5+Math.floor(Math.random()*5);
-        const pts=[[ox,oy]];
-        for(let s=1;s<=segs;s++){ const t=s/segs;
-          pts.push([ox+Math.cos(a)*len*t+(Math.random()-0.5)*bodyR*0.45, oy+Math.sin(a)*len*t+(Math.random()-0.5)*bodyR*0.45]); }
-        const draw=(w,st)=>{ g.strokeStyle=st; g.lineWidth=w; g.beginPath(); g.moveTo(pts[0][0],pts[0][1]);
-          for(let s=1;s<pts.length;s++) g.lineTo(pts[s][0],pts[s][1]); g.stroke(); };
-        g.shadowColor='rgb('+cr+','+cgn+','+cb+')'; g.shadowBlur=10;
-        draw(2.6,'rgba('+cr+','+cgn+','+cb+',0.8)'); g.shadowBlur=0; draw(1.1,'rgba(255,255,255,0.9)');
-      }
       g.restore();
-      // ── 3D layers ──
-      const pu=1+0.12*Math.sin(_fxT*6), flick=0.9+Math.random()*0.25;
-      const sh=sprites[c.o.as+':'+c.o.sk];
-      const tint=new T.Color(col).lerp(new T.Color('#ffffff'),0.45);     // light team tint, never pure white
-      auraCore.visible=true; auraCore.material.color.copy(tint); auraCore.position.set(swx,hh*0.42,swz);
-      const cs=hh*(0.45+0.25*chg)*pu; auraCore.scale.set(cs,cs,1); auraCore.material.opacity=0.06+0.12*chg;
-      auraFlame.visible=true; auraFlame.material.color.set(col); auraFlame.position.set(swx,0.1,swz);
-      auraFlame.scale.set(hh*(0.95+0.35*chg)*flick, hh*(1.35+0.75*chg)*(0.95+0.1*Math.sin(_fxT*11)),1); auraFlame.material.opacity=0.10+0.16*chg;
-      auraFlame2.visible=true; auraFlame2.material.color.copy(tint); auraFlame2.position.set(swx,0.1,swz);
-      auraFlame2.scale.set(hh*(0.55+0.2*chg)*(2-flick), hh*(1.0+0.6*chg)*(0.95+0.1*Math.cos(_fxT*13)),1); auraFlame2.material.opacity=0.04+0.08*chg;
-      const rs=hh*(1.3+0.6*chg);
-      auraRing1.visible=true; auraRing1.material.color.set(col); auraRing1.material.opacity=0.55; auraRing1.position.set(swx,0.07,swz); auraRing1.scale.set(rs*pu,rs*pu,1); auraRing1.rotation.z+=dt*2.4;
-      auraRing2.visible=true; auraRing2.material.opacity=0.3; auraRing2.position.set(swx,0.08,swz); auraRing2.scale.set(rs*0.68/pu,rs*0.68/pu,1); auraRing2.rotation.z-=dt*3.6;
-      auraFloor.visible=true; auraFloor.material.color.set(col); auraFloor.position.set(swx,0.05,swz); auraFloor.scale.set(rs*1.1,rs*1.1,1);
-      auraFloor.material.opacity=0.03+0.07*chg*Math.abs(Math.sin(_fxT*6));
-      // glowing silhouette: the shooter's own current sheet cell, tinted + pulsing
-      if(sh&&sh.sprite&&sh.sprite.visible){
-        const map=sh.sprite.material.map;
-        if(auraSil.material.map!==map){ auraSil.material.map=map; auraSil.material.needsUpdate=true; }
-        auraSil.visible=true; auraSil.material.color.set(col);
-        auraSil.center.copy(sh.sprite.center);
-        auraSil.position.copy(sh.sprite.position); auraSil.position.y+=0.01;
-        auraSil.scale.copy(sh.sprite.scale).multiplyScalar(1.0+0.03*Math.sin(_fxT*14));
-        auraSil.material.opacity=0.08+0.18*chg*(0.6+0.4*Math.abs(Math.sin(_fxT*9)));
-      }
-      // charge glow on the ball
-      const bw=(typeof ball!=='undefined'&&ball)?{x:ex2wx(ball.x),z:ey2wz(ball.y)}:{x:swx,z:swz};
-      ballGlowSp.visible=true; ballGlowSp.material.color.set(col); ballGlowSp.position.set(bw.x,0.35,bw.z);
-      const bs=hh*(0.25+0.3*chg)*(1+0.2*Math.sin(_fxT*10)); ballGlowSp.scale.set(bs,bs,1); ballGlowSp.material.opacity=0.2+0.25*chg;
-      // rising embers
+      // 3D: pulsing aura around the shooter + charge glow on the ball
+      const hh=PLEN*(P3D.spriteFrac!=null?P3D.spriteFrac:0.045);
+      const pu=1+0.14*Math.sin(_fxT*6);
+      auraSp.visible=true;auraSp.position.set(swx,hh*0.42,swz);
+      auraSp.scale.set(hh*1.5*pu,hh*1.6*pu,1);
+      auraSp.material.opacity=0.55+0.3*Math.abs(Math.sin(_fxT*6));
+      const bw=typeof ball!=='undefined'&&ball?{x:ex2wx(ball.x),z:ey2wz(ball.y)}:{x:swx,z:swz};
+      const chg=Math.min(1,_fxT/4.2);
+      ballGlowSp.visible=true;ballGlowSp.position.set(bw.x,0.35,bw.z);
+      const bs=hh*(0.35+0.5*chg)*(1+0.2*Math.sin(_fxT*10));
+      ballGlowSp.scale.set(bs,bs,1);
+      // energy crackle: sparks around the shooter every ~90ms
       const now=performance.now();
-      if(now-_fxLastCrackle>(70-40*chg)){
+      if(now-_fxLastCrackle>90){
         _fxLastCrackle=now;
-        for(let i=0;i<2+Math.round(3*chg);i++){
-          const a=Math.random()*Math.PI*2, rr=hh*(0.15+Math.random()*0.45);
-          spawnPart(swx+Math.cos(a)*rr,0.1+Math.random()*0.3,swz+Math.sin(a)*rr,
-                    (Math.random()-0.5)*0.8, 1.6+Math.random()*2.6+chg*1.5, (Math.random()-0.5)*0.8,
-                    Math.random()<0.35?'#ffffff':col, hh*(0.05+Math.random()*0.09), 0.5+Math.random()*0.6, -0.6);
-        }
+        const ox=(Math.random()-0.5)*hh*0.9, oz=(Math.random()-0.5)*hh*0.5;
+        spawnTrail(swx+ox,0.2+Math.random()*hh*0.8,swz+oz,'#ffd24a',hh*0.28);
       }
-      // periodic ground shockwave — faster as the charge peaks
-      if(now-_fxLastRing>(900-500*chg)){ _fxLastRing=now; spawnRing(swx,swz,col,hh*0.4,hh*(2.5+2*chg),0.6); }
     }
     /* ════════ CINEMATIC SPRITE ASSETS — PER TEAM, WITH FALLBACK ════════
        Both sides now run this cinematic (human □ and CPU), so the wind-up
@@ -2145,16 +1512,6 @@
     }
     function clearTrail(){ TRAIL.forEach(t=>{t.alive=false;t.sp.visible=false;}); }
     // force a sprite to an explicit sheet cell (used on shooter + GK)
-    // layout-aware: pick a frame of an animation by index, or by 0..1 progress
-    function forceAnim(id,face,anim,idx,flip){
-      const o=sprites[id]; if(!o)return;
-      const cc=cellOf(o._L||GRID,face,anim,idx); forceCell(id,cc.row,cc.col,flip);
-    }
-    function forceAnimT(id,face,anim,t,flip){
-      const o=sprites[id]; if(!o)return;
-      const rng=((o._L||GRID)[anim])||[0,1];
-      forceAnim(id,face,anim,Math.round(Math.max(0,Math.min(1,t))*(rng[1]-1)),flip);
-    }
     function forceCell(id,row,col,flip){
       const o=sprites[id]; if(!o)return;
       const _L=(o._L||GRID);
@@ -2162,8 +1519,6 @@
       const ox=col*cw, oy=1-(row+1)*ch;
       if(flip){ o.tex.repeat.set(-cw,ch); o.tex.offset.set(ox+cw,oy); }
       else    { o.tex.repeat.set( cw,ch); o.tex.offset.set(ox,oy); }
-      const an=o._anchor&&o._anchor[row*_L.cols+col];
-      o.sprite.center.set(an?(flip?1-an.cx:an.cx):0.5, an?an.padB:0);
     }
     /* opts: {as, sk, ds, isGoal, color, onDone} — engine sides/keys */
     P3D.superCine=function(o){
@@ -2177,7 +1532,7 @@
         fx:sp.x, fy:sp.y,          // engine-space flight endpoints
         tx:gp.x, ty:gp.y,
         nx:gx,   ny:gp.y,          // net point (goal outcome)
-        col:o.color||sideColor(o.as),
+        col:o.color||'#ffd24a',
         gkRestore:null, diveDir:(Math.random()<0.5?1:2)};
       if(typeof ball!=='undefined'&&ball){ ball.x=sp.x; ball.y=sp.y; ball.bz=0; }
     };
@@ -2224,20 +1579,13 @@
         }catch(e){}
         cine={v2:true,mode:'hold',t:0,ft:0,ot:0,o,dir,arrived:false,gkRestore:null,
           fx:sp.x,fy:sp.y, tx:stopX,ty:gp.y, gx,gy:gp.y, kx:gp.x,ky:gp.y,
-          col:o.color||sideColor(o.as)};
-        try{
-          const shooter=(typeof sq==='function'&&sq(o.as))?sq(o.as)[o.sk]:null;
-          const st=shotStyleFor(shooter), pp=shotPerp(sp.x,sp.y,stopX,gp.y);
-          Object.assign(cine,{style:st,perpX:pp.px,perpY:pp.py,curveAmt:W*0.05*st.curve,dur:1.6/st.speed});
-          window.U11DBG&&U11DBG('[3D] super shot style: '+st.kind+' ('+(shooter?((shooter.origName||shooter.name)+' pwr'+shooter.pwr+' tec'+shooter.tec):'?')+')');
-        }catch(e){}
+          col:o.color||'#ffd24a'};
         if(typeof ball!=='undefined'&&ball){ball.x=sp.x;ball.y=sp.y;ball.bz=0;}
         return true;
       },
       fly(onArrive){
         if(!(cine&&cine.v2&&cine.mode==='hold'))return;
         cine.mode='fly';cine.ft=0;cine.onArrive=onArrive;
-        try{ kickBurst(cine); }catch(e){}
         try{ // kick burst flash (radial white), ~0.3s
           let b=document.getElementById('cine-burst');
           if(!b){ b=document.createElement('div'); b.id='cine-burst';
@@ -2273,11 +1621,10 @@
             if(g.sil){ g.sil.material.map=cineWindupTex; g.sil.material.needsUpdate=true; }
           }
           const hh=PLEN*frac;                          // override per-frame (syncPlayers resets scale)
-          g.sprite.center.set(0.5,0);
           g.sprite.scale.set(hh*cineWindupAR,hh,1);
           if(g.sil)g.sil.scale.set(hh*cineWindupAR,hh,1);
         }
-        else forceAnim(sid,'up','shoot',0,false);       // fallback: sheet wind-up, back view
+        else forceCell(sid,ROW.up.act,3,false);        // fallback: sheet wind-up, back view
         drawHoldFx(c,dt);                              // sakuga charge: lines/aura/glow
       }else if(c.mode==='fly'||c.mode==='wait'){
         if(!c._fxOff){c._fxOff=true;_fxT=0;hideHoldFx();}
@@ -2287,13 +1634,12 @@
             if(r.g.sil&&r.silMap){ r.g.sil.material.map=r.silMap; r.g.sil.material.needsUpdate=true; } }
           c._shBack=true;
         }
-        if(!gkCineCell(c,0,0))forceAnim(c.o.ds+':GK','down','idle',0,false); // keeper set, facing the ball
+        if(!gkCineCell(c,0,0))forceCell(c.o.ds+':GK',ROW.down.run,0,false); // keeper set, facing the ball
         cineGkNudge(c);                               // ...a step off his line
-        const stl=c.style||{curve:0,loft:1,speed:1,kind:'normal'}, dur=c.dur||1.6;
         if(c.mode==='fly'){
-          c.ft+=dt/dur;
-          const kf=Math.min(3,Math.floor((c.ft*dur)/0.14));
-          forceAnimT(sid,'up','shoot',kf/3,false);    // kick frames, back view
+          c.ft+=dt/1.6;
+          const kf=Math.min(3,Math.floor((c.ft*1.6)/0.14));
+          forceCell(sid,ROW.up.act,3+kf,false);       // kick frames, back view
           if(c.ft>=1){
             c.ft=1;c.mode='wait';
             if(c.onArrive&&!c.arrived){c.arrived=true;const cb=c.onArrive;c.onArrive=null;setTimeout(cb,0);}
@@ -2302,8 +1648,7 @@
         const ft=Math.min(1,c.ft);
         const fe=ft*ft*(3-2*ft);
         bx=c.fx+(c.tx-c.fx)*fe; by=c.fy+(c.ty-c.fy)*fe;
-        if(c.curveAmt){ const off=Math.sin(Math.PI*fe)*c.curveAmt; bx+=c.perpX*off; by+=c.perpY*off; }  // banana
-        bz=(46*3.2*fe*(1-fe)*0.7+8*Math.sin(fe*Math.PI))*stl.loft;
+        bz=46*3.2*fe*(1-fe)*0.7+8*Math.sin(fe*Math.PI);
         if(c.mode==='wait')bz=4+Math.sin(c.t*6)*0.8;  // hover short of the keeper
       }else if(c.mode==='out'){
         c.ot+=dt;
@@ -2316,7 +1661,7 @@
           bz=4*(1-gt)+3.4*gt;                        // settle into the gloves
         }
         if(!gkCineCell(c,c.isGoal?2:1,c.isGoal?0:1))
-          forceAnimT(c.o.ds+':GK','down','shoot',Math.min(3,Math.floor(c.ot/0.18))/3,false);
+          forceCell(c.o.ds+':GK',ROW.down.act,Math.min(6,3+Math.floor(c.ot/0.18)),false);
         cineGkNudge(c);
         if(c.ot>=0.85&&!c._fired){                    // outcome shown — hand control to game.js,
           c._fired=true;                              // keep the frontal camera until it releases us
@@ -2330,14 +1675,10 @@
       const bwx=ex2wx(Math.min(Math.max(bx,0.02*W2),0.98*W2)),bwz=ey2wz(by);
       const bwy=0.05+bz*0.09;
       ballMesh.scale.set(d,d,1); ballMesh.position.set(bwx,bwy,bwz);
-      if(c.mode==='fly'&&c.style){
-        if(c.style.kind==='curve') ballMesh.rotateOnWorldAxis(_AY,dt*26);                 // side-spin
-        else if(c._pbw){ const ddx=bwx-c._pbw.x, ddz=bwz-c._pbw.z;                       // topspin along travel
-          if(Math.hypot(ddx,ddz)>1e-4){ _bAxis.set(ddz,0,-ddx).normalize(); ballMesh.rotateOnWorldAxis(_bAxis,dt*(c.style.kind==='power'?40:22)); } }
+      if(c.mode==='fly'||(c.mode==='out'&&c.isGoal)){
+        spawnTrail(bwx,bwy+d*0.5,bwz,'#ffffff',d*1.3);      // hot core
+        spawnTrail(bwx,bwy+d*0.5,bwz,c.col,d*2.6);          // wide comet tail
       }
-      c._pbw={x:bwx,z:bwz};
-      try{ shotBallFx(c,bwx,bwy,bwz,d,(c.mode==='fly'||(c.mode==='out'&&c.isGoal)),c.mode==='wait'); }catch(e){}
-      if(c.mode==='out'&&c.ot>=0.55&&!c._impact){ c._impact=true; try{ impactBurst(c,bwx,bwy,bwz,d); }catch(e){} }
       c._bw={x:bwx,y:bwy,z:bwz};
     }
     // Cinematic keeper uses its own dedicated sheet (assets/ps1/gk_cine.png, 3x2):
@@ -2370,12 +1711,9 @@
         // Behind the shooter ALONG the shooter→goal line — goal centred ahead,
         // full body in the lower frame, slight over-the-shoulder offset.
         let dx=gwx-swx,dz=gwz-swz;const L=Math.hypot(dx,dz)||1;dx/=L;dz/=L;
-        const CC=P3D.cine||{};
-        const dv=(CC.holdDist||9.6)-Math.min(0.8,c.t*0.16);      // slow dolly-in
-        const sd=(CC.holdSide!=null?CC.holdSide:1.1);
-        camera.position.set(swx-dx*dv-dz*sd, (CC.holdHeight||1.55), swz-dz*dv+dx*sd);
-        const la=Math.min(L*0.6,(CC.holdLookAhead||20));
-        camera.lookAt(swx+dx*la, (CC.holdLookY||1.25), swz+dz*la);
+        const dv=6.8-Math.min(0.8,c.t*0.16);      // slow dolly-in
+        camera.position.set(swx-dx*dv-dz*0.9, 2.4, swz-dz*dv+dx*0.9);
+        camera.lookAt(swx+dx*Math.min(L*0.55,14), 1.15, swz+dz*Math.min(L*0.55,14));
       }else if(c.mode==='out'){
         // Outcome: FIXED frontal frame on the goal (goal + keeper + net), no motion.
         let dx=swx-gwx,dz=swz-gwz;const L=Math.hypot(dx,dz)||1;dx/=L;dz/=L;
@@ -2385,9 +1723,8 @@
         // Chase: behind the ball along the ball→goal line.
         const b=c._bw||{x:swx,y:0.5,z:swz};
         let dx=gwx-b.x,dz=gwz-b.z;const L=Math.hypot(dx,dz)||1;dx/=L;dz/=L;
-        const CC=P3D.cine||{}, cd=(CC.chaseDist||7.5);
-        camera.position.set(b.x-dx*cd,Math.max(0.5,b.y)+(CC.chaseHeight||2.4),b.z-dz*cd);
-        camera.lookAt(gwx,(CC.chaseLookY||1.0),gwz);
+        camera.position.set(b.x-dx*5.2,b.y+2.0,b.z-dz*5.2);
+        camera.lookAt(gwx,1.0,gwz);
       }
     }
 
@@ -2402,7 +1739,7 @@
       // ── shooter: frontal action row, kick frames over phase A ──
       if(c.t<2.5){
         const kf=Math.min(3,Math.floor(Math.max(0,(c.t-1.55))/0.28));  // 0..3
-        forceAnimT(sid,'down','shoot',kf/3,false);
+        forceCell(sid, ROW.down.act, 3+kf, false);
       }
       // ── ball flight (engine coords + tall arc) — slowed for readability ──
       const T0=2.6, T1=4.9;
@@ -2421,7 +1758,7 @@
         const frac=(P3D.spriteFrac!=null?P3D.spriteFrac:0.045);
         const d=PLEN*frac*0.21;
         ballMesh.scale.set(d,d,1); ballMesh.position.set(bwx,bwy,bwz);
-        try{ shotBallFx(c,bwx,bwy,bwz,d,c.t<T1+0.4); }catch(e){}
+        if(c.t<T1+0.4) spawnTrail(bwx,bwy+d*0.5,bwz,c.col,d*1.8);
       } else {
         ballMesh.position.set(ex2wx(c.fx),0.05,ey2wz(c.fy));
       }
@@ -2441,7 +1778,7 @@
           const cw=1/DIVE.cols, ch=1/DIVE.rows;
           og.tex.repeat.set(cw,ch); og.tex.offset.set(fr*cw,1-(row+1)*ch);
         } else {
-          if(c.t<4.6) forceAnim(gid,'down','pass',0,false); else forceAnimT(gid,'down','shoot',Math.min(3,Math.floor((c.t-4.6)/0.18))/3,false);
+          forceCell(gid, ROW.down.act, c.t<4.6?0:3+Math.min(3,Math.floor((c.t-4.6)/0.18)), false);
         }
       }
       if(c.t>=6.4) cineEnd();
@@ -2507,13 +1844,12 @@
       if(cine){ try{ if(cine.v2){cineStep2(dt);cineCamera2();} else {cineStep(dt);cineCamera();} }catch(e){console.error('[P3D] cine error',e); cineEnd();} }
       else    { syncBall(); updateCamera(dt); }
       tickTrail(dt);
-      try{ tickGfx(dt,now); }catch(e){}
       syncRef(dt);
       // anchor god rays at the sun's projected screen position
       if(rayPass){
         _v3.copy(sun.position).project(camera);
         rayPass.uniforms.lightPos.value.set(_v3.x*0.5+0.5, _v3.y*0.5+0.5);
-        rayPass.enabled = (P3D.fx.rays>0.001) && (_v3.z<1) && !(cine&&cine.v2&&cine.mode==='hold');   // off when sun behind camera / during the charge hold
+        rayPass.enabled = (P3D.fx.rays>0.001) && (_v3.z<1);   // off when sun behind camera
       }
       if(composer && P3D.fx && P3D.fx.on) composer.render(dt);
       else renderer.render(scene,camera);
