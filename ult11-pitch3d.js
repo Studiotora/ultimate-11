@@ -61,7 +61,7 @@
       return 'classic';
     })(),
     spriteScale:1.9,     // (legacy) billboard height vs engine token radius CR
-    spriteY:-0.35,       // vertical plant offset (negative sinks feet into pitch for low-angle cam)
+    spriteY:-0.12,       // vertical plant offset (negative sinks feet into pitch for low-angle cam)
     spriteFrac:0.045,    // billboard height as fraction of world pitch LENGTH (HD-2D)
     // ---- LIGHTING / SHADOWS (Camera Lab → LIGHTING) ----
     light:{ azim:3.14,    // sun NORTH → shadows cast SOUTH (+Z). Sun angle slider rotates this.
@@ -132,13 +132,14 @@
         if(saved.light)Object.assign(P3D.light,saved.light);
         if(saved.fx)   Object.assign(P3D.fx,   saved.fx);
         if(saved.spriteFrac!=null) P3D.spriteFrac=saved.spriteFrac;
+        if(saved.spriteY!=null) P3D.spriteY=saved.spriteY;
         console.log('[P3D] restored saved camera settings');
       }
     }catch(e){}
     P3D.saveCam=function(){
       try{
         localStorage.setItem('ue_p3d_cam', JSON.stringify(
-          {cam:P3D.cam, bowl:P3D.bowl, light:P3D.light, fx:P3D.fx, spriteFrac:P3D.spriteFrac}));
+          {cam:P3D.cam, bowl:P3D.bowl, light:P3D.light, fx:P3D.fx, spriteFrac:P3D.spriteFrac, spriteY:P3D.spriteY}));
         console.log('[P3D] camera settings saved — they will persist across reloads');
         return true;
       }catch(e){ console.warn('[P3D] saveCam failed',e); return false; }

@@ -174,6 +174,7 @@
 
     panel.appendChild(section('PLAYERS'));
     panel.appendChild(row('Sprite size', 0.02,0.10,0.001, ()=>P3D.spriteFrac, v=>P3D.spriteFrac=v));
+    panel.appendChild(row('Sprite Y', -1.0,0.3,0.01, ()=>P3D.spriteY, v=>P3D.spriteY=v));
 
     panel.appendChild(section('LIGHTING'));
     const L=P3D.light, al=()=>{ if(P3D._applyLight) P3D._applyLight(); };
