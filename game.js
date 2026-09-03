@@ -2295,7 +2295,7 @@ function startAnim(){
     // STRANDED IDLE: phase 'idle' with the kickoff grace long expired means a
     // delayed restart was cancelled (foul/free-kick recovery, etc). Rather than
     // sit frozen until the next event, put the ball back in play.
-    if(G.phase==='idle'&&G.mt&&!G._cineHold&&!G.paused&&
+    if(G.phase==='idle'&&G.mt&&!G._cineHold&&!G.paused&&!G.awaitKickoff&&
        G.kickoffUntil&&Date.now()-G.kickoffUntil>2500){
       console.warn('stranded idle watchdog — resuming play');
       G.kickoffUntil=Date.now()+400;

@@ -61,6 +61,7 @@
       return 'classic';
     })(),
     spriteScale:1.9,     // (legacy) billboard height vs engine token radius CR
+    spriteY:-0.35,       // vertical plant offset (negative sinks feet into pitch for low-angle cam)
     spriteFrac:0.045,    // billboard height as fraction of world pitch LENGTH (HD-2D)
     // ---- LIGHTING / SHADOWS (Camera Lab → LIGHTING) ----
     light:{ azim:3.14,    // sun NORTH → shadows cast SOUTH (+Z). Sun angle slider rotates this.
@@ -293,7 +294,7 @@
       const EX0=0.07,EX1=0.93,EY0=0.01,EY1=0.99;
       const u=ex=>((ex-EX0)/(EX1-EX0))*cw, v=ey=>((ey-EY0)/(EY1-EY0))*ch;
       // 1) mow stripes — 14 bands, light/dark
-      const NB=14, bw=cw/NB, LIGHT=[76,142,60], DARK=[62,124,50];
+      const NB=14, bw=cw/NB, LIGHT=[76,142,60], DARK=[48,102,40];
       for(let i=0;i<NB;i++){ const col=(i%2)?DARK:LIGHT;
         x.fillStyle='rgb('+col[0]+','+col[1]+','+col[2]+')'; x.fillRect(Math.round(i*bw),0,Math.ceil(bw)+1,ch); }
       // 2) pixel grain — 2-texel cells, plus a cross-mow checker and worn patches
@@ -1461,7 +1462,7 @@
           const padB=an?an.padB:0, acx=an?(st.flip?1-an.cx:an.cx):0.5;
           o.sprite.center.set(acx,padB);
           o.sprite.scale.set(wWorld, hWorld, 1);
-          o.sprite.position.set(wx,0.05,wz);
+          o.sprite.position.set(wx,0.05+(P3D.spriteY||0),wz);
           // ---- shadows ----
           const Lt=P3D.light, az=Lt.azim, el=Math.max(0.05,Math.min(1,Lt.elev));
           const cdx=-Math.sin(az), cdz=-Math.cos(az);        // cast direction (away from sun)
