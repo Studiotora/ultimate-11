@@ -4407,7 +4407,7 @@ function _ensureBusts(){
     const img=document.createElement('div');
     img.className='bust-img';
     img.style.cssText='position:absolute;left:0;right:0;top:0;bottom:0;'+
-      'background:no-repeat center 26%/190% auto;'+
+      'background:no-repeat center 4%/230% auto;'+
       'filter:drop-shadow(0 4px 10px rgba(0,0,0,.65));';
     w.appendChild(img);
     vp.appendChild(w);
@@ -6239,9 +6239,11 @@ function flashControlSwitch(side,k){
 }
 function updP(){
   const iH=G.poss==='h';
-  document.getElementById('pdot').style.background=iH?'var(--blue)':'var(--red)';
+  const _pd=document.getElementById('pdot');
+  if(_pd)_pd.style.background=iH?'var(--blue)':'var(--red)';
   const t=iH?HT:AT;const c=sq(G.poss)[G.ck];
-  document.getElementById('pname').textContent=(t?t.name.toUpperCase():'—')+' POSSESSION'+(c?' · '+c.name:'');
+  const _pn=document.getElementById('pname');
+  if(_pn)_pn.textContent=(t?t.name.toUpperCase():'—')+' POSSESSION'+(c?' · '+c.name:'');
   const shotBtn=document.getElementById('fieldShotBtn');
   const pressBtn=document.getElementById('pressBtn');
   if(shotBtn){
