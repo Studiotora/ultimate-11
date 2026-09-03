@@ -4408,11 +4408,11 @@ function _ensureBusts(){
     const w=document.createElement('div');
     w.id='bust-'+side;
     w.style.cssText='position:absolute;bottom:26px;'+(right?'right:18px;':'left:18px;')+
-      'width:200px;height:250px;z-index:5;pointer-events:none;display:none;';
+      'width:200px;height:188px;z-index:5;pointer-events:none;display:none;overflow:hidden;';
     const img=document.createElement('div');
     img.className='bust-img';
     img.style.cssText='position:absolute;left:0;right:0;top:0;bottom:24px;'+
-      'background:no-repeat center bottom/contain;'+
+      'background:no-repeat center top/100% auto;'+
       'filter:drop-shadow(0 4px 10px rgba(0,0,0,.65));';
     const col=side==='h'?'#1e72dc':'#c22020';
     const plate=document.createElement('div');

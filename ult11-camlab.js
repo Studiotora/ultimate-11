@@ -197,8 +197,8 @@
     panel.appendChild(row('Key light',  0,3,0.05,    ()=>L.key,       v=>{L.key=v; al();}));
     panel.appendChild(row('Ambient',    0,2,0.05,    ()=>L.ambient,   v=>{L.ambient=v; al();}));
     panel.appendChild(row('Warmth',     0,1,0.01,    ()=>L.warmth,    v=>{L.warmth=v; al();}));
-    panel.appendChild(row('Shadow',     0,0.9,0.01,  ()=>L.shadow,    v=>{L.shadow=v;}));
-    panel.appendChild(row('Shadow len', 0,2,0.05,    ()=>L.shadowLen, v=>{L.shadowLen=v;}));
+    panel.appendChild(row('Shadow',     0,0.9,0.01,  ()=>L.shadow,    v=>{L.shadow=v; al();}));
+    panel.appendChild(row('Shadow len', 0,2,0.05,    ()=>L.shadowLen, v=>{L.shadowLen=v; al();}));
     panel.appendChild(row('Sun glow',   0,1,0.01,    ()=>L.glow,      v=>{L.glow=v; al();}));
     panel.appendChild(row('Stand shade',0,1,0.01,    ()=>L.shade,     v=>{L.shade=v; al();}));
 
@@ -215,6 +215,10 @@
     panel.appendChild(row('God rays',   0,1.5,0.01,  ()=>F.rays,        v=>{F.rays=v; af();}));
     panel.appendChild(row('Ray reach',  0.8,0.99,0.005,()=>F.rayDecay,  v=>{F.rayDecay=v; af();}));
     panel.appendChild(row('Ray quality',16,120,2,    ()=>F.raySamples,  v=>{F.raySamples=v; af();}));
+    panel.appendChild(row('Saturation', 0,2,0.01,    ()=>F.sat,         v=>{F.sat=v; af();}));
+    panel.appendChild(row('Contrast',   0.5,2,0.01,  ()=>F.contrast,    v=>{F.contrast=v; af();}));
+    panel.appendChild(row('Lift',      -0.3,0.3,0.01,()=>F.lift,        v=>{F.lift=v; af();}));
+    panel.appendChild(row('Split tone', 0,1,0.01,    ()=>F.split,       v=>{F.split=v; af();}));
 
     panel.appendChild(section('DEBUG'));
     const dg=document.createElement('div'); dg.style.cssText='display:flex;flex-wrap:wrap';

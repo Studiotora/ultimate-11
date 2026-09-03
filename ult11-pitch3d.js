@@ -194,6 +194,7 @@
           const m=o.material; if(!m) return;
           (Array.isArray(m)?m:[m]).forEach(mm=>{
             if(mm&&mm.userData&&mm.userData.isStand&&mm.color) mm.color.setScalar(sh);
+            if(mm&&mm.userData&&mm.userData.isShadow) mm.opacity=Lt.shadow;
           });
         });
       }catch(e){}
@@ -1344,12 +1345,14 @@
       // soft round CONTACT shadow under the feet
       const sh=new T.Mesh(new T.PlaneGeometry(1,1),
         new T.MeshBasicMaterial({map:SHADOW_TEX,transparent:true,opacity:P3D.light.shadow,depthWrite:false}));
+      sh.material.userData.isShadow=true;
       sh.rotation.x=-Math.PI/2; sh.position.y=0.04; sh.renderOrder=2; scene.add(sh);
       // SILHOUETTE cast shadow — same sprite texture, tinted black, laid flat &
       // stretched away from the sun (real shape, since the sprite is transparent).
       const sil=new T.Mesh(new T.PlaneGeometry(1,1),
         new T.MeshBasicMaterial({map:tex,color:0x000000,transparent:true,alphaTest:0.5,
                                  opacity:P3D.light.shadow,depthWrite:false}));
+      sil.material.userData.isShadow=true;
       sil.renderOrder=2; scene.add(sil);
       return sprites[id]={sprite:sp,shadow:sh,sil,tex,_sheetImg:sheet.img,_L:(sheet.L||GRID)};
     }
