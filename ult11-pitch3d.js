@@ -70,6 +70,7 @@
             ambient:0.55, // hemisphere ambient intensity
             warmth:0.55,  // 0 cool → 1 warm (tints fog, key light, glow)
             shadow:0.40,  // player shadow opacity
+            shade:0.45,   // stand/crowd darkening 0=bright .. 1=black (Stand shade slider)
             shadowLen:1.0,// player shadow stretch (with elev)
             castSil:true, // stretched silhouette cast shadow — P3D.light.castSil=false to kill
             glow:0.45 },  // warm sun-pool intensity on the pitch (0 = off)
@@ -186,6 +187,16 @@
       const fogCol=new T.Color().copy(warmColor(Lt.warmth)).multiplyScalar(0.5);
       if(scene.fog) scene.fog.color.copy(fogCol);
       if(typeof updatePitchGlow==='function') updatePitchGlow();
+      // live stand darkening (Stand shade slider)
+      try{
+        const sh=Math.max(0.05,1-(Lt.shade!=null?Lt.shade:0.45));
+        scene.traverse(o=>{
+          const m=o.material; if(!m) return;
+          (Array.isArray(m)?m:[m]).forEach(mm=>{
+            if(mm&&mm.userData&&mm.userData.isStand&&mm.color) mm.color.setScalar(sh);
+          });
+        });
+      }catch(e){}
     }
     P3D._applyLight=applyLight;     // Camera Lab calls this when light sliders change
     let updatePitchGlow=null;       // defined once pitchGlow exists (after pitch build)
@@ -295,7 +306,7 @@
       const EX0=0.07,EX1=0.93,EY0=0.01,EY1=0.99;
       const u=ex=>((ex-EX0)/(EX1-EX0))*cw, v=ey=>((ey-EY0)/(EY1-EY0))*ch;
       // 1) mow stripes — 14 bands, light/dark
-      const NB=14, bw=cw/NB, LIGHT=[76,142,60], DARK=[48,102,40];
+      const NB=14, bw=cw/NB, LIGHT=[62,120,52], DARK=[42,92,38];
       for(let i=0;i<NB;i++){ const col=(i%2)?DARK:LIGHT;
         x.fillStyle='rgb('+col[0]+','+col[1]+','+col[2]+')'; x.fillRect(Math.round(i*bw),0,Math.ceil(bw)+1,ch); }
       // 2) pixel grain — 2-texel cells, plus a cross-mow checker and worn patches
@@ -554,7 +565,11 @@
       let m=tex;
       if(!m || m.image===undefined || (m.image&&m.image.width===0)) m=crowdTex;
       if(m===crowdTex){ m=m.clone(); m.wrapS=m.wrapT=T.RepeatWrapping; m.needsUpdate=true; }
-      return new T.MeshBasicMaterial({map:m, color:0xffffff, side:T.DoubleSide});
+      const sh=1-(P3D.light.shade!=null?P3D.light.shade:0.45);
+      const m2=new T.MeshBasicMaterial({map:m, color:0xffffff, side:T.DoubleSide});
+      m2.color.setScalar(Math.max(0.05,sh));
+      m2.userData.isStand=true;
+      return m2;
     }
     function buildTierSegmented(ihl,ihw,r, yB,yT, out, opts){
       const grp=new T.Group(); const {backMat,texFor,openFront,sharp}=opts;
