@@ -1340,7 +1340,7 @@
       L=L||GRID;
       const now=performance.now();
       const prev=stt[id]||{rx:p.x,ry:p.y,face:'side',flip:false,moveT:-1e9,
-                           spd:0,lx:p.x,ly:p.y,lt:now,phase:Math.random()*1000};
+                           spd:0,lx:p.x,ly:p.y,lt:now,phase:Math.random()*1000,aph:Math.random()*100,apt:now};
       // smoothed speed drives run cadence (jog vs sprint)
       const dtS=Math.max(1,now-(prev.lt||now))/1000;
       const inst=Math.hypot(p.x-(prev.lx==null?p.x:prev.lx),p.y-(prev.ly==null?p.y:prev.ly))/dtS;
@@ -1366,7 +1366,7 @@
         }
         moveT=now; rx=p.x; ry=p.y;
       }
-      stt[id]={rx,ry,face,flip,moveT,spd:prev.spd,lx:prev.lx,ly:prev.ly,lt:prev.lt,phase:prev.phase};
+      stt[id]={rx,ry,face,flip,moveT,spd:prev.spd,lx:prev.lx,ly:prev.ly,lt:prev.lt,phase:prev.phase,aph:prev.aph,apt:prev.apt};
       if(L.rowFor&&face!=='side') flip=false;   // dedicated front/back rows are never mirrored
       const band=ROW[face]||ROW.side;
       // one-shot pass/shoot animation override (action band, same facing) —
@@ -1387,8 +1387,12 @@
         const A=P3D.anim||ANIM;
         const fps=(A.runFpsMin+(A.runFpsMax-A.runFpsMin)*t)*(L.fpsScale||1);
         const R=L.run;
-        const cc=cellOf(L,face,'run',Math.floor(now/1000*fps)%R[1]); return {row:cc.row, col:cc.col, flip};
+        // accumulate phase by fps*dt so a changing fps never warps the cycle
+        const adt=Math.max(0,Math.min(0.1,(now-(prev.apt||now))/1000));
+        stt[id].aph=(prev.aph||0)+fps*adt; stt[id].apt=now;
+        const cc=cellOf(L,face,'run',Math.floor(stt[id].aph)%R[1]); return {row:cc.row, col:cc.col, flip};
       }
+      stt[id].apt=now;
       const I=L.idle;
       if(I[1]>1){   // multi-frame idle, phase-offset per player so nobody syncs
         const fi=Math.floor((now+prev.phase*370)/1000*((P3D.anim&&P3D.anim.idleFps)||L.idleFps||ANIM.idleFps))%I[1];
