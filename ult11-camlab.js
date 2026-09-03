@@ -176,6 +176,20 @@
     panel.appendChild(row('Sprite size', 0.02,0.10,0.001, ()=>P3D.spriteFrac, v=>P3D.spriteFrac=v));
     panel.appendChild(row('Sprite Y', -1.0,0.3,0.01, ()=>P3D.spriteY, v=>P3D.spriteY=v));
 
+    panel.appendChild(section('CONTROLS — ANALOG STICK'));
+    const CT=(window.UECTRL||{joy:{},pad:{}}), J=CT.joy, PD=CT.pad;
+    const ac=()=>{ if(window.applyCtrlLayout) applyCtrlLayout(); };
+    panel.appendChild(row('Stick opacity', 0.1,1,0.01, ()=>J.op,   v=>{J.op=v;   ac();}));
+    panel.appendChild(row('Stick size',    0.5,2,0.01, ()=>J.size, v=>{J.size=v; ac();}));
+    panel.appendChild(row('Stick X',      -200,200,1,  ()=>J.dx,   v=>{J.dx=v;   ac();}));
+    panel.appendChild(row('Stick Y',      -200,200,1,  ()=>J.dy,   v=>{J.dy=v;   ac();}));
+
+    panel.appendChild(section('CONTROLS — FACE BUTTONS'));
+    panel.appendChild(row('Pad opacity', 0.1,1,0.01, ()=>PD.op,   v=>{PD.op=v;   ac();}));
+    panel.appendChild(row('Pad size',    0.5,2,0.01, ()=>PD.size, v=>{PD.size=v; ac();}));
+    panel.appendChild(row('Pad X',      -200,200,1,  ()=>PD.dx,   v=>{PD.dx=v;   ac();}));
+    panel.appendChild(row('Pad Y',      -200,200,1,  ()=>PD.dy,   v=>{PD.dy=v;   ac();}));
+
     panel.appendChild(section('LIGHTING'));
     const L=P3D.light, al=()=>{ if(P3D._applyLight) P3D._applyLight(); };
     panel.appendChild(row('Sun angle',  0,6.28,0.01, ()=>L.azim,      v=>{L.azim=v; al();}));
@@ -231,6 +245,7 @@
       +'background:#1f9d63;border:0;border-radius:7px;padding:8px;cursor:pointer';
     save.onclick=()=>{
       const ok=window.P3D && P3D.saveCam && P3D.saveCam();
+      try{ if(window.saveCtrlLayout) saveCtrlLayout(); }catch(e){}
       save.textContent=ok?'✓ SAVED':'✗ SAVE FAILED';
       setTimeout(()=>save.textContent='💾 SAVE SETTINGS',1400);
     };

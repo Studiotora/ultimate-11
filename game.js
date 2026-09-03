@@ -3354,6 +3354,40 @@ window.addEventListener('keyup',e=>{
 window.addEventListener('blur',()=>{for(const k in G_keys)G_keys[k]=false;_recomputeInputFromKeys();});
 
 // ── Virtual joystick (touch) ─────────────────────────────────────
+/* ══════ ON-SCREEN CONTROL LAYOUT (Camera Lab → CONTROLS) ══════
+   Joystick and the 4 face buttons are tuned INDEPENDENTLY.
+   op   = opacity 0..1
+   size = scale multiplier (1 = stock)
+   dx   = shift right (+) / left (-) in px
+   dy   = shift up (+) / down (-) in px
+   Persisted in localStorage('ue_ctrl'). */
+window.UECTRL = window.UECTRL || {
+  joy:{ op:1.00, size:1.00, dx:0, dy:0 },
+  pad:{ op:0.82, size:1.00, dx:0, dy:0 }
+};
+try{ const s=JSON.parse(localStorage.getItem('ue_ctrl')||'null');
+  if(s){ if(s.joy)Object.assign(UECTRL.joy,s.joy); if(s.pad)Object.assign(UECTRL.pad,s.pad); } }catch(e){}
+window.applyCtrlLayout=function(){
+  const J=UECTRL.joy, P=UECTRL.pad;
+  if(G_joyEl){
+    const px=Math.round(130*(J.size||1));
+    G_joyEl.style.width=px+'px'; G_joyEl.style.height=px+'px';
+    const kb=Math.round(56*(J.size||1));
+    if(G_joyKnob){ G_joyKnob.style.width=kb+'px'; G_joyKnob.style.height=kb+'px'; }
+    G_joyEl.style.opacity=(J.op==null?1:J.op);
+    G_joyEl.style.transform='translate('+(J.dx||0)+'px,'+(-(J.dy||0))+'px)';
+  }
+  if(G_dpadEl){
+    G_dpadEl.style.opacity=(P.op==null?0.82:P.op);
+    G_dpadEl.style.transformOrigin='bottom right';
+    G_dpadEl.style.transform='translate('+(P.dx||0)+'px,'+(-(P.dy||0))+'px) scale('+(P.size||1)+')';
+  }
+};
+window.saveCtrlLayout=function(){
+  try{ localStorage.setItem('ue_ctrl',JSON.stringify(UECTRL)); return true; }
+  catch(e){ console.warn('[CTRL] save failed',e); return false; }
+};
+
 let G_joyActive=false, G_joyEl=null, G_joyKnob=null;
 function _buildJoystick(){
   if(G_joyEl)return;
@@ -3377,15 +3411,16 @@ function _buildJoystick(){
   base.appendChild(knob);
   document.body.appendChild(base);
   G_joyEl=base;G_joyKnob=knob;
-  const R=50;
+  // clamp radius tracks the real rendered size (base can be resized in Camera Lab)
+  const R=()=>{ const w=base.getBoundingClientRect().width||130; return (w*0.3846)||50; };
   let touchId=null;
   const setKnob=(dx,dy)=>{
-    const len=Math.hypot(dx,dy);
+    const r=R(), len=Math.hypot(dx,dy);
     let kx=dx,ky=dy;
-    if(len>R){kx=dx/len*R;ky=dy/len*R;}
+    if(len>r){kx=dx/len*r;ky=dy/len*r;}
     knob.style.left=`calc(50% + ${kx}px)`;
     knob.style.top=`calc(50% + ${ky}px)`;
-    G_inputVec.x=kx/R;G_inputVec.y=ky/R;
+    G_inputVec.x=kx/r;G_inputVec.y=ky/r;
   };
   const reset=()=>{
     knob.style.left='50%';knob.style.top='50%';
@@ -3412,6 +3447,7 @@ function _buildJoystick(){
   const end=e=>{for(const t of e.changedTouches){if(t.identifier===touchId){reset();return;}}};
   base.addEventListener('touchend',end);
   base.addEventListener('touchcancel',end);
+  try{ applyCtrlLayout(); }catch(e){}
 }
 function _updateJoystickVisibility(){
   if(!G_joyEl)return;
@@ -3456,6 +3492,7 @@ function _buildDpad(){
   xb.addEventListener('touchstart',on,{passive:false});
   xb.addEventListener('touchend',off);xb.addEventListener('touchcancel',off);
   xb.addEventListener('mousedown',on);xb.addEventListener('mouseup',off);xb.addEventListener('mouseleave',off);
+  try{ applyCtrlLayout(); }catch(e){}
 }
 function _updateDpad(show){
   if(!G_dpadEl){if(show)_buildDpad();if(!G_dpadEl)return;}
