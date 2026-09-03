@@ -3540,6 +3540,11 @@ function _updateDpad(show){
 // ── FIELD HUD CHIPS — controlled player + opponent (bottom-left) ──
 let _hudKeys='';
 function _updateHudChips(){
+  const old=document.getElementById('hud-chips');
+  if(old)old.style.display='none';
+  return;
+}
+function _updateHudChipsLegacy(){
   const vp=document.getElementById('viewport');if(!vp)return;
   let wrap=document.getElementById('hud-chips');
   if(!wrap){
@@ -4406,10 +4411,21 @@ function _ensureBusts(){
       'width:200px;height:250px;z-index:5;pointer-events:none;display:none;';
     const img=document.createElement('div');
     img.className='bust-img';
-    img.style.cssText='position:absolute;left:0;right:0;top:0;bottom:0;'+
-      'background:no-repeat center 4%/230% auto;'+
+    img.style.cssText='position:absolute;left:0;right:0;top:0;bottom:24px;'+
+      'background:no-repeat center bottom/contain;'+
       'filter:drop-shadow(0 4px 10px rgba(0,0,0,.65));';
-    w.appendChild(img);
+    const col=side==='h'?'#1e72dc':'#c22020';
+    const plate=document.createElement('div');
+    plate.className='bust-plate';
+    plate.style.cssText='position:absolute;left:0;right:0;bottom:0;height:24px;display:flex;align-items:center;'+
+      (right?'flex-direction:row-reverse;':'')+
+      'background:linear-gradient('+(right?'270deg':'90deg')+','+col+'ee,rgba(10,14,24,.88));'+
+      'border-radius:3px;font-family:Rajdhani,system-ui;color:#fff;';
+    plate.innerHTML=
+      '<span class="b-num" style="font-weight:700;font-size:14px;min-width:26px;align-self:stretch;display:flex;align-items:center;justify-content:center;background:rgba(0,0,0,.35)"></span>'+
+      '<span class="b-name" style="font-weight:700;font-size:13px;letter-spacing:.06em;flex:1;padding:0 7px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;'+(right?'text-align:right;':'')+'"></span>'+
+      '<span class="b-pos" style="font-weight:700;font-size:11px;opacity:.9;padding:0 8px"></span>';
+    w.appendChild(img);w.appendChild(plate);
     vp.appendChild(w);
     return w;
   };
@@ -4438,6 +4454,10 @@ function updBusts(){
     const sig=side+':'+k+':'+(pl.name||'');
     if(_bustKey[side]===sig)return;
     _bustKey[side]=sig;
+    el.querySelector('.b-num').textContent=pl.jersey!=null?pl.jersey:'';
+    el.querySelector('.b-name').textContent=playerSurname(pl.name).toUpperCase();
+    let posTxt=pl.pos||'';try{posTxt=displayPosLabel(k)||posTxt;}catch(e){}
+    el.querySelector('.b-pos').textContent=posTxt;
     const imgEl=el.querySelector('.bust-img');
     const chain=_portraitChainFor(pl,side);
     let i=0;const t=new Image();
