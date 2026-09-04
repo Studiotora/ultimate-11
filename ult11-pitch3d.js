@@ -92,7 +92,7 @@
     // ---- GFX UPGRADE PACK ----
     pixelPitch:true,     // procedural pixel-art turf instead of assets/stadium/pitch.png
     pitchPx:768,         // turf texture width in texels (lower = chunkier pixels)
-    gfx:{ sky:true, masts:true, lamps:true, boards:true, flags:true, flashes:true },
+    gfx:{ sky:true, masts:true, lamps:true, boards:true, flags:true, flashes:true, floods:true },
     // super-shot cinematic camera (console-tunable): hold = charging aura, chase = ball flight
     cine:{ holdDist:9.6, holdHeight:1.55, holdSide:1.1, holdLookAhead:20, holdLookY:1.25,
            chaseDist:7.5, chaseHeight:2.4, chaseLookY:1.0 },
@@ -894,6 +894,25 @@
           '  float k=smoothstep(0.5,0.05,r); gl_FragColor=vec4(vec3(1.0,0.97,0.9)*k*vA*1.6,k*vA); }'].join('\n')});
       flashPts=new T.Points(g,m); flashPts.frustumCulled=false; scene.add(flashPts);
     }
+    /* floodlight bank — mounted on the tier-1 / tier-2 riser, aimed at the
+       pitch. Returns [housing group, halo sprite]; caller adds both. */
+    function floodBank(x,y,z,s){
+      s=s||1;
+      const g=new T.Group(); g.position.set(x,y,z); g.lookAt(0,y*0.3,0);
+      const hMat=new T.MeshLambertMaterial({color:'#171d28'});
+      const lMat=new T.MeshBasicMaterial({color:'#fff8e4',fog:false});
+      g.add(new T.Mesh(new T.BoxGeometry(3.0*s,0.85*s,0.42*s),hMat));
+      for(let i=0;i<4;i++){
+        const l=new T.Mesh(new T.BoxGeometry(0.58*s,0.58*s,0.2*s),lMat);
+        l.position.set((-1.05+i*0.7)*s,0,-0.28*s); g.add(l);
+      }
+      const post=new T.Mesh(new T.BoxGeometry(0.26*s,1.7*s,0.26*s),hMat);
+      post.position.set(0,-1.15*s,0); g.add(post);
+      const halo=new T.Sprite(new T.SpriteMaterial({map:haloTex(),color:'#ffeec6',
+        transparent:true,opacity:0.5,depthWrite:false,blending:T.AdditiveBlending,fog:false}));
+      halo.position.set(x,y,z); halo.scale.set(9*s,9*s,1);
+      return [g,halo];
+    }
     /* masts, roof lamps, flash spots — rebuilt whenever the bowl is */
     function buildExtras(){
       buildSky();
@@ -939,6 +958,16 @@
             const h2=new T.Sprite(haloM.clone()); h2.material.opacity=0.22; h2.position.set(x,top,z); h2.scale.set(34,34,1); extrasGroup.add(h2);
           });
         }
+        if(gfxOn('floods') && B.tiers.length>=2){
+          const t0=B.tiers[0], fy=t0.yT+th*0.18, s=th*0.15;
+          const fhl=t0.ihl+out*0.92, fhw=t0.ihw+out*0.92;
+          const put=(x,z)=>{ const [g,h]=floodBank(x,fy,z,s);
+                             extrasGroup.add(g); extrasGroup.add(h); };
+          for(let i=0;i<7;i++) put(-fhl*0.82+(i/6)*fhl*1.64, -fhw);
+          for(let i=0;i<4;i++){ const zz=-fhw*0.72+(i/3)*fhw*1.44;
+                                put(-fhl,zz); put(fhl,zz); }
+          if(!of) for(let i=0;i<7;i++) put(-fhl*0.82+(i/6)*fhl*1.64, fhw);
+        }
       } else if(B.type==='oval' && window.U11_OVAL && window.U11_OVAL._last){
         const O=window.U11_OVAL._last, TAU=Math.PI*2;
         const inCut=th=>{ if(!O.openF) return false; th=((th%TAU)+TAU)%TAU; return th>O.CUT0&&th<O.CUT1; };
@@ -950,6 +979,16 @@
             spots.push([rx*Math.cos(th), t.y+fr*(t.yTop-t.y)+0.5, rz*Math.sin(th)]);
           }
         });
+        if(gfxOn('floods') && O.TIERS.length>=2){
+          const t0=O.TIERS[0];
+          const fy=(t0.yOut!=null?t0.yOut:t0.yTop)+ (t0.yTop-t0.y)*0.18;
+          const s=(t0.yTop-t0.y)*0.16, N=18;
+          for(let i=0;i<N;i++){
+            const a=(i/N)*TAU; if(inCut(a)) continue;
+            extrasGroup.add(...floodBank(t0.rxTop*Math.cos(a), fy,
+                                         t0.rzTop*Math.sin(a), s));
+          }
+        }
       }
       buildFlashes(spots);
       buildBoards(); placeCornerFlags();
