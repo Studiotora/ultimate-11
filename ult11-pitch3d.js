@@ -898,19 +898,21 @@
        pitch. Returns [housing group, halo sprite]; caller adds both. */
     function floodBank(x,y,z,s){
       s=s||1;
-      const g=new T.Group(); g.position.set(x,y,z); g.lookAt(0,y*0.3,0);
+      const g=new T.Group(); g.position.set(x,y,z); g.lookAt(0,0,0);
       const hMat=new T.MeshLambertMaterial({color:'#171d28'});
       const lMat=new T.MeshBasicMaterial({color:'#fff8e4',fog:false});
       g.add(new T.Mesh(new T.BoxGeometry(3.0*s,0.85*s,0.42*s),hMat));
       for(let i=0;i<4;i++){
         const l=new T.Mesh(new T.BoxGeometry(0.58*s,0.58*s,0.2*s),lMat);
-        l.position.set((-1.05+i*0.7)*s,0,-0.28*s); g.add(l);
+        l.position.set((-1.05+i*0.7)*s,0,0.28*s); g.add(l);
       }
       const post=new T.Mesh(new T.BoxGeometry(0.26*s,1.7*s,0.26*s),hMat);
       post.position.set(0,-1.15*s,0); g.add(post);
       const halo=new T.Sprite(new T.SpriteMaterial({map:haloTex(),color:'#ffeec6',
         transparent:true,opacity:0.5,depthWrite:false,blending:T.AdditiveBlending,fog:false}));
-      halo.position.set(x,y,z); halo.scale.set(9*s,9*s,1);
+      const d=Math.hypot(x,z)||1;
+      halo.position.set(x-(x/d)*0.9*s, y, z-(z/d)*0.9*s);
+      halo.scale.set(7*s,7*s,1);
       return [g,halo];
     }
     /* masts, roof lamps, flash spots — rebuilt whenever the bowl is */
@@ -959,8 +961,8 @@
           });
         }
         if(gfxOn('floods') && B.tiers.length>=2){
-          const t0=B.tiers[0], fy=t0.yT+th*0.18, s=th*0.15;
-          const fhl=t0.ihl+out*0.92, fhw=t0.ihw+out*0.92;
+          const t0=B.tiers[0], fy=t0.yT-th*0.06, s=th*0.13;
+          const fhl=t0.ihl+out*0.55, fhw=t0.ihw+out*0.55;
           const put=(x,z)=>{ const [g,h]=floodBank(x,fy,z,s);
                              extrasGroup.add(g); extrasGroup.add(h); };
           for(let i=0;i<7;i++) put(-fhl*0.82+(i/6)*fhl*1.64, -fhw);
@@ -981,12 +983,12 @@
         });
         if(gfxOn('floods') && O.TIERS.length>=2){
           const t0=O.TIERS[0];
-          const fy=(t0.yOut!=null?t0.yOut:t0.yTop)+ (t0.yTop-t0.y)*0.18;
-          const s=(t0.yTop-t0.y)*0.16, N=18;
+          const fy=t0.yTop-(t0.yTop-t0.y)*0.06;
+          const s=(t0.yTop-t0.y)*0.14, N=18;
           for(let i=0;i<N;i++){
             const a=(i/N)*TAU; if(inCut(a)) continue;
-            extrasGroup.add(...floodBank(t0.rxTop*Math.cos(a), fy,
-                                         t0.rzTop*Math.sin(a), s));
+            extrasGroup.add(...floodBank(t0.rxTop*0.96*Math.cos(a), fy,
+                                         t0.rzTop*0.96*Math.sin(a), s));
           }
         }
       }
