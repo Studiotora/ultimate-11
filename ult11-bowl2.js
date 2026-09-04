@@ -109,8 +109,8 @@ function build(T,group,PLEN,PWID){
   function addRS(rx1,rz1,y1,rx2,rz2,y2,seg,mat,repU){
     arcs().forEach(function(A){
       var frac=(A[1]-A[0])/TAU;
-      addRS(rx1,rz1,y1,rx2,rz2,y2,
-        Math.max(8,Math.round(seg*frac)),mat,(repU||10)*frac,A[0],A[1]);
+      group.add(ringStrip(T,rx1,rz1,y1,rx2,rz2,y2,
+        Math.max(8,Math.round(seg*frac)),mat,(repU||10)*frac,A[0],A[1]));
     });
   }
   var seed=12345;
@@ -294,7 +294,10 @@ function build(T,group,PLEN,PWID){
   torso.frustumCulled=false; heads.frustumCulled=false;
   group.add(torso); group.add(heads);
 
-  return {seats:SEAT_COUNT,bodies:occ.length};
+  var info={seats:SEAT_COUNT,bodies:occ.length,TIERS:TIERS,
+            openF:openF,CUT0:CUT0,CUT1:CUT1,R:R,k:k,SPX:SPX,SPZ:SPZ};
+  window.U11_OVAL._last=info;
+  return info;
 }
 
 window.U11_OVAL={build:build,CFG:CFG};
