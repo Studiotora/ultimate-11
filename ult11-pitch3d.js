@@ -1093,16 +1093,29 @@
       const panels=[
         {bg:hc,fg:'#ffffff',txt:hn.toUpperCase()},   {bg:'#0b0e16',fg:'#ffd24a',txt:'ULTIMATE ELEVEN'},
         {bg:ac,fg:'#ffffff',txt:an.toUpperCase()},   {bg:'#101826',fg:'#7fd7ff',txt:'\u26A1 SUPER SHOT'},
-        {bg:hc,fg:'#ffffff',txt:hn.toUpperCase()},   {bg:'#0b0e16',fg:'#ffd24a',txt:'ULTIMATE ELEVEN'},
-        {bg:ac,fg:'#ffffff',txt:an.toUpperCase()},   {bg:'#16121e',fg:'#ff8ad0',txt:'HD-2D ARENA'}];
+        {bg:hc,fg:'#ffffff',crest:'h',txt:hn.toUpperCase(),
+         emoji:(flagData&&flagData.homeFlag)||''},   {bg:'#0b0e16',fg:'#ffd24a',txt:'ULTIMATE ELEVEN'},
+        {bg:ac,fg:'#ffffff',crest:'a',txt:an.toUpperCase(),
+         emoji:(flagData&&flagData.awayFlag)||''},   {bg:'#101826',fg:'#7fd7ff',txt:'\u26A1 SUPER SHOT'}];
       const pw=c.width/panels.length;
       x.textAlign='center'; x.textBaseline='middle';
       panels.forEach((p,i)=>{
         x.fillStyle=p.bg; x.fillRect(i*pw,0,pw,128);
         const g=x.createLinearGradient(0,0,0,128); g.addColorStop(0,'rgba(255,255,255,0.22)'); g.addColorStop(0.5,'rgba(255,255,255,0)'); g.addColorStop(1,'rgba(0,0,0,0.35)');
         x.fillStyle=g; x.fillRect(i*pw,0,pw,128);
-        x.font='bold 64px "Bebas Neue",Impact,sans-serif'; x.fillStyle=p.fg;
-        x.shadowColor=p.fg; x.shadowBlur=16; x.fillText(p.txt,i*pw+pw/2,66,pw-30); x.shadowBlur=0;
+        const im=p.crest?_crestImg[p.crest]:null;
+        if(p.crest && im){
+          const sc=Math.min((pw-40)/im.width, 100/im.height);
+          const w=im.width*sc, h=im.height*sc;
+          x.drawImage(im, i*pw+(pw-w)/2, (128-h)/2, w, h);
+        } else if(p.crest && p.emoji){
+          x.font='84px serif';
+          x.shadowColor='rgba(0,0,0,.6)'; x.shadowBlur=10;
+          x.fillText(p.emoji, i*pw+pw/2, 68); x.shadowBlur=0;
+        } else {
+          x.font='bold 64px "Bebas Neue",Impact,sans-serif'; x.fillStyle=p.fg;
+          x.shadowColor=p.fg; x.shadowBlur=16; x.fillText(p.txt,i*pw+pw/2,66,pw-30); x.shadowBlur=0;
+        }
         x.fillStyle='rgba(0,0,0,0.55)'; x.fillRect(i*pw-3,0,6,128);
       });
       x.fillStyle='rgba(0,0,0,0.28)';
@@ -1110,7 +1123,18 @@
       for(let xx=0;xx<c.width;xx+=4) x.fillRect(xx,0,1,128);
       const t=new T.CanvasTexture(c); t.wrapS=T.RepeatWrapping; t.wrapT=T.ClampToEdgeWrapping; t.anisotropy=8; return t;
     }
+    let _crestImg={h:null,a:null}, _crestKey=null;
+    function ensureCrests(){
+      if(!flagData) return;
+      const key=(flagData.home||[]).join('|')+'#'+(flagData.away||[]).join('|');
+      if(key===_crestKey) return;
+      _crestKey=key; _crestImg={h:null,a:null};
+      let pend=2; const done=()=>{ if(--pend===0) buildBoards(); };
+      loadFirst(flagData.home,im=>{ _crestImg.h=im; done(); });
+      loadFirst(flagData.away,im=>{ _crestImg.a=im; done(); });
+    }
     function buildBoards(){
+      ensureCrests();
       if(boardGroup){ scene.remove(boardGroup); boardGroup=null; }
       if(!gfxOn('boards')||!_bowlInfo) return;
       let hl,hw,r,y0;
@@ -1394,12 +1418,21 @@
         const cw=c.width/cols, ch=c.height/rows, anchor=new Array(cols*rows);
         for(let r=0;r<rows;r++)for(let q=0;q<cols;q++){
           const x0=Math.floor(q*cw), x1=Math.floor((q+1)*cw), y0=Math.floor(r*ch), y1=Math.floor((r+1)*ch);
-          let minX=1e9,maxX=-1,minY=1e9,maxY=-1;
+          let minX=1e9,maxX=-1,minY=1e9,maxY=-1,tot=0;
+          const colMass=new Int32Array(Math.max(1,x1-x0));
           for(let yy=y0;yy<y1;yy++){ let has=false;
-            for(let xx=x0;xx<x1;xx++){ if(d[(yy*Wc+xx)*4+3]>40){ has=true; if(xx<minX)minX=xx; if(xx>maxX)maxX=xx; } }
+            for(let xx=x0;xx<x1;xx++){ if(d[(yy*Wc+xx)*4+3]>40){ has=true;
+              if(xx<minX)minX=xx; if(xx>maxX)maxX=xx; colMass[xx-x0]++; tot++; } }
             if(has){ if(yy<minY)minY=yy; maxY=yy; } }
+          // Horizontal anchor from the MEDIAN opaque column, not the bounding-box
+          // centre: dust puffs and outflung limbs are light, so they barely move
+          // the median but drag a bbox centre by 15px+ and make the sprite wobble.
+          let med=(minX+maxX)/2;
+          if(tot>0){ let acc=0; const half=tot/2;
+            for(let i=0;i<colMass.length;i++){ acc+=colMass[i];
+              if(acc>=half){ med=x0+i; break; } } }
           anchor[r*cols+q]=(maxX<0)?{cx:0.5,padB:0,h:1}
-            :{cx:((minX+maxX)/2-x0)/cw, padB:(y1-1-maxY)/ch, h:(maxY-minY+1)/ch};
+            :{cx:(med-x0)/cw, padB:(y1-1-maxY)/ch, h:(maxY-minY+1)/ch};
         }
         sheet.anchor=anchor;
         const i0=cellOf(L,'down','idle',0), ref=anchor[i0.row*cols+i0.col];
