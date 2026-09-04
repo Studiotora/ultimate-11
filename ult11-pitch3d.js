@@ -92,7 +92,7 @@
     // ---- GFX UPGRADE PACK ----
     pixelPitch:true,     // procedural pixel-art turf instead of assets/stadium/pitch.png
     pitchPx:768,         // turf texture width in texels (lower = chunkier pixels)
-    gfx:{ sky:true, masts:true, lamps:true, boards:true, flags:true, flashes:true, floods:true },
+    gfx:{ sky:true, masts:true, lamps:true, boards:true, flags:true, flashes:true, floods:true, banners:true },
     // super-shot cinematic camera (console-tunable): hold = charging aura, chase = ball flight
     cine:{ holdDist:9.6, holdHeight:1.55, holdSide:1.1, holdLookAhead:20, holdLookY:1.25,
            chaseDist:7.5, chaseHeight:2.4, chaseLookY:1.0 },
@@ -894,6 +894,95 @@
           '  float k=smoothstep(0.5,0.05,r); gl_FragColor=vec4(vec3(1.0,0.97,0.9)*k*vA*1.6,k*vA); }'].join('\n')});
       flashPts=new T.Points(g,m); flashPts.frustumCulled=false; scene.add(flashPts);
     }
+    /* ── STATIC BRAND BANNERS (tiers 2 & 3) ──────────────────────
+       Canvas-drawn fictional brands, no PNG assets. Two bands with a
+       different panel order each so the tiling doesn't line up. */
+    let bannerGroup=null;
+    const BRANDS=[
+      {bg:'#b0121a',fg:'#fff4e0',txt:'ROLE COLA'},
+      {bg:'#0d1b3a',fg:'#7fd7ff',txt:'VARDIDAS'},
+      {bg:'#f0a614',fg:'#241a08',txt:'TSUBASA AIR'},
+      {bg:'#12351f',fg:'#e8ffd8',txt:'GENOVA BANCA'},
+      {bg:'#2a1240',fg:'#ffc7f0',txt:'KAMPF ENERGY'},
+      {bg:'#e8e2d6',fg:'#1a1a1a',txt:'PUNA SPORT'},
+      {bg:'#0b0e16',fg:'#ffd24a',txt:'STUDIO TORA'},
+      {bg:'#7a1440',fg:'#ffe9f2',txt:'NIKKO TYRES'}
+    ];
+    function makeBannerTex(shift){
+      const c=document.createElement('canvas'); c.width=2048; c.height=128;
+      const x=c.getContext('2d');
+      const pw=c.width/BRANDS.length;
+      x.textAlign='center'; x.textBaseline='middle';
+      for(let i=0;i<BRANDS.length;i++){
+        const p=BRANDS[(i+(shift||0))%BRANDS.length];
+        x.fillStyle=p.bg; x.fillRect(i*pw,0,pw,128);
+        const g=x.createLinearGradient(0,0,0,128);
+        g.addColorStop(0,'rgba(255,255,255,0.14)');
+        g.addColorStop(0.55,'rgba(0,0,0,0)');
+        g.addColorStop(1,'rgba(0,0,0,0.42)');
+        x.fillStyle=g; x.fillRect(i*pw,0,pw,128);
+        x.font='bold 62px "Bebas Neue",Impact,sans-serif'; x.fillStyle=p.fg;
+        x.fillText(p.txt,i*pw+pw/2,68,pw-40);
+        x.fillStyle='rgba(0,0,0,0.5)'; x.fillRect(i*pw-2,0,4,128);
+      }
+      const t=new T.CanvasTexture(c);
+      t.wrapS=T.RepeatWrapping; t.wrapT=T.ClampToEdgeWrapping; t.anisotropy=8;
+      return t;
+    }
+    /* elliptical band, used for the oval bowl */
+    function ellipseBand(rx,rz,y0,y1,seg,mat,repU,skip){
+      const pos=[],uv=[],idx=[]; const TAU=Math.PI*2;
+      for(let i=0;i<=seg;i++){
+        const a=(i/seg)*TAU, c=Math.cos(a), sn=Math.sin(a);
+        pos.push(rx*c,y0,rz*sn, rx*c,y1,rz*sn);
+        uv.push((i/seg)*repU,0,(i/seg)*repU,1);
+      }
+      for(let i=0;i<seg;i++){
+        const a=((i+0.5)/seg)*TAU;
+        if(skip&&skip(a)) continue;
+        const k=i*2; idx.push(k,k+2,k+1, k+1,k+2,k+3);
+      }
+      const g=new T.BufferGeometry();
+      g.setAttribute('position',new T.Float32BufferAttribute(pos,3));
+      g.setAttribute('uv',new T.Float32BufferAttribute(uv,2));
+      g.setIndex(idx); g.computeVertexNormals();
+      return new T.Mesh(g,mat);
+    }
+    function buildBanners(){
+      if(bannerGroup){ scene.remove(bannerGroup); bannerGroup=null; }
+      if(!gfxOn('banners')||!_bowlInfo) return;
+      bannerGroup=new T.Group(); scene.add(bannerGroup);
+      const B=_bowlInfo;
+      if(B.type==='classic'){
+        const r=B.r, th=B.th, out=B.out, of=B.of;
+        [1,2].forEach((ti,bi)=>{
+          const t=B.tiers[ti]; if(!t) return;
+          const mat=new T.MeshBasicMaterial({map:makeBannerTex(bi*3),side:T.DoubleSide,fog:false});
+          const H=th*0.17, y0=t.yB+th*0.04, o=0.25;
+          const hl=t.ihl, hw=t.ihw;
+          const walls=[[-hl+r,-hw, hl-r,-hw],[hl,-hw+r, hl,hw-r],
+                       [hl-r,hw, -hl+r,hw],[-hl,hw-r, -hl,-hw+r]];
+          walls.forEach(([ax,az,bx,bz],wi)=>{
+            if(of && wi===2) return;
+            const len=Math.hypot(bx-ax,bz-az);
+            const rep=Math.max(1,Math.round(len/(H*10)));
+            const m=buildStraightWall(ax,az,bx,bz, y0,y0+H, o, mat, rep);
+            m.renderOrder=12; bannerGroup.add(m);
+          });
+        });
+      } else if(B.type==='oval' && window.U11_OVAL && window.U11_OVAL._last){
+        const O=window.U11_OVAL._last, TAU=Math.PI*2;
+        const inCut=a=>{ if(!O.openF) return false;
+          a=((a%TAU)+TAU)%TAU; return a>O.CUT0&&a<O.CUT1; };
+        [1,2].forEach((ti,bi)=>{
+          const t=O.TIERS[ti]; if(!t) return;
+          const span=t.yTop-t.y, H=span*0.17, y0=t.y+span*0.04;
+          const mat=new T.MeshBasicMaterial({map:makeBannerTex(bi*3),side:T.DoubleSide,fog:false});
+          const m=ellipseBand(t.rx-0.3,t.rz-0.3, y0,y0+H, 96, mat, 26, inCut);
+          m.renderOrder=12; bannerGroup.add(m);
+        });
+      }
+    }
     /* floodlight bank — mounted on the tier-1 / tier-2 riser, aimed at the
        pitch. Returns [housing group, halo sprite]; caller adds both. */
     function floodBank(x,y,z,s){
@@ -993,7 +1082,7 @@
         }
       }
       buildFlashes(spots);
-      buildBoards(); placeCornerFlags();
+      buildBoards(); placeCornerFlags(); buildBanners();
     }
     /* LED perimeter boards — team panels + branding, scrolling, per-wall repeats */
     function makeBoardTex(){
