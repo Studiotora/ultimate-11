@@ -2094,19 +2094,32 @@ function moveOffBall(s,ds,dt=1){
     cands.slice(0,pressCount).forEach(c=>{ if(c.d<W*0.30) _pressers.add(c.k); });
   }
 
-  // Build marker map — each free defender marks nearest free attacker
+  /* Build marker map — CLOSEST PAIR FIRST, with a range cap.
+     The old loop walked defenders in arbitrary key order and let each claim
+     his nearest still-free attacker. Whoever came first in the object won,
+     so a defender could end up assigned to a man on the far touchline while
+     the defender actually standing next to that man marked someone else.
+     It also had no range limit, so EVERY free defender always got a mark —
+     which meant the zonal line-shape and secondary-press branches below were
+     effectively dead code. */
   const markerMap={};
-  const usedAtk=new Set();
-  Object.keys(sq(ds)).forEach(k=>{
-    if(!sq(ds)[k]||assignedDefs.has(k)||k==='GK'||!PP[ds][k])return;
-    let bestA=null,bestD=Infinity;
-    freeAtk.forEach(ak=>{
-      if(!PP[s][ak]||usedAtk.has(ak))return;
-      const d=dist(PP[ds][k],PP[s][ak]);
-      if(d<bestD){bestD=d;bestA=ak;}
+  {
+    const usedAtk=new Set(), usedDef=new Set(), pairs=[];
+    const MARK_RANGE=W*0.34;
+    Object.keys(sq(ds)).forEach(k=>{
+      if(!sq(ds)[k]||assignedDefs.has(k)||k==='GK'||!PP[ds][k])return;
+      freeAtk.forEach(ak=>{
+        if(!PP[s][ak])return;
+        pairs.push({k,ak,d:dist(PP[ds][k],PP[s][ak])});
+      });
     });
-    if(bestA){markerMap[k]=bestA;usedAtk.add(bestA);}
-  });
+    pairs.sort((a,b)=>a.d-b.d);
+    pairs.forEach(pr=>{
+      if(pr.d>MARK_RANGE)return;
+      if(usedDef.has(pr.k)||usedAtk.has(pr.ak))return;
+      markerMap[pr.k]=pr.ak; usedDef.add(pr.k); usedAtk.add(pr.ak);
+    });
+  }
 
   Object.keys(sq(ds)).forEach(k=>{
     if(!sq(ds)[k]||!PP[ds][k])return;
@@ -5921,6 +5934,17 @@ function resDuel(){
         const _ds=as==='h'?'a':'h';
         const _gkPos=PP[_ds]&&PP[_ds]['GK']?PP[_ds]['GK']:{x:goalXFor(as),y:H*.5};
         const _cp=PP[as][G.ck]||_gkPos;
+        /* SUPER SHOT won from a FIELD duel must still play the full cinematic.
+           This branch used to run a plain 2D animateBallTo straight into
+           opDuel(true,'special'), skipping the skill cutscene, the 3D flight
+           and the chase camera entirely — the cinematic was only ever reachable
+           from the free-play SUPER button via manualShot(). */
+        if(ak==='special' && window.P3D && P3D.on && P3D.superCine2 &&
+           !(P3D.cineActive && P3D.cineActive())){
+          closeDuel();
+          G.phase='moving';                       // superShotCine() gates on this
+          if(superShotCine())return;              // it runs banner → fly → GK duel
+        }
         if(rollShotMiss(as,ak)){shotMissed(as);return;}
         G._shotTrail=true;
         animateBallTo(_cp.x,_cp.y,_gkPos.x,_gkPos.y,()=>{G._shotTrail=false;G.phase='idle';opDuel(true,ak);},40,true);
