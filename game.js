@@ -1899,7 +1899,7 @@ function tick(dt=1){
   }
 
   moveOffBall(s,ds,dt);
-  stepLunge();
+  stepLunge(dt);
   applyRepulsion();
   clampAllToPitch();
 }
@@ -3617,7 +3617,7 @@ function _updateDpad(show){
   if(triL) triL.textContent = atk?'SHOOT':'SHOULDER';
   if(sqL)  sqL.textContent  = atk?'SUPER':'TACKLE';
   tri.classList.remove('dim'); sqB.classList.remove('dim');
-  const _lk=(()=>{ const dk=G.chk; if(!dk)return 0;
+  const _lk=(()=>{ const dk=G.chk||ROLES.engager; if(!dk)return 0;
     const ph=_phys['h:'+dk]; return (ph&&ph._lungeLock)||0; })();
   if(!atk && Date.now()<_lk){ tri.classList.add('dim'); sqB.classList.add('dim'); }
   G_dpadEl.querySelector('[data-a="switch"]').classList.remove('dim'); // ✕ never dims: PASS on attack, SWITCH on defence
@@ -4062,8 +4062,7 @@ function startLunge(side,kind){
   if(_lunge)return;
   if(!G||G.phase!=='moving'||G.paused||G._cineHold)return;
   if(G.poss===side)return;                       // only the defending side
-  const k=(side==='h'?ROLES.engager:ROLES.engager);
-  const dk=G.chk||k; if(!dk||!PP[side]||!PP[side][dk])return;
+  const dk=G.chk||ROLES.engager; if(!dk||!PP[side]||!PP[side][dk])return;
   const pl=sq(side)[dk]; if(!pl||ocd(side,dk))return;
   const ph=physOf(side,dk,pl);
   if(ph._lungeLock&&Date.now()<ph._lungeLock)return;   // still recovering
@@ -4074,10 +4073,11 @@ function startLunge(side,kind){
   if(d>CONTACT()*L.reach*6)return;               // too far to be worth it
   _lunge={side,k:dk,kind,t0:Date.now(),phase:'wind',dx:dx/d,dy:dy/d,gen:G.goalGen};
   try{ if(window.SFX&&SFX.whoosh)SFX.whoosh(0.6); }catch(e){}
-  try{ if(window.P3D&&P3D.forceAnim)P3D.forceAnim(side+':'+dk,null,'shoot',0,false); }catch(e){}
+  try{ if(window.P3D&&P3D.forceAnim)P3D.forceAnim(side+':'+dk,'side','act',0,false); }catch(e){}
 }
-function stepLunge(){
+function stepLunge(dt){
   if(!_lunge)return;
+  dt=dt||1;
   const L=LUNGE[_lunge.kind]||LUNGE.tackle;
   const el=Date.now()-_lunge.t0;
   if(!G||!G.mt||G.goalGen!==_lunge.gen||G.phase!=='moving'){ _lunge=null; return; }
@@ -4088,7 +4088,7 @@ function stepLunge(){
     return;
   }
   // travelling — direction is locked, no steering
-  const step=MAX_DEF_STEP()*L.speed;
+  const step=MAX_DEF_STEP()*L.speed*dt;
   dp.x=clamp(dp.x+_lunge.dx*step, W*0.02, W*0.98);
   dp.y=clamp(dp.y+_lunge.dy*step, H*0.02, H*0.98);
   const cp=PP[G.poss]&&PP[G.poss][G.ck];

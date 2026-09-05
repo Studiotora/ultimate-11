@@ -2532,6 +2532,8 @@
       if(typeof ball!=='undefined'&&ball){ ball.x=sp.x; ball.y=sp.y; ball.bz=0; }
     };
     P3D.cineActive=function(){ return !!cine; };
+    /* exposed for game.js: tackle/shoulder lunges drive a sheet frame */
+    P3D.forceAnim=function(id,face,anim,idx,flip){ try{ forceAnim(id,face||'side',anim,idx||0,!!flip); }catch(e){} };
     function cineEnd(){
       if(!cine)return;
       try{hideHoldFx();_fxT=0;}catch(e){}
