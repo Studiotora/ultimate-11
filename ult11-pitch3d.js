@@ -101,7 +101,7 @@
            chaseLag:0.10, chaseLookAhead:4.5,
            slowMo:1.6, slowInAt:0.12 },
     // sprite animation cadence (frames per second) — console-tunable
-    anim:{ runFpsMin:8, runFpsMax:13, idleFps:3, shootMs:720, passMs:520 },
+    anim:{ runFpsMin:8, runFpsMax:13, idleFps:3, shootMs:720, passMs:520, tackleMs:430, shoulderMs:480 },
     ready:true
   };
   // 2.5D is the ONLY renderer now — lock the flag so nothing (camlab,
@@ -1527,6 +1527,15 @@
       12:{cols:12, rows:6, idle:[0,12], run:[0,12], pass:[0,8], shoot:[0,12], idleFps:4, fpsScale:0.9,
           rowFor:{ idle:{down:0, up:1, side:0}, run:{side:3, down:4, up:5}, act:{down:2, up:2, side:2} }}
     };
+    // 12x8 = the 12x6 sheet plus TWO dedicated action rows the tackle needs:
+    //   row 6 = tackle    (3 frames: reach → lunge → slide)
+    //   row 7 = shoulder  (3 frames: lean → charge → follow-through)
+    // Side-view art, so every facing maps to the same row. Detected by aspect
+    // (~1.07) or a "12x8" in the filename. Sheet MUST be a clean 8×408px grid.
+    const L12x8={cols:12, rows:8, idle:[0,12], run:[0,12], pass:[0,8], shoot:[0,12],
+      tackle:[0,3], shoulder:[0,3], idleFps:4, fpsScale:0.9,
+      rowFor:{ idle:{down:0, up:1, side:0}, run:{side:3, down:4, up:5}, act:{down:2, up:2, side:2},
+               tackle:{side:6, down:6, up:6}, shoulder:{side:7, down:7, up:7} }};
     const GRID=LAYOUTS[7];                 // fallback for unmeasured sheets
     /* Scan every cell's alpha once per sheet: where the feet are (padB = empty
        fraction below the lowest opaque pixel), the body's horizontal centre
@@ -1571,8 +1580,11 @@
       const m=/(\d+)x6/.exec(url||'');        // explicit: name it team.12x6.png
       if(m&&LAYOUTS[+m[1]]) return LAYOUTS[+m[1]];
       if(P3D.forceLayout&&LAYOUTS[P3D.forceLayout]) return LAYOUTS[P3D.forceLayout];
+      if(P3D.forceLayout==='12x8') return L12x8;
       const asp=img.width/img.height;
-      if(asp>1.33&&asp<1.58) return LAYOUTS[12];   // 12 cols of ~166x226 cells
+      if(/12x8/.test(url||'')) return L12x8;
+      if(asp>1.03&&asp<1.22) return L12x8;         // 12 cols x 8 rows (+ tackle & shoulder). gk.png is 1.00 → excluded
+      if(asp>1.33&&asp<1.58) return LAYOUTS[12];   // 12 cols x 6 rows
       const measured=img.width/(img.height/6);   // rows are always 6 (square-ish cells)
       let best=GRID,bestErr=Infinity;
       for(const k of [7,10]){
@@ -1701,8 +1713,14 @@
       const act=ACT[id];
       if(act){
         const A=P3D.anim||ANIM;
-        const rng=(act.name==='shoot'?L.shoot:L.pass), dur=(act.name==='shoot'?(A.shootMs||720):(A.passMs||520))*Math.max(0.6,rng[1]/8), el=now-act.t0;
+        const rng=L[act.name]||L.pass;
+        let dur;
+        if(act.name==='tackle')        dur=(A.tackleMs||430);      // whole slide plays across the lunge
+        else if(act.name==='shoulder') dur=(A.shoulderMs||480);
+        else dur=(act.name==='shoot'?(A.shootMs||720):(A.passMs||520))*Math.max(0.6,rng[1]/8);
+        const el=now-act.t0;
         if(el<dur){ const fi=Math.min(rng[1]-1, Math.floor(el/dur*rng[1]));
+          // tackle/shoulder are side-view only — keep the flip the lunge set
           const cc=cellOf(L,face,act.name,fi); return {row:cc.row, col:cc.col, flip}; }
         delete ACT[id];
       }
@@ -1729,7 +1747,8 @@
     }
     /* one-shot action triggers — auto-detected from engine phase transitions */
     const ACT={};
-    P3D.action=function(s,k,name){ if(COL[name]) ACT[s+':'+k]={name,t0:performance.now()}; };
+    P3D.action=function(s,k,name){ if(COL[name]||name==='tackle'||name==='shoulder') ACT[s+':'+k]={name,t0:performance.now()}; };
+    P3D.clearAction=function(s,k){ delete ACT[s+':'+k]; };   // snap back to run/idle (lunge end)
     let _lastCarrier=null,_prevKick=false;
     function watchActions(){
       if(typeof G==='undefined'||!G) return;

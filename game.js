@@ -4103,7 +4103,9 @@ function startLunge(side,kind){
   if(d>CONTACT()*L.reach*6)return;               // too far to be worth it
   _lunge={side,k:dk,kind,t0:Date.now(),phase:'wind',dx:dx/d,dy:dy/d,gen:G.goalGen};
   try{ if(window.SFX&&SFX.whoosh)SFX.whoosh(0.6); }catch(e){}
-  try{ if(window.P3D&&P3D.forceAnim)P3D.forceAnim(side+':'+dk,'side','act',0,false); }catch(e){}
+  // play the real 3-frame tackle/shoulder animation (falls back to a run frame
+  // on sheets that don't have the dedicated rows yet)
+  try{ if(window.P3D&&P3D.action)P3D.action(side,dk, kind==='shoulder'?'shoulder':'tackle'); }catch(e){}
 }
 function stepLunge(dt){
   if(!_lunge)return;
@@ -4130,14 +4132,15 @@ function stepLunge(dt){
   const step=MAX_DEF_STEP()*L.speed*dt;
   dp.x=clamp(dp.x+_lunge.dx*step, W*0.02, W*0.98);
   dp.y=clamp(dp.y+_lunge.dy*step, H*0.02, H*0.98);
+  // real frames convey the pose now — no sprite tilt, just kick up turf dust
   try{ if(window.P3D&&P3D.lunge)
-    P3D.lunge(_lunge.side+':'+_lunge.k, (_lunge.dx<0?-1:1)*L.lean, true); }catch(e){}
+    P3D.lunge(_lunge.side+':'+_lunge.k, 0, true); }catch(e){}
   const cp=PP[G.poss]&&PP[G.poss][G.ck];
   const hit=cp && dist(dp,cp)<CONTACT()*L.reach;
   if(hit){
     const side=_lunge.side, dk=_lunge.k, kind=_lunge.kind;
     _lunge=null;
-    try{ if(window.P3D&&P3D.lunge)P3D.lunge(side+':'+dk,0,false); }catch(e){}
+    try{ if(window.P3D&&P3D.lunge)P3D.lunge(side+':'+dk,0,false); if(P3D.clearAction)P3D.clearAction(side,dk); }catch(e){}
     const ph=physOf(side,dk,sq(side)[dk]);
     ph._lungeLock=Date.now()+L.recover*0.4;      // short lock on a clean hit
     if(rollFoul(side,dk,G.poss,L.foul))return;   // mistimed = free kick
@@ -4149,7 +4152,7 @@ function stepLunge(dt){
   if(el>=L.wind+L.dur){                          // whiffed
     const side=_lunge.side, dk=_lunge.k;
     _lunge=null;
-    try{ if(window.P3D&&P3D.lunge)P3D.lunge(side+':'+dk,0,false); }catch(e){}
+    try{ if(window.P3D&&P3D.lunge)P3D.lunge(side+':'+dk,0,false); if(P3D.clearAction)P3D.clearAction(side,dk); }catch(e){}
     const ph=physOf(side,dk,sq(side)[dk]);
     ph._lungeLock=Date.now()+L.recover;
     say('Missed the tackle!');
