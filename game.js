@@ -1195,6 +1195,11 @@ function startGame(){
 const CV=document.getElementById('C');const cx=CV.getContext('2d');
 let W=0,H=0,PP={h:{},a:{}},PT={h:{},a:{}},ball={x:0,y:0,tx:0,ty:0},trail=[];
 const CR=13,CDms=2500,CS=()=>W*.00023,DS=()=>W*.00030,IR=()=>W*.022,PC=()=>W*.08;
+/* CONTACT() — real sprite-on-sprite range. The pitch is 1280 engine px across
+   ~105m, so ~12px per metre; two players actually touching are ~1.2m apart.
+   IR() (28px ≈ 2.3m) is an INTERCEPTION radius and was being used as the duel
+   trigger, which is why duels fired while the two were still clearly apart. */
+const CONTACT=()=>W*.014;
 const MAX_CARRIER_STEP=()=>Math.max(0.22,W*.00038); // carrier — bigger-pitch pacing
 const MAX_DEF_STEP=()=>Math.max(0.30,W*.00058);     // engager — slightly faster than carrier
 const MAX_OFFBALL_STEP=()=>Math.max(0.26,W*.00058);  // off-ball
@@ -1248,7 +1253,7 @@ function physOf(side,k,pl){
   }
   return ph;
 }
-function resetPhysics(){ for(const k in _phys) delete _phys[k]; }
+function resetPhysics(){ for(const k in _phys) delete _phys[k]; _lunge=null; }
 
 // Awareness 0..1 from the stats that describe reading the game.
 function awarenessOf(pl){
@@ -1844,6 +1849,7 @@ function tick(dt=1){
       if(engPl && _sprintForSide(ds)) engPl.spirit=Math.max(0,(engPl.spirit||1500)-0.5*dt); // sprint costs stamina on defense too
       const sprintMult=(_sprintForSide(ds))?1.34:1.30; // AI commits to the chase
       const manualMult=manualDef?1.3:1.0;
+      if(lungeActive(ds,ROLES.engager))return;   // committed — stepLunge() owns him
       const step=MAX_DEF_STEP()*pressMult*sprintMult*manualMult*fieldSpdMult(engPl)*recoveryMult(ds,ROLES.engager,dp2)*dt;
       // momentum: steer velocity toward the chase direction rather than
       // teleporting along it, so acceleration and turning both cost time
@@ -1851,7 +1857,7 @@ function tick(dt=1){
       moveMomentum(dp2,_ephy,dp2.x+ux*step*8,dp2.y+uy*step*8,step,engPl,dt);
       dp2.x=clamp(dp2.x,W*.01,W*.99);
       dp2.y=clamp(dp2.y,H*.03,H*.97);
-      if(Date.now()>=(G.kickoffUntil||0) && dist(dp2,cp)<IR()){G.chk=ROLES.engager;opDuel(false);return;}
+      if(Date.now()>=(G.kickoffUntil||0) && dist(dp2,cp)<CONTACT()){G.chk=ROLES.engager;opDuel(false);return;}
     }
   }
   // PRESS: second player (cover) also sprints toward carrier.
@@ -1880,7 +1886,7 @@ function tick(dt=1){
     for(const k of Object.keys(defQ)){
       if(!defQ[k]||k===ROLES.engager||k==='GK'||ocd(ds,k))continue;
       const dp=PP[ds][k];if(!dp)continue;
-      if(dist(dp,cp)<IR()*1.05){
+      if(dist(dp,cp)<CONTACT()*1.05){
         const wasEngager=ROLES.engager;
         ROLES.engager=k;G.chk=k;
         if(!isCpuSide(ds)&&wasEngager!==k){
@@ -1893,6 +1899,7 @@ function tick(dt=1){
   }
 
   moveOffBall(s,ds,dt);
+  stepLunge();
   applyRepulsion();
   clampAllToPitch();
 }
@@ -2297,6 +2304,7 @@ function applyRepulsion(){
     const keys=Object.keys(sq(side)).filter(k=>sq(side)[k]&&PP[side][k]);
     for(let i=0;i<keys.length;i++){
       for(let j=i+1;j<keys.length;j++){
+        if(isLunging(side,keys[i])||isLunging(side,keys[j]))continue;  // let the lunge connect
         const a=PP[side][keys[i]],b=PP[side][keys[j]];
         const dx=b.x-a.x,dy=b.y-a.y;
         const d=Math.hypot(dx,dy)||0.1;
@@ -3579,8 +3587,14 @@ function _buildDpad(){
   document.body.appendChild(w);
   G_dpadEl=w;
   const tap=(sel,fn)=>{const b=w.querySelector(sel);b.addEventListener('pointerdown',e=>{e.preventDefault();e.stopPropagation();fn();},{passive:false});};
-  tap('[data-a="shoot"]',()=>{if(G.poss==='h')manualShot('shoot');});
-  tap('[data-a="pass"]',()=>{ if(G.awaitKickoff==='h'){doKickoff();return;} if(G.poss==='h'){ if(G.phase==='moving') manualShot('special'); else togglePassMode(); }});
+  tap('[data-a="shoot"]',()=>{
+    if(G.poss==='h') manualShot('shoot');
+    else startLunge('h','shoulder');           // △ becomes SHOULDER on defence
+  });
+  tap('[data-a="pass"]',()=>{ if(G.awaitKickoff==='h'){doKickoff();return;}
+    if(G.poss==='h'){ if(G.phase==='moving') manualShot('special'); else togglePassMode(); }
+    else startLunge('h','tackle');             // □ becomes TACKLE on defence
+  });
   tap('[data-a="switch"]',()=>{ if(G.awaitKickoff==='h'){doKickoff();return;} if(G.poss==='h'){ if(G.phase==='moving') directionalPass(); else togglePassMode(); } else switchDefender(); });
   const xb=w.querySelector('[data-a="sprint"]');
   const on=e=>{e.preventDefault();G_sprint=true;xb.classList.add('held');};
@@ -3595,8 +3609,17 @@ function _updateDpad(show){
   G_dpadEl.style.display=show?'grid':'none';
   if(!show){G_sprint=false;return;}
   const atk=G.poss==='h';
-  G_dpadEl.querySelector('[data-a="shoot"]').classList.toggle('dim',!atk);
-  G_dpadEl.querySelector('[data-a="pass"]').classList.toggle('dim',!atk);
+  /* Super shot has no defensive equivalent, so the attacking face buttons are
+     free while defending — △ SHOULDER, □ TACKLE. */
+  const tri=G_dpadEl.querySelector('[data-a="shoot"]');
+  const sqB=G_dpadEl.querySelector('[data-a="pass"]');
+  const triL=tri.querySelector('span'), sqL=sqB.querySelector('span');
+  if(triL) triL.textContent = atk?'SHOOT':'SHOULDER';
+  if(sqL)  sqL.textContent  = atk?'SUPER':'TACKLE';
+  tri.classList.remove('dim'); sqB.classList.remove('dim');
+  const _lk=(()=>{ const dk=G.chk; if(!dk)return 0;
+    const ph=_phys['h:'+dk]; return (ph&&ph._lungeLock)||0; })();
+  if(!atk && Date.now()<_lk){ tri.classList.add('dim'); sqB.classList.add('dim'); }
   G_dpadEl.querySelector('[data-a="switch"]').classList.remove('dim'); // ✕ never dims: PASS on attack, SWITCH on defence
 }
 // ── FIELD HUD CHIPS — controlled player + opponent (bottom-left) ──
@@ -4020,6 +4043,75 @@ function _switchEngager(ds){
   const pl=sq(ds)[best];
   say('Switched to '+(pl?pl.name:'defender'));
 }
+/* ══ TACKLE / SHOULDER CHARGE ═══════════════════════════════════════
+   A committed lunge, not a proximity check. Wind-up → travel (steering
+   locked) → contact or whiff → recovery lockout. Only the controlled
+   defender may lunge, so the AI never triple-commits.
+      tackle   — short, fast, big reach, long recovery if missed
+      shoulder — slower, shorter, must stay in contact briefly, low foul risk
+   Contact is measured against CONTACT(), the same sprite-overlap range the
+   duel trigger uses. */
+const LUNGE={
+  tackle  :{wind:90, dur:340, reach:1.35, speed:2.35, recover:900, foul:0.22},
+  shoulder:{wind:140,dur:420, reach:1.05, speed:1.55, recover:520, foul:0.07}
+};
+let _lunge=null;   // {side,k,kind,t0,phase,dx,dy,gen}
+function lungeActive(side,k){ return !!(_lunge&&_lunge.side===side&&_lunge.k===k); }
+function isLunging(side,k){ return lungeActive(side,k)&&_lunge.phase==='go'; }
+function startLunge(side,kind){
+  if(_lunge)return;
+  if(!G||G.phase!=='moving'||G.paused||G._cineHold)return;
+  if(G.poss===side)return;                       // only the defending side
+  const k=(side==='h'?ROLES.engager:ROLES.engager);
+  const dk=G.chk||k; if(!dk||!PP[side]||!PP[side][dk])return;
+  const pl=sq(side)[dk]; if(!pl||ocd(side,dk))return;
+  const ph=physOf(side,dk,pl);
+  if(ph._lungeLock&&Date.now()<ph._lungeLock)return;   // still recovering
+  const dp=PP[side][dk], cp=PP[G.poss]&&PP[G.poss][G.ck];
+  if(!cp)return;
+  const dx=cp.x-dp.x, dy=cp.y-dp.y, d=Math.hypot(dx,dy)||1;
+  const L=LUNGE[kind]||LUNGE.tackle;
+  if(d>CONTACT()*L.reach*6)return;               // too far to be worth it
+  _lunge={side,k:dk,kind,t0:Date.now(),phase:'wind',dx:dx/d,dy:dy/d,gen:G.goalGen};
+  try{ if(window.SFX&&SFX.whoosh)SFX.whoosh(0.6); }catch(e){}
+  try{ if(window.P3D&&P3D.forceAnim)P3D.forceAnim(side+':'+dk,null,'shoot',0,false); }catch(e){}
+}
+function stepLunge(){
+  if(!_lunge)return;
+  const L=LUNGE[_lunge.kind]||LUNGE.tackle;
+  const el=Date.now()-_lunge.t0;
+  if(!G||!G.mt||G.goalGen!==_lunge.gen||G.phase!=='moving'){ _lunge=null; return; }
+  const dp=PP[_lunge.side]&&PP[_lunge.side][_lunge.k];
+  if(!dp){ _lunge=null; return; }
+  if(_lunge.phase==='wind'){
+    if(el>=L.wind) _lunge.phase='go';
+    return;
+  }
+  // travelling — direction is locked, no steering
+  const step=MAX_DEF_STEP()*L.speed;
+  dp.x=clamp(dp.x+_lunge.dx*step, W*0.02, W*0.98);
+  dp.y=clamp(dp.y+_lunge.dy*step, H*0.02, H*0.98);
+  const cp=PP[G.poss]&&PP[G.poss][G.ck];
+  const hit=cp && dist(dp,cp)<CONTACT()*L.reach;
+  if(hit){
+    const side=_lunge.side, dk=_lunge.k, kind=_lunge.kind;
+    _lunge=null;
+    const ph=physOf(side,dk,sq(side)[dk]);
+    ph._lungeLock=Date.now()+L.recover*0.4;      // short lock on a clean hit
+    if(rollFoul(side,dk,G.poss,L.foul))return;   // mistimed = free kick
+    G.chk=dk; G._lungeKind=kind;
+    try{ if(window.SFX&&SFX.tackle)SFX.tackle(); }catch(e){}
+    opDuel(false);
+    return;
+  }
+  if(el>=L.wind+L.dur){                          // whiffed
+    const side=_lunge.side, dk=_lunge.k;
+    _lunge=null;
+    const ph=physOf(side,dk,sq(side)[dk]);
+    ph._lungeLock=Date.now()+L.recover;
+    say('Missed the tackle!');
+  }
+}
 function switchDefender(){ _switchEngager('h'); }                 // touch/keyboard path (P1 / home)
 function pvpSwitch(player){ _switchEngager(player===2?'a':'h'); } // pad ✕ — switches the side that player controls
 
@@ -4339,14 +4431,14 @@ function checkDuelGrace(){
   const dp=PP[ds][ROLES.engager],cp=PP[G.poss][G.ck];
   if(!dp||!cp)return;
   const d=dist(dp,cp);
-  if(d<IR()*1.6&&d>=IR()*1.0&&!G_duelGrace&&Date.now()>=(G.kickoffUntil||0)){
+  if(d<IR()*1.6&&d>=CONTACT()&&!G_duelGrace&&Date.now()>=(G.kickoffUntil||0)){
     G_duelGrace=setTimeout(()=>{
       G_duelGrace=null;
       const dsNow=G.poss==='h'?'a':'h';
       if(dsNow!==ds)return; // possession flipped during grace window
       if(G.phase==='moving'&&ROLES.engager&&PP[ds][ROLES.engager]){
         const d2=dist(PP[ds][ROLES.engager],PP[G.poss][G.ck]||{x:-9999,y:-9999});
-        if(d2<IR()*1.8){G.chk=ROLES.engager;opDuel(false);}
+        if(d2<CONTACT()*1.15){G.chk=ROLES.engager;opDuel(false);}
       }
     },600);
   }else if(d>=IR()*1.8&&G_duelGrace){
