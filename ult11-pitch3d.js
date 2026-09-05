@@ -99,7 +99,7 @@
            // profile instead of the camera riding on top of the ball
            chaseDist:16.5, chaseHeight:4.2, chaseSide:5.5, chaseLookY:1.0,
            chaseLag:0.10, chaseLookAhead:4.5,
-           slowMo:2.4, slowInAt:0.12 },
+           slowMo:1.6, slowInAt:0.12 },
     // sprite animation cadence (frames per second) — console-tunable
     anim:{ runFpsMin:8, runFpsMax:13, idleFps:3, shootMs:720, passMs:520 },
     ready:true
@@ -2558,7 +2558,7 @@
         const W=(CV.width||1280);
         const dir=(o.dir!=null)?o.dir:((o.as==='h')?1:-1);     // engine attack dir (halves swap!)
         const gx=(o.gx!=null)?o.gx:((dir>0)?W*0.93:W*0.07);
-        const stopX=gp.x-dir*W*0.045;                 // hold point just short of the keeper
+        const stopX=gp.x-dir*W*0.016;                 // hold point just short of the keeper
         try{
           // game.js declares selHome/selAway as top-level `let` — reachable by
           // bare name from a later script, NOT via window.*
@@ -2656,7 +2656,14 @@
         const fe=ft*ft*(3-2*ft);
         bx=c.fx+(c.tx-c.fx)*fe; by=c.fy+(c.ty-c.fy)*fe;
         if(c.curveAmt){ const off=Math.sin(Math.PI*fe)*c.curveAmt; bx+=c.perpX*off; by+=c.perpY*off; }  // banana
-        bz=(46*3.2*fe*(1-fe)*0.7+8*Math.sin(fe*Math.PI))*stl.loft;
+        {
+          // The old arc drove bz to 0 at fe=1, so every shot — even a flat
+          // power drive — dropped to the grass right in front of the keeper.
+          // Blend the arc into the hover height so it arrives at goal height.
+          const arc=(46*3.2*fe*(1-fe)*0.7+8*Math.sin(fe*Math.PI))*stl.loft;
+          const land=4, bl=Math.max(0,(fe-0.5)/0.5);
+          bz=arc*(1-bl)+land*bl;
+        }
         if(c.mode==='wait')bz=4+Math.sin(c.t*6)*0.8;  // hover short of the keeper
       }else if(c.mode==='out'){
         c.ot+=dt;
