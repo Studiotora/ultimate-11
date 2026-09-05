@@ -1675,6 +1675,24 @@
         }
         moveT=now; rx=p.x; ry=p.y;
       }
+      /* Idle players turn to watch the ball. Facing used to be set ONLY while
+         moving, so at kick-off nobody had moved yet and the whole XI sat on the
+         default face:'side', flip:false — every player staring screen-right. */
+      else if((now-moveT)>=ANIM.moveHoldMs &&
+              typeof ball!=='undefined' && ball && ball.x!=null){
+        const bdx=ball.x-p.x, bdy=ball.y-p.y, bd=Math.hypot(bdx,bdy);
+        if(bd>thresh*4){
+          const dwx=(bdx/bd)*_wpeX*10, dwz=(bdy/bd)*_wpeZ*10;
+          const sX=dwx*_camRX+dwz*_camRZ, sZ=dwx*_camFX+dwz*_camFZ;
+          if(Math.abs(sX)>=Math.abs(sZ)){
+            face='side';
+            _fp.set(wx,0.05,wz).project(camera);
+            _fp2.set(wx+dwx,0.05,wz+dwz).project(camera);
+            const sdx=_fp2.x-_fp.x;
+            if(Math.abs(sdx)>1e-5) flip=sdx<0;
+          } else face=sZ>0?'up':'down';
+        }
+      }
       stt[id]={rx,ry,face,flip,moveT,spd:prev.spd,lx:prev.lx,ly:prev.ly,lt:prev.lt,phase:prev.phase,aph:prev.aph,apt:prev.apt};
       if(L.rowFor&&face!=='side') flip=false;   // dedicated front/back rows are never mirrored
       const band=ROW[face]||ROW.side;
