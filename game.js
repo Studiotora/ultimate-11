@@ -1660,6 +1660,10 @@ function clampAllToPitch(){
 function tick(dt=1){
   if(typeof pvpPumpInput==='function')pvpPumpInput();
   if(G._cineHold)return;                       // super-shot cinematic: world frozen
+  /* iPos() puts everyone in their own half, but the AI kept ticking while the
+     kick-off prompt was up, so players walked across the halfway line before
+     the whistle. Freeze the world until the ball is actually kicked. */
+  if(G.awaitKickoff)return;
   const s=G.poss,ds=s==='h'?'a':'h';
   const cp=PP[s][G.ck];if(!cp)return;
   const dir=dirFor(s);
@@ -3449,13 +3453,35 @@ window.addEventListener('keydown',e=>{
   if(['w','a','s','d','arrowup','arrowdown','arrowleft','arrowright'].includes(k)){
     G_keys[k]=true;_recomputeInputFromKeys();
     if(k.startsWith('arrow'))e.preventDefault();
+    return;
   }
+  /* Face-button keys — same four actions as the on-screen pad, so the
+     tackle is reachable without chasing a small target with the mouse.
+       O = △   P = □   K = ○ sprint   L = ✕
+     Attacking: O shoot, P super, L pass.  Defending: O shoulder, P tackle,
+     L switch player. */
+  if(e.repeat)return;
+  if(k==='o'){ e.preventDefault();
+    if(G.awaitKickoff==='h'){doKickoff();return;}
+    if(G.poss==='h') manualShot('shoot'); else startLunge('h','shoulder'); return; }
+  if(k==='p'){ e.preventDefault();
+    if(G.awaitKickoff==='h'){doKickoff();return;}
+    if(G.poss==='h'){ if(G.phase==='moving') manualShot('special'); else togglePassMode(); }
+    else startLunge('h','tackle'); return; }
+  if(k==='l'){ e.preventDefault();
+    if(G.awaitKickoff==='h'){doKickoff();return;}
+    if(G.poss==='h'){ if(G.phase==='moving') directionalPass(); else togglePassMode(); }
+    else switchDefender(); return; }
+  if(k==='k'){ e.preventDefault(); G_sprint=true;
+    const b=G_dpadEl&&G_dpadEl.querySelector('[data-a="sprint"]'); if(b)b.classList.add('held'); return; }
 });
 window.addEventListener('keyup',e=>{
   const k=e.key.toLowerCase();
+  if(k==='k'){ G_sprint=false;
+    const b=G_dpadEl&&G_dpadEl.querySelector('[data-a="sprint"]'); if(b)b.classList.remove('held'); }
   if(G_keys[k]!==undefined){G_keys[k]=false;_recomputeInputFromKeys();}
 });
-window.addEventListener('blur',()=>{for(const k in G_keys)G_keys[k]=false;_recomputeInputFromKeys();});
+window.addEventListener('blur',()=>{for(const k in G_keys)G_keys[k]=false;G_sprint=false;_recomputeInputFromKeys();});
 
 // ── Virtual joystick (touch) ─────────────────────────────────────
 /* ══════ ON-SCREEN CONTROL LAYOUT (Camera Lab → CONTROLS) ══════
@@ -4052,8 +4078,12 @@ function _switchEngager(ds){
    Contact is measured against CONTACT(), the same sprite-overlap range the
    duel trigger uses. */
 const LUNGE={
-  tackle  :{wind:90, dur:340, reach:1.35, speed:2.35, recover:900, foul:0.22},
-  shoulder:{wind:140,dur:420, reach:1.05, speed:1.55, recover:520, foul:0.07}
+  // track = how much the lunge may re-aim during the first 45% of travel.
+  // Fully locked steering meant any small change of direction beat it, which
+  // made connecting nearly impossible; a little tracking keeps the commitment
+  // feel while letting a well-timed challenge actually land.
+  tackle  :{wind:70, dur:430, reach:1.9, speed:2.6, recover:850, foul:0.22, track:0.16, lean:0.85},
+  shoulder:{wind:90, dur:480, reach:1.5, speed:1.9, recover:480, foul:0.07, track:0.26, lean:0.30}
 };
 let _lunge=null;   // {side,k,kind,t0,phase,dx,dy,gen}
 function lungeActive(side,k){ return !!(_lunge&&_lunge.side===side&&_lunge.k===k); }
@@ -4087,15 +4117,27 @@ function stepLunge(dt){
     if(el>=L.wind) _lunge.phase='go';
     return;
   }
-  // travelling — direction is locked, no steering
+  // travelling — mostly committed, with a little tracking early on
+  const cp0=PP[G.poss]&&PP[G.poss][G.ck];
+  const prog=(el-L.wind)/Math.max(1,L.dur);
+  if(cp0 && prog<0.45 && L.track){
+    const ax=cp0.x-dp.x, ay=cp0.y-dp.y, ad=Math.hypot(ax,ay)||1;
+    _lunge.dx += (ax/ad-_lunge.dx)*L.track;
+    _lunge.dy += (ay/ad-_lunge.dy)*L.track;
+    const n=Math.hypot(_lunge.dx,_lunge.dy)||1;
+    _lunge.dx/=n; _lunge.dy/=n;
+  }
   const step=MAX_DEF_STEP()*L.speed*dt;
   dp.x=clamp(dp.x+_lunge.dx*step, W*0.02, W*0.98);
   dp.y=clamp(dp.y+_lunge.dy*step, H*0.02, H*0.98);
+  try{ if(window.P3D&&P3D.lunge)
+    P3D.lunge(_lunge.side+':'+_lunge.k, (_lunge.dx<0?-1:1)*L.lean, true); }catch(e){}
   const cp=PP[G.poss]&&PP[G.poss][G.ck];
   const hit=cp && dist(dp,cp)<CONTACT()*L.reach;
   if(hit){
     const side=_lunge.side, dk=_lunge.k, kind=_lunge.kind;
     _lunge=null;
+    try{ if(window.P3D&&P3D.lunge)P3D.lunge(side+':'+dk,0,false); }catch(e){}
     const ph=physOf(side,dk,sq(side)[dk]);
     ph._lungeLock=Date.now()+L.recover*0.4;      // short lock on a clean hit
     if(rollFoul(side,dk,G.poss,L.foul))return;   // mistimed = free kick
@@ -4107,6 +4149,7 @@ function stepLunge(dt){
   if(el>=L.wind+L.dur){                          // whiffed
     const side=_lunge.side, dk=_lunge.k;
     _lunge=null;
+    try{ if(window.P3D&&P3D.lunge)P3D.lunge(side+':'+dk,0,false); }catch(e){}
     const ph=physOf(side,dk,sq(side)[dk]);
     ph._lungeLock=Date.now()+L.recover;
     say('Missed the tackle!');
@@ -4592,7 +4635,14 @@ function _bustActiveKey(side){
 }
 function hideBusts(){
   if(!_bustEls)return;
-  _bustEls.h.style.display='none';_bustEls.a.style.display='none';
+  ['h','a'].forEach(sd=>{
+    const el=_bustEls[sd]; el.style.display='none';
+    // The <div> keeps its background-image, so if the NEXT match's portrait
+    // chain 404s at every step the previous player's art just stays on screen.
+    const im=el.querySelector('.bust-img'); if(im) im.style.backgroundImage='';
+    const n=el.querySelector('.b-num'), nm=el.querySelector('.b-name'), ps=el.querySelector('.b-pos');
+    if(n)n.textContent=''; if(nm)nm.textContent=''; if(ps)ps.textContent='';
+  });
   _bustKey={h:null,a:null};
 }
 function updBusts(){
@@ -4608,6 +4658,8 @@ function updBusts(){
     const sig=side+':'+k+':'+(pl.name||'');
     if(_bustKey[side]===sig)return;
     _bustKey[side]=sig;
+    const _im0=el.querySelector('.bust-img');
+    if(_im0)_im0.style.backgroundImage='';     // drop the previous face at once
     el.querySelector('.b-num').textContent=pl.jersey!=null?pl.jersey:'';
     el.querySelector('.b-name').textContent=playerSurname(pl.name).toUpperCase();
     let posTxt=pl.pos||'';try{posTxt=displayPosLabel(k)||posTxt;}catch(e){}

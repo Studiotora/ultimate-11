@@ -2532,6 +2532,20 @@
       if(typeof ball!=='undefined'&&ball){ ball.x=sp.x; ball.y=sp.y; ball.bz=0; }
     };
     P3D.cineActive=function(){ return !!cine; };
+    /* Slide read-out without new art: lean the sprite and kick up turf.
+       THREE.SpriteMaterial supports `rotation`, so a committed lunge can tilt
+       into the challenge and spray dust behind the boot. */
+    P3D.lunge=function(id,lean,dust){
+      const o=sprites[id]; if(!o)return;
+      if(o.sprite&&o.sprite.material) o.sprite.material.rotation=lean||0;
+      if(o.sil&&o.sil.material) o.sil.material.rotation=lean||0;
+      if(dust){
+        const p=o.sprite&&o.sprite.position; if(!p)return;
+        for(let i=0;i<2;i++)
+          spawnTrail(p.x+(Math.random()-0.5)*0.5, 0.05+Math.random()*0.05,
+                     p.z+(Math.random()-0.5)*0.5, '#c8b48a', 0.30+Math.random()*0.18);
+      }
+    };
     /* exposed for game.js: tackle/shoulder lunges drive a sheet frame */
     P3D.forceAnim=function(id,face,anim,idx,flip){ try{ forceAnim(id,face||'side',anim,idx||0,!!flip); }catch(e){} };
     function cineEnd(){
