@@ -1805,21 +1805,8 @@
           o.sil.quaternion.copy(_qS).multiply(_qF);
           o.sil.visible = (Lt.castSil!==false);
           o.sil.material.opacity=Lt.shadow*0.8;
-          // dust puff: BALL CARRIER only (every player was too noisy)
-          const st2=stt[id];
-          const _isCarrier=(typeof G!=='undefined'&&G&&G.poss&&G.ck)&&(id===G.poss+':'+G.ck);
-          if(_isCarrier && st2 && (performance.now()-st2.moveT)<70){
-            if(!st2._dustT || performance.now()-st2._dustT>140){
-              st2._dustT=performance.now();
-              const bdx=(st2.flip?1:-1);                 // behind = opposite facing
-              for(let di=0; di<2; di++){
-                spawnTrail(wx+bdx*wWorld*0.35+(Math.random()-.5)*wWorld*0.25,
-                           0.05+Math.random()*0.06,
-                           wz+0.18+(Math.random()-.5)*wWorld*0.3,
-                           '#a88a5e', hWorld*(0.16+Math.random()*0.06));
-              }
-            }
-          }
+          // (procedural dust puff removed — the 12x6 sprite sheets now draw
+          //  their own kick-up dust in the run frames)
         });
       });
       // hide sprites whose players vanished (subs, etc.)

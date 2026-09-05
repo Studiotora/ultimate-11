@@ -5845,8 +5845,16 @@ function resDuel(){
       aN+' '+(al[ak]||ak.toUpperCase())+' '+Math.round(atkPow)+'  vs  '+dN+' '+(dl[defA]||defA.toUpperCase())+' '+Math.round(defPow);
   }
   const ro=document.getElementById('duel-res');
+  /* A super-shot / super-save duel routes through a cinematic that plays
+     AFTER this point. Showing SUCCESS/COUNTER here spoiled the result before
+     the animation had even started, so on those routes the badge and the
+     ticker line are held back and flushed from the cinematic's onDone. */
+  const _cineRoute = (ak==='special' && G.D.isShot && window.P3D && P3D.on &&
+      ((P3D.superCine2 && P3D.superCine2.active()) || P3D.superCine));
+  if(_cineRoute) G.D._silent=true;
   if(!G.D._silent){ro.classList.add('show');G._resT=Date.now();}
-  say(badge+(det?' — '+det:''));
+  const _sayLine=badge+(det?' — '+det:'');
+  if(_cineRoute) G.D._deferSay=_sayLine; else say(_sayLine);
 
   // ── IMPACT FEEDBACK ─────────────────────────────────────
   // Shakes only — the floating texts duplicated the result badge.
@@ -5898,14 +5906,15 @@ function resDuel(){
           closeDuel();
           showGkCineMedia(sq(ds)['GK'],()=>{
             if(G.goalGen!==_gen){try{P3D.superCine2.abort();}catch(e){}return;}
-            P3D.superCine2.finish({isGoal:true,onDone:()=>{ if(G.goalGen===_gen)afGoal(carrier,as,_gen); }});
+            P3D.superCine2.finish({isGoal:true,onDone:()=>{
+              if(G.goalGen!==_gen)return; flushDuelSay(); afGoal(carrier,as,_gen); }});
           });
         }
         else if(ak==='special'&&window.P3D&&P3D.on&&P3D.superCine){
           try{playDuelCutIn({atk:carrier,def:sq(ds)['GK'],as,ds,isShot:true},()=>{});}catch(e){}
           showSuperCineBanner(getSpecial(carrier),as);
           P3D.superCine({as, sk:G.ck, ds, dir:dirFor(as), gx:goalXFor(as), isGoal:true,
-            onDone:()=>{ if(G.goalGen===_gen)afGoal(carrier,as,_gen); }});
+            onDone:()=>{ if(G.goalGen!==_gen)return; flushDuelSay(); afGoal(carrier,as,_gen); }});
         } else afGoal(carrier,as,_gen);
       } else {
         // Won a field duel with a shot — animate to GK then open shot duel
@@ -5929,6 +5938,7 @@ function resDuel(){
               if(G.goalGen!==_gen)return;
               showSaveBanner(sq(ds)['GK'],()=>{
                 if(G.goalGen!==_gen)return;
+                flushDuelSay();
                 G._cineSaveLock=true;
                 afSave(ds);
               });
@@ -5939,7 +5949,12 @@ function resDuel(){
           try{playDuelCutIn({atk:carrier,def:sq(ds)['GK'],as,ds,isShot:true},()=>{});}catch(e){}
           showSuperCineBanner(getSpecial(carrier),as);
           P3D.superCine({as, sk:G.ck, ds, dir:dirFor(as), gx:goalXFor(as), isGoal:false,
-            onDone:()=>{ if(G.goalGen===_gen)afSave(ds); }});
+            onDone:()=>{
+              if(G.goalGen!==_gen)return;
+              // the keeper gets his cut-in here too, same as the cine2 route
+              showSaveBanner(sq(ds)['GK'],()=>{
+                if(G.goalGen!==_gen)return; flushDuelSay(); afSave(ds); });
+            }});
         } else afSave(ds);
       }
       else afTurn(ds);
@@ -5959,6 +5974,10 @@ function resDuel(){
   },950);
 }
 
+/* Release the held result line once the cinematic has actually resolved. */
+function flushDuelSay(){
+  try{ if(G&&G.D&&G.D._deferSay){ const t=G.D._deferSay; G.D._deferSay=null; say(t); } }catch(e){}
+}
 function closeDuel(){killCutIn();G._duelT=0;G._resT=0;try{gkShotLayout(false);}catch(e){}try{Object.values(hSq).forEach(p=>{if(p)p._pending2v1=false;});Object.values(aSq).forEach(p=>{if(p)p._pending2v1=false;});}catch(e){}try{document.getElementById('s-match').classList.remove('duel-live');}catch(e){}document.getElementById('duel-ov').classList.remove('show');document.getElementById('duel-res').classList.remove('show');G.pm=false;$id('pass-banner').style.display='none';const d2=document.getElementById('dpd2-wrap');if(d2)d2.remove();}
 /* SAFE DELAYED RESTART — several restarts fire on a 120-950ms setTimeout.
    Without a guard they can land after the whistle, after exitToMenu(), or
@@ -6699,11 +6718,17 @@ function rollFoul(defSide,defSlot,attSide,prob){
       return;
     }
     updP();
-    // Resume play
-    G.phase='moving';
-    asnC();
-    if(attSide==='h'){const ph2=$id('passhint');if(ph2)ph2.style.display='block';}
-    G.kickoffUntil=Date.now()+1500;
+    /* A free kick used to drop straight back into 'moving', so play simply
+       restarted and the taker never got to choose. Open the action menu the
+       same way the penalty does — the taker picks pass or shoot. */
+    G.phase='idle';
+    G.kickoffUntil=Date.now()+900;
+    setTimeout(()=>{
+      if(G._fkGen!==_fk||!G.mt)return;
+      if(G.phase==='duel'||G.phase==='duel_result')return;
+      G.phase='idle';
+      opDuel();                      // pass / dribble / shoot, taker's call
+    },900);
   },isPK?3500:3200);
   return true;
 }
