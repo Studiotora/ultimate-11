@@ -1905,6 +1905,19 @@ function moveOffBall(s,ds,dt=1){
   const threatLevel=clamp((carrierProg-.30)/.45,0,1);
 
   // Speeds
+  /* Per-slot depth stagger for the ATTACKING side's own back line — the
+     defending side already had this; without it all four go to one tx. */
+  const _atkDefOff={};
+  (function(){
+    try{
+      const ks=validOutfieldKeys(s).filter(k=>zo(k)==='def');
+      if(!ks.length)return;
+      let sum=0; const raw={};
+      ks.forEach(k=>{ const q=fp(k, s==='h'?'home':'away', G.half); raw[k]=q.x; sum+=q.x; });
+      const mean=sum/ks.length;
+      ks.forEach(k=>{ _atkDefOff[k]=clamp((raw[k]-mean)*(dirFor(s)>0?1:-1),-0.07,0.07); });
+    }catch(e){}
+  })();
   const DRIFT_SPEED   = W * 0.00020 * dt;
   const ROLE_SPEED    = W * 0.00046 * dt;   // cover/blocker were jogging
   const SUPPORT_SPEED = W * 0.00046 * dt;
@@ -2036,10 +2049,14 @@ function moveOffBall(s,ds,dt=1){
         glide(cur,dir>0?clamp(tx,W*.40,W*.85):clamp(tx,W*.15,W*.60),ty,SUPPORT_SPEED*0.85,pl,s,k);
         return;
       }
-      // Normal: hold defensive line based on carrier progress. Stance shifts
-      // the whole line: chasing pushes past halfway, protecting drops deep.
-      const lineProg = clamp(carrierProg - 0.35 + stA*0.06, 0.06, 0.50);
-      const tx = (dir>0 ? lineProg : 1-lineProg) * W;
+      /* Normal: hold defensive line based on carrier progress.
+         The old floor was 0.06 — inside the six-yard box — and the gap behind
+         the ball was 0.35. Playing the ball backwards drove the whole back
+         four onto the keeper (any carrierProg under 0.41 pinned them at 6%).
+         Floor is now outside the area and the gap is a realistic 0.26. */
+      const lineProg = clamp(carrierProg - 0.26 + stA*0.06, 0.165, 0.50);
+      const myProg = lineProg + (_atkDefOff[k]||0);
+      const tx = (dir>0 ? myProg : 1-myProg) * W;
       const cap = dir>0 ? W*(0.48+stA*0.07) : W*(0.52-stA*0.07);
       const final = dir>0 ? Math.min(tx, cap) : Math.max(tx, cap);
       const ty = p.y*H;
