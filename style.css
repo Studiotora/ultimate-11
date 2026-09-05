@@ -1472,7 +1472,7 @@ html,body{overscroll-behavior:none;}
 
 /* ─── IMAGE-BASED ACTION BUTTONS (overrides 3D face/bot styling) ─── */
 .dact3d{padding:0;background:none;border:none;}
-.dact3d-img{display:block;width:clamp(38px,57.6px,54px)!important;max-width:54px!important;height:auto!important;filter:drop-shadow(0 3px 5px rgba(0,0,0,.55));transition:filter .15s,transform .12s;pointer-events:none;}
+.dact3d-img{display:block;width:clamp(49px,73.7px,69px)!important;max-width:69px!important;height:auto!important;filter:drop-shadow(0 3px 5px rgba(0,0,0,.55));transition:filter .15s,transform .12s;pointer-events:none;}
 .dact3d:hover .dact3d-img{filter:drop-shadow(0 5px 9px rgba(0,0,0,.7)) brightness(1.08);transform:translateY(-1px);}
 .dact3d:active .dact3d-img{transform:translateY(2px);filter:drop-shadow(0 1px 2px rgba(0,0,0,.7)) brightness(.95);}
 .dact3d .dact3d-c{position:absolute;bottom:-4px;left:50%;transform:translateX(-50%);font-family:'Orbitron',sans-serif;font-size:clamp(8px,12.16px,11px);letter-spacing:.06em;color:#fff;background:rgba(0,0,0,.78);padding:1px 7px;border-radius:3px;white-space:nowrap;border:1px solid rgba(255,255,255,.12);z-index:3;}
@@ -2229,8 +2229,8 @@ html,body{overscroll-behavior:none;}
   letter-spacing:.16em !important;
 }
 .duel-aaa .dact3d-img{
-  width:clamp(68px,108.8px,110px) !important;
-  max-width:clamp(68px,108.8px,110px) !important;
+  width:clamp(87px,139.3px,141px) !important;
+  max-width:clamp(87px,139.3px,141px) !important;
 }
 .duel-aaa .dact3d-c{
   font-size:clamp(9px,13.44px,12px) !important;
@@ -2553,8 +2553,8 @@ html,body{overscroll-behavior:none;}
   }
   .duel-aaa .dact3d-l{ font-size:11px !important; letter-spacing:.06em !important;}
   .duel-aaa .dact3d-img{
-    width:30px !important;
-    max-width:30px !important;
+    width:39px !important;
+    max-width:39px !important;
   }
   .duel-aaa .dact3d-i{ font-size:13px !important;}
   .duel-aaa .dact3d-c{ font-size:7px !important; padding:1px 4px !important;}
@@ -3482,7 +3482,7 @@ html.ue-phone #s-match .pause-btn.aaa-pause,html.ue-tablet #s-match .pause-btn.a
 html.ue-phone .dact3d-face,html.ue-tablet .dact3d-face{
   padding:calc(8px*var(--tb)) calc(13px*var(--tb));}
 html.ue-phone .dact3d-img,html.ue-tablet .dact3d-img{
-  width:calc(48px*var(--tb))!important;max-width:none!important;}
+  width:calc(62px*var(--tb))!important;max-width:none!important;}
 
 /* --- pause-menu option rows (if reachable on touch) --- */
 html.ue-phone .pz-opt,html.ue-tablet .pz-opt{min-height:calc(46px*var(--tb));}
