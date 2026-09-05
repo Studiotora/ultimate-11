@@ -1212,18 +1212,48 @@
         f.sp.material.opacity=(f.life/f.max)*0.85; const s=f.sp.scale.x*(1+dt*3.5); f.sp.scale.set(s,s,1); }
     }
     /* ── camera-facing ribbon trail (comet tail) ── */
+    let _ribTex=null;
+    function ribbonTex(){
+      if(_ribTex) return _ribTex;
+      const c=document.createElement('canvas'); c.width=8; c.height=64;
+      const x=c.getContext('2d');
+      const g=x.createLinearGradient(0,0,0,64);
+      g.addColorStop(0.00,'rgba(0,0,0,0)');   g.addColorStop(0.22,'rgba(120,120,120,0.55)');
+      g.addColorStop(0.50,'rgba(255,255,255,1)');
+      g.addColorStop(0.78,'rgba(120,120,120,0.55)'); g.addColorStop(1.00,'rgba(0,0,0,0)');
+      x.fillStyle=g; x.fillRect(0,0,8,64);
+      _ribTex=new T.CanvasTexture(c);
+      _ribTex.wrapS=_ribTex.wrapT=T.ClampToEdgeWrapping;
+      return _ribTex;
+    }
     function makeRibbon(maxN,col){
       const g=new T.BufferGeometry();
       const pos=new Float32Array(maxN*2*3), colr=new Float32Array(maxN*2*3);
+      const uv=new Float32Array(maxN*2*2);
+      for(let i=0;i<maxN;i++){ uv[i*4]=i/(maxN-1); uv[i*4+1]=0; uv[i*4+2]=i/(maxN-1); uv[i*4+3]=1; }
       g.setAttribute('position',new T.BufferAttribute(pos,3)); g.setAttribute('color',new T.BufferAttribute(colr,3));
+      g.setAttribute('uv',new T.BufferAttribute(uv,2));
       const idx=[]; for(let i=0;i<maxN-1;i++){ const a=i*2; idx.push(a,a+1,a+2, a+1,a+3,a+2); } g.setIndex(idx);
-      const m=new T.MeshBasicMaterial({vertexColors:true,transparent:true,blending:T.AdditiveBlending,depthWrite:false,side:T.DoubleSide,fog:false});
+      const m=new T.MeshBasicMaterial({map:ribbonTex(),vertexColors:true,transparent:true,blending:T.AdditiveBlending,depthWrite:false,side:T.DoubleSide,fog:false});
       const mesh=new T.Mesh(g,m); mesh.frustumCulled=false; mesh.visible=false; scene.add(mesh);
-      return {mesh,pts:[],maxN,col:new T.Color(col),width:0.6,g,pos,colr};
+      return {mesh,pts:[],maxN,col:new T.Color(col),width:0.6,life:430,g,pos,colr};
     }
-    function ribbonPush(R,x,y,z){ R.pts.push({x,y,z,t:performance.now()}); if(R.pts.length>R.maxN) R.pts.shift(); }
+    function ribbonPush(R,x,y,z){
+      const L=R.pts[R.pts.length-1];
+      if(L){
+        const dx=x-L.x, dy=y-L.y, dz=z-L.z, d=Math.hypot(dx,dy,dz);
+        const step=R.width*0.55||0.3;
+        if(d>step*1.6){ // interpolate so a fast ball still lays a continuous tail
+          const n=Math.min(6,Math.floor(d/step));
+          for(let i=1;i<n;i++){ const f=i/n;
+            R.pts.push({x:L.x+dx*f,y:L.y+dy*f,z:L.z+dz*f,t:L.t+(performance.now()-L.t)*f});
+            if(R.pts.length>R.maxN) R.pts.shift(); }
+        }
+      }
+      R.pts.push({x,y,z,t:performance.now()}); if(R.pts.length>R.maxN) R.pts.shift();
+    }
     function ribbonUpdate(R,now){
-      const LIFE=300;
+      const LIFE=R.life||430;
       while(R.pts.length&&now-R.pts[0].t>LIFE) R.pts.shift();
       const n=R.pts.length;
       if(n<2){ R.mesh.visible=false; return; }
@@ -1235,7 +1265,9 @@
         let vx=cp.x-p.x,vy=cp.y-p.y,vz=cp.z-p.z; const vl=Math.hypot(vx,vy,vz)||1; vx/=vl;vy/=vl;vz/=vl;
         let sx=ty*vz-tz*vy, sy=tz*vx-tx*vz, sz=tx*vy-ty*vx; const sl=Math.hypot(sx,sy,sz)||1; sx/=sl;sy/=sl;sz/=sl;
         const f=i/(n-1), age=Math.max(0,1-(now-p.t)/LIFE);
-        const w=R.width*(0.08+0.92*f*f)*age, b=age*age*(0.12+0.88*f*f);
+        // whip taper: needle tail, full-width head, plus a little energy flicker
+        const taper=Math.pow(f,0.55), fl=0.88+0.12*Math.sin(now*0.045+i*1.7);
+        const w=R.width*(0.04+0.96*taper)*age*fl, b=age*age*(0.10+0.90*taper)*fl;
         const k=i*6;
         R.pos[k]=p.x+sx*w; R.pos[k+1]=p.y+sy*w; R.pos[k+2]=p.z+sz*w;
         R.pos[k+3]=p.x-sx*w; R.pos[k+4]=p.y-sy*w; R.pos[k+5]=p.z-sz*w;
@@ -1271,12 +1303,57 @@
       if(Math.sign(py)!==sideSign){ px=-px; py=-py; }
       return {px,py,L};
     }
+    /* ══ SUPER-SHOT TRAIL STYLES ══════════════════════════════════════
+       Each entry drives the shared ribbon/glow/particle rig rather than
+       having its own renderer: strand count, braid wobble, glow size,
+       particle rate and ring cadence are what make them read apart. */
+    const TRAIL_STYLES={
+      standard :{w:1.00,strands:1,wob:0.00,wf:0 ,glow:2.2,pR:2,pG:9 ,ring:0   ,col:'#ffd24a'},
+      flame    :{w:1.15,strands:2,wob:0.30,wf:7 ,glow:2.7,pR:4,pG:4 ,ring:0   ,col:'#ff6a1e',hotP:1},
+      lightning:{w:0.70,strands:3,wob:0.85,wf:22,glow:2.3,pR:1,pG:9 ,ring:0.17,col:'#7fd8ff'},
+      wind     :{w:0.60,strands:3,wob:0.70,wf:4 ,glow:1.8,pR:2,pG:2 ,ring:0   ,col:'#bfe9ff'},
+      shadow   :{w:1.20,strands:1,wob:0.25,wf:3 ,glow:2.4,pR:2,pG:2 ,ring:0   ,col:'#7a4cc4',dark:1},
+      aura     :{w:1.05,strands:3,wob:0.50,wf:9 ,glow:2.9,pR:3,pG:6 ,ring:0.16,col:'#ff5ca8'},
+      tiger    :{w:1.30,strands:3,wob:0.60,wf:10,glow:3.2,pR:3,pG:7 ,ring:0.13,col:'#ffb020',hotP:1},
+      after    :{w:0.00,strands:0,wob:0.00,wf:0 ,glow:2.0,pR:0,pG:0 ,ring:0   ,col:'#6fd0ff',ghost:1},
+      dragon   :{w:1.25,strands:2,wob:0.90,wf:5 ,glow:2.7,pR:3,pG:8 ,ring:0   ,col:'#ff3a2a',hotP:1},
+      ice      :{w:0.90,strands:2,wob:0.35,wf:3 ,glow:2.3,pR:3,pG:10,ring:0   ,col:'#8fe8ff',hotP:1},
+      nature   :{w:0.85,strands:2,wob:0.55,wf:3 ,glow:2.0,pR:2,pG:1 ,ring:0   ,col:'#4fe06a'},
+      galaxy   :{w:0.70,strands:2,wob:1.10,wf:6 ,glow:2.6,pR:4,pG:0 ,ring:0   ,col:'#b07cff'}
+    };
+    const TRAIL_TINTS=['#ffd24a','#ff6a1e','#4fa8ff','#46e0ff','#9b5cff',
+                       '#2ee06a','#ff4fa0','#ffffff','#a8ff5c','#ff3a6a'];
+    // players who always get the dragon
+    const DRAGON_NAMES=['frisina','xiao','michael','micheal'];
+    const TECH_POOL=['lightning','wind','ice','galaxy','aura','nature','after','shadow'];
+    const ALL_POOL=Object.keys(TRAIL_STYLES);
+    function _hash(str){ let h=0; str=String(str||'');
+      for(let i=0;i<str.length;i++) h=(h*31+str.charCodeAt(i))|0; return Math.abs(h); }
+    function trailStyleFor(pl){
+      if(!pl) return {k:'standard',st:TRAIL_STYLES.standard,col:TRAIL_STYLES.standard.col};
+      const nm=String(pl.origName||pl.name||''), h=_hash(nm), low=nm.toLowerCase();
+      let k;
+      if(DRAGON_NAMES.some(d=>low.indexOf(d)>=0)) k='dragon';
+      else {
+        const pwr=pl.pwr||pl.pow||50, tec=pl.tec||50, sho=pl.sho||pl.shO||50;
+        if(pwr>=tec+6 || sho>=85)      k=(h%2)?'tiger':'flame';        // strong strikers
+        else if(tec>=pwr+6)            k=TECH_POOL[h%TECH_POOL.length]; // technical
+        else                           k=ALL_POOL[h%ALL_POOL.length];   // everyone else
+      }
+      const st=TRAIL_STYLES[k]||TRAIL_STYLES.standard;
+      // strikers keep their signature colour; technical players get variety
+      const col=(k==='flame'||k==='tiger'||k==='dragon') ? st.col
+                : TRAIL_TINTS[(h>>3)%TRAIL_TINTS.length];
+      return {k,st,col};
+    }
+    let _trailFx=null, _ringT=0, _ghostT=0;
     let _os={bt:null};   // open-play shot state (style + bend axis for the current ballTravel)
     /* ── ball FX: comet (shots) + resting halo (open play) ── */
-    let shotRibbon=null, ballGlow=null, ballCore=null, ballHalo=null, _lastFxBall=null;
+    let shotRibbon=null, RIBS=[], ballGlow=null, ballCore=null, ballHalo=null, _lastFxBall=null;
     function ensureBallFx(){
       if(shotRibbon) return;
-      shotRibbon=makeRibbon(40,'#ffd24a');
+      shotRibbon=makeRibbon(96,'#ffd24a');
+      RIBS=[shotRibbon, makeRibbon(96,'#ffd24a'), makeRibbon(96,'#ffd24a')];
       const mk=(col,op)=>{ const s=new T.Sprite(new T.SpriteMaterial({map:fxGradTex(col),transparent:true,opacity:op,blending:T.AdditiveBlending,depthWrite:false,fog:false})); s.visible=false; scene.add(s); return s; };
       ballGlow=mk('#ffb040',0.9); ballCore=mk('#ffffff',0.95); ballHalo=mk('#ffd24a',0.28);
     }
@@ -1292,15 +1369,60 @@
       ballGlow.material.opacity=0.6;
       if(hot){
         const kind=(c&&c.style&&c.style.kind)||(_os.st&&_os.st.kind)||'normal';
-        shotRibbon.col.set(col); shotRibbon.width=d*(kind==='power'?0.65:kind==='curve'?1.1:0.9); ribbonPush(shotRibbon,x,y,z);
-        const pu=1+0.25*Math.sin(performance.now()*0.03);
-        ballGlow.visible=true; ballGlow.material.color.set(col); ballGlow.position.set(x,y,z); ballGlow.scale.set(d*2.2*pu,d*2.2*pu,1);
-        ballCore.visible=true; ballCore.material.opacity=0.55; ballCore.position.set(x,y,z); ballCore.scale.set(d*1.25,d*1.25,1);
-        if(_lastFxBall){ const dx=x-_lastFxBall.x, dy=y-_lastFxBall.y, dz=z-_lastFxBall.z, L=Math.hypot(dx,dy,dz);
-          if(L>0.02){ const nS=kind==='curve'?3:kind==='power'?1:2; for(let i=0;i<nS;i++){ const j=()=>(Math.random()-0.5)*(kind==='power'?1.2:3);
-            spawnPart(x-dx*0.3,y,z-dz*0.3, -dx/L*2+j(), 1+j(), -dz/L*2+j(), Math.random()<0.5?'#ffffff':col,
-                      d*(0.35+Math.random()*0.35), 0.28+Math.random()*0.22, 9); } } }
-      } else { ballGlow.visible=false; ballCore.visible=false; }
+        const FX=_trailFx||trailStyleFor(null), ST=FX.st;
+        const tcol=FX.col||col;
+        const kw=(kind==='power'?0.65:kind==='curve'?1.1:0.9);
+        const now=performance.now(), ph=now*0.001;
+
+        // speed → tail length
+        if(_lastFxBall){
+          const sx=x-_lastFxBall.x, sy=y-_lastFxBall.y, sz=z-_lastFxBall.z;
+          const spd=Math.hypot(sx,sy,sz)*60;
+          const want=Math.max(430,Math.min(1250,380+spd*22));
+          RIBS.forEach(R=>{ R.life+=(want-R.life)*0.25; });
+        }
+
+        // horizontal perpendicular, for braiding the extra strands
+        let px=0,pz=0;
+        if(_lastFxBall){ const dx=x-_lastFxBall.x, dz=z-_lastFxBall.z, L=Math.hypot(dx,dz)||1;
+          px=-dz/L; pz=dx/L; }
+
+        RIBS.forEach((R,k)=>{
+          if(k>=ST.strands){ R.mesh.visible=false; R.pts.length=0; return; }
+          R.col.set(tcol);
+          R.width=d*kw*ST.w*(k?0.62:1);
+          const off=ST.wob? Math.sin(ph*ST.wf+k*2.1)*ST.wob*d*3*(k?1:0.35) : 0;
+          const yo =ST.wob? Math.cos(ph*ST.wf+k*1.3)*ST.wob*d*1.1 : 0;
+          ribbonPush(R, x+px*off, y+yo, z+pz*off);
+        });
+
+        // afterimage: no ribbon, discrete ghost balls instead
+        if(ST.ghost){
+          _ghostT+=0.016;
+          if(_ghostT>0.045){ _ghostT=0;
+            spawnPart(x,y,z, 0,0,0, tcol, d*1.5, 0.42, 0); }
+        }
+
+        const pu=1+0.25*Math.sin(now*0.03);
+        const gcol=ST.dark?'#1a0f2e':tcol;
+        ballGlow.visible=true; ballGlow.material.color.set(gcol);
+        ballGlow.position.set(x,y,z);
+        ballGlow.scale.set(d*ST.glow*pu,d*ST.glow*pu,1);
+        ballCore.visible=true; ballCore.material.opacity=ST.dark?0.30:0.55;
+        ballCore.position.set(x,y,z); ballCore.scale.set(d*1.25,d*1.25,1);
+
+        if(ST.ring){ _ringT+=0.016;
+          if(_ringT>ST.ring){ _ringT=0; spawnRing(x,z,tcol,d*0.8,d*7,0.45,0.06); } }
+
+        if(_lastFxBall && ST.pR){
+          const dx=x-_lastFxBall.x, dy=y-_lastFxBall.y, dz=z-_lastFxBall.z, L=Math.hypot(dx,dy,dz);
+          if(L>0.02){ const spread=(kind==='power'?1.2:3);
+            for(let i=0;i<ST.pR;i++){ const j=()=>(Math.random()-0.5)*spread;
+              spawnPart(x-dx*0.3,y,z-dz*0.3, -dx/L*2+j(), (ST.pG<3?2.5:1)+j(), -dz/L*2+j(),
+                        Math.random()<(ST.hotP?0.6:0.5)?'#ffffff':tcol,
+                        d*(0.35+Math.random()*0.35), 0.28+Math.random()*0.30, ST.pG); } } }
+      } else { ballGlow.visible=false; ballCore.visible=false;
+               RIBS.forEach(R=>{ if(R!==shotRibbon) R.mesh.visible=false; }); }
       _lastFxBall={x,y,z};
     }
     function openPlayBallFx(x,y,z,d,shooting){
@@ -1344,7 +1466,7 @@
       for(const f of CFLAGS) f.rotation.y=Math.sin(now*0.003+f.userData.ph)*0.45+(f.position.x<0?0.3:Math.PI-0.3);
       for(const h of MASTS) h.material.opacity=0.6+0.12*Math.sin(now*0.02+h.position.x);
       tickParts(dt); tickRings(dt); tickFlashes(dt);
-      if(shotRibbon) ribbonUpdate(shotRibbon,now);
+      RIBS.forEach(R=>ribbonUpdate(R,now));
       if(cine&&ballHalo) ballHalo.visible=false;
     }
     P3D.gfxRebuild=function(){ try{ buildExtras(); }catch(e){ console.warn('[P3D] gfxRebuild',e); } };
@@ -1914,12 +2036,14 @@
             const s=G.poss, pl=(typeof sq==='function'&&G.ck&&sq(s))?sq(s)[G.ck]:null;
             const st=shotStyleFor(pl), pp=shotPerp(bt.fx,bt.fy,bt.tx,bt.ty);
             _os={bt,st,px:pp.px,py:pp.py,L:pp.L,amt:(CV.width||1280)*0.05*st.curve};
-            window.U11DBG&&U11DBG('[3D] open-play shot style: '+st.kind);
+            _trailFx=trailStyleFor(pl); try{ clearTrail(); }catch(e){}
+            window.U11DBG&&U11DBG('[3D] open-play shot: '+st.kind+' / trail '+_trailFx.k
+              +' ('+(pl?(pl.origName||pl.name):'?')+')');
           }
           const t=Math.min(1,Math.hypot(bx-_os.bt.fx,by-_os.bt.fy)/_os.L);
           const off=Math.sin(Math.PI*t)*_os.amt;
           bx+=_os.px*off; by+=_os.py*off; hgtMul=_os.st.loft;
-        } else if(!shooting) _os.bt=null;
+        } else if(!shooting){ _os.bt=null; _trailFx=null; }
       }catch(e){}
       const r=d*0.5, hgt=Math.max(0,(ball.bz||0)*0.09)*hgtMul;
       const bwy=r+hgt;                       // resting on the turf, lifted by bz
@@ -2358,7 +2482,9 @@
         const f=t.life/t.max;
         t.sp.material.opacity=0.85*f; const s=t.size*(0.4+0.6*f); t.sp.scale.set(s,s,1); });
     }
-    function clearTrail(){ TRAIL.forEach(t=>{t.alive=false;t.sp.visible=false;}); }
+    function clearTrail(){ TRAIL.forEach(t=>{t.alive=false;t.sp.visible=false;});
+      RIBS.forEach(R=>{ R.pts.length=0; R.mesh.visible=false; R.life=430; });
+      _ringT=0; _ghostT=0; }
     // force a sprite to an explicit sheet cell (used on shooter + GK)
     // layout-aware: pick a frame of an animation by index, or by 0..1 progress
     function forceAnim(id,face,anim,idx,flip){
@@ -2444,7 +2570,9 @@
           const shooter=(typeof sq==='function'&&sq(o.as))?sq(o.as)[o.sk]:null;
           const st=shotStyleFor(shooter), pp=shotPerp(sp.x,sp.y,stopX,gp.y);
           Object.assign(cine,{style:st,perpX:pp.px,perpY:pp.py,curveAmt:W*0.05*st.curve,dur:1.6/st.speed});
-          window.U11DBG&&U11DBG('[3D] super shot style: '+st.kind+' ('+(shooter?((shooter.origName||shooter.name)+' pwr'+shooter.pwr+' tec'+shooter.tec):'?')+')');
+          _trailFx=trailStyleFor(shooter); try{ clearTrail(); }catch(e){}
+          window.U11DBG&&U11DBG('[3D] super shot: '+st.kind+' / trail '+_trailFx.k
+            +' ('+(shooter?((shooter.origName||shooter.name)+' pwr'+shooter.pwr+' tec'+shooter.tec):'?')+')');
         }catch(e){}
         if(typeof ball!=='undefined'&&ball){ball.x=sp.x;ball.y=sp.y;ball.bz=0;}
         return true;
@@ -2544,7 +2672,7 @@
       const W2=(CV.width||1280);
       const bwx=ex2wx(Math.min(Math.max(bx,0.02*W2),0.98*W2)),bwz=ey2wz(by);
       const bwy=0.05+bz*0.09;
-      ballMesh.scale.set(d,d,1); ballMesh.position.set(bwx,bwy,bwz);
+      ballMesh.scale.setScalar(d); ballMesh.position.set(bwx,bwy,bwz);
       if(c.mode==='fly'&&c.style){
         if(c.style.kind==='curve') ballMesh.rotateOnWorldAxis(_AY,dt*26);                 // side-spin
         else if(c._pbw){ const ddx=bwx-c._pbw.x, ddz=bwz-c._pbw.z;                       // topspin along travel
@@ -2635,7 +2763,7 @@
         const bwy=0.05+bz*0.09;
         const frac=(P3D.spriteFrac!=null?P3D.spriteFrac:0.045);
         const d=PLEN*frac*0.21;
-        ballMesh.scale.set(d,d,1); ballMesh.position.set(bwx,bwy,bwz);
+        ballMesh.scale.setScalar(d); ballMesh.position.set(bwx,bwy,bwz);
         try{ shotBallFx(c,bwx,bwy,bwz,d,c.t<T1+0.4); }catch(e){}
       } else {
         ballMesh.position.set(ex2wx(c.fx),0.05,ey2wz(c.fy));
