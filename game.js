@@ -5031,10 +5031,10 @@ const BTN_IMG_MAP = {
 };
 function actBtnInner(actionId, costTxt){
   const img = BTN_IMG_MAP[actionId] || actionId;
-  return '<img class="dact3d-img" style="width:78px;max-width:78px;height:auto;display:block;" src="assets/ui/btn-'+img+'.png" alt=""><span class="dact3d-c">'+costTxt+'</span>';
+  return '<img class="dact3d-img" style="width:100px;max-width:100px;height:auto;display:block;" src="assets/ui/btn-'+img+'.png" alt=""><span class="dact3d-c">'+costTxt+'</span>';
 }
 function superToggleInner(on){
-  return '<img class="dact3d-img" style="width:78px;max-width:78px;height:auto;display:block;" src="assets/ui/btn-super.png" alt=""><span class="dact3d-c">'+(on?'ON':'OFF')+'</span>';
+  return '<img class="dact3d-img" style="width:100px;max-width:100px;height:auto;display:block;" src="assets/ui/btn-super.png" alt=""><span class="dact3d-c">'+(on?'ON':'OFF')+'</span>';
 }
 
 // Apply/clear selection visuals directly via inline styles (cache-proof)
