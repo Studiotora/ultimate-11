@@ -95,7 +95,11 @@
     gfx:{ sky:true, masts:true, lamps:true, boards:true, flags:true, flashes:true, floods:true, banners:true },
     // super-shot cinematic camera (console-tunable): hold = charging aura, chase = ball flight
     cine:{ holdDist:9.6, holdHeight:1.55, holdSide:1.1, holdLookAhead:20, holdLookY:1.25,
-           chaseDist:7.5, chaseHeight:2.4, chaseLookY:1.0 },
+           // chase: sits well back and off to the side so the tail reads in
+           // profile instead of the camera riding on top of the ball
+           chaseDist:16.5, chaseHeight:4.2, chaseSide:5.5, chaseLookY:1.0,
+           chaseLag:0.10, chaseLookAhead:4.5,
+           slowMo:2.4, slowInAt:0.12 },
     // sprite animation cadence (frames per second) — console-tunable
     anim:{ runFpsMin:8, runFpsMax:13, idleFps:3, shootMs:720, passMs:520 },
     ready:true
@@ -2634,7 +2638,13 @@
         cineGkNudge(c);                               // ...a step off his line
         const stl=c.style||{curve:0,loft:1,speed:1,kind:'normal'}, dur=c.dur||1.6;
         if(c.mode==='fly'){
-          c.ft+=dt/dur;
+          // Tsubasa-style ramp: hard off the boot, then slides into slow motion
+          // for the middle of the flight so the trail is actually readable.
+          const CCs=P3D.cine||{}, smoMax=(CCs.slowMo||2.4), inAt=(CCs.slowInAt||0.12);
+          const ramp=Math.min(1,Math.max(0,(c.ft-inAt)/0.22));
+          const ease=Math.sin(Math.PI*Math.min(1,c.ft*1.05));
+          const smo=1+(smoMax-1)*ramp*ease;
+          c.ft+=dt/(dur*smo);
           const kf=Math.min(3,Math.floor((c.ft*dur)/0.14));
           forceAnimT(sid,'up','shoot',kf/3,false);    // kick frames, back view
           if(c.ft>=1){
@@ -2725,12 +2735,24 @@
         camera.position.set(gwx+dx*13,3.2,gwz+dz*13);
         camera.lookAt(gwx,1.1,gwz);
       }else{
-        // Chase: behind the ball along the ball→goal line.
+        // Chase: well behind the ball AND offset to one side, so the comet
+        // streams across frame instead of pointing straight at the lens.
         const b=c._bw||{x:swx,y:0.5,z:swz};
         let dx=gwx-b.x,dz=gwz-b.z;const L=Math.hypot(dx,dz)||1;dx/=L;dz/=L;
-        const CC=P3D.cine||{}, cd=(CC.chaseDist||7.5);
-        camera.position.set(b.x-dx*cd,Math.max(0.5,b.y)+(CC.chaseHeight||2.4),b.z-dz*cd);
-        camera.lookAt(gwx,(CC.chaseLookY||1.0),gwz);
+        const CC=P3D.cine||{};
+        const cd=(CC.chaseDist||16.5), ch=(CC.chaseHeight||4.2), cs=(CC.chaseSide||5.5);
+        const side=(c._camSide||(c._camSide=(Math.random()<0.5?1:-1)));
+        const tx=b.x-dx*cd-dz*cs*side,
+              ty=Math.max(1.0,b.y)+ch,
+              tz=b.z-dz*cd+dx*cs*side;
+        if(!c._cam) c._cam={x:tx,y:ty,z:tz};
+        const k=(CC.chaseLag!=null?CC.chaseLag:0.10);   // lag → ball drifts ahead
+        c._cam.x+=(tx-c._cam.x)*k; c._cam.y+=(ty-c._cam.y)*k; c._cam.z+=(tz-c._cam.z)*k;
+        camera.position.set(c._cam.x,c._cam.y,c._cam.z);
+        // aim just ahead of the BALL, never at the goal — that was what pushed
+        // the ball to the frame edge and cropped the trail out entirely
+        const la=(CC.chaseLookAhead||4.5);
+        camera.lookAt(b.x+dx*la, Math.max(0.8,b.y)+0.5, b.z+dz*la);
       }
     }
 
