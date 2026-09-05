@@ -2087,6 +2087,7 @@ function moveOffBall(s,ds,dt=1){
     const cands=[];
     Object.keys(sq(ds)).forEach(k=>{
       if(!sq(ds)[k]||k==='GK'||assignedDefs.has(k)||ocd(ds,k)||!PP[ds][k])return;
+      if(zo(k)==='att')return;                  // keep the forwards up the pitch
       cands.push({k,d:dist(PP[ds][k],cp)});
     });
     cands.sort((a,b)=>a.d-b.d);
@@ -2108,6 +2109,10 @@ function moveOffBall(s,ds,dt=1){
     const MARK_RANGE=W*0.34;
     Object.keys(sq(ds)).forEach(k=>{
       if(!sq(ds)[k]||assignedDefs.has(k)||k==='GK'||!PP[ds][k])return;
+      // Forwards do NOT man-mark. They were being assigned like everyone else,
+      // which dragged the whole front line back and left nobody upfield —
+      // the "8 players behind the ball" shape.
+      if(zo(k)==='att')return;
       freeAtk.forEach(ak=>{
         if(!PP[s][ak])return;
         pairs.push({k,ak,d:dist(PP[ds][k],PP[s][ak])});
@@ -2186,14 +2191,21 @@ function moveOffBall(s,ds,dt=1){
           // Track the carrier's projected forward path
           const ahead = dir>0 ? 1 : -1; // attacker direction
           const predictX = cp.x + ahead*W*0.03;
-          const tx = lerp(predictX,dgx,0.15);
+          let tx = lerp(predictX,dgx,0.15);
+          const fX=(ddir>0 ? 0.135 : 1-0.135)*W;
+          tx = ddir>0 ? Math.max(tx,fX) : Math.min(tx,fX);
           const ty = lerp(cp.y,H*0.5,0.10);
           glide(cur,tx,ty,TRACK_SPEED*1.45*recoveryMult(ds,k,cur),pl,ds,k);
           return;
         }
         // Stay goal-side of the attacker — bunkering teams sag toward goal (zonal feel)
         const goalSideBias = 0.18 + threatLevel*0.12 + bunker*0.15;
-        const tx=lerp(tgt.x,dgx,goalSideBias);
+        let tx=lerp(tgt.x,dgx,goalSideBias);
+        /* Goal-side bias with a deep attacker used to drag markers all the way
+           onto the keeper. Never drop behind the defensive line's own floor. */
+        const floorProg=0.135;
+        const floorX=(ddir>0 ? floorProg : 1-floorProg)*W;
+        tx = ddir>0 ? Math.max(tx,floorX) : Math.min(tx,floorX);
         // was lerp(...,H*0.5,0.08) — pulled markers infield, leaving the wide
         // man free. Track his actual lane instead.
         const ty=lerp(tgt.y,H*0.5,0.02);
