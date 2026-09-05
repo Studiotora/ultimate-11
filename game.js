@@ -2002,7 +2002,10 @@ function moveOffBall(s,ds,dt=1){
       if(k===ROLES.runner1||k===ROLES.runner2){
         const offset = k===ROLES.runner1 ? W*0.12 : W*0.08;
         const tx = aheadOf(cp.x, offset);
-        const ty = lerp(p.y*H, cp.y, 0.25);
+        // was 0.25 toward the carrier's lane — both runners converged onto him.
+        // Hold the formation lane and push out to opposite sides instead.
+        const laneBias = (k===ROLES.runner1 ? -1 : 1) * H*0.10;
+        const ty = clamp(lerp(p.y*H, cp.y, 0.10) + laneBias, H*0.10, H*0.90);
         glide(cur, dir>0?clamp(tx,W*.15,W*.85):clamp(tx,W*.15,W*.85), ty, SUPPORT_SPEED, pl,s,k);
         return;
       }
@@ -2237,7 +2240,7 @@ function moveOffBall(s,ds,dt=1){
       // Ball-side shift. At 0.18 the block barely slid across, so running down
       // a touchline simply bypassed everyone. A real back line shuttles hard
       // toward the ball; 0.50 keeps shape while genuinely closing the flank.
-      ty = lerp(p.y*H, cp.y, 0.50);
+      ty = lerp(p.y*H, cp.y, 0.26);
       // ELASTIC ANCHORING: if the engager is a fellow defender who stepped
       // out, tuck toward his vacated formation slot to cover the hole.
       if(ROLES.engager&&zo(ROLES.engager)==='def'){
@@ -2268,8 +2271,11 @@ function moveOffBall(s,ds,dt=1){
 
 // ── REPULSION — prevent teammates bunching into clumps ────────────────────
 function applyRepulsion(){
-  const REPEL_DIST=W*.055;
-  const REPEL_FORCE=0.28;
+  /* Separation used to be 0.28px per tick against 4-13px of movement toward
+     the ball — roughly 45x too weak to do anything, which is why the whole
+     team ended up standing on the same blade of grass. */
+  const REPEL_DIST=W*.085;
+  const REPEL_FORCE=3.2;
   ['h','a'].forEach(side=>{
     const keys=Object.keys(sq(side)).filter(k=>sq(side)[k]&&PP[side][k]);
     for(let i=0;i<keys.length;i++){
@@ -2280,8 +2286,8 @@ function applyRepulsion(){
         if(d<REPEL_DIST){
           const force=(REPEL_DIST-d)/REPEL_DIST*REPEL_FORCE;
           const nx=dx/d,ny=dy/d;
-          if(keys[i]!==G.ck){a.x-=nx*force;a.y-=ny*force;}
-          if(keys[j]!==G.ck){b.x+=nx*force;b.y+=ny*force;}
+          if(keys[i]!==G.ck&&keys[i]!=='GK'){a.x-=nx*force;a.y-=ny*force;}
+          if(keys[j]!==G.ck&&keys[j]!=='GK'){b.x+=nx*force;b.y+=ny*force;}
         }
       }
     }
