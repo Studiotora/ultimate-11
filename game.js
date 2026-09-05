@@ -2061,7 +2061,20 @@ function moveOffBall(s,ds,dt=1){
      of the attacker and retreats with him. */
   const attPosOwnFrame=1-carrierProg;
   const lineGap=0.13*(1-carrierProg*0.55);        // gap tightens near our goal
-  const defLineProg=clamp(attPosOwnFrame+lineGap - bunker*0.05 + dchase*0.05, 0.085, 0.62);
+  const defLineProg=clamp(attPosOwnFrame+lineGap - bunker*0.05 + dchase*0.05, 0.155, 0.62);
+  /* Per-slot depth stagger. Every defender was being sent to the SAME tx, which
+     is why the back line rendered as one flat American-football row. Keep each
+     man's own formation depth relative to the unit's average so centre-backs
+     sit deeper than full-backs and the line has natural shape. */
+  const _defOff={};
+  (function(){
+    const ks=validOutfieldKeys(ds).filter(k=>zo(k)==='def');
+    if(!ks.length) return;
+    let sum=0; const raw={};
+    ks.forEach(k=>{ const q=fp(k, ds==='h'?'home':'away', G.half); raw[k]=q.x; sum+=q.x; });
+    const mean=sum/ks.length;
+    ks.forEach(k=>{ _defOff[k]=clamp((raw[k]-mean)*(ddir>0?1:-1), -0.075, 0.075); });
+  })();
   const assignedDefs=new Set([ROLES.engager,ROLES.cover,ROLES.blocker]);
   const freeAtk=validOutfieldKeys(s).filter(k=>k!==G.ck);
 
@@ -2194,7 +2207,8 @@ function moveOffBall(s,ds,dt=1){
     let tx=p.x*W, ty=p.y*H;
     if(zone==='def'){
       // Defensive line uses the shared stance-aware height
-      tx = (ddir>0 ? defLineProg : 1-defLineProg) * W;
+      const myProg = defLineProg + (_defOff[k]||0);
+      tx = (ddir>0 ? myProg : 1-myProg) * W;
       // Ball-side shift. At 0.18 the block barely slid across, so running down
       // a touchline simply bypassed everyone. A real back line shuttles hard
       // toward the ball; 0.50 keeps shape while genuinely closing the flank.
