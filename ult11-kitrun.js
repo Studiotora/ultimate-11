@@ -1,21 +1,18 @@
 /* ============================================================
    ULT11-KITRUN · Team Select kit preview
-   Under each selection card the in-game sprite jogs on a strip of
-   pitch, so you can see the kit before picking a team. Uses the
-   home/away field sheets (assets/ps1/home.png & away.png), which are
-   12x8 grids — the side-facing RUN is row 3 (12 frames). The away
-   side is mirrored so the two players run toward the middle (VS).
-   Load AFTER game.js. Self-contained; no engine edits.
+   ONE long strip of pitch spans edge-to-edge under the captains
+   (at the tabs-row height). The home sprite jogs on the left, the
+   away sprite on the right (mirrored), so you can see the in-game
+   kit before picking. Uses the home/away field sheets
+   (assets/ps1/home.png & away.png) — 12x8 grids, side-run is row 3
+   (12 frames). Load AFTER game.js. Self-contained; no engine edits.
    ============================================================ */
 (function(){
   'use strict';
   const SHEET={ h:'assets/ps1/home.png', a:'assets/ps1/away.png' };
   const COLS=12, ROWS=8, RUN_ROW=3, RUN_FRAMES=12, FPS=11;
-  const S={};   // per side → {img, top, bot}  (content bounds within a cell row, 0..1)
+  const S={};   // per side → {img, top, bot} (content bounds within a cell row)
 
-  // Scan the RUN row once so the tall cell padding doesn't render the player
-  // tiny/floating — we crop to the actual sprite bounds. Falls back to the
-  // lower half of the cell if the canvas is tainted (e.g. opened via file://).
   function measure(side, im){
     const info={img:im, top:0.46, bot:1.0};
     try{
@@ -42,54 +39,52 @@
     im.src=SHEET[side];
   });
 
-  function draw(cv, side, t){
+  // one running player centred at cx, feet on groundY, up to maxH tall
+  function drawSprite(ctx, side, cx, groundY, maxH, t){
+    const info=S[side]; if(!info||!info.img) return;
+    const im=info.img, cw=im.width/COLS, ch=im.height/ROWS;
+    const fi=Math.floor(t/1000*FPS)%RUN_FRAMES, sx=fi*cw;
+    const syc=RUN_ROW*ch+info.top*ch, shc=Math.max(1,(info.bot-info.top)*ch);
+    const aspect=cw/shc;
+    const dh=maxH, dw=dh*aspect, dx=cx-dw/2, dy=groundY-dh;
+    ctx.imageSmoothingEnabled=false;
+    if(side==='h'){                                  // home faces right (toward centre)
+      ctx.drawImage(im, sx,syc,cw,shc, dx,dy,dw,dh);
+    }else{                                           // away mirrored, faces left
+      ctx.save(); ctx.translate(cx*2,0); ctx.scale(-1,1);
+      ctx.drawImage(im, sx,syc,cw,shc, dx,dy,dw,dh);
+      ctx.restore();
+    }
+  }
+
+  function draw(cv, t){
     const ctx=cv.getContext('2d'), W=cv.width, H=cv.height;
-    const faceRight=(side==='h');            // home runs right, away runs left
-    // ── pitch strip ──
+    // ── pitch ──
     const g=ctx.createLinearGradient(0,0,0,H);
     g.addColorStop(0,'#1f7a34'); g.addColorStop(1,'#12561f');
     ctx.fillStyle=g; ctx.fillRect(0,0,W,H);
-    // mowing stripes scroll opposite the run so the jog reads as motion
-    const stripeW=16, period=stripeW*2;
-    let off=((t*0.05)*(faceRight?-1:1))%period; if(off<0) off+=period;
-    ctx.save(); ctx.globalAlpha=0.08; ctx.fillStyle='#ffffff';
+    // mow stripes drift slowly to sell motion
+    const stripeW=Math.max(10,Math.round(W/34)), period=stripeW*2;
+    let off=(t*0.03)%period; if(off<0) off+=period;
+    ctx.save(); ctx.globalAlpha=0.07; ctx.fillStyle='#ffffff';
     for(let x=-period+off; x<W+period; x+=period) ctx.fillRect(x,0,stripeW,H);
     ctx.restore();
-    ctx.strokeStyle='rgba(255,255,255,.22)'; ctx.lineWidth=2;
-    ctx.beginPath(); ctx.moveTo(0,H-6); ctx.lineTo(W,H-6); ctx.stroke();
-    // contact shadow
-    ctx.fillStyle='rgba(0,0,0,.25)';
-    ctx.beginPath(); ctx.ellipse(W/2, H-9, 34, 7, 0, 0, Math.PI*2); ctx.fill();
-    // ── running sprite ──
-    const info=S[side];
-    if(info&&info.img){
-      const im=info.img, cw=im.width/COLS, ch=im.height/ROWS;
-      const fi=Math.floor(t/1000*FPS)%RUN_FRAMES, sx=fi*cw;
-      const top=info.top, bot=info.bot;
-      const syc=RUN_ROW*ch + top*ch, shc=Math.max(1,(bot-top)*ch);   // cropped source
-      // "contain"-fit the sprite so it fills the strip (big player, little pitch)
-      const aspect=cw/shc, pad=0.05;
-      let dw=W*(1-pad*2), dh=dw/aspect;
-      if(dh>H*(1-pad)){ dh=H*(1-pad); dw=dh*aspect; }
-      const dx=(W-dw)/2, dy=H-5-dh;
-      ctx.imageSmoothingEnabled=false;
-      if(faceRight){
-        ctx.drawImage(im, sx,syc,cw,shc, dx,dy,dw,dh);
-      }else{
-        ctx.save(); ctx.translate(W,0); ctx.scale(-1,1);
-        ctx.drawImage(im, sx,syc,cw,shc, dx,dy,dw,dh);   // dx centred → symmetric under flip
-        ctx.restore();
-      }
-    }
+    const groundY=H-3, maxH=H*0.92;
+    // home on the left third, away on the right third (clear of the centre tabs)
+    [['h',W*0.22],['a',W*0.78]].forEach(([side,cx])=>{
+      ctx.fillStyle='rgba(0,0,0,.28)';
+      ctx.beginPath(); ctx.ellipse(cx, groundY-1, maxH*0.34, maxH*0.10, 0, 0, Math.PI*2); ctx.fill();
+      drawSprite(ctx, side, cx, groundY, maxH, t);
+    });
   }
 
   function tick(ts){
     const sts=document.getElementById('s-ts');
-    if(sts && sts.offsetParent!==null){                 // only when Team Select is visible
-      ['h','a'].forEach(side=>{ const cv=document.getElementById(side+'-run'); if(cv) draw(cv,side,ts); });
+    if(sts && sts.offsetParent!==null){
+      const cv=document.getElementById('ts-run'); if(cv) draw(cv, ts);
     }
     requestAnimationFrame(tick);
   }
   requestAnimationFrame(tick);
-  console.log('[KITRUN] team-select kit preview active');
+  console.log('[KITRUN] team-select kit strip active');
 })();

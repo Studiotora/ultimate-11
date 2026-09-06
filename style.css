@@ -404,7 +404,7 @@ canvas#C{position:absolute;inset:0;width:100%;height:100%}
 
 /* DUEL */
 /* Duel overlay */
-#duel-ov{position:absolute;inset:0;z-index:20;display:none;flex-direction:column;background:linear-gradient(180deg,rgba(6,12,24,.35) 0%,rgba(4,6,12,.15) 35%,rgba(4,6,12,.55) 100%),url('assets/wallpaper/duel.png') center/cover no-repeat}
+#duel-ov{position:absolute;inset:0;z-index:20;display:none;flex-direction:column;background:linear-gradient(180deg,rgba(4,7,14,.5) 0%,rgba(4,7,14,.3) 40%,rgba(4,7,14,.66) 100%)}
 #duel-ov.show{display:flex}
 .da-bg{position:absolute;inset:0;background:repeating-linear-gradient(-45deg,transparent,transparent 4px,rgba(255,255,255,.006) 4px,rgba(255,255,255,.006) 5px);pointer-events:none;z-index:0}
 .dvs{position:absolute;left:50%;top:35%;transform:translate(-50%,-50%);width:clamp(120px,230.4px,220px);height:clamp(120px,230.4px,220px);font-family:'Bebas Neue',sans-serif;font-size:0;letter-spacing:.06em;filter:drop-shadow(0 0 24px rgba(240,192,64,.5));opacity:0;pointer-events:none;z-index:5}
@@ -1522,10 +1522,11 @@ html,body{overscroll-behavior:none;}
    we don't override.
    ═══════════════════════════════════════════════════════════════════ */
 
+/* Duel now plays over the LIVE (frozen) pitch — no separate stadium image, just
+   a translucent dim so the field shows through behind the duel UI. */
 #duel-ov.duel-aaa{
   background:
-    linear-gradient(180deg,rgba(6,12,24,.35) 0%,rgba(4,6,12,.15) 30%,rgba(4,6,12,.7) 100%),
-    url('assets/wallpaper/duel.png') center/cover no-repeat;
+    linear-gradient(180deg,rgba(4,7,14,.5) 0%,rgba(4,7,14,.28) 40%,rgba(4,7,14,.68) 100%);
 }
 
 /* ── Atmospheric blue/red auras ───────────────────────────────────── */

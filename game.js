@@ -850,12 +850,13 @@ const _allstarIdx=DEMO_TEAMS.indexOf('allstar');
 let homeIdx=_japanIdx>=0?_japanIdx:0;
 let awayIdx=_allstarIdx>=0?_allstarIdx:1;
 function calcTeamOvr(team){
-  if(!team||!team.p)return 0;
-  const reserveIds=new Set(team.reserves||[]);
-  const starters=team.p.filter(p=>!reserveIds.has(p.id));
-  if(!starters.length)return 0;
-  const total=starters.reduce((sum,pl)=>sum+calcOvr(pl),0);
-  return Math.round(total/starters.length);
+  // Team OVR = the strongest XI a team can field. Average the best 11 by rating
+  // so a deep/weak bench (or an under-marked `reserves` list) can never drag the
+  // number down — it always reflects the best 11 players in the squad.
+  if(!team||!team.p||!team.p.length)return 0;
+  const ovrs=team.p.map(pl=>calcOvr(pl)).sort((a,b)=>b-a);
+  const n=Math.min(11,ovrs.length);
+  return Math.round(ovrs.slice(0,n).reduce((s,v)=>s+v,0)/n);
 }
 function syncTeamSelections(){
   if(!DEMO_TEAMS||DEMO_TEAMS.length<2){
@@ -1805,8 +1806,7 @@ function tick(dt=1){
     if(rollShotMiss(s)){shotMissed(s);return;}
     G.phase='pass_anim';
     const _gkPos2=PP[ds]&&PP[ds]['GK']?PP[ds]['GK']:{x:goalXFor(s),y:H*.5};
-    G._shotTrail=true;
-    animateBallTo(cp.x,cp.y,_gkPos2.x,_gkPos2.y,()=>{G._shotTrail=false;G.phase='idle';opDuel(true);},45,true);
+    launchShot(cp.x,cp.y,_gkPos2.x,_gkPos2.y,s,undefined,45);
     return;
   }
 
@@ -2367,6 +2367,7 @@ function startAnim(){
     if(G.paused){draw();raf=requestAnimationFrame(loop);return;}
     if(G.phase==='duel' && typeof pvpDuelInput==='function') pvpDuelInput();
     if(G.phase==='moving')tick(dt);
+    if(G.phase==='loose'&&!G._cineHold)tickLoose(dt);
     if(G.phase==='pass_anim'&&!G._cineHold){tickBallTravel(dt);tickPassMotion(dt);}
     /* WATCHDOG — 50s was far too long to sit staring at a stuck overlay, and
        it only covered phase==='duel'. The reported symptom (menu stays open
@@ -3998,6 +3999,60 @@ function cpuWantsSuperCine(s){
   U11DBG('SSC: CPU super shot ('+(carrier.origName||carrier.name)+')');
   return true;
 }
+/* ══════ OUTFIELD SHOT BLOCK (geometry + stats + reaction) ══════════════
+   A defender genuinely in the shot lane can block/deflect a NORMAL shot before
+   it reaches the keeper. Chance rises with: DEFENCE, how squarely he's in the
+   lane, and reaction time (travel distance / ball speed → fast shots are harder
+   to block). Super shots bypass this entirely (they run the cinematic path), so
+   they stay exciting and only a super save stops them. A block spills the ball
+   LOOSE → scramble; otherwise the shot goes through to the GK duel as before. */
+function shotOutfieldBlock(fx,fy,gx,gy,side,pw){
+  const ds=side==='h'?'a':'h';
+  const dx=gx-fx, dy=gy-fy, len=Math.hypot(dx,dy)||1, nx=dx/len, ny=dy/len;
+  const corridor=W*0.020;                 // how close to the lane counts (tight)
+  let best=null,bestPts=-1,bestPt=null;
+  Object.entries(sq(ds)).forEach(([k,pl])=>{
+    if(!pl||k==='GK'||ocd(ds,k)||!PP[ds][k])return;
+    const ap=PP[ds][k];
+    const t=((ap.x-fx)*nx+(ap.y-fy)*ny)/len;      // position along the shot (0 shooter → 1 goal)
+    if(t<0.12||t>0.90)return;                       // between shooter and goal, not on the keeper
+    const cx=fx+t*dx, cy=fy+t*dy, perp=Math.hypot(ap.x-cx,ap.y-cy);
+    if(perp>corridor)return;                        // not in the lane
+    const lanePos=1-perp/corridor;                  // 1 = dead in the lane
+    const travel=t*len, speed=pw*0.9+30;            // higher-power shots travel faster
+    const react=clamp(travel/speed,0,1);            // more travel = more time to step in
+    const defStat=gs(pl,'def')||60;
+    let pts=((defStat-pw)+15*lanePos+10*react)*spiritMult(pl);
+    if(pts>bestPts){bestPts=pts;best=k;bestPt={x:cx,y:cy};}
+  });
+  if(!best)return {outcome:'through'};
+  let p=clamp(bestPts/60,0,0.7);                    // max ~70% for elite DF, dead in lane, vs a weak shot
+  if(Math.random()>=p)return {outcome:'through'};
+  // it's a block event — mostly deflections (loose), occasional clean block
+  return {outcome:Math.random()<0.35?'block':'deflect', key:best, x:bestPt.x, y:bestPt.y};
+}
+// Fire a NORMAL shot: outfield block check first, then the keeper duel.
+function launchShot(fx,fy,gx,gy,side,ak,dur){
+  const isSuper=(ak==='special'||ak==='super'||ak==='super-shot'||ak==='super-pass');
+  const shooter=sq(side)[G.ck];
+  const pw=shooter?(gs(shooter,'sho')||75):75;
+  const b=isSuper?{outcome:'through'}:shotOutfieldBlock(fx,fy,gx,gy,side,pw);
+  if(b.outcome==='through'){
+    G._shotTrail=true;
+    animateBallTo(fx,fy,gx,gy,()=>{G._shotTrail=false;G.phase='idle';opDuel(true,ak);},dur,true);
+    return;
+  }
+  const blk=sq(side==='h'?'a':'h')[b.key];
+  const nm=blk?(blk.name.split('.').pop()):'Defender';
+  G._shotTrail=true;
+  animateBallTo(fx,fy,b.x,b.y,()=>{
+    G._shotTrail=false;
+    say(nm+(b.outcome==='block'?' blocks it!':' gets a block — loose!'));
+    try{ if(typeof shakeScreen==='function') shakeScreen(5,90); }catch(e){}
+    const spd=(b.outcome==='block')?(2+Math.random()*3):(6+Math.random()*5), ang=Math.random()*Math.PI*2;
+    goLoose(b.x,b.y,Math.cos(ang)*spd,Math.sin(ang)*spd, side==='h'?'a':'h');
+  },Math.max(10,Math.round(dur*0.65)),true);
+}
 function manualShot(kind){
   if(window.P3D&&P3D.superCine2&&P3D.superCine2.active())return; // cinematic running — ignore
   if(G.phase!=='moving'||!G.ck||G._scoringGoal)return;
@@ -4020,11 +4075,8 @@ function manualShot(kind){
   if(rollShotMiss(s,ak)){shotMissed(s);return;}
   const _gkPosM=PP[ds]&&PP[ds]['GK']?PP[ds]['GK']:{x:goalXFor(s),y:H*.5};
   G.phase='pass_anim';
-  G._shotTrail=true;
   shakeScreen(4,60);
-  animateBallTo(_cpM.x,_cpM.y,_gkPosM.x,_gkPosM.y,()=>{
-    G._shotTrail=false; G.phase='idle'; opDuel(true,ak);
-  },45,true);
+  launchShot(_cpM.x,_cpM.y,_gkPosM.x,_gkPosM.y,s,ak,45);
 }
 function togglePress(){
   if(G.poss==='h'){say('Win the ball first to press!');return;}
@@ -4372,6 +4424,107 @@ function tickBallTravel(dt=1){
   }
 }
 
+/* ══════ LOOSE BALL (Option A) ══════════════════════════════════════
+   The ball becomes a real free object: it rolls with friction while the
+   nearest players of BOTH sides sprint to it in real time. First to reach
+   it wins possession (closer side, small random tiebreak). This is what
+   lets the ball actually be "free" instead of always glued to a carrier.
+   Triggered from deflections/rebounds (more triggers to follow).        */
+let looseBall=null;   // {vx,vy,t,bvz}
+function goLoose(x,y,vx,vy,touch){
+  ball.x=clamp(x,W*0.03,W*0.97); ball.y=clamp(y,H*0.03,H*0.97);
+  ball.tx=ball.x; ball.ty=ball.y; ball.bz=Math.max(ball.bz||0,4);
+  // `touch` = side that last played it — decides throw-in / corner / goal kick.
+  looseBall={vx:vx||0, vy:vy||0, t:0, bvz:BALLPHYS.loosePop*1.4, touch:touch||null};
+  G.poss=null; G.ck=null; G.chk=null;
+  try{ ROLES.engager=null; ROLES.cover=null; }catch(e){}
+  clearInterval(G.di);
+  G.phase='loose';
+  try{ if(typeof say==='function') say('Loose ball!'); }catch(e){}
+}
+function _assignLoose(side,key){
+  looseBall=null;
+  const k=key||validOutfieldKeys(side).find(x=>!ocd(side,x))||'CM2';
+  G.poss=side; G.ck=k; G.tP++; if(side==='h')G.hP++;
+  if(PP[side][k]){ ball.x=PP[side][k].x; ball.y=PP[side][k].y; }
+  ball.tx=ball.x; ball.ty=ball.y; ball.bz=0;
+  updP(); asnC(); G.phase='moving'; G.kickoffUntil=Date.now()+300;
+  try{ const w=sq(side)[k]; say((w?w.name:'A player')+' wins the loose ball!'); }catch(e){}
+  if(side==='h'){ const ph=$id('passhint'); if(ph)ph.style.display='block'; }
+}
+// Ball out of play → restart. isGoalKick puts it on the GK; otherwise the
+// nearest outfielder of `side` takes it from (x,y). Used for throw-in/corner/GK.
+function looseRestart(side,x,y,label,isGoalKick){
+  looseBall=null;
+  let k,px,py;
+  if(isGoalKick){
+    k='GK'; const gp=fp('GK',side==='h'?'home':'away',G.half); px=gp.x*W; py=gp.y*H;
+    if(PP[side]&&PP[side]['GK']){PP[side]['GK'].x=px;PP[side]['GK'].y=py;}
+  }else{
+    let best=null,bd=Infinity;
+    Object.keys(sq(side)).forEach(kk=>{ if(!sq(side)[kk]||kk==='GK'||!PP[side][kk]||ocd(side,kk))return;
+      const d=Math.hypot(PP[side][kk].x-x,PP[side][kk].y-y); if(d<bd){bd=d;best=kk;} });
+    k=best||validOutfieldKeys(side).find(z=>!ocd(side,z))||'CM2';
+    px=x; py=y; if(PP[side][k]){PP[side][k].x=x;PP[side][k].y=y;}
+  }
+  G.poss=side; G.ck=k; G.tP++; if(side==='h')G.hP++;
+  ball.x=px; ball.y=py; ball.tx=px; ball.ty=py; ball.bz=0;
+  updP(); asnC(); G.phase='moving'; G.kickoffUntil=Date.now()+1200;
+  try{ if(typeof showReferee==='function') showReferee(label.toUpperCase()); }catch(e){}
+  const tn=((side==='h'?HT:AT)||{}).name||side.toUpperCase();
+  say(label+' — '+tn+'.');
+  if(side==='h'){ const ph=$id('passhint'); if(ph)ph.style.display='block'; }
+}
+function tickLoose(dt){
+  const lb=looseBall; if(!lb){ G.phase='moving'; return; }
+  lb.t+=dt;
+  // roll ball with friction
+  const fr=0.94, steps=Math.max(1,Math.round(dt));
+  for(let i=0;i<steps;i++){ ball.x+=lb.vx; ball.y+=lb.vy; lb.vx*=fr; lb.vy*=fr; }
+  // ── out of play → throw-in / corner / goal kick ──
+  const outSide=(ball.y<=H*0.018||ball.y>=H*0.982), outByline=(ball.x<=W*0.012||ball.x>=W*0.988);
+  if(outByline){
+    const bx=(ball.x<=W*0.5)?0:W;
+    const defOwner=(Math.abs(ownGoalXFor('h')-bx)<Math.abs(ownGoalXFor('a')-bx))?'h':'a';
+    const atk=defOwner==='h'?'a':'h';
+    if(lb.touch===defOwner){ // last touched by a defender → corner for attackers
+      looseRestart(atk,(bx<=W*0.5?W*0.045:W*0.955),(ball.y<=H*0.5?H*0.06:H*0.94),'Corner');
+    }else{                   // last touched by an attacker → goal kick for defenders
+      looseRestart(defOwner,null,null,'Goal kick',true);
+    }
+    return;
+  }
+  if(outSide){
+    const take=(lb.touch==='h')?'a':(lb.touch==='a')?'h':(Math.random()<0.5?'h':'a');
+    looseRestart(take,clamp(ball.x,W*0.06,W*0.94),(ball.y<=H*0.5?H*0.05:H*0.95),'Throw-in');
+    return;
+  }
+  ball.tx=ball.x; ball.ty=ball.y;
+  // vertical settle (little hop)
+  lb.bvz-=BALLPHYS.g; ball.bz=(ball.bz||0)+lb.bvz;
+  if(ball.bz<0){ ball.bz=0; lb.bvz=(-lb.bvz>BALLPHYS.minBounce)?-lb.bvz*BALLPHYS.rest:0; }
+  // nearest 2 outfielders per side chase the ball in real time
+  const speed=MAX_DEF_STEP()*1.3*dt;
+  const nearest={h:null,a:null}, nd={h:Infinity,a:Infinity};
+  ['h','a'].forEach(side=>{
+    const q=sq(side);
+    const cands=Object.keys(q).filter(k=>q[k]&&PP[side][k]&&k!=='GK'&&!ocd(side,k))
+      .map(k=>({k,d:Math.hypot(PP[side][k].x-ball.x,PP[side][k].y-ball.y)}))
+      .sort((a,b)=>a.d-b.d);
+    cands.slice(0,2).forEach((c,idx)=>{
+      const p=PP[side][c.k], dx=ball.x-p.x, dy=ball.y-p.y, d=Math.hypot(dx,dy)||1, sp=speed*(idx?0.9:1);
+      p.x=clamp(p.x+(dx/d)*Math.min(sp,d),W*0.02,W*0.98);
+      p.y=clamp(p.y+(dy/d)*Math.min(sp,d),H*0.03,H*0.97);
+    });
+    if(cands[0]){ nearest[side]=cands[0].k; nd[side]=Math.hypot(PP[side][cands[0].k].x-ball.x,PP[side][cands[0].k].y-ball.y); }
+  });
+  // pickup
+  const PICK=CONTACT()*1.5;
+  if(nd.h<PICK||nd.a<PICK){ _assignLoose(nd.h<=nd.a?'h':'a', nd.h<=nd.a?nearest.h:nearest.a); return; }
+  // failsafe: ball stopped and nobody arrived, or been loose too long → nearest gets it
+  const stalled=(lb.vx*lb.vx+lb.vy*lb.vy)<0.03;
+  if((stalled&&lb.t>12)||lb.t>260){ _assignLoose(nd.h<=nd.a?'h':'a', nd.h<=nd.a?nearest.h:nearest.a); }
+}
 function iPas(tk){
   const s=G.poss, ds=s==='h'?'a':'h';
   const fr=sq(s)[G.ck],fp2=PP[s][G.ck],tp=PP[s][tk];if(!fp2||!tp)return;
@@ -4381,22 +4534,13 @@ function iPas(tk){
     const outcome=intResult.outcome;
     const iPos=PP[ds][ic]||tp;
     if(outcome==='deflect'){
-      // Deflection — ball bounces to loose position between passer and interceptor
-      const lx=lerp(fp2.x,iPos.x,0.5)+(Math.random()-.5)*W*.06;
-      const ly=lerp(fp2.y,iPos.y,0.5)+(Math.random()-.5)*H*.06;
+      // Deflection — ball ricochets off the interceptor and rolls FREE; both
+      // sides scramble for it (real loose ball, no instant closest-assign).
       say((fr?fr.name:'—')+' pass deflected by '+sq(ds)[ic].name+'!');
-      animateBallTo(fp2.x,fp2.y,lx,ly,()=>{
-        let closestSide='h',closestKey=G.ck,closestDist=Infinity;
-        ['h','a'].forEach(side=>{Object.keys(sq(side)).forEach(k=>{
-          if(!sq(side)[k]||!PP[side][k])return;
-          const d2=Math.hypot(PP[side][k].x-lx,PP[side][k].y-ly);
-          if(d2<closestDist){closestDist=d2;closestSide=side;closestKey=k;}
-        });});
-        G.poss=closestSide;G.ck=closestKey;G.tP++;if(closestSide==='h')G.hP++;
-        ball.x=lx;ball.y=ly;ball.tx=lx;ball.ty=ly;
-        updP();G.phase='idle';
-        setTimeout(()=>liveResume(closestSide),200);
-      },passDuration(fp2.x,fp2.y,lx,ly,24));
+      const bx=lerp(fp2.x,iPos.x,0.7), by=lerp(fp2.y,iPos.y,0.7);
+      const ang=Math.atan2(by-fp2.y,bx-fp2.x)+(Math.random()-.5)*1.8;
+      const spd=7+Math.random()*5;
+      animateBallTo(fp2.x,fp2.y,bx,by,()=>{ goLoose(bx,by,Math.cos(ang)*spd,Math.sin(ang)*spd,ds); },passDuration(fp2.x,fp2.y,bx,by,20));
     }else{
       // Clean steal
       say((fr?fr.name:'—')+' pass cut by '+sq(ds)[ic].name+'!');
@@ -4439,8 +4583,8 @@ function camUpdate(){
     const d=nearestOpponentDist(G.poss,G.ck);
     if(d<IR()*1.8)tz+=0.08;else if(d<IR()*3)tz+=0.04;
     fx=perspX(cp.x,cp.y);fy=perspY(cp.y);
-  }else if(G.phase==='pass_anim'&&typeof ball!=='undefined'){
-    tz=1.32;fx=perspX(ball.x,ball.y);fy=perspY(ball.y);
+  }else if((G.phase==='pass_anim'||G.phase==='loose')&&typeof ball!=='undefined'){
+    tz=(G.phase==='loose')?1.55:1.32;fx=perspX(ball.x,ball.y);fy=perspY(ball.y);
   }else if(cp){
     tz=1.40;fx=perspX(cp.x,cp.y);fy=perspY(cp.y);
   }
@@ -4871,11 +5015,9 @@ function opDuel(isShot, committedAk){
       if(ds==='a') setTimeout(aiDef, as==='a' ? 490 : 260);
     }
   };
-  try{
-    // Shot duels: no VS cut-in ever — GK-only layout replaces it.
-    if(isShot){killCutIn();_reveal();}
-    else playDuelCutIn({atk:carrier,def,as,ds,isShot,is2v1:G.D.is2v1,zoneTxt},_reveal);
-  }catch(e){killCutIn();_reveal();}
+  // Pre-duel VS split-screen removed — it broke the flow and killed the pace.
+  // Every duel now goes straight into the action overlay.
+  try{ killCutIn(); _reveal(); }catch(e){ _reveal(); }
 }
 
 // ── 2v1 SECOND DEFENDER MINI-CARD ─────────────────────────────────
@@ -6149,8 +6291,7 @@ function resDuel(){
           if(superShotCine())return;              // it runs banner → fly → GK duel
         }
         if(rollShotMiss(as,ak)){shotMissed(as);return;}
-        G._shotTrail=true;
-        animateBallTo(_cp.x,_cp.y,_gkPos.x,_gkPos.y,()=>{G._shotTrail=false;G.phase='idle';opDuel(true,ak);},40,true);
+        launchShot(_cp.x,_cp.y,_gkPos.x,_gkPos.y,as,ak,40);
       }
     }
     else if(['shoot','special'].includes(ak)&&!win){
@@ -6298,6 +6439,8 @@ function afSave(ds){
     else outcome='goal';
   }
   if(_cineFlow&&outcome==='goal')outcome='parry';
+  // A PUNCH never holds the ball — it knocks it back into play (loose rebound).
+  if(gkDefA==='punch'&&outcome==='catch')outcome='spill';
   const superName=isSuper&&gk?getGKSuper(gk).l:'';
   const outcomeText={catch:'CAUGHT!',parry:'PARRIED!',spill:'REBOUND!',goal:'GOAL!'};
   const outcomeDetail={
@@ -6358,27 +6501,16 @@ function afSave(ds){
       },30);
       return;
     }
-    // spill
-    const spillX=clamp(gkX+(dirFor(ds)>0?W*0.07:-W*0.07)+(Math.random()-.5)*W*0.08,W*0.04,W*0.96);
-    const spillY=clamp(gkY+(Math.random()-.5)*H*0.22,H*0.12,H*0.88);
-    let bSide=ds,bKey='CB1',bDist=Infinity;
-    ['h','a'].forEach(side=>Object.keys(sq(side)).forEach(k=>{
-      if(!sq(side)[k]||!PP[side][k]||(k==='GK'&&side===ds))return;
-      const d=Math.hypot(PP[side][k].x-spillX,PP[side][k].y-spillY);
-      if(d<bDist){bDist=d;bSide=side;bKey=k;}
-    }));
+    // spill / punch → real loose REBOUND: both sides scramble (goLoose). Keeper
+    // touched it last, so if it rolls over the byline it's a CORNER.
+    const spillX=clamp(gkX+(dirFor(ds)>0?W*0.09:-W*0.09)+(Math.random()-.5)*W*0.06,W*0.05,W*0.95);
+    const spillY=clamp(gkY+(Math.random()-.5)*H*0.24,H*0.10,H*0.90);
     G.phase='pass_anim';
     animateBallTo(gkX,gkY,spillX,spillY,()=>{
       ro.classList.remove('show');
-      ball.x=spillX;ball.y=spillY;ball.tx=spillX;ball.ty=spillY;
-      G.poss=bSide;G.ck=bKey;G.tP++;if(bSide==='h')G.hP++;
-      if(PP[bSide][bKey]){PP[bSide][bKey].x=spillX;PP[bSide][bKey].y=spillY;}
-      updP();
-      const winner=sq(bSide)[bKey];
-      say((winner?winner.name:'—')+' wins the rebound!');
-      G.kickoffUntil=Date.now()+1800;
-      setTimeout(()=>liveResume(null),500);
-    },30);
+      const ang=Math.atan2(spillY-gkY,spillX-gkX)+(Math.random()-.5)*1.0, spd=6+Math.random()*5;
+      goLoose(spillX,spillY,Math.cos(ang)*spd,Math.sin(ang)*spd, ds);
+    },26);
   }; // end doResolve
 
   // Supersave: show GK cutscene first, then resolve.
@@ -7171,6 +7303,11 @@ function updH(){
 
 function goHalf(){
   clearInterval(G.mt);clearInterval(G.di);G.phase='idle';closeDuel();
+  // A half can end while a kick-off is still armed (awaiting the player's tap).
+  // Clear it so the "TAP PASS TO KICK OFF" prompt can't leak onto — and be
+  // mis-tapped over — the Half-Time screen's Second Half button.
+  G.awaitKickoff=null; hideKickoffPrompt();
+  {const _gb=document.getElementById('goal-banner'); if(_gb)_gb.classList.remove('show');}
   $id('passhint').style.display='none';
   document.getElementById('hth').textContent=G.hG;document.getElementById('ata').textContent=G.aG;
   document.getElementById('htd').textContent=G.duels;document.getElementById('hts').textContent=G.shots;
@@ -7240,6 +7377,8 @@ function doSub(outSlot,inPl){
 }
 function goFull(){
   clearInterval(G.mt);clearInterval(G.di);G.phase='idle';closeDuel();
+  G.awaitKickoff=null; hideKickoffPrompt();
+  {const _gb=document.getElementById('goal-banner'); if(_gb)_gb.classList.remove('show');}
   $id('passhint').style.display='none';
   stopMatchMusic();
   if(typeof window.storyOnFullTime==='function'&&window.STORY&&window.STORY.pending){
@@ -8732,11 +8871,12 @@ function _txRenderLog(){
     #s-ts .tsf-splash-img{height:100%;width:auto;object-fit:contain;object-position:bottom;display:none;filter:drop-shadow(0 0 30px rgba(0,0,0,.5));
       -webkit-mask-image:linear-gradient(180deg,#000 0%,#000 66%,transparent 100%);mask-image:linear-gradient(180deg,#000 0%,#000 66%,transparent 100%);}
     #s-ts .tsf-splash-away .tsf-splash-img{transform:none;}
-    /* in-game kit preview: the home/away sprite jogs on a pitch strip at the
-       captain's feet (driven by ult11-kitrun.js). Sits above the cards. */
-    #s-ts .tsf-hero .tsf-run{position:absolute;bottom:8px;width:150px;height:auto;z-index:6;border-radius:9px;
-      image-rendering:pixelated;pointer-events:none;box-shadow:inset 0 0 0 1px rgba(255,255,255,.12),0 8px 22px rgba(0,0,0,.55);}
-    #s-ts #h-run{left:48px;} #s-ts #a-run{right:48px;}
+    /* in-game kit preview: ONE long pitch strip spanning edge to edge at the
+       tabs row height; the home (left) & away (right) sprites jog on it lower
+       than the portraits (driven by ult11-kitrun.js). Behind the flow content
+       so the tab buttons stay on top and clickable. */
+    #s-ts .tsf-run{position:absolute;left:0;right:0;top:56.5%;width:100%;height:auto;z-index:0;
+      image-rendering:pixelated;pointer-events:none;box-shadow:inset 0 1px 0 rgba(255,255,255,.10),inset 0 -1px 0 rgba(0,0,0,.4);}
     #s-ts .tsf-splash-ph{height:90%;width:300px;border-radius:18px;display:flex;flex-direction:column;align-items:center;justify-content:flex-end;gap:10px;padding:18px;
       background:linear-gradient(180deg,transparent,color-mix(in srgb,var(--c) 32%,transparent) 70%,color-mix(in srgb,var(--c) 55%,transparent));
       -webkit-mask-image:linear-gradient(180deg,transparent 0%,#000 22%,#000 100%);mask-image:linear-gradient(180deg,transparent 0%,#000 22%,#000 100%);}
@@ -8840,10 +8980,8 @@ function _txRenderLog(){
       '<div class="tsf-root"><div class="tsf-bg"></div>'+
       '<div class="tsf-head"><div class="tsf-title"><h1>Team Select</h1><div class="tsf-sub">'+L[2]+'</div></div>'+
       '<div class="tsf-center"><div class="tsf-globe">🌐</div><div class="tsf-ct">'+L[0]+'</div><div class="tsf-ch">'+L[1]+'</div></div><div></div></div>'+
-      '<div class="tsf-hero">'+splash(selHome,'home')+'<div class="tsf-cards">'+card(selHome,'home')+'<div class="tsf-vs">VS</div>'+card(selAway,'away')+'</div>'+splash(selAway,'away')+
-        '<canvas class="tsf-run" id="h-run" data-side="h" width="170" height="150" title="In-game kit preview"></canvas>'+
-        '<canvas class="tsf-run" id="a-run" data-side="a" width="170" height="150" title="In-game kit preview"></canvas>'+
-      '</div>'+
+      '<div class="tsf-hero">'+splash(selHome,'home')+'<div class="tsf-cards">'+card(selHome,'home')+'<div class="tsf-vs">VS</div>'+card(selAway,'away')+'</div>'+splash(selAway,'away')+'</div>'+
+      '<canvas class="tsf-run" id="ts-run" width="1720" height="52" title="In-game kit preview"></canvas>'+
       '<div class="tsf-hint">Tap <b>HOME</b> or <b>AWAY</b>, then pick a team. Tabs mix nationals, clubs &amp; special.</div>'+
       '<div class="tsf-tabs">'+
         '<button class="tsf-tab'+(tsViewCat==='nationals'?' on':'')+'" onclick="tsSetCat(\'nationals\')">Nationals</button>'+
