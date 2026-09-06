@@ -1200,6 +1200,13 @@ const CR=13,CDms=2500,CS=()=>W*.00023,DS=()=>W*.00030,IR=()=>W*.022,PC=()=>W*.08
    IR() (28px ≈ 2.3m) is an INTERCEPTION radius and was being used as the duel
    trigger, which is why duels fired while the two were still clearly apart. */
 const CONTACT=()=>W*.014;
+/* ENGAGE() — passive auto-challenge range for an AI/uncontrolled defender who
+   catches the carrier. The tackle refactor collapsed every duel trigger to the
+   tight CONTACT() (~18px), so a defender had to get pixel-close — a faster
+   carrier could just run around everyone. This restores a middle ground
+   (~38px, between the old ~51px and CONTACT). The DELIBERATE human tackle still
+   uses CONTACT() (see startLunge/stepLunge), so committing early is unchanged. */
+const ENGAGE=()=>W*.030;
 const MAX_CARRIER_STEP=()=>Math.max(0.22,W*.00038); // carrier — bigger-pitch pacing
 const MAX_DEF_STEP=()=>Math.max(0.30,W*.00058);     // engager — slightly faster than carrier
 const MAX_OFFBALL_STEP=()=>Math.max(0.26,W*.00058);  // off-ball
@@ -1853,15 +1860,18 @@ function tick(dt=1){
       if(engPl && _sprintForSide(ds)) engPl.spirit=Math.max(0,(engPl.spirit||1500)-0.5*dt); // sprint costs stamina on defense too
       const sprintMult=(_sprintForSide(ds))?1.34:1.30; // AI commits to the chase
       const manualMult=manualDef?1.3:1.0;
-      if(lungeActive(ds,ROLES.engager))return;   // committed — stepLunge() owns him
-      const step=MAX_DEF_STEP()*pressMult*sprintMult*manualMult*fieldSpdMult(engPl)*recoveryMult(ds,ROLES.engager,dp2)*dt;
-      // momentum: steer velocity toward the chase direction rather than
-      // teleporting along it, so acceleration and turning both cost time
-      const _ephy=physOf(ds,ROLES.engager,engPl);
-      moveMomentum(dp2,_ephy,dp2.x+ux*step*8,dp2.y+uy*step*8,step,engPl,dt);
-      dp2.x=clamp(dp2.x,W*.01,W*.99);
-      dp2.y=clamp(dp2.y,H*.03,H*.97);
-      if(Date.now()>=(G.kickoffUntil||0) && dist(dp2,cp)<CONTACT()){G.chk=ROLES.engager;opDuel(false);return;}
+      // A committed lunge → skip normal chase steering, but DON'T return: flow
+      // must reach stepLunge() at the tail (it owns the dash + hit detection).
+      if(!lungeActive(ds,ROLES.engager)){
+        const step=MAX_DEF_STEP()*pressMult*sprintMult*manualMult*fieldSpdMult(engPl)*recoveryMult(ds,ROLES.engager,dp2)*dt;
+        // momentum: steer velocity toward the chase direction rather than
+        // teleporting along it, so acceleration and turning both cost time
+        const _ephy=physOf(ds,ROLES.engager,engPl);
+        moveMomentum(dp2,_ephy,dp2.x+ux*step*8,dp2.y+uy*step*8,step,engPl,dt);
+        dp2.x=clamp(dp2.x,W*.01,W*.99);
+        dp2.y=clamp(dp2.y,H*.03,H*.97);
+        if(Date.now()>=(G.kickoffUntil||0) && dist(dp2,cp)<ENGAGE()){G.chk=ROLES.engager;opDuel(false);return;}
+      }
     }
   }
   // PRESS: second player (cover) also sprints toward carrier.
@@ -1890,7 +1900,7 @@ function tick(dt=1){
     for(const k of Object.keys(defQ)){
       if(!defQ[k]||k===ROLES.engager||k==='GK'||ocd(ds,k))continue;
       const dp=PP[ds][k];if(!dp)continue;
-      if(dist(dp,cp)<CONTACT()*1.05){
+      if(dist(dp,cp)<ENGAGE()){
         const wasEngager=ROLES.engager;
         ROLES.engager=k;G.chk=k;
         if(!isCpuSide(ds)&&wasEngager!==k){
@@ -2303,9 +2313,16 @@ function applyRepulsion(){
      the ball — roughly 45x too weak to do anything, which is why the whole
      team ended up standing on the same blade of grass. */
   const REPEL_DIST=W*.085;
-  const REPEL_FORCE=3.2;
+  // Was 3.2 — but a defender's whole chase step is ~1px/tick, so a 1.7px/tick
+  // shove flung converging defenders AWAY from the ball ("opposed magnetic
+  // field"): you could never reach the carrier, and switching players just gave
+  // you one not yet in the repel cluster. Gentler now, and the ENGAGER (the man
+  // you actually chase with) is exempt so his press is never fought.
+  const REPEL_FORCE=1.4;
+  const _ds=G.poss==='h'?'a':'h';   // defending side owns ROLES.engager
   ['h','a'].forEach(side=>{
     const keys=Object.keys(sq(side)).filter(k=>sq(side)[k]&&PP[side][k]);
+    const _pinned=(k)=>k===G.ck||k==='GK'||(side===_ds&&k===ROLES.engager);
     for(let i=0;i<keys.length;i++){
       for(let j=i+1;j<keys.length;j++){
         if(isLunging(side,keys[i])||isLunging(side,keys[j]))continue;  // let the lunge connect
@@ -2315,8 +2332,8 @@ function applyRepulsion(){
         if(d<REPEL_DIST){
           const force=(REPEL_DIST-d)/REPEL_DIST*REPEL_FORCE;
           const nx=dx/d,ny=dy/d;
-          if(keys[i]!==G.ck&&keys[i]!=='GK'){a.x-=nx*force;a.y-=ny*force;}
-          if(keys[j]!==G.ck&&keys[j]!=='GK'){b.x+=nx*force;b.y+=ny*force;}
+          if(!_pinned(keys[i])){a.x-=nx*force;a.y-=ny*force;}
+          if(!_pinned(keys[j])){b.x+=nx*force;b.y+=ny*force;}
         }
       }
     }
@@ -2403,6 +2420,10 @@ function startAnim(){
       const k=Math.min(.45*dt,1);
       ball.x+=(fx-ball.x)*k; ball.y+=(fy-ball.y)*k;
       ball.tx=ball.x;ball.ty=ball.y;
+      // BUGFIX: a saved shot (esp. a clean CATCH) repositions the ball without
+      // running animateBallTo, so ball.bz kept its in-flight height and the ball
+      // hovered over the keeper/carrier's head until the next pass. Ground it.
+      if(ball.bz) ball.bz+=(0-ball.bz)*Math.min(.35*dt,1);
     }else{
       ball.x+=(ball.tx-ball.x)*Math.min(.18*dt,1);
       ball.y+=(ball.ty-ball.y)*Math.min(.18*dt,1);
@@ -4484,7 +4505,7 @@ function checkDuelGrace(){
       if(dsNow!==ds)return; // possession flipped during grace window
       if(G.phase==='moving'&&ROLES.engager&&PP[ds][ROLES.engager]){
         const d2=dist(PP[ds][ROLES.engager],PP[G.poss][G.ck]||{x:-9999,y:-9999});
-        if(d2<CONTACT()*1.15){G.chk=ROLES.engager;opDuel(false);}
+        if(d2<ENGAGE()){G.chk=ROLES.engager;opDuel(false);}
       }
     },600);
   }else if(d>=IR()*1.8&&G_duelGrace){
@@ -6226,7 +6247,8 @@ function afGoal(scorer,s,gen){
   showReferee('GOAL!');
   goalZoom();
   shakeScreen(12, 200);
-  impactText('⚽ GOAL!!!', '#f0c040', 'clamp(28px,64px,52px)');
+  // (removed impactText('⚽ GOAL!!!') — it stacked a 2nd big "GOAL" over the goal
+  //  banner's title. showGoalBanner already shows GOAL! + net art + scorer/team.)
   showGoalBanner(scorer,s);
   setTimeout(()=>{
     Object.values(hSq).forEach(p=>{if(p)p.cooldownUntil=0;}); Object.values(aSq).forEach(p=>{if(p)p.cooldownUntil=0;});
@@ -8710,6 +8732,11 @@ function _txRenderLog(){
     #s-ts .tsf-splash-img{height:100%;width:auto;object-fit:contain;object-position:bottom;display:none;filter:drop-shadow(0 0 30px rgba(0,0,0,.5));
       -webkit-mask-image:linear-gradient(180deg,#000 0%,#000 66%,transparent 100%);mask-image:linear-gradient(180deg,#000 0%,#000 66%,transparent 100%);}
     #s-ts .tsf-splash-away .tsf-splash-img{transform:none;}
+    /* in-game kit preview: the home/away sprite jogs on a pitch strip at the
+       captain's feet (driven by ult11-kitrun.js). Sits above the cards. */
+    #s-ts .tsf-hero .tsf-run{position:absolute;bottom:8px;width:150px;height:auto;z-index:6;border-radius:9px;
+      image-rendering:pixelated;pointer-events:none;box-shadow:inset 0 0 0 1px rgba(255,255,255,.12),0 8px 22px rgba(0,0,0,.55);}
+    #s-ts #h-run{left:48px;} #s-ts #a-run{right:48px;}
     #s-ts .tsf-splash-ph{height:90%;width:300px;border-radius:18px;display:flex;flex-direction:column;align-items:center;justify-content:flex-end;gap:10px;padding:18px;
       background:linear-gradient(180deg,transparent,color-mix(in srgb,var(--c) 32%,transparent) 70%,color-mix(in srgb,var(--c) 55%,transparent));
       -webkit-mask-image:linear-gradient(180deg,transparent 0%,#000 22%,#000 100%);mask-image:linear-gradient(180deg,transparent 0%,#000 22%,#000 100%);}
@@ -8813,7 +8840,10 @@ function _txRenderLog(){
       '<div class="tsf-root"><div class="tsf-bg"></div>'+
       '<div class="tsf-head"><div class="tsf-title"><h1>Team Select</h1><div class="tsf-sub">'+L[2]+'</div></div>'+
       '<div class="tsf-center"><div class="tsf-globe">🌐</div><div class="tsf-ct">'+L[0]+'</div><div class="tsf-ch">'+L[1]+'</div></div><div></div></div>'+
-      '<div class="tsf-hero">'+splash(selHome,'home')+'<div class="tsf-cards">'+card(selHome,'home')+'<div class="tsf-vs">VS</div>'+card(selAway,'away')+'</div>'+splash(selAway,'away')+'</div>'+
+      '<div class="tsf-hero">'+splash(selHome,'home')+'<div class="tsf-cards">'+card(selHome,'home')+'<div class="tsf-vs">VS</div>'+card(selAway,'away')+'</div>'+splash(selAway,'away')+
+        '<canvas class="tsf-run" id="h-run" data-side="h" width="170" height="150" title="In-game kit preview"></canvas>'+
+        '<canvas class="tsf-run" id="a-run" data-side="a" width="170" height="150" title="In-game kit preview"></canvas>'+
+      '</div>'+
       '<div class="tsf-hint">Tap <b>HOME</b> or <b>AWAY</b>, then pick a team. Tabs mix nationals, clubs &amp; special.</div>'+
       '<div class="tsf-tabs">'+
         '<button class="tsf-tab'+(tsViewCat==='nationals'?' on':'')+'" onclick="tsSetCat(\'nationals\')">Nationals</button>'+

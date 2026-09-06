@@ -1527,15 +1527,24 @@
       12:{cols:12, rows:6, idle:[0,12], run:[0,12], pass:[0,8], shoot:[0,12], idleFps:4, fpsScale:0.9,
           rowFor:{ idle:{down:0, up:1, side:0}, run:{side:3, down:4, up:5}, act:{down:2, up:2, side:2} }}
     };
-    // 12x8 = the 12x6 sheet plus TWO dedicated action rows the tackle needs:
-    //   row 6 = tackle    (3 frames: reach → lunge → slide)
-    //   row 7 = shoulder  (3 frames: lean → charge → follow-through)
+    // 12x8 = the 12x6 sheet plus TWO dedicated action rows the tackle needs.
+    // (Rows verified in-game: row 6 is the SHOULDER art, row 7 is the TACKLE art.)
+    //   row 7 = tackle    (3 frames: reach → lunge → slide)
+    //   row 6 = shoulder  (3 frames: lean → charge → follow-through)
     // Side-view art, so every facing maps to the same row. Detected by aspect
     // (~1.07) or a "12x8" in the filename. Sheet MUST be a clean 8×408px grid.
     const L12x8={cols:12, rows:8, idle:[0,12], run:[0,12], pass:[0,8], shoot:[0,12],
       tackle:[0,3], shoulder:[0,3], idleFps:4, fpsScale:0.9,
       rowFor:{ idle:{down:0, up:1, side:0}, run:{side:3, down:4, up:5}, act:{down:2, up:2, side:2},
-               tackle:{side:6, down:6, up:6}, shoulder:{side:7, down:7, up:7} }};
+               tackle:{side:7, down:7, up:7}, shoulder:{side:6, down:6, up:6} }};
+    // Dedicated 4x4 keeper sheet (assets/ps1/gk_cine.png):
+    //   row 0 = idle · row 1 = run · rows 2-3 = cinematic dives/saves (see GK_POSE).
+    // Front-facing art, so every facing maps to the same in-play row.
+    const LGK4={cols:4, rows:4, idle:[0,4], run:[0,4], pass:[0,4], shoot:[0,4], idleFps:3, fpsScale:1,
+      rowFor:{ idle:{down:0, up:0, side:0}, run:{down:1, up:1, side:1}, act:{down:0, up:0, side:0} }};
+    // Cinematic keeper poses — [col, gridRow] on the 4x4 gk sheet (rows 2-3).
+    // Easy to retune: set = pre-shot stance, save = dive/catch, beaten = goal conceded.
+    const GK_POSE={ set:[0,3], save:[3,2], beaten:[2,3] };
     const GRID=LAYOUTS[7];                 // fallback for unmeasured sheets
     /* Scan every cell's alpha once per sheet: where the feet are (padB = empty
        fraction below the lowest opaque pixel), the body's horizontal centre
@@ -1610,9 +1619,16 @@
     const COL={idle:0, run:[1,6], pass:[0,3], shoot:[3,4]};
     const SHEETS={h:null,a:null}; const _sk={h:undefined,a:undefined};
     let GK_SHEET=null;                                 // shared keeper sheet for BOTH teams
-    (function(){ const im=new Image();
-      im.onload=()=>{const L=layoutFor(im,'assets/ps1/gk.png');GK_SHEET={img:im,L,cw:im.width/L.cols,ch:im.height/L.rows};measureSheet(GK_SHEET);};
-      im.src='assets/ps1/gk.png'; })();
+    // Single 4x4 keeper sheet (gk_cine.png): row0 idle, row1 run, rows2-3 cinematic.
+    // Forced to LGK4 (its 1:1 aspect would otherwise mis-detect). Falls back to the
+    // old gk.png (12x6-ish) if the new sheet is missing.
+    (function(){
+      const tryLoad=(url,L,onFail)=>{ const im=new Image();
+        im.onload=()=>{GK_SHEET={img:im,L:(L||layoutFor(im,url)),cw:im.width/((L||layoutFor(im,url)).cols),ch:im.height/((L||layoutFor(im,url)).rows)};measureSheet(GK_SHEET);
+          console.log('[P3D] GK sheet '+url+' '+im.width+'x'+im.height+' -> '+GK_SHEET.L.cols+'x'+GK_SHEET.L.rows);};
+        im.onerror=onFail||(()=>{}); im.src=url; };
+      tryLoad('assets/ps1/gk_cine.png', LGK4, ()=>tryLoad('assets/ps1/gk.png', null));
+    })();
     function loadSheet(side,urls){
       let i=0; const next=()=>{ if(i>=urls.length){ if(!SHEETS[side])SHEETS[side]='none'; return; }
         const im=new Image(), u=urls[i++];
@@ -2674,7 +2690,7 @@
             if(r.g.sil&&r.silMap){ r.g.sil.material.map=r.silMap; r.g.sil.material.needsUpdate=true; } }
           c._shBack=true;
         }
-        if(!gkCineCell(c,0,0))forceAnim(c.o.ds+':GK','down','idle',0,false); // keeper set, facing the ball
+        if(!gkCineCell(c,GK_POSE.set[0],GK_POSE.set[1]))forceAnim(c.o.ds+':GK','down','idle',0,false); // keeper set, facing the ball
         cineGkNudge(c);                               // ...a step off his line
         const stl=c.style||{curve:0,loft:1,speed:1,kind:'normal'}, dur=c.dur||1.6;
         if(c.mode==='fly'){
@@ -2715,8 +2731,9 @@
           bx=c.tx+(hx-c.tx)*gt; by=c.ty+(c.ky-c.ty)*gt;
           bz=4*(1-gt)+3.4*gt;                        // settle into the gloves
         }
-        if(!gkCineCell(c,c.isGoal?2:1,c.isGoal?0:1))
-          forceAnimT(c.o.ds+':GK','down','shoot',Math.min(3,Math.floor(c.ot/0.18))/3,false);
+        {const _P=c.isGoal?GK_POSE.beaten:GK_POSE.save;
+         if(!gkCineCell(c,_P[0],_P[1]))
+           forceAnimT(c.o.ds+':GK','down','shoot',Math.min(3,Math.floor(c.ot/0.18))/3,false);}
         cineGkNudge(c);
         if(c.ot>=0.85&&!c._fired){                    // outcome shown — hand control to game.js,
           c._fired=true;                              // keep the frontal camera until it releases us
@@ -2740,8 +2757,8 @@
       if(c.mode==='out'&&c.ot>=0.55&&!c._impact){ c._impact=true; try{ impactBurst(c,bwx,bwy,bwz,d); }catch(e){} }
       c._bw={x:bwx,y:bwy,z:bwz};
     }
-    // Cinematic keeper uses its own dedicated sheet (assets/ps1/gk_cine.png, 3x2):
-    //  top row: ready / lean / flying dive — bottom: low block / catch / sprawl.
+    // Cinematic keeper uses the single 4x4 gk sheet (gk_cine.png); the cinematic
+    // dives live on rows 2-3. `col`,`row` are absolute grid cells (0..3).
     function gkCineCell(c,col,row){
       const g=sprites[c.o.ds+':GK']; if(!g||!g.sprite||!cineGkTex)return false;
       if(!c.gkRestore)c.gkRestore={map:g.sprite.material.map};
@@ -2749,8 +2766,8 @@
         g.sprite.material.map=cineGkTex; g.sprite.material.needsUpdate=true;
         if(g.sil){ g.sil.material.map=cineGkTex; g.sil.material.needsUpdate=true; }
       }
-      cineGkTex.repeat.set(1/3,1/2);
-      cineGkTex.offset.set(col/3,1-(row+1)/2);
+      cineGkTex.repeat.set(1/4,1/4);
+      cineGkTex.offset.set(col/4,1-(row+1)/4);
       return true;
     }
     function cineGkNudge(c){

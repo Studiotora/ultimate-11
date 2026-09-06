@@ -9,6 +9,17 @@
  * ✓ Reduced repaints and reflows
  */
 
+/* Bold Pixel — pixel-art HUD font. "BoldPixels by YukiPixels" (CC BY-SA 4.0,
+   yukipixels.itch.io/boldpixels) — attribution required; see
+   assets/fonts/BoldPixels-license.txt. Used for the in-match score, clock and
+   duel score; falls back to Orbitron if the files are missing. */
+@font-face{
+  font-family:'Bold Pixel';
+  src:url('assets/fonts/boldpixels.woff2') format('woff2'),
+      url('assets/fonts/boldpixels.woff') format('woff'),
+      url('assets/fonts/boldpixels.ttf') format('truetype');
+  font-weight:normal;font-style:normal;font-display:swap;
+}
 :root{--gold:#f0c040;--gold2:#7a5a08;--red:#dc2020;--rf:#b81616;--rl:#f03030;--blue:#1e72dc;--bf:#1258b0;--bl:#2882f0;--sp:#44c8ff;--green:#20c878;--bg:#06080e;--panel:rgba(5,7,12,.97);--bdr:rgba(240,192,64,.18);--dim:#48586a;--w:#eceff4}
 *{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent}
 button{touch-action:manipulation;cursor:pointer;}
@@ -367,17 +378,17 @@ html,body{width:100%;height:100%;height:-webkit-fill-available;overflow:hidden;b
 .hteam.home .hflag-circle{position:absolute;left:clamp(34px,66.56px,72px);top:50%;transform:translateY(-50%);margin:0;}
 .hteam.away .hflag-circle{position:absolute;right:clamp(34px,66.56px,72px);top:50%;transform:translateY(-50%);margin:0;}
 .hflag-circle{width:clamp(28px,53.76px,38px);height:clamp(28px,53.76px,38px);border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:clamp(16px,33.28px,24px);border:2px solid rgba(255,255,255,.3);background:rgba(0,0,0,.3);flex-shrink:0;box-shadow:0 2px 10px rgba(0,0,0,.5)}
-.htn{font-family:'Bebas Neue',sans-serif;font-size:clamp(14px,26.88px,21px);letter-spacing:.14em;color:#fff;line-height:1;text-shadow:0 1px 3px rgba(0,0,0,.85);transform:translateY(-3px);}
+.htn{font-family:'Bold Pixel','Bebas Neue',sans-serif;font-size:clamp(14px,26.88px,21px);letter-spacing:.14em;color:#fff;line-height:1;text-shadow:0 1px 3px rgba(0,0,0,.85);transform:translateY(-3px);}
 /* Center plate — scores row, then clock, then half */
 .hmid{display:flex;flex-direction:column;align-items:center;justify-content:center;padding:0 clamp(6px,12.8px,14px);flex-shrink:0;position:relative;background:none;height:100%;gap:1px;}
 .hmid::before,.hmid::after{display:none;}
 .hscores{display:flex;align-items:center;gap:clamp(48px,89.6px,90px);line-height:1;transform:translateY(4px);}
-.hsc{font-family:'Orbitron',sans-serif;font-size:clamp(18px,33.28px,24px);font-weight:900;color:#fff;text-shadow:0 2px 4px rgba(0,0,0,.95);line-height:1;}
+.hsc{font-family:'Bold Pixel','Orbitron',sans-serif;font-size:clamp(18px,33.28px,24px);font-weight:900;color:#fff;text-shadow:0 2px 4px rgba(0,0,0,.95);line-height:1;}
 .hsc.sh{text-shadow:0 0 10px rgba(30,114,220,.9),0 2px 4px rgba(0,0,0,.95)}
 .hsc.sa{text-shadow:0 0 10px rgba(220,32,32,.9),0 2px 4px rgba(0,0,0,.95)}
-.hsc-sep{color:rgba(255,255,255,.55);font-family:'Orbitron',sans-serif;font-weight:900;font-size:clamp(14px,25.6px,18px);}
+.hsc-sep{color:rgba(255,255,255,.55);font-family:'Bold Pixel','Orbitron',sans-serif;font-weight:900;font-size:clamp(14px,25.6px,18px);}
 .hclock{display:flex;align-items:baseline;gap:4px;}
-.htime{font-family:'Orbitron',sans-serif;font-size:clamp(12px,23.04px,16px);font-weight:700;color:#fff;letter-spacing:.06em;line-height:1;text-shadow:0 1px 3px rgba(0,0,0,.95)}
+.htime{font-family:'Bold Pixel','Orbitron',sans-serif;font-size:clamp(12px,23.04px,16px);font-weight:700;color:#fff;letter-spacing:.06em;line-height:1;text-shadow:0 1px 3px rgba(0,0,0,.95)}
 .hhalf{font-size:clamp(6px,9.6px,8px);font-family:'Orbitron',sans-serif;letter-spacing:.22em;color:rgba(255,255,255,.7);text-align:center;text-shadow:0 1px 2px rgba(0,0,0,.95)}
 .posstrip{display:flex;width:clamp(70px,140.8px,120px);height:2px;border-radius:2px;overflow:hidden;background:rgba(255,255,255,.15)}
 .posstrip-h{background:linear-gradient(90deg,#2882f0,var(--blue));transition:width .6s}
@@ -768,9 +779,9 @@ canvas#C{position:absolute;inset:0;width:100%;height:100%}
 #duel-res{position:absolute;inset:0;z-index:35;display:none;align-items:center;justify-content:center;flex-direction:column;background:rgba(4,6,12,.82)}
 #duel-res.show{display:flex;animation:rFI .25s}
 @keyframes rFI{from{opacity:0}to{opacity:1}}
-.rbadge{font-family:'Bebas Neue',sans-serif;font-size:clamp(44px,115.2px,100px);letter-spacing:.06em;line-height:1;filter:drop-shadow(0 0 36px currentColor)}
+.rbadge{font-family:'Bold Pixel','Bebas Neue',sans-serif;font-size:clamp(44px,115.2px,100px);letter-spacing:.06em;line-height:1;filter:drop-shadow(0 0 36px currentColor)}
 .rdet{font-family:'Orbitron',sans-serif;font-size:11px;letter-spacing:.28em;margin-top:9px;opacity:.85}
-.ract{font-family:'Rajdhani',sans-serif;font-size:13px;color:var(--dim);margin-top:7px;letter-spacing:.1em}
+.ract{font-family:'Bold Pixel','Rajdhani',sans-serif;font-size:13px;color:var(--dim);margin-top:7px;letter-spacing:.1em}
 
 /* GOAL */
 .gfl{position:absolute;inset:0;z-index:80;pointer-events:none;opacity:0;display:flex;flex-direction:column;align-items:center;justify-content:center}
@@ -2678,7 +2689,7 @@ html,body{overscroll-behavior:none;}
 .dtw .dtr{filter:drop-shadow(0 0 10px rgba(240,192,64,.45));}
 #dta{stroke:#ffd24a;stroke-width:3.5;}
 .dtn{
-  font-family:'Bebas Neue',sans-serif !important;
+  font-family:'Bold Pixel','Bebas Neue',sans-serif !important;
   font-size:19px !important;color:#ffd970 !important;
   text-shadow:0 0 12px rgba(240,192,64,.8),0 2px 6px #000 !important;
 }
@@ -3525,7 +3536,7 @@ html.ue-phone #vjoy-base{transform:scale(calc(0.5 + 0.5*var(--tb)));transform-or
    hero.png is the new slot — menu-bg.png / wallpaper/home.png are the files
    this project already ships, so the menu has art before you add hero.png. */
 .ue-art{position:absolute;inset:-4%;z-index:0;background:
-  url('assets/home/hero.png') center 22%/cover no-repeat,
+  url('assets/home/menu-hero.png') center 30%/cover no-repeat,
   url('assets/home/menu-bg.png') center 22%/cover no-repeat,
   url('assets/wallpaper/home.png') center 22%/cover no-repeat,
   radial-gradient(60% 70% at 50% 40%,#12305e,#050d1c 70%);
