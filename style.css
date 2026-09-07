@@ -20,6 +20,13 @@
       url('assets/fonts/boldpixels.ttf') format('truetype');
   font-weight:normal;font-style:normal;font-display:swap;
 }
+/* HYBRID HD-2D IDENTITY (FF/Dragon Quest inspired): clean modern UI + retro
+   accents, NOT all-pixel. Cinzel serif for headers/titles/team names; Rajdhani
+   sans for body/menus/labels (the html,body default below); Bold Pixel reserved
+   for the score, match clock, duel score and the big result badge — the numeric
+   HUD — so the pixel flavour lands where it reads best. */
+.font-serif{font-family:'Cinzel',Georgia,serif;}
+.font-pixel{font-family:'Bold Pixel','Orbitron',sans-serif;}
 :root{--gold:#f0c040;--gold2:#7a5a08;--red:#dc2020;--rf:#b81616;--rl:#f03030;--blue:#1e72dc;--bf:#1258b0;--bl:#2882f0;--sp:#44c8ff;--green:#20c878;--bg:#06080e;--panel:rgba(5,7,12,.97);--bdr:rgba(240,192,64,.18);--dim:#48586a;--w:#eceff4}
 *{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent}
 button{touch-action:manipulation;cursor:pointer;}
@@ -361,35 +368,38 @@ html,body{width:100%;height:100%;height:-webkit-fill-available;overflow:hidden;b
 #looming-alert .looming-icon{font-size:18px}
 #s-match{background:var(--bg)}
 /* BROADCAST HUD — team names at corners, score center */
+/* Compact CSS scoreboard pill (PNG scoreboard.png removed) — floats top-centre,
+   frees pitch space below. Same look as the duel scoreboard. */
 .mhud{
-  display:grid;
-  grid-template-columns:33% 34% 33%;
-  align-items:center;
-  flex-shrink:0;height:clamp(54px,57.6px,72px);
-  background:url('assets/ui/scoreboard.png') no-repeat center top / 100% 100%, #000;
-  border-bottom:none;position:relative;overflow:hidden;
+  display:flex; align-items:stretch; justify-content:center; align-self:center;
+  width:max-content; max-width:96%; margin:clamp(4px,0.9vh,10px) auto 0;
+  flex-shrink:0; height:clamp(34px,4.6vh,46px);
+  background:linear-gradient(180deg,rgba(10,15,26,.94),rgba(4,7,13,.97));
+  border:1px solid rgba(244,236,212,.38); border-radius:8px;
+  box-shadow:0 0 0 1px rgba(0,0,0,.6) inset,0 6px 18px rgba(0,0,0,.5),0 0 16px rgba(232,210,154,.07);
+  position:relative; overflow:hidden; z-index:12; font-size:min(1.55vw,2.7vh);
 }
 .mhud::after{display:none;}
 /* Team cluster — name centered, emblem pinned to outer edge (inside the white slanted box of the scoreboard graphic) */
-.hteam{display:flex;align-items:center;justify-content:center;padding:0 clamp(8px,17.92px,18px);gap:clamp(6px,12.8px,10px);position:relative;height:100%;background:none!important;}
+.hteam{display:flex;align-items:center;justify-content:center;padding:0 .9em;gap:.5em;position:relative;height:100%;background:none!important;}
 .hteam.home,.hteam.away{justify-content:center;flex-direction:row;}
 .hteam.away{flex-direction:row-reverse;}
-/* Pin emblems to the outer corners so they land inside the scoreboard graphic's white box */
-.hteam.home .hflag-circle{position:absolute;left:clamp(34px,66.56px,72px);top:50%;transform:translateY(-50%);margin:0;}
-.hteam.away .hflag-circle{position:absolute;right:clamp(34px,66.56px,72px);top:50%;transform:translateY(-50%);margin:0;}
-.hflag-circle{width:clamp(28px,53.76px,38px);height:clamp(28px,53.76px,38px);border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:clamp(16px,33.28px,24px);border:2px solid rgba(255,255,255,.3);background:rgba(0,0,0,.3);flex-shrink:0;box-shadow:0 2px 10px rgba(0,0,0,.5)}
-.htn{font-family:'Bold Pixel','Bebas Neue',sans-serif;font-size:clamp(14px,26.88px,21px);letter-spacing:.14em;color:#fff;line-height:1;text-shadow:0 1px 3px rgba(0,0,0,.85);transform:translateY(-3px);}
+/* flags inline in the compact pill */
+.hteam.home .hflag-circle,.hteam.away .hflag-circle{position:static;transform:none;margin:0;}
+.hflag-circle{width:1.55em;height:1.05em;border-radius:2px;display:flex;align-items:center;justify-content:center;font-size:1em;overflow:hidden;border:none;background:rgba(0,0,0,.3);flex-shrink:0;box-shadow:0 1px 3px rgba(0,0,0,.5)}
+.hflag-circle img,.hflag-circle svg{width:100%;height:100%;object-fit:cover}
+.htn{font-family:'Cinzel',Georgia,serif;font-weight:700;font-size:1.15em;letter-spacing:.06em;color:#fff;line-height:1;text-shadow:0 1px 3px rgba(0,0,0,.85);transform:none;}
 /* Center plate — scores row, then clock, then half */
-.hmid{display:flex;flex-direction:column;align-items:center;justify-content:center;padding:0 clamp(6px,12.8px,14px);flex-shrink:0;position:relative;background:none;height:100%;gap:1px;}
+.hmid{display:flex;flex-direction:column;align-items:center;justify-content:center;padding:0 .9em;flex-shrink:0;position:relative;height:100%;gap:0;background:rgba(0,0,0,.28);border-left:1px solid rgba(255,255,255,.12);border-right:1px solid rgba(255,255,255,.12);}
 .hmid::before,.hmid::after{display:none;}
-.hscores{display:flex;align-items:center;gap:clamp(48px,89.6px,90px);line-height:1;transform:translateY(4px);}
-.hsc{font-family:'Bold Pixel','Orbitron',sans-serif;font-size:clamp(18px,33.28px,24px);font-weight:900;color:#fff;text-shadow:0 2px 4px rgba(0,0,0,.95);line-height:1;}
+.hscores{display:flex;align-items:center;gap:.7em;line-height:1;transform:none;}
+.hsc{font-family:'Bold Pixel','Orbitron',sans-serif;font-size:1.35em;font-weight:900;color:#fff;text-shadow:0 2px 4px rgba(0,0,0,.95);line-height:1;}
 .hsc.sh{text-shadow:0 0 10px rgba(30,114,220,.9),0 2px 4px rgba(0,0,0,.95)}
 .hsc.sa{text-shadow:0 0 10px rgba(220,32,32,.9),0 2px 4px rgba(0,0,0,.95)}
-.hsc-sep{color:rgba(255,255,255,.55);font-family:'Bold Pixel','Orbitron',sans-serif;font-weight:900;font-size:clamp(14px,25.6px,18px);}
+.hsc-sep{color:var(--gold-b,#f0c040);font-family:'Bold Pixel','Orbitron',sans-serif;font-weight:900;font-size:.9em;margin-top:-.1em;}
 .hclock{display:flex;align-items:baseline;gap:4px;}
-.htime{font-family:'Bold Pixel','Orbitron',sans-serif;font-size:clamp(12px,23.04px,16px);font-weight:700;color:#fff;letter-spacing:.06em;line-height:1;text-shadow:0 1px 3px rgba(0,0,0,.95)}
-.hhalf{font-size:clamp(6px,9.6px,8px);font-family:'Orbitron',sans-serif;letter-spacing:.22em;color:rgba(255,255,255,.7);text-align:center;text-shadow:0 1px 2px rgba(0,0,0,.95)}
+.htime{font-family:'Bold Pixel','Orbitron',sans-serif;font-size:.72em;font-weight:700;color:var(--gold-b,#f0c040);letter-spacing:.06em;line-height:1;text-shadow:0 0 8px rgba(240,192,64,.3)}
+.hhalf{font-size:.42em;font-family:'Orbitron',sans-serif;letter-spacing:.22em;color:rgba(255,255,255,.7);text-align:center;text-shadow:0 1px 2px rgba(0,0,0,.95)}
 .posstrip{display:flex;width:clamp(70px,140.8px,120px);height:2px;border-radius:2px;overflow:hidden;background:rgba(255,255,255,.15)}
 .posstrip-h{background:linear-gradient(90deg,#2882f0,var(--blue));transition:width .6s}
 .posstrip-a{background:linear-gradient(90deg,#ff5555,var(--red));flex:1}
@@ -3536,8 +3546,8 @@ html.ue-phone #vjoy-base{transform:scale(calc(0.5 + 0.5*var(--tb)));transform-or
    gradient underneath guarantees the menu always looks intentional.
    hero.png is the new slot — menu-bg.png / wallpaper/home.png are the files
    this project already ships, so the menu has art before you add hero.png. */
-.ue-art{position:absolute;inset:-4%;z-index:0;background:
-  url('assets/home/menu-hero.png') center 30%/cover no-repeat,
+.ue-art{position:absolute;inset:-1.5%;z-index:0;background:
+  url('assets/home/menu-hero2.png') center center/cover no-repeat,
   url('assets/home/menu-bg.png') center 22%/cover no-repeat,
   url('assets/wallpaper/home.png') center 22%/cover no-repeat,
   radial-gradient(60% 70% at 50% 40%,#12305e,#050d1c 70%);
@@ -3550,8 +3560,8 @@ html.ue-phone #vjoy-base{transform:scale(calc(0.5 + 0.5*var(--tb)));transform-or
   background:radial-gradient(50% 50% at 50% 50%,rgba(111,180,255,.3),rgba(5,13,28,0) 70%);
   animation:ueBloom 6.5s ease-in-out infinite;}
 .ue-vig{position:absolute;inset:0;z-index:2;pointer-events:none;background:
-  linear-gradient(90deg,var(--ue-bg) 8%,rgba(5,13,28,.86) 22%,rgba(5,13,28,.1) 44%,rgba(5,13,28,.05) 62%,rgba(5,13,28,.82) 88%,var(--ue-bg) 100%),
-  linear-gradient(0deg,var(--ue-bg) 3%,transparent 26%,transparent 76%,rgba(5,13,28,.92) 100%);}
+  linear-gradient(90deg,var(--ue-bg) 8%,rgba(5,13,28,.86) 22%,rgba(5,13,28,.1) 44%,rgba(5,13,28,.03) 62%,rgba(5,13,28,.04) 84%,rgba(5,13,28,.34) 100%),
+  linear-gradient(0deg,var(--ue-bg) 2%,transparent 22%,transparent 78%,rgba(5,13,28,.88) 100%);}
 .ue-scan{position:absolute;inset:0;z-index:2;pointer-events:none;
   background:repeating-linear-gradient(0deg,rgba(0,0,0,.2) 0 1px,transparent 1px 3px);}
 .ue-sweepband{position:absolute;left:0;right:0;height:120px;z-index:2;pointer-events:none;
@@ -3626,7 +3636,7 @@ html.ue-phone #vjoy-base{transform:scale(calc(0.5 + 0.5*var(--tb)));transform-or
 .ue-logo .ue-ghost{position:absolute;left:56px;top:-10px;font-family:Anton,sans-serif;
   font-size:clamp(48px,6.5vw,88px);line-height:1;color:rgba(255,255,255,.07);letter-spacing:-.04em;}
 .ue-logo-in{position:relative;animation:ueGlowB 3.4s ease-in-out infinite;}
-.ue-logo-in b{display:block;font:800 italic clamp(40px,5.4vw,78px)/.82 'Barlow Condensed';letter-spacing:-.02em;color:#fff;}
+.ue-logo-in b{display:block;font:900 clamp(34px,4.7vw,66px)/.92 'Cinzel',Georgia,serif;letter-spacing:.015em;color:#fff;}
 .ue-logo-in b+b{color:var(--ue-gold);}
 .ue-tagline{margin-top:10px;font:700 clamp(10px,.95vw,14px)/1 'Barlow Condensed';letter-spacing:.28em;color:rgba(234,241,251,.72);}
 
@@ -3637,7 +3647,7 @@ html.ue-phone #vjoy-base{transform:scale(calc(0.5 + 0.5*var(--tb)));transform-or
   transition:background .15s,border-color .15s;position:relative;overflow:hidden;}
 .ue-item:hover,.ue-item:focus-visible{background:rgba(47,141,255,.1);border-left-color:var(--ue-accent);outline:none;}
 .ue-item svg{width:clamp(18px,1.7vw,24px);height:clamp(18px,1.7vw,24px);flex:none;fill:none;stroke:var(--ue-accent);stroke-width:1.7;}
-.ue-item-l{font:800 italic clamp(16px,1.6vw,24px)/1 'Barlow Condensed';letter-spacing:.03em;}
+.ue-item-l{font:700 clamp(15px,1.45vw,22px)/1.05 'Cinzel',Georgia,serif;letter-spacing:.02em;}
 .ue-item-s{font:700 clamp(9px,.8vw,11px)/1.5 'Barlow Condensed';letter-spacing:.16em;color:var(--ue-dim);}
 .ue-item.active{color:#03102a;border-left-color:transparent;height:clamp(44px,6.8vh,62px);
   background:linear-gradient(90deg,var(--ue-accent) 0%,var(--ue-accent-d) 62%,rgba(22,96,216,0) 100%);
@@ -3667,7 +3677,7 @@ html.ue-phone #vjoy-base{transform:scale(calc(0.5 + 0.5*var(--tb)));transform-or
 .ue-tile-art{position:absolute;inset:0;background-size:cover;background-position:center;opacity:.6;}
 .ue-tile-scrim{position:absolute;inset:0;background:linear-gradient(90deg,#061020 32%,rgba(6,16,32,.2) 100%);}
 .ue-tile-txt{position:absolute;left:clamp(10px,1.2vw,18px);top:clamp(10px,1.2vw,18px);right:clamp(10px,1.2vw,18px);pointer-events:none;}
-.ue-tile-txt h4{margin:0;font:800 italic clamp(15px,1.7vw,25px)/.95 'Barlow Condensed';}
+.ue-tile-txt h4{margin:0;font:700 clamp(14px,1.55vw,23px)/1 'Cinzel',Georgia,serif;letter-spacing:.02em;}
 .ue-tile-txt p{margin:clamp(6px,1vh,12px) 0 0;font:700 clamp(10px,.9vw,13px)/1.5 'Barlow Condensed';letter-spacing:.12em;color:rgba(234,241,251,.6);}
 .ue-tile-txt .gold{font:800 italic clamp(12px,1.1vw,17px)/1 'Barlow Condensed';color:var(--ue-gold);}
 .ue-tile-txt .acc{color:var(--ue-accent);}
@@ -3689,7 +3699,7 @@ html.ue-phone #vjoy-base{transform:scale(calc(0.5 + 0.5*var(--tb)));transform-or
 .ue-online svg{width:17px;height:17px;fill:none;stroke:currentColor;stroke-width:1.8;}
 
 /* ---------- keyframes ---------- */
-@keyframes ueKen{0%,100%{transform:scale(1.02) translateX(0)}50%{transform:scale(1.09) translateX(-14px)}}
+@keyframes ueKen{0%,100%{transform:scale(1.03) translateX(0)}50%{transform:scale(1.055) translateX(-9px)}}
 @keyframes ueHalo{0%,100%{opacity:.35;transform:scale(.96)}50%{opacity:.85;transform:scale(1.06)}}
 @keyframes ueBloom{0%,100%{opacity:.18;transform:scale(1)}50%{opacity:.42;transform:scale(1.12)}}
 @keyframes ueScan{0%{transform:translateY(-120px)}100%{transform:translateY(104vh)}}
@@ -3719,3 +3729,201 @@ html.ue-phone #vjoy-base{transform:scale(calc(0.5 + 0.5*var(--tb)));transform-or
   .ue-art,.ue-halo,.ue-bloom,.ue-sweepband,.ue-conf,.ue-logo-in,.ue-script b+b,.ue-item.active::after{animation:none!important;}
   .ue-conf{display:none;}
 }
+
+/* ═══════════════════════════════════════════════════════════════════
+   FF HD-2D PREMIUM DUEL  (v42)
+   Elegant serif type (Cinzel) + cream/gold double-frame panels with
+   ornamental corner brackets and gold section dividers — the Octopath /
+   Final Fantasy command-menu look. Appended last so it wins by order;
+   team blue/red identity kept as an inner tint. Numbers stay retro.
+   ═══════════════════════════════════════════════════════════════════ */
+:root{ --ff-gold:#e8d29a; --ff-gold-lo:#b9975a; --ff-cream:#f4ecd4; }
+
+/* — Serif typography — the single biggest premium lever — */
+.duel-aaa .dpnm,
+.duel-aaa .dpd2-nm{ font-family:'Cinzel',Georgia,serif; font-weight:700; letter-spacing:.03em; color:var(--ff-cream); text-shadow:0 2px 6px rgba(0,0,0,.85); }
+.duel-aaa .duelzone{ font-family:'Cinzel',Georgia,serif; font-weight:700; letter-spacing:.06em; }
+.duel-aaa .dside-h{ font-family:'Cinzel',Georgia,serif; font-weight:700; color:var(--ff-gold); letter-spacing:.14em; }
+.duel-aaa .dss-name{ font-family:'Cinzel',Georgia,serif; font-weight:700; letter-spacing:.02em; color:var(--ff-cream); }
+.duel-aaa .dact3d-l{ font-family:'Cinzel',Georgia,serif; font-weight:700; letter-spacing:.04em; }
+/* stat & overall numbers keep the retro-pixel accent */
+.duel-aaa .dside-ovr-num,
+.duel-aaa .dst-v{ font-family:'Bold Pixel','Orbitron',sans-serif; }
+
+/* — Panel: deep glass + cream/gold double frame — */
+.duel-aaa .dpc{
+  background:linear-gradient(180deg,rgba(16,20,32,.74),rgba(6,9,16,.86));
+  border:1px solid rgba(244,236,212,.42);
+  box-shadow:
+    0 0 0 1px rgba(0,0,0,.65) inset,
+    0 0 0 3px rgba(232,210,154,.14),
+    0 12px 40px rgba(0,0,0,.62);
+}
+/* keep a whisper of team identity on the frame */
+.duel-aaa .dp-card-wrap.atk .dpc{ border-color:rgba(200,222,255,.5); }
+.duel-aaa .dp-card-wrap:not(.atk) .dpc{ border-color:rgba(255,214,214,.5); }
+/* gold hairline banner along the card top */
+.duel-aaa .dpc::before{
+  content:''!important; position:absolute; top:0; left:8px; right:8px; height:2px; z-index:6;
+  background:linear-gradient(90deg,transparent,var(--ff-gold) 20%,var(--ff-cream) 50%,var(--ff-gold) 80%,transparent);
+  opacity:.85; box-shadow:0 0 8px rgba(232,210,154,.5);
+}
+/* ornamental corner brackets (all four) via non-stretching SVG border-image */
+.duel-aaa .dpc::after{
+  content:''; position:absolute; inset:0; z-index:7; pointer-events:none;
+  padding:0; border:11px solid transparent;
+  border-image:url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='60' height='60'><g fill='none' stroke='%23e8d29a' stroke-width='2.4'><path d='M2 16 L2 2 L16 2'/><path d='M44 2 L58 2 L58 16'/><path d='M58 44 L58 58 L44 58'/><path d='M16 58 L2 58 L2 44'/></g></svg>") 16 stretch;
+  filter:drop-shadow(0 0 3px rgba(232,210,154,.35));
+}
+
+/* — Section headers: gold diamond marker + gradient rule — */
+.duel-aaa .dside-h{
+  border-bottom:1px solid transparent;
+  border-image:linear-gradient(90deg,rgba(232,210,154,.55),rgba(232,210,154,.05)) 1;
+  position:relative; padding-left:14px;
+}
+.duel-aaa .dside-h::before{
+  content:'◆'; position:absolute; left:0; top:50%; transform:translateY(-50%);
+  font-size:7px; color:var(--ff-gold); text-shadow:0 0 6px rgba(232,210,154,.7);
+}
+
+/* — Zone banner: gold-framed plaque — */
+.duel-aaa .duelzone{
+  background:linear-gradient(180deg,rgba(20,16,8,.7),rgba(8,7,4,.8));
+  border:1px solid rgba(232,210,154,.5);
+  box-shadow:0 0 0 1px rgba(0,0,0,.6) inset,0 0 12px rgba(232,210,154,.15);
+  color:var(--ff-cream);
+}
+
+/* — VS glyph: elegant serif crest — */
+.duel-aaa .dvs{ filter:drop-shadow(0 0 14px rgba(232,210,154,.35)); }
+
+/* — Command buttons: warmer selected-state glow keeps the gold thread — */
+.duel-aaa .dact3d-face{
+  background:linear-gradient(180deg,rgba(255,255,255,.06) 0%,transparent 42%),linear-gradient(180deg,rgba(14,18,30,.96),rgba(6,9,16,.98));
+}
+
+/* ═══════════════════════════════════════════════════════════════════
+   LIVE DUEL — PREMIUM FF/SQUARE-ENIX SKIN (v103)
+   Wires the duel-mockup look into #duel-ov. Team colour per side via
+   --tc / --tf (set by fCard). Layout mirrors the static mockup.
+   ═══════════════════════════════════════════════════════════════════ */
+#duel-ov.duel-aaa{ font-size:min(1.42vw,2.5vh); }
+#duel-ov .dvs{ display:none!important; }
+/* let the real (frozen) pitch show through — only darken the edges a touch */
+#duel-ov .da-bg{ background:radial-gradient(120% 85% at 50% 42%,transparent 40%,rgba(3,6,12,.55) 100%)!important; }
+#duel-ov .daura{ opacity:.5; }
+
+/* ---- SCOREBOARD (top centre, behind portraits) ---- */
+#duel-ov .dsb{ position:absolute; top:2.4%; left:50%; transform:translateX(-50%); z-index:2; display:flex; align-items:stretch;
+  height:4.3em; overflow:hidden; border-radius:.55em; border:1px solid rgba(244,236,212,.4);
+  background:linear-gradient(180deg,rgba(10,15,26,.94),rgba(4,7,13,.97));
+  box-shadow:0 0 0 1px rgba(0,0,0,.6) inset,0 8px 24px rgba(0,0,0,.55),0 0 18px rgba(232,210,154,.08); }
+#duel-ov .dsb-side{ display:flex; align-items:center; gap:.6em; padding:0 .85em; }
+#duel-ov .dsb-flag{ width:1.7em; height:1.16em; border-radius:2px; overflow:hidden; display:flex; align-items:center; justify-content:center; flex:none; box-shadow:0 1px 3px rgba(0,0,0,.6); }
+#duel-ov .dsb-flag img,#duel-ov .dsb-flag svg{ width:100%; height:100%; object-fit:cover; }
+#duel-ov .dsb-code{ font-family:'Rajdhani',sans-serif; font-weight:700; font-size:1.35em; letter-spacing:.06em; color:#fff; }
+#duel-ov .dsb-score{ font-family:'Bold Pixel','Orbitron',sans-serif; font-size:1.7em; font-weight:900; color:#fff; min-width:1.3em; text-align:center; text-shadow:0 2px 6px rgba(0,0,0,.8); }
+#duel-ov .dsb-mid{ display:flex; flex-direction:column; align-items:center; justify-content:center; padding:0 .9em; background:linear-gradient(180deg,rgba(0,0,0,.35),rgba(0,0,0,.15)); border-left:1px solid rgba(255,255,255,.12); border-right:1px solid rgba(255,255,255,.12); }
+#duel-ov .dsb-clock{ font-family:'Bold Pixel','Orbitron',sans-serif; font-size:1.15em; font-weight:700; color:var(--gold-b,#f0c040); letter-spacing:.04em; line-height:1; text-shadow:0 0 10px rgba(240,192,64,.35); }
+#duel-ov .dsb-half{ font-family:'Rajdhani',sans-serif; font-weight:700; font-size:.6em; letter-spacing:.24em; color:#8fa2bd; margin-top:.35em; }
+#duel-ov .dsb-acc{ width:.28em; } #duel-ov .dsb-acc.b{ background:linear-gradient(180deg,#3b8dff,#1257b8); } #duel-ov .dsb-acc.r{ background:linear-gradient(180deg,#ff4d4d,#b81616); }
+
+/* ---- PORTRAITS (own layer; ball rides here) ---- */
+#duel-ov .dhero{ position:absolute; bottom:-2%; height:104%; width:29em; z-index:4; pointer-events:none; }
+#duel-ov .dhero.left{ left:3%; }
+#duel-ov .dhero.right{ right:3%; }
+#duel-ov .dhero .dpav{ z-index:4; }
+#duel-ov .dhero.right .dpav{ filter:drop-shadow(0 0 26px rgba(255,80,80,.45)) drop-shadow(0 14px 26px rgba(0,0,0,.75)); }
+/* GK SAVE (gk-mode): existing keeper screen (goal backdrop + central keeper art,
+   only the keeper visible) with the NEW infobox layered on. Hide the new
+   portraits/ball and the attacker's infobox; keep the keeper's infobox on top. */
+#duel-ov.gk-mode .dhero{ display:none!important; }
+#duel-ov.gk-mode .dp-ball{ display:none!important; }
+#duel-ov.gk-mode .dside.atk-info{ display:none!important; }
+#duel-ov.gk-mode .dside.gk-info{ z-index:20; }
+
+/* ---- BALL — at the carrier's feet, cut by lower edge is fine ---- */
+#duel-ov .dp-ball{ position:absolute; bottom:1%; top:auto; width:clamp(34px,5em,72px); height:clamp(34px,5em,72px); z-index:4;
+  background:url('assets/pitch/ball.png') center/contain no-repeat; transform:none;
+  filter:drop-shadow(0 0 16px rgba(255,215,60,.9)) drop-shadow(0 0 34px rgba(255,215,60,.4)); }
+#duel-ov .dp-ball.ball-left{ left:19%; right:auto; }
+#duel-ov .dp-ball.ball-right{ right:19%; left:auto; }
+#duel-ov .dp-ball.show{ display:block; animation:none; }
+
+/* ---- SIDE PANELS (info box + attached skill) ---- */
+#duel-ov .dside{ position:absolute; top:30%; width:23%; z-index:6; display:flex; flex-direction:column; gap:.55em; --tc:#3b8dff; --tf:#1257b8; }
+#duel-ov .dside.left{ left:1.4%; }
+#duel-ov .dside.right{ right:1.4%; text-align:left; }
+#duel-ov .dside .info{ position:relative; width:100%; padding:1.7px; border:0!important; border-radius:0!important;
+  background:linear-gradient(150deg,var(--tc),var(--tf) 72%)!important;
+  filter:drop-shadow(0 0 7px color-mix(in srgb,var(--tc) 45%,transparent)) drop-shadow(0 14px 28px rgba(0,0,0,.6)); box-shadow:none!important; backdrop-filter:none!important; overflow:visible!important; }
+#duel-ov .dside.left .info{ clip-path:polygon(0 0,45% 0,66% 40%,100% 40%,100% 100%,0 100%); }
+#duel-ov .dside.right .info{ clip-path:polygon(55% 0,100% 0,100% 100%,0 100%,0 40%,34% 40%); }
+#duel-ov .info-in{ background:linear-gradient(180deg,rgba(13,19,32,.94),rgba(4,7,13,.97)); backdrop-filter:blur(6px); padding:.7em .8em .75em; }
+#duel-ov .dside.left .info-in{ clip-path:polygon(0 0,45% 0,66% 40%,100% 40%,100% 100%,0 100%); }
+#duel-ov .dside.right .info-in{ clip-path:polygon(55% 0,100% 0,100% 100%,0 100%,0 40%,34% 40%); }
+#duel-ov .i-topcol{ width:65.7%; }
+#duel-ov .dside.right .i-topcol{ margin-left:auto; text-align:right; }
+
+#duel-ov .i-head{ display:flex; align-items:center; gap:.55em; margin-bottom:.15em; }
+#duel-ov .dside.right .i-head{ flex-direction:row-reverse; }
+#duel-ov .i-flag{ width:1.7em; height:1.16em; border-radius:2px; flex:none; overflow:hidden; display:flex; align-items:center; justify-content:center; box-shadow:0 1px 2px rgba(0,0,0,.6); }
+#duel-ov .i-flag img,#duel-ov .i-flag svg{ width:100%; height:100%; object-fit:cover; }
+#duel-ov .i-nat{ font-family:'Rajdhani',sans-serif; font-weight:700; font-size:1em; letter-spacing:.12em; color:#8fa2bd; }
+#duel-ov .i-name{ display:flex; align-items:baseline; gap:.4em; margin:.05em 0 .1em; }
+#duel-ov .dside.right .i-name{ flex-direction:row-reverse; }
+#duel-ov .i-num{ font-family:'Bold Pixel','Orbitron',sans-serif; font-weight:900; font-size:1.4em; line-height:.9; color:#fff; text-shadow:0 2px 6px rgba(0,0,0,.7); }
+#duel-ov .i-fam{ font-family:'Rajdhani',sans-serif; font-weight:700; font-size:1.35em; line-height:.95; color:#fff; letter-spacing:.01em; white-space:nowrap; }
+#duel-ov .i-role{ font-family:'Rajdhani',sans-serif; font-weight:700; letter-spacing:.24em; font-size:.74em; color:#8fa2bd; }
+#duel-ov .i-stars{ color:var(--gold-b,#f0c040); font-size:.82em; letter-spacing:.08em; margin:.2em 0 .4em; text-shadow:0 0 8px rgba(240,192,64,.4); }
+#duel-ov .i-stars .st-half{ opacity:.5; }
+
+#duel-ov .i-ovrrow{ display:flex; align-items:center; gap:.7em; margin-top:.55em; margin-bottom:.4em; }
+#duel-ov .i-ovr{ display:flex; flex-direction:column; align-items:center; line-height:1; flex:none; }
+#duel-ov .i-ovr b{ font-family:'Bold Pixel','Orbitron',sans-serif; font-size:2em; font-weight:900; color:var(--tc); }
+#duel-ov .i-ovr span{ font-family:'Rajdhani',sans-serif; font-weight:700; font-size:.7em; letter-spacing:.22em; color:#8fa2bd; margin-bottom:.15em; }
+#duel-ov .i-stats{ flex:1; display:flex; flex-direction:column; gap:.14em; min-width:0; }
+#duel-ov .st{ display:grid; grid-template-columns:4.4em 1fr 1.8em; align-items:center; gap:.5em; }
+#duel-ov .st-l{ font-family:'Rajdhani',sans-serif; font-weight:700; letter-spacing:.1em; font-size:.72em; color:#8fa2bd; }
+#duel-ov .st-bar{ height:.52em; background:rgba(255,255,255,.09); border-radius:3px; overflow:hidden; position:relative; }
+#duel-ov .st-bar i{ position:absolute; top:0; bottom:0; left:0; border-radius:3px; display:block; }
+#duel-ov .st-v{ font-family:'Bold Pixel','Orbitron',sans-serif; font-weight:700; font-size:.82em; color:#fff; text-align:right; }
+#duel-ov .i-stam-row{ display:flex; justify-content:space-between; align-items:baseline; font-size:.72em; margin-bottom:.25em; }
+#duel-ov .i-stam-l{ font-family:'Rajdhani',sans-serif; font-weight:700; letter-spacing:.18em; color:#8fa2bd; }
+#duel-ov .i-stam-v b{ font-family:'Bold Pixel','Orbitron',sans-serif; color:var(--tc); }
+#duel-ov .i-stam-v span{ color:#8fa2bd; }
+#duel-ov .i-stam-bar{ height:.42em; background:rgba(255,255,255,.09); border-radius:3px; overflow:hidden; position:relative; }
+#duel-ov .i-stam-bar i{ position:absolute; top:0; bottom:0; left:0; display:block; border-radius:3px; }
+
+/* ---- ATTACHED SPECIAL-SKILL PANEL ---- */
+/* single clean box — no rim/secondary box behind */
+#duel-ov .skill{ width:100%; padding:0; background:none!important; filter:drop-shadow(0 8px 18px rgba(0,0,0,.5)); }
+#duel-ov .skill-in{ border-radius:.4em; padding:.4em .65em .45em; background:linear-gradient(180deg,rgba(15,21,34,.96),rgba(5,8,14,.98)); border:1px solid color-mix(in srgb,var(--tc) 55%,transparent); }
+#duel-ov .sk-h{ font-family:'Cinzel',Georgia,serif; font-weight:700; letter-spacing:.2em; font-size:.6em; color:var(--ff-gold,#e8d29a); position:relative; padding-left:.9em; margin-bottom:.2em; }
+#duel-ov .sk-h::before{ content:'◆'; position:absolute; left:0; top:.05em; font-size:.6em; color:var(--gold-b,#f0c040); }
+#duel-ov .sk-body{ display:flex; align-items:center; gap:.6em; justify-content:space-between; }
+#duel-ov .sk-tx{ min-width:0; }
+#duel-ov .sk-nm{ font-family:'Cinzel',Georgia,serif; font-weight:700; font-size:.92em; letter-spacing:.02em; color:var(--ff-cream,#f4ecd4); line-height:1.05; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+#duel-ov .sk-ds{ font-family:'Rajdhani',sans-serif; font-weight:600; font-size:.68em; color:#8fa2bd; margin-top:.08em; line-height:1.05; }
+#duel-ov .sk-cls{ flex:none; width:1.85em; height:1.85em; border-radius:.35em; display:flex; align-items:center; justify-content:center; font-family:'Cinzel',Georgia,serif; font-weight:900; font-size:1em; color:#fff; text-shadow:0 1px 3px rgba(0,0,0,.6); border:1px solid rgba(255,255,255,.4); }
+
+/* ---- ACTION BAR (bottom centre) — NO box behind; buttons float ---- */
+#duel-ov .duelbar{ position:absolute!important; left:50%; bottom:5.5%; transform:translateX(-50%); width:auto!important; max-width:92%; z-index:7;
+  padding:0!important; background:transparent!important; border:none!important; box-shadow:none!important; }
+#duel-ov .duelbar::before,#duel-ov .duelbar::after{ content:none!important; }
+#duel-ov .dueltop{ display:flex; align-items:center; justify-content:center; gap:.9em; margin-bottom:.5em; }
+/* GO — prominent button at the end of the action row; grey idle, gold armed */
+#duel-ov .dcfm{ margin-left:1em!important; opacity:1!important; pointer-events:none; align-self:center;
+  min-width:5.5em; height:3.2em; display:inline-flex!important; align-items:center; justify-content:center;
+  padding:0 1.1em!important; border-radius:.5em!important; font-family:'Cinzel',Georgia,serif!important; font-weight:900!important; letter-spacing:.22em!important; font-size:1.1em!important;
+  background:linear-gradient(180deg,rgba(44,52,66,.95),rgba(22,28,38,.98))!important; color:#8492a6!important; border:1px solid rgba(255,255,255,.2)!important; box-shadow:0 6px 16px rgba(0,0,0,.5)!important; }
+#duel-ov .dcfm.rdy{ background:linear-gradient(180deg,#ffd875,#e0a41c)!important; color:#2a1c00!important; border-color:#ffe9a8!important; pointer-events:all!important; box-shadow:0 0 18px rgba(240,192,64,.6)!important; animation:goPulse 1s ease-in-out infinite alternate; }
+@keyframes goPulse{from{box-shadow:0 0 10px rgba(240,192,64,.4)}to{box-shadow:0 0 22px rgba(240,192,64,.75)}}
+#duel-ov .duelzone{ font-family:'Cinzel',Georgia,serif; font-weight:700; letter-spacing:.08em; font-size:.85em; color:var(--ff-cream,#f4ecd4);
+  background:linear-gradient(180deg,rgba(20,16,8,.7),rgba(8,7,4,.8)); border:1px solid rgba(232,210,154,.5); border-radius:.35em; padding:.15em .7em; }
+#duel-ov .di{ font-family:'Rajdhani',sans-serif; font-weight:700; letter-spacing:.16em; font-size:.66em; color:#8fa2bd; }
+#duel-ov .duel-row{ display:flex; align-items:center; justify-content:center; gap:.5em; flex-wrap:wrap; }
+#duel-ov .dplbl{ font-family:'Cinzel',Georgia,serif; font-weight:700; letter-spacing:.14em; font-size:.62em; color:#8fa2bd; }
+#duel-ov [hidden]{ display:none!important; }
+#duel-ov .dpd2-chip,#duel-ov #dpd2-wrap{ display:none!important; }

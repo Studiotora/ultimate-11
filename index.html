@@ -11,8 +11,8 @@
 <meta name="theme-color" content="#06080e">
 <title>Ultimate Eleven - Football Strategy Game | Beta</title>
 <meta name="description" content="Ultimate Eleven - A Captain Tsubasa inspired football strategy game with 11 vs 11 gameplay">
-<link href="https://fonts.googleapis.com/css2?family=Anton&family=Barlow+Condensed:ital,wght@0,500;0,600;0,700;0,800;1,700;1,800&family=Permanent+Marker&family=Bebas+Neue&family=Rajdhani:wght@600;700&family=Orbitron:wght@400;700&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="style.css?v=40">
+<link href="https://fonts.googleapis.com/css2?family=Anton&family=Barlow+Condensed:ital,wght@0,500;0,600;0,700;0,800;1,700;1,800&family=Permanent+Marker&family=Bebas+Neue&family=Rajdhani:wght@600;700&family=Orbitron:wght@400;700&family=Cinzel:wght@500;700;900&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="style.css?v=57">
 <style>
 /* CAREER MODE - inline to bypass cache */
 #s-career-clubs{background:radial-gradient(ellipse 80% 50% at 50% 0%,rgba(30,114,220,.08),transparent 60%),#06080e;overflow:hidden;}
@@ -286,9 +286,8 @@
    ============================================================ */
 /* Duel plays over the LIVE (frozen) pitch — dim veil only, no stadium image. */
 #duel-ov.duel-aaa{background:
-  linear-gradient(180deg,rgba(4,7,14,.5) 0%,rgba(4,7,14,.28) 40%,rgba(4,7,14,.68) 100%) !important;}
-/* see-through info cards */
-.duel-aaa .dpc{background:linear-gradient(180deg,rgba(7,13,26,.46) 0%,rgba(5,8,16,.5) 100%) !important;backdrop-filter:blur(7px) saturate(1.1);-webkit-backdrop-filter:blur(7px) saturate(1.1);}
+  linear-gradient(180deg,rgba(4,7,14,.22) 0%,rgba(4,7,14,.08) 45%,rgba(4,7,14,.44) 100%) !important;}
+/* (old see-through .dpc card bg removed — new skin controls the info box) */
 /* glowing foot rings under each player */
 .duel-aaa .dp-card-wrap.atk::after,
 .duel-aaa .dp-card-wrap:not(.atk)::after{
@@ -329,7 +328,7 @@
 .duel-aaa .dss-desc{font-size:8px !important;line-height:1.35 !important;max-height:34px;overflow:hidden;}
 .duel-aaa .dpc-info{flex:none !important;}
 /* full-screen field — pitch shows behind the top score banner during a duel */
-#s-match.duel-live .mhud{background:transparent !important;z-index:30;}
+#s-match.duel-live .mhud{display:none !important;}
 .duel-aaa .dmenu.special .dact3d-img{filter:drop-shadow(0 0 7px rgba(170,90,255,.6)) drop-shadow(0 3px 5px rgba(0,0,0,.55));}
 @media(max-width:900px){
   .duel-aaa .dmenu{padding:4px 8px 6px;gap:3px;border-radius:9px;}
@@ -398,20 +397,8 @@
     <button class="ue-icobtn" onclick="openSettings()" title="Settings"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"></circle><path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 11-2.83 2.83l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-4 0v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 11-2.83-2.83l.06-.06a1.65 1.65 0 00.33-1.82 1.65 1.65 0 00-1.51-1H3a2 2 0 010-4h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 112.83-2.83l.06.06a1.65 1.65 0 001.82.33H9a1.65 1.65 0 001-1.51V3a2 2 0 014 0v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 112.83 2.83l-.06.06a1.65 1.65 0 00-.33 1.82V9a1.65 1.65 0 001.51 1H21a2 2 0 010 4h-.09a1.65 1.65 0 00-1.51 1z"></path></svg></button>
     <button class="ue-icobtn" onclick="aeToast('Inbox — coming soon')" title="Inbox"><svg viewBox="0 0 24 24"><path d="M4 5h16v14H4z"></path><path d="M4 6l8 6 8-6"></path></svg><span class="ue-badge">3</span></button>
 
-    <div class="ue-top-right">
-      <div class="ue-coin"><i>U</i><span id="hmCoins">125,250</span></div>
-      <div class="ue-lvl">
-        <b id="hmLevel">LVL 24</b>
-        <div class="ue-xp"><span id="hmXpText">18,450 / 21,000</span><div><i id="hmXpFill"></i></div></div>
-      </div>
-      <div class="ue-me" onclick="openProfileEdit()">
-        <div style="text-align:right">
-          <div class="ue-me-name" id="hmProfileName">Striker11</div>
-          <div class="ue-me-sub">ELITE PLAYER</div>
-        </div>
-        <div class="ue-av" id="hmProfileAvatar"></div>
-      </div>
-    </div>
+    <!-- top-right coins/level/profile removed — mobile-gacha HUD dropped for a
+         cleaner console-style menu (Square-Enix direction) -->
   </header>
 
   <!-- BODY -->
@@ -478,9 +465,6 @@
       </div>
     </div>
   </div>
-
-  <!-- script tagline over the art -->
-  <div class="ue-script"><b>EVERY<br>MATCH.</b><b>EVERY<br>DREAM.</b></div>
 
   <!-- foreground confetti (parallax) -->
   <div class="ue-conf front"><i></i><i></i><i></i><i></i><i></i></div>
@@ -941,109 +925,78 @@
       <div class="daura blue"></div>
       <div class="daura red"></div>
       <div class="dvs" id="dvs"><img src="assets/ui/vs.png" alt="VS" style="width:100%;height:100%;object-fit:contain;"></div>
-      <!-- Two player panels -->
-      <div class="dpwrap">
-        <!-- Ball floats between cards at dpwrap level -->
-        <div class="dp-ball show" id="dp-ball"></div>
 
-        <!-- ATTACKER (left) -->
-        <div class="dp-card-wrap atk">
-          <div class="dp-role" id="dpa-role">ATTACKER</div>
-          <div class="dpav" id="dpa-av"></div>
-          <div class="dpc" id="dpa-c">
-            <div class="dc-tab" id="dpa-tab">PLAYER 1</div>
-            <div class="dpr" id="dpa-r">SR</div>
-            <div class="dpc-info">
-              <!-- Profile portrait + overall -->
-              <div class="dch">
-                <div class="dch-id">
-                  <div class="dpps dch-pos" id="dpa-ps">—</div>
-                  <div class="dpnm" id="dpa-nm">—</div>
-                  <div class="dch-stars" id="dpa-stars"></div>
-                  <div class="dside-ovr"><b class="dside-ovr-num" id="dpa-ovr">—</b><span class="dside-ovr-lbl">OVR</span></div>
-                </div>
-                <div class="dside-mini dch-port" id="dpa-mini"></div>
-              </div>
-
-              <!-- Stamina bar with smooth gradient -->
-              <div class="dp-energy-wrap">
-                <div class="ds-stamina-row">
-                  <span class="dp-energy-lbl">STAMINA</span>
-                  <span class="dp-energy-val"><span id="dpa-ev">100</span><span class="ds-stamina-max"> / <span id="dpa-emax">1500</span></span></span>
-                </div>
-                <div class="dp-energy-bar"><div class="dp-energy-fill" id="dpa-ef" style="width:100%"></div></div>
-              </div>
-
-              <!-- Skill list (top 4 derived from stats) -->
-              <div class="dside-skill">
-                <div class="dside-h">STATS</div>
-                <div class="dside-skills" id="dpa-skills"></div>
-              </div>
-
-              <!-- Special skill -->
-              <div class="dside-special">
-                <div class="dside-h">SPECIAL SKILL</div>
-                <div class="dss-content">
-                  <div class="dss-portrait" id="dpa-sp-port"></div>
-                  <div class="dss-info">
-                    <div class="dss-name" id="dpa-sp-name">—</div>
-                    <div class="dss-grade" id="dpa-sp-grade">S</div>
-                  </div>
-                  <div class="dss-desc" id="dpa-sp-desc">—</div>
-                </div>
-              </div>
-            </div>
-          </div>
-          <div class="dp-stats" id="dpa-st"></div>
-        </div>
-
-        <!-- DEFENDER (right) -->
-        <div class="dp-card-wrap">
-          <div class="dp-role" id="dpd-role">DEFENDER</div>
-          <div class="dpav" id="dpd-av"></div>
-          <div class="dpc" id="dpd-c">
-            <div class="dc-tab" id="dpd-tab">COM</div>
-            <div class="dpr" id="dpd-r">SR</div>
-            <div class="dpc-info">
-              <div class="dch">
-                <div class="dch-id">
-                  <div class="dpps dch-pos" id="dpd-ps">—</div>
-                  <div class="dpnm" id="dpd-nm">—</div>
-                  <div class="dch-stars" id="dpd-stars"></div>
-                  <div class="dside-ovr"><b class="dside-ovr-num" id="dpd-ovr">—</b><span class="dside-ovr-lbl">OVR</span></div>
-                </div>
-                <div class="dside-mini dch-port" id="dpd-mini"></div>
-              </div>
-
-              <div class="dp-energy-wrap">
-                <div class="ds-stamina-row">
-                  <span class="dp-energy-lbl">STAMINA</span>
-                  <span class="dp-energy-val"><span id="dpd-ev">100</span><span class="ds-stamina-max"> / <span id="dpd-emax">1500</span></span></span>
-                </div>
-                <div class="dp-energy-bar"><div class="dp-energy-fill" id="dpd-ef" style="width:100%"></div></div>
-              </div>
-
-              <div class="dside-skill">
-                <div class="dside-h">STATS</div>
-                <div class="dside-skills" id="dpd-skills"></div>
-              </div>
-
-              <div class="dside-special">
-                <div class="dside-h">SPECIAL SKILL</div>
-                <div class="dss-content">
-                  <div class="dss-portrait" id="dpd-sp-port"></div>
-                  <div class="dss-info">
-                    <div class="dss-name" id="dpd-sp-name">—</div>
-                    <div class="dss-grade" id="dpd-sp-grade">S</div>
-                  </div>
-                  <div class="dss-desc" id="dpd-sp-desc">—</div>
-                </div>
-              </div>
-            </div>
-          </div>
-          <div class="dp-stats" id="dpd-st"></div>
-        </div>
+      <!-- CSS scoreboard (top centre, behind portraits) -->
+      <div class="dsb">
+        <div class="dsb-acc b"></div>
+        <div class="dsb-side"><span class="dsb-flag" id="dsb-hflag"></span><span class="dsb-code" id="dsb-hcode">—</span><span class="dsb-score" id="dsb-hsc">0</span></div>
+        <div class="dsb-mid"><div class="dsb-clock" id="dsb-clock">00:00</div><div class="dsb-half" id="dsb-half">1ST HALF</div></div>
+        <div class="dsb-side"><span class="dsb-score" id="dsb-asc">0</span><span class="dsb-code" id="dsb-acode">—</span><span class="dsb-flag" id="dsb-aflag"></span></div>
+        <div class="dsb-acc r"></div>
       </div>
+
+      <!-- Zoomed portraits (their own layer; the ball rides on this layer) -->
+      <div class="dhero left"><div class="dpav" id="dpa-av"></div></div>
+      <div class="dhero right"><div class="dpav" id="dpd-av"></div></div>
+
+      <!-- Ball indicator — sits at the carrier's feet, same layer as portrait -->
+      <div class="dp-ball show" id="dp-ball"></div>
+
+      <!-- LEFT panel (info + attached special skill) -->
+      <div class="dside left" id="dpa-side">
+        <div class="info" id="dpa-c"><div class="info-in">
+          <div class="i-topcol">
+            <div class="i-head"><span class="i-flag" id="dpa-flag"></span><span class="i-nat" id="dpa-nat">—</span></div>
+            <div class="i-name"><span class="i-num" id="dpa-num"></span><span class="i-fam" id="dpa-nm">—</span></div>
+            <div class="i-role" id="dpa-ps">—</div>
+            <div class="i-stars" id="dpa-stars"></div>
+          </div>
+          <div class="i-ovrrow">
+            <div class="i-ovr"><span>OVR</span><b id="dpa-ovr">—</b></div>
+            <div class="i-stats" id="dpa-stats"></div>
+          </div>
+          <div class="i-stam-row"><span class="i-stam-l">STAMINA</span><span class="i-stam-v"><b id="dpa-ev">100</b><span> / <span id="dpa-emax">1500</span></span></span></div>
+          <div class="i-stam-bar"><i id="dpa-ef" style="width:100%"></i></div>
+        </div></div>
+        <div class="skill" id="dpa-skillbox"><div class="skill-in">
+          <div class="sk-h">SPECIAL SKILL</div>
+          <div class="sk-body">
+            <div class="sk-tx"><div class="sk-nm" id="dpa-sp-name">—</div><div class="sk-ds" id="dpa-sp-desc">—</div></div>
+            <div class="sk-cls" id="dpa-sp-grade">S</div>
+          </div>
+        </div></div>
+        <!-- legacy engine hooks (kept, hidden) -->
+        <div id="dpa-tab" hidden></div><div id="dpa-r" hidden></div><div id="dpa-st" hidden></div>
+        <div id="dpa-skills" hidden></div><div id="dpa-mini" hidden></div><div id="dpa-sp-port" hidden></div><div id="dpa-role" hidden></div>
+      </div>
+
+      <!-- RIGHT panel (info + attached special skill) -->
+      <div class="dside right" id="dpd-side">
+        <div class="info" id="dpd-c"><div class="info-in">
+          <div class="i-topcol">
+            <div class="i-head"><span class="i-flag" id="dpd-flag"></span><span class="i-nat" id="dpd-nat">—</span></div>
+            <div class="i-name"><span class="i-num" id="dpd-num"></span><span class="i-fam" id="dpd-nm">—</span></div>
+            <div class="i-role" id="dpd-ps">—</div>
+            <div class="i-stars" id="dpd-stars"></div>
+          </div>
+          <div class="i-ovrrow">
+            <div class="i-ovr"><span>OVR</span><b id="dpd-ovr">—</b></div>
+            <div class="i-stats" id="dpd-stats"></div>
+          </div>
+          <div class="i-stam-row"><span class="i-stam-l">STAMINA</span><span class="i-stam-v"><b id="dpd-ev">100</b><span> / <span id="dpd-emax">1500</span></span></span></div>
+          <div class="i-stam-bar"><i id="dpd-ef" style="width:100%"></i></div>
+        </div></div>
+        <div class="skill" id="dpd-skillbox"><div class="skill-in">
+          <div class="sk-h">SPECIAL SKILL</div>
+          <div class="sk-body">
+            <div class="sk-tx"><div class="sk-nm" id="dpd-sp-name">—</div><div class="sk-ds" id="dpd-sp-desc">—</div></div>
+            <div class="sk-cls" id="dpd-sp-grade">S</div>
+          </div>
+        </div></div>
+        <div id="dpd-tab" hidden></div><div id="dpd-r" hidden></div><div id="dpd-st" hidden></div>
+        <div id="dpd-skills" hidden></div><div id="dpd-mini" hidden></div><div id="dpd-sp-port" hidden></div><div id="dpd-role" hidden></div>
+      </div>
+
       <div class="duelbar">
         <div class="dueltop">
           <div class="duelzone" id="dzone">MIDFIELD</div>
@@ -1405,7 +1358,7 @@
   </div>
 </div>
 
-<script src="game.js?v=99" defer></script>
+<script src="game.js?v=108" defer></script>
 <!-- ps1-mod.js removed: P3D is the only renderer, its post-FX drew into the hidden 2D canvas.
      Re-add this line to restore it: <script src="ps1-mod.js?v=1" defer></script> -->
 <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js" defer></script>

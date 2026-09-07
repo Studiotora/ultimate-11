@@ -4931,6 +4931,8 @@ function _gkDuelCSS(){
   document.head.appendChild(st);
 }
 function gkShotLayout(on,def,ds){
+  // GK save keeps its own screen (goal backdrop + central keeper art, ONLY the
+  // keeper visible). The NEW infobox is layered on via .gk-info in opDuel.
   const ov=document.getElementById('duel-ov');if(!ov)return;
   let bg=document.getElementById('gkduel-bg'),art=document.getElementById('gkduel-art');
   if(!on){ov.classList.remove('gk-mode');if(bg)bg.remove();if(art)art.remove();return;}
@@ -4956,9 +4958,9 @@ function opDuel(isShot, committedAk){
   const carrier=sq(as)[G.ck];const dk=isShot?'GK':(G.chk||Object.keys(sq(ds)).find(k=>sq(ds)[k]));
   const def=sq(ds)[dk];
   if(isShot&&!def){say('Shot blocked — no goalkeeper!');G.phase='moving';return;}
-  // 2v1 detection — carrier faced by two defenders within tackle range (not for shots vs GK)
+  // 2v1/1v2 removed — duels are always 1v1 now (tackle activates a straight duel)
   let dk2=null;
-  if(!isShot&&carrier&&PP[as][G.ck]){
+  if(false&&!isShot&&carrier&&PP[as][G.ck]){
     const cp=PP[as][G.ck];
     const defQ=sq(ds);
     const candidates=[];
@@ -4988,10 +4990,36 @@ function opDuel(isShot, committedAk){
   fCard('a',leftPl,leftSide,leftRole); fCard('d',rightPl,leftSide==='h'?'a':'h',rightRole);
   const ballEl=document.getElementById('dp-ball');
   if(ballEl){
-    // show on attacker side; left/right class positions it next to the correct card
-    const hasBall=(as===leftSide);
-    ballEl.className='dp-ball'+(hasBall?' show ball-left':' show ball-right');
+    // ball rides at the carrier's (attacker's) feet — left slot if attacker is on the left
+    const carrierLeft=(as===leftSide);
+    ballEl.className='dp-ball show'+(carrierLeft?' ball-left':' ball-right');
   }
+  // GK shot: only the keeper is shown (goal backdrop via gkShotLayout). Mark which
+  // side's NEW infobox is the keeper's (kept) vs the attacker's (hidden in gk-mode).
+  try{
+    const gkRole=(leftPl===def)?'a':'d';
+    ['dpa-side','dpd-side'].forEach(id=>{const e=document.getElementById(id);if(e)e.classList.remove('gk-info','atk-info');});
+    if(isShot){
+      const gkSide=document.getElementById('dp'+gkRole+'-side');
+      const atkSide=document.getElementById('dp'+(gkRole==='a'?'d':'a')+'-side');
+      if(gkSide)gkSide.classList.add('gk-info');
+      if(atkSide)atkSide.classList.add('atk-info');
+    }
+  }catch(e){}
+  // ── scoreboard mirror (CSS-built, top centre) ──
+  try{
+    const g=id=>document.getElementById(id);
+    const hcode=(HT&&(HT.abbr||(HT.name||'').slice(0,3).toUpperCase()))||'HOM';
+    const acode=(AT&&(AT.abbr||(AT.name||'').slice(0,3).toUpperCase()))||'AWY';
+    if(g('dsb-hcode'))g('dsb-hcode').textContent=hcode;
+    if(g('dsb-acode'))g('dsb-acode').textContent=acode;
+    if(g('dsb-hsc'))g('dsb-hsc').textContent=(g('sc-h')?g('sc-h').textContent:'0');
+    if(g('dsb-asc'))g('dsb-asc').textContent=(g('sc-a')?g('sc-a').textContent:'0');
+    if(g('dsb-clock'))g('dsb-clock').textContent=(g('htime')?g('htime').textContent:'');
+    if(g('dsb-half'))g('dsb-half').textContent=(g('hhalf')?g('hhalf').textContent:'');
+    if(g('dsb-hflag'))setTeamEmblem(g('dsb-hflag'),selHome,(HT&&HT.flag)||'');
+    if(g('dsb-aflag'))setTeamEmblem(g('dsb-aflag'),selAway,(AT&&AT.flag)||'');
+  }catch(e){}
   gkShotLayout(isShot,def,ds);
   bldA(carrier,isShot); bldD(def,ds,isShot);
   // ── 2v1 visual: show a second mini defender card stacked next to the main defender ──
@@ -5068,25 +5096,16 @@ function renderSecondDefender(dk2, ds){
 function fCard(role,pl,s,displayRole){
   const p=role==='a'?'dpa-':'dpd-';
   const tf=s==='h'?'#1258b0':'#b81616',tl=s==='h'?'#2882f0':'#f03030',rcol=rc(pl?.rar||1);
-  // Card border = team colour, subtle team tint background
   const cardEl=document.getElementById(p+'c');
-  cardEl.style.border=`2px solid ${tl}`;
+  // team colour drives the premium duel skin via CSS var (see #duel-ov styles)
+  const _sideEl=document.getElementById(p+'side');
+  if(_sideEl){ _sideEl.style.setProperty('--tc',tl); _sideEl.style.setProperty('--tf',tf); }
   const tabEl=document.getElementById(p+'tab');
-  if(tabEl){tabEl.textContent=(s==='h')?'PLAYER 1':'COM';tabEl.style.background=`linear-gradient(90deg,${tl} 0%,${tl}55 55%,transparent 100%)`;}
-  cardEl.style.boxShadow=`0 0 28px ${tl}44, 0 8px 40px rgba(0,0,0,.8)`;
-  cardEl.style.background=`linear-gradient(160deg,${tf}28 0%,rgba(4,6,14,.97) 45%)`;
+  if(tabEl){tabEl.textContent=(s==='h')?'PLAYER 1':'COM';}
   // Portrait — no mirroring, images always shown as supplied
   const avEl=document.getElementById(p+'av');
   const lastName=playerLastName(pl);
   const img=playerImg(pl);
-  // Team flag emblem watermark — PNG if available, flag emoji fallback
-  cardEl.querySelector('.dp-card-emblem')?.remove();
-  const emblemEl=document.createElement('div');
-  emblemEl.className='dp-card-emblem';
-  const emblemKey=s==='h'?selHome:selAway;
-  const emblemFlag=s==='h'?(HT?.flag||''):(AT?.flag||'');
-  setTeamEmblem(emblemEl, emblemKey, emblemFlag);
-  cardEl.appendChild(emblemEl);
   avEl.classList.remove('mirrored');
   // Determine the effective club key for portrait paths.
   // Career mode sets pl.clubKey directly. Friendly mode picks clubs from the
@@ -5311,6 +5330,37 @@ function fCard(role,pl,s,displayRole){
     };
     spDc.textContent = sp ? (descs[sp.l] || 'Signature move that swings the duel.') : '';
   }
+
+  // ── PREMIUM DUEL SKIN — flag, nation code, jersey, role name, stat bars, gem ──
+  try{
+    const tm = (s==='h') ? HT : AT;
+    const flagEl=document.getElementById(p+'flag');
+    if(flagEl){ setTeamEmblem(flagEl,(s==='h'?selHome:selAway),(tm&&tm.flag)||''); }
+    const natEl=document.getElementById(p+'nat');
+    if(natEl){ natEl.textContent = tm ? (tm.abbr || (tm.name||'').slice(0,3).toUpperCase()) : '—'; }
+    const numEl=document.getElementById(p+'num');
+    if(numEl){ numEl.textContent = (pl && pl.jersey!=null) ? pl.jersey : ''; }
+    const psEl=document.getElementById(p+'ps');
+    if(psEl && pl){
+      const RN={GK:'GOALKEEPER',CB1:'DEFENDER',CB2:'DEFENDER',CB:'DEFENDER',LB:'FULL-BACK',RB:'FULL-BACK',DMF:'ANCHOR',CM1:'MIDFIELDER',CM2:'MIDFIELDER',CM:'MIDFIELDER',OMF:'PLAYMAKER',AMF:'PLAYMAKER',LW:'WINGER',RW:'WINGER',ST:'STRIKER',CF:'STRIKER'};
+      psEl.textContent = RN[pl.pos] || pl.pos; psEl.style.color='';
+    }
+    const barsEl=document.getElementById(p+'stats');
+    if(barsEl){
+      barsEl.innerHTML='';
+      const rows = (pl && pl.pos==='GK')
+        ? [['SAVE','sav'],['REFLEX','ref'],['SPEED','spd'],['POWER','pwr'],['DEFENCE','def'],['HANDS','tec']]
+        : [['SHOT','sho'],['PASS','pas'],['DRIBBLE','dri'],['POWER','pow'],['SPEED','spd'],['DEFENCE','def']];
+      rows.forEach(([lab,k])=>{
+        let v=pl?Math.round(Number(gs(pl,k))||0):0; v=Math.max(0,Math.min(99,v));
+        const r=document.createElement('div'); r.className='st';
+        r.innerHTML=`<div class="st-l">${lab}</div><div class="st-bar"><i style="width:${Math.max(4,v)}%;background:linear-gradient(90deg,${tf},${tl})"></i></div><div class="st-v">${v}</div>`;
+        barsEl.appendChild(r);
+      });
+    }
+    const gemEl=document.getElementById(p+'sp-grade');
+    if(gemEl){ gemEl.style.background=`linear-gradient(160deg,${tl},${tf})`; gemEl.style.boxShadow=`0 0 10px ${tl}88, inset 0 1px 0 rgba(255,255,255,.35)`; gemEl.style.color='#fff'; }
+  }catch(e){}
 }
 
 const SPECIALS={
@@ -7078,16 +7128,16 @@ function rollFoul(defSide,defSlot,attSide,prob){
       return;
     }
     updP();
-    /* A free kick used to drop straight back into 'moving', so play simply
-       restarted and the taker never got to choose. Open the action menu the
-       same way the penalty does — the taker picks pass or shoot. */
+    /* A free kick is UNCONTESTED at the moment it's taken — no duel. The taker
+       gets the ball in-field and plays on normally (dribble / pass / shoot); a
+       grace window keeps defenders off him for the first beat. */
     G.phase='idle';
-    G.kickoffUntil=Date.now()+900;
+    G.kickoffUntil=Date.now()+1500;
     setTimeout(()=>{
       if(G._fkGen!==_fk||!G.mt)return;
       if(G.phase==='duel'||G.phase==='duel_result')return;
-      G.phase='idle';
-      opDuel();                      // pass / dribble / shoot, taker's call
+      G.kickoffUntil=Date.now()+1000;
+      liveResume(attSide);           // resume IN-FIELD — no forced duel vs the GK
     },900);
   },isPK?3500:3200);
   return true;
@@ -7247,7 +7297,8 @@ function armKickoff(side){
 function doKickoff(){
   if(!G.awaitKickoff)return;
   G.awaitKickoff=null; hideKickoffPrompt();
-  G.kickoffUntil=Date.now()+900;
+  G.chk=null; try{looseBall=null;}catch(e){}      // clear any stale duel/loose state
+  G.kickoffUntil=Date.now()+1600;                 // clean first beat — no instant duel
   asnC(); G.phase='moving';
   if(G.poss==='h'){const ph=$id('passhint');if(ph)ph.style.display='block';}
 }
@@ -8859,11 +8910,11 @@ function _txRenderLog(){
       radial-gradient(60% 50% at 50% 18%,rgba(255,255,255,.10),transparent 70%);}
     #s-ts .tsf-root>*{position:relative;z-index:1;}
     #s-ts .tsf-head{display:grid;grid-template-columns:1fr auto 1fr;align-items:center;padding:20px 48px 0;height:120px;}
-    #s-ts .tsf-title h1{font-style:italic;font-weight:800;letter-spacing:.04em;font-size:46px;line-height:.95;text-transform:uppercase;text-shadow:0 2px 14px rgba(0,0,0,.6);margin:0;}
+    #s-ts .tsf-title h1{font-family:'Cinzel',Georgia,serif;font-weight:900;letter-spacing:.02em;font-size:44px;line-height:.98;text-transform:uppercase;text-shadow:0 2px 14px rgba(0,0,0,.6);margin:0;}
     #s-ts .tsf-sub{color:#2b6fff;font-weight:700;letter-spacing:.2em;font-size:16px;text-transform:uppercase;margin-top:4px;}
     #s-ts .tsf-center{text-align:center;}
     #s-ts .tsf-globe{font-size:36px;filter:drop-shadow(0 0 8px rgba(255,255,255,.35));}
-    #s-ts .tsf-ct{font-weight:800;letter-spacing:.16em;font-size:20px;text-transform:uppercase;margin-top:2px;}
+    #s-ts .tsf-ct{font-family:'Cinzel',Georgia,serif;font-weight:700;letter-spacing:.08em;font-size:20px;text-transform:uppercase;margin-top:2px;}
     #s-ts .tsf-ch{color:#9fb2cf;font-size:14px;margin-top:2px;}
     #s-ts .tsf-hero{flex:1 1 auto;position:relative;display:flex;align-items:flex-end;justify-content:center;min-height:0;padding:0 48px;}
     #s-ts .tsf-splash{position:absolute;bottom:0;height:128%;width:540px;z-index:0;pointer-events:none;display:flex;align-items:flex-end;}
@@ -8892,7 +8943,7 @@ function _txRenderLog(){
     #s-ts .tsf-home{--c:#2b6fff;} #s-ts .tsf-away{--c:#ff3a44;}
     #s-ts .tsf-pill{position:absolute;top:-14px;left:50%;transform:translateX(-50%);background:var(--c);color:#fff;font-weight:800;letter-spacing:.14em;font-size:12px;padding:5px 18px;border-radius:6px;text-transform:uppercase;box-shadow:0 3px 10px rgba(0,0,0,.4);}
     #s-ts .tsf-card.tsf-act{box-shadow:0 0 0 2px var(--c),0 0 30px color-mix(in srgb,var(--c) 70%,transparent),0 14px 40px rgba(0,0,0,.5);transform:translateY(-3px);}
-    #s-ts .tsf-tname{font-style:italic;font-weight:800;text-transform:uppercase;font-size:27px;line-height:1.02;margin-bottom:4px;text-shadow:0 2px 8px rgba(0,0,0,.6);min-height:28px;}
+    #s-ts .tsf-tname{font-family:'Cinzel',Georgia,serif;font-weight:700;text-transform:uppercase;font-size:25px;letter-spacing:.02em;line-height:1.02;margin-bottom:4px;text-shadow:0 2px 8px rgba(0,0,0,.6);min-height:28px;}
     #s-ts .tsf-emblem{height:138px;display:flex;align-items:center;justify-content:center;margin:0 0 6px;}
     #s-ts .tsf-emblem img{height:138px;width:auto;filter:drop-shadow(0 3px 10px rgba(0,0,0,.5));}
     #s-ts .tsf-emblem svg{height:138px;width:auto;}
@@ -8904,7 +8955,7 @@ function _txRenderLog(){
     #s-ts .tsf-stats b{font-weight:800;font-size:26px;}
     #s-ts .tsf-pslab{color:#9fb2cf;font-size:10px;font-weight:700;letter-spacing:.14em;text-transform:uppercase;}
     #s-ts .tsf-psval{color:color-mix(in srgb,var(--c) 75%,#fff);font-weight:800;letter-spacing:.06em;text-transform:uppercase;font-size:17px;}
-    #s-ts .tsf-vs{font-style:italic;font-weight:900;font-size:52px;align-self:center;text-shadow:0 0 18px rgba(255,255,255,.4),0 4px 10px rgba(0,0,0,.6);}
+    #s-ts .tsf-vs{font-family:'Cinzel',Georgia,serif;font-weight:900;font-size:48px;align-self:center;letter-spacing:.02em;color:#f3e6c4;text-shadow:0 0 18px rgba(240,208,120,.45),0 4px 10px rgba(0,0,0,.6);}
     #s-ts .tsf-hint{text-align:center;color:#9fb2cf;font-size:13px;padding:0 10px 4px;}
     #s-ts .tsf-hint b{color:#cdd8ee;}
     #s-ts .tsf-tabs{display:flex;justify-content:center;gap:8px;padding:0 10px 10px;}
@@ -8918,7 +8969,7 @@ function _txRenderLog(){
     #s-ts .tsf-tile-em{height:34px;display:flex;align-items:center;justify-content:center;}
     #s-ts .tsf-tile-em img{height:34px;width:auto;filter:drop-shadow(0 2px 5px rgba(0,0,0,.5));}
     #s-ts .tsf-tile-em svg{height:34px;width:auto;}
-    #s-ts .tsf-tile-nm{font-size:11px;font-weight:700;letter-spacing:.02em;text-transform:uppercase;color:#9fb2cf;line-height:1.1;}
+    #s-ts .tsf-tile-nm{font-family:'Cinzel',Georgia,serif;font-size:11px;font-weight:700;letter-spacing:.01em;text-transform:uppercase;color:#c3cfe2;line-height:1.1;}
     #s-ts .tsf-tile-ovr{font-size:10px;font-weight:800;color:#ffd24a;}
     #s-ts .tsf-tile.tsf-sel-h{border-color:#2b6fff;box-shadow:0 0 0 1px #2b6fff,0 0 16px rgba(43,111,255,.5);}
     #s-ts .tsf-tile.tsf-sel-a{border-color:#ff3a44;box-shadow:0 0 0 1px #ff3a44,0 0 16px rgba(255,58,68,.5);}
