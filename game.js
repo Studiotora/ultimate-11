@@ -617,6 +617,23 @@ function genericPlayerImage(){
   return genericPlayerImage._cache;
 }
 
+/* ── Brand safety (roadmap 0.3) ───────────────────────────────────────────────
+   Real federation and club crests are registered trademarks and must not ship.
+   The files in assets/team/ and assets/career/clubs/ are the REAL ones (the
+   Italy badge is the actual FIGC crest, etc), so with BRAND_SAFE on nothing
+   loads them: emblem lookups go to a fake/ subfolder first and otherwise fall
+   back to art we generate ourselves — the procedural club shield, or the plain
+   national flag emoji (a national flag is not a trademark; a federation crest
+   is). Drop replacements into assets/team/fake/{key}.png and they appear with
+   no code change. Flip BRAND_SAFE to false only for local reference. */
+const BRAND_SAFE = true;
+function emblemSrcs(k, isClub){
+  if(BRAND_SAFE)
+    return isClub ? [`assets/team/fake/${k}.png`,`assets/career/clubs/fake/club${k}.png`]
+                  : [`assets/team/fake/${k}.png`];
+  return isClub ? [`assets/team/${k}.png`,`assets/career/clubs/club${k}.png`]
+                : [`assets/team/${k}.png`];
+}
 function setTeamEmblem(el, teamKey, flagEmoji){
   if(!el)return;
   el.style.display='';
@@ -643,7 +660,7 @@ function setTeamEmblem(el, teamKey, flagEmoji){
 
   // Try the PNG override(s); first that exists replaces the SVG/emoji.
   // Clubs: assets/team/{key}.png (same path as nationals) → legacy assets/career/clubs/club{key}.png
-  const srcs=isClub?[`assets/team/${k}.png`,`assets/career/clubs/club${k}.png`]:[`assets/team/${k}.png`];
+  const srcs=emblemSrcs(k,isClub);
   (function tryEmblem(i){
     if(i>=srcs.length)return;
     const img=new Image();
@@ -668,7 +685,9 @@ function teamEmblemPath(key){
   const k=String(key).toLowerCase();
   let isClub=false;
   try { isClub = !!(k && ((CR_CLUBS&&CR_CLUBS[k])||(window.ST_CLUBS&&window.ST_CLUBS[k]))); } catch(e) { isClub=false; }
-  return isClub ? `assets/career/clubs/club${k}.png` : `assets/team/${k}.png`;
+  // Brand-safe: never hand back a real crest path. Callers already treat a
+  // failed load as 'err' and fall through to the generated badge.
+  return emblemSrcs(k,isClub)[isClub?1:0];
 }
 // Cache for SVG-rasterized club badges so we can draw them on the canvas.
 // crBadgeSvg() returns an SVG string for any CR_CLUBS entry; we wrap that in
@@ -3209,10 +3228,9 @@ let _pvpDuelPrev=[{},{}]; // per-pad button snapshot during duels
 function pvpSetAtk(id){
   const sp=G.D.carrier?Math.round(G.D.carrier.spirit||1500):1500;
   if((ATK_ACTIONS[id]?.cost||0)>sp) id=baseAction(id);        // can't afford super → base
-  G.D.ak=id; G.D.pk=null; G.D.ak2=null;
+  G.D.ak=id; G.D.pk=null;
   const b=baseAction(id);
   if(b==='pass'||b==='one-two') G.D.pk=bestTeammateFor(G.D.as,G.ck,b)||bestTeammateFor(G.D.as,G.ck,'pass');
-  if(G.D.is2v1 && b!=='pass' && b!=='one-two') G.D.ak2=(b==='shoot')?'shoot':'dribble'; // 2v1 2nd move auto (v1 approx)
 }
 function pvpSetDef(id){
   const sp=G.D.def?Math.round(G.D.def.spirit||(G.D.def&&G.D.def.pos==='GK'?2000:1500)):1500;
@@ -3968,7 +3986,7 @@ function silentShotDuel(){
   const carrier=sq(as)[G.ck];
   const def=sq(ds)['GK'];
   if(!carrier||!def){say('Shot blocked — no goalkeeper!');G.phase='moving';try{P3D.superCine2.abort();}catch(e){}return;}
-  G.D={carrier,def,dk:'GK',dk2:null,as,ds,isShot:true,ak:'special',pk:null,defA:null,is2v1:false,duelStage:1,_silent:true};
+  G.D={carrier,def,dk:'GK',as,ds,isShot:true,ak:'special',pk:null,defA:null,duelStage:1,_silent:true};
   try{aiDef();}catch(e){}
   if(!G.D.defA){
     const canSuper=(typeof getGKSuper==='function')&&getGKSuper(def)&&(def.spirit||2000)>=(((typeof DEF_ACTIONS!=='undefined'&&DEF_ACTIONS['supersave'])||{}).cost||600);
@@ -4716,7 +4734,7 @@ function chkInt(fp2,tp,pt){
 // ── CINEMATIC DUEL CUT-IN ──────────────────────────────────────────
 // CT-style pre-duel scene: flash → team-tinted diagonal split → portraits
 // slam in with speed lines → zone banner → reveal the duel UI.
-// Full version for shots / 2v1 / named-special stars; quick for routine duels.
+// Full version for shots / named-special stars; quick for routine duels.
 let _cutinTimers=[],_cutinDone=null;
 
 /* ── STORY HERO/RIVAL fixed duel-card path ──────────────────
@@ -4846,11 +4864,11 @@ function killCutIn(){
   const ci=document.getElementById('cutin-ov');if(ci)ci.remove();
 }
 function playDuelCutIn(opts,onDone){
-  const {atk,def,as,ds,isShot,is2v1,zoneTxt}=opts;
+  const {atk,def,as,ds,isShot,zoneTxt}=opts;
   killCutIn();
   const host=document.getElementById('viewport')||document.body;
   const ov=document.createElement('div');ov.id='cutin-ov';
-  const star=isShot||is2v1||!!(atk&&Object.keys(SPECIALS).some(k=>(atk.name||'').includes(k)));
+  const star=isShot||!!(atk&&Object.keys(SPECIALS).some(k=>(atk.name||'').includes(k)));
   const full=star;
   ov.className=full?'full':'quick';
   const atkCol=as==='h'?'#2882f0':'#f03030';
@@ -4958,30 +4976,13 @@ function opDuel(isShot, committedAk){
   const carrier=sq(as)[G.ck];const dk=isShot?'GK':(G.chk||Object.keys(sq(ds)).find(k=>sq(ds)[k]));
   const def=sq(ds)[dk];
   if(isShot&&!def){say('Shot blocked — no goalkeeper!');G.phase='moving';return;}
-  // 2v1/1v2 removed — duels are always 1v1 now (tackle activates a straight duel)
-  let dk2=null;
-  if(false&&!isShot&&carrier&&PP[as][G.ck]){
-    const cp=PP[as][G.ck];
-    const defQ=sq(ds);
-    const candidates=[];
-    Object.keys(defQ).forEach(k=>{
-      if(!defQ[k]||k===dk||k==='GK'||ocd(ds,k)||!PP[ds][k])return;
-      const d=dist(PP[ds][k],cp);
-      if(d<IR()*1.35) candidates.push({k,d});
-    });
-    candidates.sort((a,b)=>a.d-b.d);
-    if(candidates.length){
-      dk2=candidates[0].k;
-      // Flag the second defender as engaged — blocks them from cooldown, shows the context
-      const d2=defQ[dk2];if(d2)d2._pending2v1=true;
-    }
-  }
+  // Duels are always 1v1 (roadmap 0.4) — tackle now activates a straight duel,
+  // so the old 2v1/1v2 second-defender path is gone entirely.
   // committedAk: shot already decided in field duel — attacker gets no second choice, no extra stamina cost
-  G.D={carrier,def,dk,dk2,as,ds,isShot,ak:committedAk||null,pk:null,defA:null,is2v1:!!dk2,duelStage:1};
+  G.D={carrier,def,dk,as,ds,isShot,ak:committedAk||null,pk:null,defA:null,duelStage:1};
   const zL={gk:'BUILD-UP',def:'DEFENSIVE THIRD',mid:'MIDFIELD',att:'ATTACKING THIRD'};
   const z=isShot?'att':zo(G.ck);
   let zoneTxt=isShot?'GOAL ATTEMPT':(zL[z]||'DUEL');
-  if(G.D.is2v1) zoneTxt='⚠ 2 vs 1 — '+zoneTxt;
   if(G.D.duelStage===2) zoneTxt='⚠ 2 vs 1 — SECOND DEFENDER';
   document.getElementById('dzone').textContent=zoneTxt;
   const homeLeft=(G.half===1),leftSide=homeLeft?'h':'a';
@@ -5022,12 +5023,9 @@ function opDuel(isShot, committedAk){
   }catch(e){}
   gkShotLayout(isShot,def,ds);
   bldA(carrier,isShot); bldD(def,ds,isShot);
-  // ── 2v1 visual: show a second mini defender card stacked next to the main defender ──
-  renderSecondDefender(G.D.is2v1?G.D.dk2:null, ds);
-  // 2v1 attacker: hint that 2 moves are needed
   const albl=document.getElementById('albl');
-  if(albl) albl.textContent = (G.D.is2v1 && as==='h' && !isShot) ? 'ATTACK (vs 1ST)' : 'ATTACK';
-  document.getElementById('di').textContent=as==='h'?(G.D.is2v1?'PICK 2 MOVES (30s)':'CHOOSE ATTACK (30s)'):ds==='h'?'CHOOSE DEFENCE (30s)':'AI DUEL';
+  if(albl) albl.textContent = 'ATTACK';
+  document.getElementById('di').textContent=as==='h'?'CHOOSE ATTACK (30s)':ds==='h'?'CHOOSE DEFENCE (30s)':'AI DUEL';
   if(PVP.on){ document.getElementById('di').textContent='CHOOSE ON YOUR PAD (30s)'; if(typeof _pvpDuelConceal==='function')_pvpDuelConceal(); }
   document.getElementById('dcfm').classList.remove('rdy'); document.getElementById('duel-res').classList.remove('show');
   const _reveal=()=>{
@@ -5048,50 +5046,6 @@ function opDuel(isShot, committedAk){
   try{ killCutIn(); _reveal(); }catch(e){ _reveal(); }
 }
 
-// ── 2v1 SECOND DEFENDER MINI-CARD ─────────────────────────────────
-// Renders a bigger portrait of the second defender, positioned BEHIND the main defender
-// for a perspective layered feel. Side mirrors the main defender's side.
-function renderSecondDefender(dk2, ds){
-  // V2: compact chip INSIDE the defender's infobox — never overlaps pitch art.
-  const existing=document.getElementById('dpd2-wrap');
-  if(existing)existing.remove();
-  if(!dk2||!sq(ds)[dk2])return;
-  const pl=sq(ds)[dk2];
-  // Which visual card belongs to the defending side? Left slot = dpa, right = dpd.
-  const homeLeft=(G.half===1);
-  const leftSide=homeLeft?'h':'a';
-  const defOnLeft=(leftSide===ds);
-  const cardEl=document.getElementById(defOnLeft?'dpa-c':'dpd-c');
-  if(!cardEl)return;
-  const tl=ds==='h'?'#2882f0':'#f03030';
-  const lastName=playerLastName(pl)||'';
-  const ln=lastName.replace(/[^a-z0-9]/g,'');
-  const effTeam=pl.clubKey||(ds==='h'?selHome:selAway);
-  let isClub=false;try{isClub=!!(effTeam&&((CR_CLUBS&&CR_CLUBS[effTeam])||(window.ST_CLUBS&&window.ST_CLUBS[effTeam])));}catch(e){}
-  const _hp2=_storyHeroCardPath(pl);
-  const chain=(_hp2?[_hp2]:[]).concat(isClub
-    ?[`assets/players/profile/${ln}.png`,`assets/career/clubs/${ln}${effTeam}.png`,`assets/career/clubs/${effTeam}.png`,_GENERIC_PLAYER_SVG_URL]
-    :[`assets/players/profile/${ln}.png`,`assets/players/${lastName}.png`,`assets/players/${effTeam}.png`,_GENERIC_PLAYER_SVG_URL]);
-  const el=document.createElement('div');
-  el.id='dpd2-wrap';
-  el.className='dpd2-chip';
-  el.style.borderColor=tl+'77';
-  el.innerHTML=`
-    <div class="d2c-av"></div>
-    <div class="d2c-info">
-      <div class="d2c-nm">${pl.name}</div>
-      <div class="d2c-sub" style="color:${tl}">2ND DEFENDER · ${pl.pos}</div>
-    </div>`;
-  cardEl.appendChild(el);
-  const av=el.querySelector('.d2c-av');
-  (function next(i){
-    if(i>=chain.length)return;
-    const t=new Image();
-    t.onload=()=>{av.style.backgroundImage=`url('${chain[i]}')`;};
-    t.onerror=()=>next(i+1);
-    t.src=chain[i];
-  })(0);
-}
 
 function fCard(role,pl,s,displayRole){
   const p=role==='a'?'dpa-':'dpd-';
@@ -5617,20 +5571,7 @@ function bldD(def,ds,isShot){
 
 function selA(a,btn){
   btnPop(btn);
-  // 2v1 attacker flow: first selection is action vs defender 1, second is action vs defender 2.
-  // When the match is 2v1 and user has already chosen ak, this click becomes ak2.
-  if(G.D.is2v1 && G.D.as==='h' && G.D.ak && !G.D.ak2 && baseAction(a.id)!=='pass' && baseAction(a.id)!=='one-two'){
-    G.D.ak2=a.id;
-    document.querySelectorAll('#abtns .dact3d').forEach(b=>{b.classList.remove('dact-sel2');if(!b.classList.contains('dact-sel'))applySelStyle(b,'clear');});
-    btn.classList.add('dact-sel2');
-    applySelStyle(btn,'sel2');
-    dimSiblings(document.getElementById('abtns'));
-    // Highlight stage 2 label
-    const albl=document.getElementById('albl');if(albl)albl.textContent='ATTACK (vs 2ND)';
-    chkRdy();
-    return;
-  }
-  G.D.ak=a.id;G.D.pk=null;G.D.ak2=null;
+  G.D.ak=a.id;G.D.pk=null;
   document.querySelectorAll('#abtns .dact3d').forEach(b=>{b.classList.remove('dact-sel');b.classList.remove('dact-sel2');applySelStyle(b,'clear');});
   btn.classList.add('dact-sel');
   applySelStyle(btn,'sel');
@@ -5646,10 +5587,6 @@ function selA(a,btn){
     $id('pass-banner').textContent=bannerTxt;
     document.getElementById('dcfm').classList.remove('rdy');
   } else {
-    // In 2v1 prompt the user for a second move
-    if(G.D.is2v1 && G.D.as==='h'){
-      const albl=document.getElementById('albl');if(albl)albl.textContent='ATTACK (vs 2ND)';
-    }
     chkRdy();
   }
 }
@@ -5657,9 +5594,7 @@ function selD(a,btn){btnPop(btn);G.D.defA=a.id;document.querySelectorAll('#dbtns
 function chkRdy(){
   const akB=baseAction(G.D.ak||'');
   const needsPk=akB==='pass'||akB==='one-two';
-  // In 2v1 with human attacker: both ak AND ak2 must be chosen (unless it's a pass variant)
-  const needsAk2 = G.D.is2v1 && G.D.as==='h' && G.D.ak && !needsPk;
-  const ao = G.D.as!=='h' || (G.D.ak && (!needsPk || G.D.pk) && (!needsAk2 || G.D.ak2));
+  const ao = G.D.as!=='h' || (G.D.ak && (!needsPk || G.D.pk));
   const do2 = G.D.ds!=='h' || G.D.defA;
   document.getElementById('dcfm').classList.toggle('rdy',!!(ao&&do2));
 }
@@ -6156,23 +6091,6 @@ function resDuel(){
   let atkPow=calcAttackPower(carrier,ak,as);
   let defPow=calcDefencePower(def,defA,ak);
   G.D.lastShotPow=(['shoot','special'].includes(ak))?atkPow:0;
-  // 2v1: second defender contributes 55% of their own defence power using the same action.
-  // If the attacker is human and chose a second attack action (ak2), use it against def2's counter.
-  if(G.D.is2v1 && G.D.dk2 && sq(ds)[G.D.dk2] && !isShot){
-    const def2=sq(ds)[G.D.dk2];
-    const ak2 = G.D.ak2 || ak; // fallback: same as primary
-    const atkPow2=calcAttackPower(carrier,ak2,as);
-    const def2Pow=calcDefencePower(def2,defA,ak2)*0.55;
-    // Attacker's effective power is the weighted average of both attack rolls
-    atkPow = atkPow*0.65 + atkPow2*0.35;
-    defPow+=def2Pow;
-    G.D.lastDef2Pow=def2Pow;
-    // Drain stamina on attacker for second action + on 2nd defender
-    const atkCost2=(ATK_ACTIONS[ak2]||{}).cost||0;
-    if(carrier && atkCost2>0 && G.D.ak2) carrier.spirit=Math.max(0,(carrier.spirit||1500)-Math.round(atkCost2*0.5));
-    const defCost2=(DEF_ACTIONS[defA]||{}).cost||0;
-    if(defCost2>0){const maxSp=def2.pos==='GK'?2000:1500;def2.spirit=Math.max(0,(def2.spirit||maxSp)-Math.round(defCost2*0.6));}
-  }
   // Wall duel — extra defenders nearby add power bonus
   if(!isShot&&def&&PP[ds][dk]){
     const defPos=PP[ds][dk];
@@ -6217,8 +6135,6 @@ function resDuel(){
   updH();
   if(win&&dk)scd(ds,dk);        // loser: full cooldown
   if(!win)scd(as,G.ck);         // loser: full cooldown
-  // 2v1: second defender also gets cooldown on defender-team loss
-  if(win && G.D.is2v1 && G.D.dk2) scd(ds,G.D.dk2);
   // Only the loser gets cooldown — winner is free to act immediately
   const hW=(as==='h'&&win)||(as==='a'&&!win);
   const rc2=hW?'#20c878':'#dc2020';
@@ -6396,7 +6312,7 @@ function resDuel(){
 function flushDuelSay(){
   try{ if(G&&G.D&&G.D._deferSay){ const t=G.D._deferSay; G.D._deferSay=null; say(t); } }catch(e){}
 }
-function closeDuel(){killCutIn();G._duelT=0;G._resT=0;try{gkShotLayout(false);}catch(e){}try{Object.values(hSq).forEach(p=>{if(p)p._pending2v1=false;});Object.values(aSq).forEach(p=>{if(p)p._pending2v1=false;});}catch(e){}try{document.getElementById('s-match').classList.remove('duel-live');}catch(e){}document.getElementById('duel-ov').classList.remove('show');document.getElementById('duel-res').classList.remove('show');G.pm=false;$id('pass-banner').style.display='none';const d2=document.getElementById('dpd2-wrap');if(d2)d2.remove();}
+function closeDuel(){killCutIn();G._duelT=0;G._resT=0;try{gkShotLayout(false);}catch(e){}try{document.getElementById('s-match').classList.remove('duel-live');}catch(e){}document.getElementById('duel-ov').classList.remove('show');document.getElementById('duel-res').classList.remove('show');G.pm=false;$id('pass-banner').style.display='none';}
 /* SAFE DELAYED RESTART — several restarts fire on a 120-950ms setTimeout.
    Without a guard they can land after the whistle, after exitToMenu(), or
    while paused/in a cinematic, waking a dead match. Route them all here. */
@@ -7478,7 +7394,7 @@ function initMatch(){
   asnC();updP();updH();startMT();startAnim();
   // supporter flags in the 2.5D stands — same emblem PNG chains as the HUD
   try{ if(window.P3D&&P3D.setTeamFlags){
-    const chain=k=>{k=String(k).toLowerCase();return ['assets/team/'+k+'.png','assets/career/clubs/club'+k+'.png'];};
+    const chain=k=>emblemSrcs(String(k).toLowerCase(),true);   // brand-safe (0.3)
     P3D.setTeamFlags({home:chain(selHome),away:chain(selAway),homeCol:'#1e72dc',awayCol:'#c22020',homeFlag:(HT&&HT.flag)||'',awayFlag:(AT&&AT.flag)||''});
   }}catch(e){}
   $id('passhint').style.display='none';

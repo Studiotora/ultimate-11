@@ -11,6 +11,41 @@ function czLoad(){try{const d=JSON.parse(localStorage.getItem(KEY));return d&&d.
 let CZ=czLoad();
 function czSave(){try{localStorage.setItem(KEY,JSON.stringify(CZ));}catch(e){}}
 
+// ── STABLE PLAYER KEYS ───────────────────────────────────────
+// Renames are keyed by ORIGINAL name (not array index) so roster
+// reorders/rebuilds (transfers, story inject, crBuildClubTeam) can
+// never attach a name to the wrong player. Duplicate original names
+// get an occurrence suffix: "Rossi", "Rossi#2", ...
+function stableKeys(names){
+  const seen={};
+  return names.map(n=>{const c=(seen[n]=(seen[n]||0)+1);return c>1?n+'#'+c:n;});
+}
+function origNamesOf(key){
+  try{
+    if(typeof T!=='undefined'&&T[key]&&T[key].p&&T[key].p.length)
+      return T[key].p.map(pl=>pl.origName||pl.name||'');
+    if(typeof CR_NAMES!=='undefined'&&CR_NAMES[key])
+      return CR_NAMES[key].slice();
+  }catch(e){}
+  return null;
+}
+// one-time migration: index-keyed maps -> origName-keyed maps
+function czMigrate(){
+  if(CZ._v===2)return;
+  const out={};
+  Object.keys(CZ.players||{}).forEach(k=>{
+    const m=CZ.players[k]||{},nm={};
+    const names=origNamesOf(k),sk=names?stableKeys(names):null;
+    Object.keys(m).forEach(key=>{
+      if(/^\d+$/.test(key)){const i=+key;if(sk&&sk[i])nm[sk[i]]=m[key];}
+      else nm[key]=m[key];
+    });
+    if(Object.keys(nm).length)out[k]=nm;
+  });
+  CZ.players=out;CZ._v=2;czSave();
+}
+czMigrate();
+
 // Position labels for club rosters (matches crBuildClubTeam LINEUP order)
 const CLUB_POS=['GK','LB','CB','CB','RB','CM','CM','CM','LW','ST','RW','GK·R','CB·R','LB·R','CM·R','CM·R','LW·R','ST·R'];
 
@@ -20,10 +55,9 @@ window.applyCustomNamesToTeam=function(key,team){
   if(!team._origName)team._origName=team.name;
   team.name=CZ.teams[key]||team._origName;
   const map=CZ.players[key]||{};
-  team.p.forEach((pl,i)=>{
-    if(!pl.origName)pl.origName=pl.name;
-    pl.name=map[i]||pl.origName;
-  });
+  team.p.forEach(pl=>{if(!pl.origName)pl.origName=pl.name;});
+  const sk=stableKeys(team.p.map(pl=>pl.origName||pl.name||''));
+  team.p.forEach((pl,i)=>{pl.name=map[sk[i]]||pl.origName;});
 };
 function applyAll(){
   try{
@@ -40,13 +74,15 @@ function applyAll(){
 // ── ROSTER SOURCE (for the editor list) ──────────────────────
 function rosterOf(key){
   // National team (or already-built career club): live player objects
+  const map=CZ.players[key]||{};
   if(T[key]&&T[key].p&&(!CR_CLUBS[key]||T[key]._career)){
-    return T[key].p.map((pl,i)=>({i,pos:pl.pos||CLUB_POS[i]||'',orig:pl.origName||pl.name,cur:pl.name}));
+    const sk=stableKeys(T[key].p.map(pl=>pl.origName||pl.name||''));
+    return T[key].p.map((pl,i)=>({k:sk[i],pos:pl.pos||CLUB_POS[i]||'',orig:pl.origName||pl.name,cur:pl.name}));
   }
   // Club not built yet: read the raw CR_NAMES roster
   const names=CR_NAMES[key]||[];
-  const map=CZ.players[key]||{};
-  return names.map((n,i)=>({i,pos:CLUB_POS[i]||'',orig:n,cur:map[i]||n}));
+  const sk=stableKeys(names);
+  return names.map((n,i)=>({k:sk[i],pos:CLUB_POS[i]||'',orig:n,cur:map[sk[i]]||n}));
 }
 function teamLabel(key){
   if(CR_CLUBS[key])return CZ.teams[key]||CR_CLUBS[key]._origName||CR_CLUBS[key].name;
@@ -58,8 +94,8 @@ function origTeamLabel(key){
 }
 function badgeHtml(k,s=26){
   const fb=(CR_CLUBS[k]&&typeof crBadgeSvg==='function')?crBadgeSvg(CR_CLUBS[k],s):((T[k]&&T[k].flag)||'🏳');
-  const alt=CR_CLUBS[k]?` data-n="assets/career/clubs/club${k}.png"`:'';
-  return `<span class="uee" style="width:${s}px;height:${s}px"><img src="assets/team/${k}.png"${alt} onerror="if(this.dataset.n){const n=this.dataset.n;this.removeAttribute('data-n');this.src=n;}else{this.style.display='none';this.nextElementSibling.style.display='flex';}"><span class="fb">${fb}</span></span>`;
+  const alt=CR_CLUBS[k]?` data-n="assets/career/clubs/fake/club${k}.png"`:'';
+  return `<span class="uee" style="width:${s}px;height:${s}px"><img src="assets/team/fake/${k}.png"${alt} onerror="if(this.dataset.n){const n=this.dataset.n;this.removeAttribute('data-n');this.src=n;}else{this.style.display='none';this.nextElementSibling.style.display='flex';}"><span class="fb">${fb}</span></span>`;
 }
 
 // ── UI ───────────────────────────────────────────────────────
@@ -87,7 +123,7 @@ function czRender(){
     </div>
     <div class="cz-rows">${ros.map(r=>`
       <div class="cz-row"><span class="cz-pos">${r.pos}</span>
-        <input class="cz-in" data-i="${r.i}" maxlength="20" value="${(CZ.players[k]&&CZ.players[k][r.i]||'').replace(/"/g,'&quot;')}" placeholder="${r.orig}">
+        <input class="cz-in" data-k="${String(r.k).replace(/"/g,'&quot;')}" maxlength="20" value="${(CZ.players[k]&&CZ.players[k][r.k]||'').replace(/"/g,'&quot;')}" placeholder="${r.orig}">
       </div>`).join('')}
     </div>
     <div class="cz-btns">
@@ -101,8 +137,8 @@ window.czSaveTeam=function(){
   const tn=(document.getElementById('cz-tn').value||'').trim();
   if(tn)CZ.teams[k]=tn;else delete CZ.teams[k];
   const map={};
-  document.querySelectorAll('#cz-edit .cz-in[data-i]').forEach(inp=>{
-    const v=(inp.value||'').trim();if(v)map[inp.dataset.i]=v;
+  document.querySelectorAll('#cz-edit .cz-in[data-k]').forEach(inp=>{
+    const v=(inp.value||'').trim();if(v)map[inp.dataset.k]=v;
   });
   if(Object.keys(map).length)CZ.players[k]=map;else delete CZ.players[k];
   czSave();applyAll();czRender();

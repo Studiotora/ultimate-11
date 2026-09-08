@@ -266,7 +266,7 @@ function heroFace(name,cls){ // legacy signature → route by name match
 function badge(k,s=24){
   const def=ST_CLUBS[k]||CR_CLUBS[k];
   const fb=def&&typeof crBadgeSvg==='function'?crBadgeSvg(def,s):((T[k]&&T[k].flag)||'🏳');
-  return `<span class="uee" style="width:${s}px;height:${s}px"><img src="assets/team/${k}.png" onerror="this.style.display='none';this.nextElementSibling.style.display='flex'"><span class="fb">${fb}</span></span>`;
+  return `<span class="uee" style="width:${s}px;height:${s}px"><img src="assets/team/fake/${k}.png" onerror="this.style.display='none';this.nextElementSibling.style.display='flex'"><span class="fb">${fb}</span></span>`;
 }
 
 

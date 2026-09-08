@@ -91,7 +91,7 @@
     debug:false,         // sprite/shadow debug overlay (Camera Lab)
     // ---- GFX UPGRADE PACK ----
     pixelPitch:true,     // procedural pixel-art turf instead of assets/stadium/pitch.png
-    pitchPx:768,         // turf texture width in texels (lower = chunkier pixels)
+    pitchPx:2048,        // turf texture width in texels (higher = crisper pitch; upscaled)
     gfx:{ sky:true, masts:true, lamps:true, boards:true, flags:true, flashes:true, floods:true, banners:true },
     // super-shot cinematic camera (console-tunable): hold = charging aura, chase = ball flight
     cine:{ holdDist:9.6, holdHeight:1.55, holdSide:1.1, holdLookAhead:20, holdLookY:1.25,
@@ -360,7 +360,8 @@
       ARC(u(gL),v(Yt),qr,0,Math.PI/2); ARC(u(gR),v(Yt),qr,Math.PI/2,Math.PI);
       ARC(u(gR),v(Yb),qr,Math.PI,Math.PI*1.5); ARC(u(gL),v(Yb),qr,Math.PI*1.5,Math.PI*2);
       const tex=new T.CanvasTexture(c);
-      tex.magFilter=T.NearestFilter; tex.minFilter=T.LinearMipmapLinearFilter; tex.anisotropy=8;
+      tex.magFilter=T.NearestFilter; tex.minFilter=T.LinearMipmapLinearFilter;
+      tex.anisotropy=(function(){try{return renderer.capabilities.getMaxAnisotropy();}catch(e){return 8;}})();
       return tex;
     }
     function makeApronTex(){
@@ -1545,6 +1546,32 @@
     // Cinematic keeper poses — [col, gridRow] on the 4x4 gk sheet (rows 2-3).
     // Easy to retune: set = pre-shot stance, save = dive/catch, beaten = goal conceded.
     const GK_POSE={ set:[0,3], save:[3,2], beaten:[2,3] };
+    /* ── Keeper reacts to WHERE the ball actually goes (roadmap 0.2) ──────────
+       Before this, the dive direction was Math.random() and a *save* always
+       played the same centre-catch cell, so a ball into the top corner was
+       gloved by a keeper standing still in the middle. Poses below are chosen
+       from the shot's aim instead.
+       gk_cine.png rows: 2 = lateral dive (art dives toward screen RIGHT, so we
+       mirror it for a left-hand dive) · 3 = vertical work, cols 0-1 low
+       gather / smother, cols 2-3 high reach (crosses, central shots).
+       Each entry is the 4-frame ramp of columns played over the save.        */
+    const GK_DIVE={ side:[0,1,2,3],        // row 2 — full-stretch lateral dive
+                    high:[1,2,3,3],        // row 3 — straight-up catch
+                    low :[0,0,1,1] };      // row 3 — smother at his feet
+    /* Shot placement, in the camera's frame (it sits behind the shooter looking
+       at the goal): s = -1 screen-left · 0 central · +1 screen-right,
+       h = 0..1 up the goal mouth. game.js may pass an explicit `aim`; without
+       one we place the shot ourselves so the keeper still has something true to
+       react to. Corners are favoured — a super shot down the middle is rare. */
+    function pickAim(o){
+      const a=o&&o.aim;
+      if(a&&typeof a.s==='number')
+        return {s:(a.s<0?-1:a.s>0?1:0), h:Math.max(0,Math.min(1,a.h!=null?a.h:0.5))};
+      const r=Math.random();
+      const s=(r<0.42)?-1:(r<0.84)?1:0;
+      return {s, h: s===0 ? (Math.random()<0.45?0.12:0.92)      // central → boot or head height
+                          : 0.20+Math.random()*0.65};
+    }
     const GRID=LAYOUTS[7];                 // fallback for unmeasured sheets
     /* Scan every cell's alpha once per sheet: where the feet are (padB = empty
        fraction below the lowest opaque pixel), the body's horizontal centre
@@ -2558,15 +2585,20 @@
       const W=(CV.width||1280);
       const _dir=(o.dir!=null)?o.dir:((o.as==='h')?1:-1);      // engine attack dir (halves swap!)
       const gx=(o.gx!=null)?o.gx:((_dir>0)?W*0.93:W*0.07);     // target goal-line x
+      const _H=(CV.height||720), _aim=pickAim(o);
+      const _dy=_aim.s*_dir*_H*0.052*0.78;                     // aimed corner, in engine y
       cine={t:0,o,dir:_dir,
         fx:sp.x, fy:sp.y,          // engine-space flight endpoints
         tx:gp.x, ty:gp.y,
-        nx:gx,   ny:gp.y,          // net point (goal outcome)
+        nx:gx,   ny:gp.y+_dy,      // net point (goal outcome) — the corner he picked
         col:o.color||sideColor(o.as),
-        gkRestore:null, diveDir:(Math.random()<0.5?1:2)};
+        aim:_aim, aimDy:_dy,
+        gkRestore:null, diveDir:(_aim.s<0?1:2)};
       if(typeof ball!=='undefined'&&ball){ ball.x=sp.x; ball.y=sp.y; ball.bz=0; }
     };
     P3D.cineActive=function(){ return !!cine; };
+    P3D.cineAim=function(){ return cine?{aim:cine.aim,dy:cine.aimDy,lat:cine.gkLat,goal:cine.isGoal,
+      mode:cine.mode,t:+(cine.t||0).toFixed(2),ft:+(cine.ft||0).toFixed(2),ot:+(cine.ot||0).toFixed(2),v2:!!cine.v2}:null; };
     /* Slide read-out without new art: lean the sprite and kick up turf.
        THREE.SpriteMaterial supports `rotation`, so a committed lunge can tilt
        into the challenge and spray dust behind the boot. */
@@ -2591,9 +2623,11 @@
         if(s2.g&&s2.g.sprite){ s2.g.sprite.material.map=s2.map; s2.g.sprite.material.needsUpdate=true;
           if(s2.g.sil&&s2.silMap){ s2.g.sil.material.map=s2.silMap; s2.g.sil.material.needsUpdate=true; } } }
       const r=cine.gkRestore;
-      if(r){ const og=sprites[cine.o.ds+':GK'];
-        if(og){ og.sprite.material.map=r.map; og.tex=r.map; og.sil.material.map=r.map;
-                r.map.needsUpdate=true; } }
+      {const og=sprites[cine.o.ds+':GK'];        // always un-lean him, dive or not
+       if(og){ if(og.sprite&&og.sprite.material)og.sprite.material.rotation=0;
+               if(og.sil&&og.sil.material)og.sil.material.rotation=0;
+               if(r){ og.sprite.material.map=r.map; og.tex=r.map; og.sil.material.map=r.map;
+                      r.map.needsUpdate=true; } }}
       clearTrail();
       const cb=cine.o.onDone; cine=null;
       if(cb)cb();
@@ -2623,8 +2657,14 @@
           cineLoadFor(o.asKey!=null?o.asKey:(o.as==='h'?_sh:_sa),
                       o.dsKey!=null?o.dsKey:(o.ds==='h'?_sh:_sa));
         }catch(e){}
+        // Where this one is going. Screen-side → engine-y flips with the attack
+        // direction (the camera is behind the shooter, so +y is screen-right
+        // only when dir>0). Goal half-mouth is PWID*0.052 → H*0.052 in engine y.
+        const Hc=(CV.height||720), aim=pickAim(o);
+        const dy=aim.s*dir*Hc*0.052*0.78;          // inside the post, not on it
         cine={v2:true,mode:'hold',t:0,ft:0,ot:0,o,dir,arrived:false,gkRestore:null,
-          fx:sp.x,fy:sp.y, tx:stopX,ty:gp.y, gx,gy:gp.y, kx:gp.x,ky:gp.y,
+          fx:sp.x,fy:sp.y, tx:stopX,ty:gp.y+dy*0.55, gx,gy:gp.y+dy, kx:gp.x,ky:gp.y,
+          aim, aimDy:dy,
           col:o.color||sideColor(o.as)};
         try{
           const shooter=(typeof sq==='function'&&sq(o.as))?sq(o.as)[o.sk]:null;
@@ -2724,16 +2764,21 @@
       }else if(c.mode==='out'){
         c.ot+=dt;
         const gt=Math.min(1,c.ot/0.55);
-        if(c.isGoal){ bx=c.tx+(c.gx-c.tx)*gt; by=c.ty+(c.gy-c.ty)*gt; bz=Math.max(0,4*(1-gt)); }
+        gkOutcome(c,gt);                             // dive first — the ball meets his gloves
+        if(c.isGoal){
+          // into the corner he was aimed at, at the height he was aimed at
+          bx=c.tx+(c.gx-c.tx)*gt; by=c.ty+(c.gy-c.ty)*gt;
+          const gh=(c.aim?c.aim.h:0.5);
+          bz=4*(1-gt)+(1.5+gh*11)*gt;
+        }
         else{
           const W3=(CV.width||1280), d3=(c.dir!=null)?c.dir:1;
           const hx=c.kx-d3*W3*0.022;                 // the keeper's displayed (nudged) spot
-          bx=c.tx+(hx-c.tx)*gt; by=c.ty+(c.ky-c.ty)*gt;
-          bz=4*(1-gt)+3.4*gt;                        // settle into the gloves
+          const hy=c.ky+(c.gkLat||0);                // ...where the dive actually took him
+          bx=c.tx+(hx-c.tx)*gt; by=c.ty+(hy-c.ty)*gt;
+          const gh=(c.aim?c.aim.h:0.5);
+          bz=4*(1-gt)+(2.2+gh*7)*gt;                 // settle into the gloves, at glove height
         }
-        {const _P=c.isGoal?GK_POSE.beaten:GK_POSE.save;
-         if(!gkCineCell(c,_P[0],_P[1]))
-           forceAnimT(c.o.ds+':GK','down','shoot',Math.min(3,Math.floor(c.ot/0.18))/3,false);}
         cineGkNudge(c);
         if(c.ot>=0.85&&!c._fired){                    // outcome shown — hand control to game.js,
           c._fired=true;                              // keep the frontal camera until it releases us
@@ -2759,25 +2804,57 @@
     }
     // Cinematic keeper uses the single 4x4 gk sheet (gk_cine.png); the cinematic
     // dives live on rows 2-3. `col`,`row` are absolute grid cells (0..3).
-    function gkCineCell(c,col,row){
+    function gkCineCell(c,col,row,flip){
       const g=sprites[c.o.ds+':GK']; if(!g||!g.sprite||!cineGkTex)return false;
       if(!c.gkRestore)c.gkRestore={map:g.sprite.material.map};
       if(g.sprite.material.map!==cineGkTex){
         g.sprite.material.map=cineGkTex; g.sprite.material.needsUpdate=true;
         if(g.sil){ g.sil.material.map=cineGkTex; g.sil.material.needsUpdate=true; }
       }
-      cineGkTex.repeat.set(1/4,1/4);
-      cineGkTex.offset.set(col/4,1-(row+1)/4);
+      if(flip){ cineGkTex.repeat.set(-1/4,1/4); cineGkTex.offset.set((col+1)/4,1-(row+1)/4); }
+      else    { cineGkTex.repeat.set( 1/4,1/4); cineGkTex.offset.set( col   /4,1-(row+1)/4); }
       return true;
+    }
+    /* The save itself. `p` is 0..1 across the outcome beat.
+       Lane comes from the shot's aim, so the keeper goes where the ball went:
+       lateral dive (mirrored for a shot to screen-left), a high vertical catch,
+       or a smother at his feet. On a goal he still commits the right way but
+       never reaches full extension, then drops into `beaten` once it's past —
+       diving the correct way and missing reads as football; standing still in
+       the middle while it flies into the top corner does not. */
+    function gkOutcome(c,p){
+      const aim=c.aim||{s:0,h:0.5};
+      const isG=(c.isGoal!=null)?c.isGoal:!!(c.o&&c.o.isGoal);
+      const lane=aim.s!==0?'side':(aim.h>0.5?'high':'low');
+      const cols=GK_DIVE[lane], row=(lane==='side')?2:3;
+      const beat=isG?0.62:1;                         // beaten keepers stop short
+      const f=Math.max(0,Math.min(cols.length-1,Math.floor(p/beat*(cols.length-1)+0.001)));
+      const capped=isG?Math.min(f,cols.length-2):f;
+      // committed the right way but late → he's beaten; show the reaction
+      if(isG&&p>beat){ if(!gkCineCell(c,GK_POSE.beaten[0],GK_POSE.beaten[1])) return gkFallback(c,p); return; }
+      if(!gkCineCell(c,cols[capped],row,aim.s<0)) return gkFallback(c,p);
+      // and he travels with it — a dive that doesn't move isn't a dive
+      const Hc=(CV.height||720), reach=(lane==='side')?Hc*0.052*0.62:0;
+      const ease=p*p*(3-2*p);
+      c.gkLat=aim.s*((c.dir!=null)?c.dir:1)*reach*ease*(isG?0.72:1);
+      // one dive pose, every height: lean the sprite toward the ball, so a shot
+      // along the ground gets a flat full-stretch dive and a top-corner shot
+      // keeps him upright. Sprite rotation is free — no extra art.
+      c.gkTilt=(lane==='side') ? -aim.s*(0.5-aim.h)*1.15*ease : 0;
+    }
+    function gkFallback(c,p){                        // no cine sheet → in-play rows
+      forceAnimT(c.o.ds+':GK','down','shoot',Math.min(3,Math.floor(p*0.55/0.18))/3,false);
     }
     function cineGkNudge(c){
       const g=sprites[c.o.ds+':GK']; if(!g||!g.sprite)return;
       const W=(CV.width||1280);
       const d=(c.dir!=null)?c.dir:1;
       const nx=c.kx-d*W*0.02;                       // between his line and the ball
-      const wx=ex2wx(nx), wz=ey2wz(c.ky);
+      const wx=ex2wx(nx), wz=ey2wz(c.ky+(c.gkLat||0));
       g.sprite.position.x=wx; g.sprite.position.z=wz;
-      if(g.sil){ g.sil.position.x=wx; g.sil.position.z=wz; }
+      if(g.sprite.material) g.sprite.material.rotation=(c.gkTilt||0);
+      if(g.sil){ g.sil.position.x=wx; g.sil.position.z=wz;
+                 if(g.sil.material) g.sil.material.rotation=(c.gkTilt||0); }
     }
     function cineCamera2(){
       const c=cine; if(!c)return;
@@ -2861,17 +2938,18 @@
           const tex=new T.Texture(diveSheet.img);
           tex.magFilter=T.NearestFilter; tex.minFilter=T.NearestFilter;
           tex.needsUpdate=true;
-          c.gkRestore={map:og.sprite.material.map};
+          c.gkRestore={map:og.sprite.material.map}; c._dive=true;
           og.sprite.material.map=tex; og.tex=tex; og.sil.material.map=tex;
         }
-        if(c.gkRestore){
-          const row=c.o.isGoal?c.diveDir:0;     // goal → dive & miss, save → catch
+        if(c._dive){
+          // optional 5x3 dive sheet: row 0 = catch, 1 = dive left, 2 = dive right.
+          // Chosen from the aim now, not a coin flip.
+          const row=(c.aim&&c.aim.s!==0)?c.diveDir:0;
           const fr=Math.min(DIVE.cols-1,Math.floor(Math.max(0,(c.t-4.6))/0.16));
           const cw=1/DIVE.cols, ch=1/DIVE.rows;
           og.tex.repeat.set(cw,ch); og.tex.offset.set(fr*cw,1-(row+1)*ch);
-        } else {
-          if(c.t<4.6) forceAnim(gid,'down','pass',0,false); else forceAnimT(gid,'down','shoot',Math.min(3,Math.floor((c.t-4.6)/0.18))/3,false);
-        }
+        } else if(c.t<4.6){ forceAnim(gid,'down','pass',0,false); }
+        else { gkOutcome(c,Math.min(1,(c.t-4.6)/0.7)); }
       }
       if(c.t>=6.4) cineEnd();
     }
