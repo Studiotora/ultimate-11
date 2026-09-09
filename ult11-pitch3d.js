@@ -76,7 +76,7 @@
             glow:0.45 },  // warm sun-pool intensity on the pitch (0 = off)
     // ---- POST-PROCESSING (Camera Lab → POST FX); needs the post scripts in index.html ----
     fx:{ on:true, bloom:0.55, bloomRadius:0.5, bloomThresh:0.82, tilt:0.45, vignette:0.5,
-         rays:0.55, rayDecay:0.95, raySamples:60,
+         rays:0.0, rayDecay:0.95, raySamples:60,   // god rays OFF by default — author never uses them; they blow out the frame
          sat:1.0, contrast:1.0, lift:0.0, split:0.0 },   // grade: saturation/contrast/lift + warm-cool split-tone
     // ---- QUALITY / PERFORMANCE ----
     // 'auto' watches the framerate and steps quality down (then back up) to
@@ -152,11 +152,20 @@
     P3D.clearCam=function(){ try{localStorage.removeItem('ue_p3d_cam');}catch(e){}
       console.log('[P3D] saved camera settings cleared (defaults on next reload)'); };
 
-    /* ---- overlay canvas, sized to #C, sitting directly on top ---- */
+    /* ---- visible WebGL canvas ----
+       Lives in #worldwrap (a full-window layer behind the letterboxed UI) when
+       game.js has mounted one, so the pitch renders edge-to-edge instead of
+       being clipped to the 1280x720 UI stage. Falls back to sitting on top of
+       #C if the wrapper is absent.
+       NOTE: #C is the 2D ENGINE surface — its width/height ARE the engine
+       coordinate space (see ex2wx/ey2wz) and must never be resized to the
+       window. Only this presentational canvas moves. */
     const gl=document.createElement('canvas');
     gl.id='C3D';
     gl.style.cssText='position:absolute;inset:0;width:100%;height:100%;pointer-events:none;display:none;z-index:2';
-    CV.parentNode.insertBefore(gl, CV.nextSibling);
+    const _world=document.getElementById('worldwrap');
+    if(_world) _world.appendChild(gl);
+    else CV.parentNode.insertBefore(gl, CV.nextSibling);
 
     const renderer=new T.WebGLRenderer({canvas:gl,antialias:true,alpha:true});
     const scene=new T.Scene();
@@ -1886,7 +1895,7 @@
       if(dbgCv) return;
       dbgCv=document.createElement('canvas'); dbgCv.id='C3D_dbg';
       dbgCv.style.cssText='position:absolute;inset:0;width:100%;height:100%;pointer-events:none;z-index:3;display:none';
-      CV.parentNode.insertBefore(dbgCv, gl.nextSibling); dbgCx=dbgCv.getContext('2d');
+      gl.parentNode.insertBefore(dbgCv, gl.nextSibling); dbgCx=dbgCv.getContext('2d');
     }
     const _v3=new T.Vector3();
     function projectToScreen(wx,wy,wz, w,h){
@@ -1905,7 +1914,7 @@
     function drawDebug(){
       ensureDbgCanvas();
       if(!P3D.debug){ if(dbgCv.style.display!=='none') dbgCv.style.display='none'; return; }
-      const w=CV.clientWidth||CV.width, h=CV.clientHeight||CV.height;
+      const w=gl.clientWidth||CV.clientWidth||CV.width, h=gl.clientHeight||CV.clientHeight||CV.height;
       if(dbgCv.width!==w||dbgCv.height!==h){ dbgCv.width=w; dbgCv.height=h; }
       dbgCv.style.display='block';
       dbgCx.clearRect(0,0,w,h);
@@ -1940,7 +1949,7 @@
       if(hudCv) return;
       hudCv=document.createElement('canvas'); hudCv.id='C3D_hud';
       hudCv.style.cssText='position:absolute;inset:0;width:100%;height:100%;pointer-events:none;z-index:4;display:none';
-      CV.parentNode.insertBefore(hudCv, gl.nextSibling); hudCx=hudCv.getContext('2d');
+      gl.parentNode.insertBefore(hudCv, gl.nextSibling); hudCx=hudCv.getContext('2d');
     }
     // foot world position of an engine player (same clamp + mapping as the sprite)
     function footWorld(p){
@@ -2034,7 +2043,7 @@
       if(typeof G==='undefined'||!G || !(G.phase==='moving'||G.phase==='pass_anim')){
         if(hudCv.style.display!=='none') hudCv.style.display='none'; return;
       }
-      const w=CV.clientWidth||CV.width, h=CV.clientHeight||CV.height;
+      const w=gl.clientWidth||CV.clientWidth||CV.width, h=gl.clientHeight||CV.clientHeight||CV.height;
       if(hudCv.width!==w||hudCv.height!==h){ hudCv.width=w; hudCv.height=h; }
       hudCv.style.display='block'; hudCx.clearRect(0,0,w,h);
       // name tags removed — active players now shown in the 2D bust HUD
@@ -2972,7 +2981,7 @@
 
     /* ---- size sync to #C ---- */
     function resize(){
-      const w=CV.clientWidth||CV.width, h=CV.clientHeight||CV.height;
+      const w=gl.clientWidth||CV.clientWidth||CV.width, h=gl.clientHeight||CV.clientHeight||CV.height;
       if(!w||!h) return;
       camera.aspect=w/h; camera.updateProjectionMatrix();
       renderer.setPixelRatio(Math.min(devicePixelRatio,2));
@@ -3111,7 +3120,7 @@
     }
     function resizeComposer(){
       if(!composer) return;
-      const w=CV.clientWidth||CV.width, h=CV.clientHeight||CV.height; if(!w||!h) return;
+      const w=gl.clientWidth||CV.clientWidth||CV.width, h=gl.clientHeight||CV.clientHeight||CV.height; if(!w||!h) return;
       composer.setPixelRatio(Math.min(devicePixelRatio,2));
       composer.setSize(w,h);
       if(bloomPass) bloomPass.setSize(w,h);

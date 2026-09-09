@@ -9,7 +9,31 @@
  * ✓ Reduced repaints and reflows
  */
 
-:root{--gold:#f0c040;--gold2:#7a5a08;--red:#dc2020;--rf:#b81616;--rl:#f03030;--blue:#1e72dc;--bf:#1258b0;--bl:#2882f0;--sp:#44c8ff;--green:#20c878;--bg:#06080e;--panel:rgba(5,7,12,.97);--bdr:rgba(240,192,64,.18);--dim:#48586a;--w:#eceff4}
+/* Bold Pixel — pixel-art HUD font. "BoldPixels by YukiPixels" (CC BY-SA 4.0,
+   yukipixels.itch.io/boldpixels) — attribution required; see
+   assets/fonts/BoldPixels-license.txt. Used for the in-match score, clock and
+   duel score; falls back to Orbitron if the files are missing. */
+@font-face{
+  font-family:'Bold Pixel';
+  src:url('assets/fonts/boldpixels.woff2') format('woff2'),
+      url('assets/fonts/boldpixels.woff') format('woff'),
+      url('assets/fonts/boldpixels.ttf') format('truetype');
+  /* Declared across the full range on purpose: BoldPixels ships ONE weight,
+     and the HUD asks for 900. Left as `normal`, the browser fakes bold by
+     smearing the glyph — which closes the ~6px counter inside the pixel
+     zero and makes the score read as a solid white block. */
+  font-weight:100 900;font-style:normal;font-display:swap;
+}
+/* HYBRID HD-2D IDENTITY (FF/Dragon Quest inspired): clean modern UI + retro
+   accents, NOT all-pixel. Cinzel serif for headers/titles/team names; Rajdhani
+   sans for body/menus/labels (the html,body default below); Bold Pixel reserved
+   for the score, match clock, duel score and the big result badge — the numeric
+   HUD — so the pixel flavour lands where it reads best. */
+.font-serif{font-family:'Cinzel',Georgia,serif;}
+.font-pixel{font-family:'Bold Pixel','Orbitron',sans-serif;}
+/* Palette moved to tokens.css (roadmap A.1) — it is loaded before this file
+   and defines --gold/--red/--blue/--bg/--w/... as aliases onto the --u-* tokens.
+   Do not redeclare colour variables here. */
 *{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent}
 button{touch-action:manipulation;cursor:pointer;}
 html,body{width:100%;height:100%;height:-webkit-fill-available;overflow:hidden;background:#000;color:var(--w);font-family:'Rajdhani',sans-serif;font-weight:600}
@@ -37,7 +61,7 @@ html,body{width:100%;height:100%;height:-webkit-fill-available;overflow:hidden;b
 #portrait-warn.show{display:flex}
 .pw-icon{font-size:52px;animation:pwRot 1.5s ease-in-out infinite alternate}
 @keyframes pwRot{from{transform:rotate(0deg)}to{transform:rotate(90deg)}}
-.pw-txt{font-family:'Bebas Neue',sans-serif;font-size:22px;letter-spacing:.14em;color:var(--gold);text-align:center}
+.pw-txt{font-family:'Bebas Neue',sans-serif;font-size:22px;letter-spacing:.14em;color:var(--u-ink);text-align:center}
 .pw-sub{font-family:'Orbitron',sans-serif;font-size:9px;letter-spacing:.28em;color:var(--dim);text-align:center}
 /* Fullscreen tap hint on splash */
 .fs-hint{font-family:'Orbitron',sans-serif;font-size:8px;letter-spacing:.3em;color:var(--dim);margin-top:14px;animation:fU .7s .7s both;position:relative;z-index:2}
@@ -66,7 +90,7 @@ html,body{width:100%;height:100%;height:-webkit-fill-available;overflow:hidden;b
   position:relative;overflow:hidden;transition:all .2s;z-index:10;animation:fU .7s .42s both;
   border-radius:3px;box-shadow:0 0 28px rgba(30,114,220,.15),inset 0 1px 0 rgba(255,255,255,.07);
   -webkit-tap-highlight-color:rgba(0,0,0,0);touch-action:manipulation}
-.splash-btn:hover{border-color:rgba(240,192,64,.6);color:var(--gold);box-shadow:0 0 32px rgba(240,192,64,.2)}
+.splash-btn:hover{border-color:rgba(var(--u-accent-rgb),.6);color:var(--u-accent);box-shadow:0 0 32px rgba(var(--u-accent-rgb),.2)}
 .splash-version{position:absolute;bottom:16px;right:20px;font-family:'Orbitron',sans-serif;font-size:8px;letter-spacing:.22em;color:rgba(255,255,255,.18);z-index:2}
 
 /* HOME — broadcast menu style */
@@ -148,11 +172,11 @@ html,body{width:100%;height:100%;height:-webkit-fill-available;overflow:hidden;b
   margin-left:-1px;
 }
 .hm-item:hover:not(.locked),.hm-item.active{
-  border-left-color:var(--gold);
-  background:rgba(240,192,64,.06);
+  border-left-color:var(--u-accent);
+  background:rgba(var(--u-accent-rgb),.06);
 }
-.hm-item.active .hm-item-lbl{color:var(--gold);}
-.hm-item.active .hm-item-num{color:var(--gold);opacity:.7;}
+.hm-item.active .hm-item-lbl{color:var(--u-accent);}
+.hm-item.active .hm-item-num{color:var(--u-accent);opacity:.7;}
 .hm-item.active .hm-item-arrow{opacity:1;transform:translateX(0);}
 .hm-item:hover:not(.locked) .hm-item-lbl{color:#fff;}
 .hm-item:hover:not(.locked) .hm-item-arrow{opacity:1;transform:translateX(0);}
@@ -171,7 +195,7 @@ html,body{width:100%;height:100%;height:-webkit-fill-available;overflow:hidden;b
   flex:1;transition:color .2s;
 }
 .hm-item-arrow{
-  font-size:14px;color:var(--gold);
+  font-size:14px;color:var(--u-accent);
   opacity:0;transform:translateX(-6px);
   transition:all .2s;
 }
@@ -201,9 +225,9 @@ html,body{width:100%;height:100%;height:-webkit-fill-available;overflow:hidden;b
 .ts-hdr h2{font-family:'Bebas Neue',sans-serif;font-size:clamp(13px,25.6px,18px);letter-spacing:.12em;color:#fff}
 .ts-cat-btn{padding:6px 14px;background:rgba(15,28,55,.9);border:1px solid rgba(255,255,255,.12);color:#cfd8e3;font-family:'Bebas Neue',sans-serif;font-size:clamp(11px,17.92px,14px);letter-spacing:.18em;cursor:pointer;border-radius:5px;transition:.18s;text-transform:uppercase}
 .ts-cat-btn:hover{border-color:rgba(240,192,64,.5);color:#fff}
-.ts-cat-btn.active{background:linear-gradient(180deg,#ffd566 0%,#f0c040 50%,#a8771a 100%);color:#1a0f00;border-color:#ffe28a;box-shadow:0 0 18px rgba(240,192,64,.4),inset 0 1px 0 rgba(255,255,255,.4)}
+.ts-cat-btn.active{background:linear-gradient(180deg,#5aa8ff 0%,#267ee2 50%,#0d4a94 100%);color:#fff;border-color:#7ec0ff;box-shadow:0 0 18px rgba(var(--u-accent-rgb),.45),inset 0 1px 0 rgba(255,255,255,.4)}
 .back-btn{padding:4px 10px;background:transparent;border:1px solid rgba(255,255,255,.15);color:var(--dim);font-family:'Orbitron',sans-serif;font-size:8px;letter-spacing:.2em;cursor:pointer;border-radius:3px;transition:.15s}
-.back-btn:hover{border-color:var(--gold);color:var(--gold)}
+.back-btn:hover{border-color:var(--u-accent);color:var(--u-accent)}
 /* Two-column layout — fills landscape perfectly */
 .ts-body{flex:1;display:flex;flex-direction:row;overflow:hidden;gap:0}
 .ts-col{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:clamp(4px,10.24px,10px);gap:clamp(3px,5.04px,8px);border-right:1px solid rgba(255,255,255,.06)}
@@ -226,7 +250,7 @@ html,body{width:100%;height:100%;height:-webkit-fill-available;overflow:hidden;b
 .ts-shield-name{font-family:'Bebas Neue',sans-serif;font-size:clamp(8px,14.08px,11px);letter-spacing:.1em;position:relative;z-index:1;text-align:center}
 .ts-sel-name-lbl{font-family:'Bebas Neue',sans-serif;font-size:clamp(16px,2.6vw,26px);letter-spacing:.1em}
 .ts-sel-hint{font-family:'Orbitron',sans-serif;font-size:clamp(8px,1.1vw,11px);letter-spacing:.2em;color:var(--dim)}
-.ts-subhint{font-family:'Orbitron',sans-serif;font-size:clamp(16px,25.6px,22px);font-weight:700;letter-spacing:.1em;color:var(--gold);text-align:center;text-shadow:0 0 14px rgba(240,192,64,.6)}
+.ts-subhint{font-family:'Orbitron',sans-serif;font-size:clamp(16px,25.6px,22px);font-weight:700;letter-spacing:.1em;color:var(--u-ink-dim);text-align:center;text-shadow:0 0 14px rgba(var(--u-accent-rgb),.6)}
 /* VS center — bold broadcast style */
 .ts-vs-big{font-family:'Bebas Neue',sans-serif;font-size:clamp(28px,64px,52px);
   background:linear-gradient(160deg,#fff 0%,var(--gold) 50%,#7a5008 100%);
@@ -247,9 +271,9 @@ html,body{width:100%;height:100%;height:-webkit-fill-available;overflow:hidden;b
 .tc-name{font-family:'Bebas Neue',sans-serif;font-size:clamp(9px,15.36px,14px);letter-spacing:.06em;line-height:1}
 /* Middle VS strip */
 .ts-mid{display:flex;flex-direction:column;align-items:center;justify-content:center;padding:0 clamp(6px,15.36px,16px);flex-shrink:0;gap:10px}
-.ts-vs-big{font-family:'Bebas Neue',sans-serif;font-size:clamp(24px,51.2px,44px);color:var(--gold);letter-spacing:.06em;filter:drop-shadow(0 0 18px rgba(240,192,64,.45));line-height:1}
-.kick-btn{padding:clamp(9px,10.8px,13px) clamp(16px,32px,28px);background:linear-gradient(135deg,var(--gold),#7a5808);border:none;color:#06080e;font-family:'Bebas Neue',sans-serif;font-size:clamp(13px,23.04px,18px);letter-spacing:.14em;cursor:pointer;border-radius:4px;transition:.18s;opacity:.3;pointer-events:none;white-space:nowrap}
-.kick-btn.rdy{opacity:1;pointer-events:all}.kick-btn.rdy:hover{transform:scale(1.04);box-shadow:0 0 28px rgba(240,192,64,.45)}
+.ts-vs-big{font-family:'Bebas Neue',sans-serif;font-size:clamp(24px,51.2px,44px);color:var(--u-accent);letter-spacing:.06em;filter:drop-shadow(0 0 18px rgba(var(--u-accent-rgb),.45));line-height:1}
+.kick-btn{padding:clamp(9px,10.8px,13px) clamp(16px,32px,28px);background:linear-gradient(135deg,var(--u-accent-bright),#0d4a94);border:none;color:#fff;font-family:'Bebas Neue',sans-serif;font-size:clamp(13px,23.04px,18px);letter-spacing:.14em;cursor:pointer;border-radius:4px;transition:.18s;opacity:.3;pointer-events:none;white-space:nowrap}
+.kick-btn.rdy{opacity:1;pointer-events:all}.kick-btn.rdy:hover{transform:scale(1.04);box-shadow:0 0 28px rgba(var(--u-accent-rgb),.5)}
 
 
 /* Team picker carousel + team menu */
@@ -257,7 +281,7 @@ html,body{width:100%;height:100%;height:-webkit-fill-available;overflow:hidden;b
 .ts-picker{position:relative;display:flex;align-items:center;justify-content:center;width:min(100%,360px);max-width:360px;min-height:220px;padding:0 58px;margin:0 auto}
 .ts-nav{position:absolute;top:50%;transform:translateY(-50%);width:46px;height:46px;border-radius:50%;border:1px solid rgba(255,255,255,.18);background:rgba(7,16,30,.96);color:#fff;font-family:"Orbitron",sans-serif;font-size:18px;cursor:pointer;z-index:3;box-shadow:0 6px 18px rgba(0,0,0,.45)}
 .ts-nav.left{left:4px}.ts-nav.right{right:4px}
-.ts-nav:hover{border-color:var(--gold);color:var(--gold)}
+.ts-nav:hover{border-color:var(--u-accent);color:var(--u-accent)}
 .ts-sel-strip.big{min-height:250px;width:100%;max-width:330px;justify-content:center;gap:12px;padding:20px 16px;border:1px solid rgba(255,255,255,.08);border-radius:10px;background:rgba(7,16,30,.72)}
 
 #s-team{background:linear-gradient(160deg,rgba(6,14,30,.82) 0%,rgba(4,8,14,.72) 100%),url('assets/wallpaper/teamedit.png') center/cover no-repeat;overflow:hidden}
@@ -268,10 +292,10 @@ html,body{width:100%;height:100%;height:-webkit-fill-available;overflow:hidden;b
 .tm-panel{background:rgba(7,16,30,.28);backdrop-filter:blur(3px);-webkit-backdrop-filter:blur(3px);border:1px solid rgba(255,255,255,.08);border-radius:12px;padding:12px;min-height:0;box-shadow:inset 0 1px 0 rgba(255,255,255,.03),0 10px 30px rgba(0,0,0,.28)}
 .tm-panel.controls{display:flex;flex-direction:column;overflow:hidden}
 .tm-scroll{overflow:auto;min-height:0;padding-right:4px}
-.tm-title{font-family:'Bebas Neue',sans-serif;font-size:18px;letter-spacing:.1em;color:var(--gold);margin-bottom:8px}
+.tm-title{font-family:'Bebas Neue',sans-serif;font-size:18px;letter-spacing:.1em;color:var(--u-ink);margin-bottom:8px}
 .tm-formations{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:6px;margin-bottom:12px}
 .tm-fbtn{padding:7px 8px;border:1px solid rgba(255,255,255,.12);background:#0b1524;color:#fff;border-radius:8px;cursor:pointer;font-family:'Bebas Neue',sans-serif;letter-spacing:.1em;font-size:14px}
-.tm-fbtn.active{border-color:var(--gold);color:var(--gold);box-shadow:0 0 0 1px rgba(240,192,64,.18) inset;background:linear-gradient(180deg,rgba(240,192,64,.08),rgba(11,21,36,1))}
+.tm-fbtn.active{border-color:var(--u-accent);color:var(--u-accent);box-shadow:0 0 0 1px rgba(var(--u-accent-rgb),.18) inset;background:linear-gradient(180deg,rgba(var(--u-accent-rgb),.08),rgba(11,21,36,1))}
 .tm-slots{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px;align-content:start}
 .tm-slot{background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.08);border-radius:8px;padding:8px}
 .tm-slot label{display:block;font-family:'Orbitron',sans-serif;font-size:7px;letter-spacing:.18em;color:var(--dim);margin-bottom:5px}
@@ -333,7 +357,7 @@ html,body{width:100%;height:100%;height:-webkit-fill-available;overflow:hidden;b
 
 
 /* SHOT button — circular, bottom right */
-.shot-btn{position:absolute;right:16px;bottom:36px;width:62px;height:62px;border-radius:50%;background:linear-gradient(135deg,#e86a00,#b34d00);border:3px solid rgba(255,140,0,.6);color:#fff;font-family:'Bebas Neue',sans-serif;font-size:14px;letter-spacing:.08em;cursor:pointer;z-index:16;box-shadow:0 4px 20px rgba(232,106,0,.55);display:flex;align-items:center;justify-content:center;transition:transform .1s}
+.shot-btn{position:absolute;right:16px;bottom:36px;width:62px;height:62px;border-radius:50%;background:linear-gradient(135deg,var(--u-gold),var(--u-gold-deep));border:2px solid var(--u-gold-bright);color:var(--u-bg);font-family:var(--u-font-display);font-weight:700;font-size:14px;letter-spacing:var(--u-track);cursor:pointer;z-index:16;box-shadow:var(--u-shadow-2),var(--u-glow-gold);display:flex;align-items:center;justify-content:center;transition:transform var(--u-fast)}
 .shot-btn:active{transform:scale(.91)}
 
 /* LOOMING DEFENDER ALERT — bottom-left corner, appears when defender closes in */
@@ -350,50 +374,74 @@ html,body{width:100%;height:100%;height:-webkit-fill-available;overflow:hidden;b
 #looming-alert .looming-icon{font-size:18px}
 #s-match{background:var(--bg)}
 /* BROADCAST HUD — team names at corners, score center */
+/* Compact CSS scoreboard pill (PNG scoreboard.png removed) — floats top-centre,
+   frees pitch space below. Same look as the duel scoreboard. */
 .mhud{
-  display:grid;
-  grid-template-columns:33% 34% 33%;
-  align-items:center;
-  flex-shrink:0;height:clamp(54px,57.6px,72px);
-  background:url('assets/ui/scoreboard.png') no-repeat center top / 100% 100%, #000;
-  border-bottom:none;position:relative;overflow:hidden;
+  /* Overlay, NOT in flow: in flow it pushed the pitch canvas down and left a
+     flat band of screen background behind the scoreboard. Absolute keeps the
+     3D view full-bleed and the scoreboard floating on top of it. */
+  position:absolute; top:clamp(4px,0.9vh,10px); left:50%; transform:translateX(-50%);
+  display:flex; align-items:stretch; justify-content:center;
+  width:max-content; max-width:96%; margin:0;
+  flex-shrink:0; height:34px; /* was clamp(34px,4.6vh,46px) — floor at design size */
+  background:linear-gradient(180deg,var(--u-panel),var(--u-panel-deep));
+  border:var(--u-hair) solid var(--u-rule); border-radius:var(--u-r-md);
+  box-shadow:var(--u-shadow-2),var(--u-glow-gold);
+  overflow:hidden; z-index:12; font-size:19.44px; /* was min(1.55vw,2.7vh) — see #duel-ov note */
 }
 .mhud::after{display:none;}
 /* Team cluster — name centered, emblem pinned to outer edge (inside the white slanted box of the scoreboard graphic) */
-.hteam{display:flex;align-items:center;justify-content:center;padding:0 clamp(8px,17.92px,18px);gap:clamp(6px,12.8px,10px);position:relative;height:100%;background:none!important;}
+.hteam{display:flex;align-items:center;justify-content:center;padding:0 .9em;gap:.5em;position:relative;height:100%;background:none!important;}
 .hteam.home,.hteam.away{justify-content:center;flex-direction:row;}
 .hteam.away{flex-direction:row-reverse;}
-/* Pin emblems to the outer corners so they land inside the scoreboard graphic's white box */
-.hteam.home .hflag-circle{position:absolute;left:clamp(34px,66.56px,72px);top:50%;transform:translateY(-50%);margin:0;}
-.hteam.away .hflag-circle{position:absolute;right:clamp(34px,66.56px,72px);top:50%;transform:translateY(-50%);margin:0;}
-.hflag-circle{width:clamp(28px,53.76px,38px);height:clamp(28px,53.76px,38px);border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:clamp(16px,33.28px,24px);border:2px solid rgba(255,255,255,.3);background:rgba(0,0,0,.3);flex-shrink:0;box-shadow:0 2px 10px rgba(0,0,0,.5)}
-.htn{font-family:'Bebas Neue',sans-serif;font-size:clamp(14px,26.88px,21px);letter-spacing:.14em;color:#fff;line-height:1;text-shadow:0 1px 3px rgba(0,0,0,.85);transform:translateY(-3px);}
+/* flags inline in the compact pill */
+.hteam.home .hflag-circle,.hteam.away .hflag-circle{position:static;transform:none;margin:0;}
+.hflag-circle{width:1.55em;height:1.05em;border-radius:var(--u-r-sm);display:flex;align-items:center;justify-content:center;font-size:1em;overflow:hidden;border:none;background:var(--u-inset);flex-shrink:0;box-shadow:var(--u-shadow-1)}
+.hflag-circle img,.hflag-circle svg{width:100%;height:100%;object-fit:cover}
+.htn{font-family:var(--u-font-display);font-weight:700;font-size:1.15em;letter-spacing:var(--u-track-tight);color:var(--u-ink);line-height:1;text-shadow:var(--u-text-shadow);transform:none;}
 /* Center plate — scores row, then clock, then half */
-.hmid{display:flex;flex-direction:column;align-items:center;justify-content:center;padding:0 clamp(6px,12.8px,14px);flex-shrink:0;position:relative;background:none;height:100%;gap:1px;}
+.hmid{display:flex;flex-direction:column;align-items:center;justify-content:center;padding:0 .9em;flex-shrink:0;position:relative;height:100%;gap:0;background:var(--u-inset);border-left:var(--u-hair) solid var(--u-edge-strong);border-right:var(--u-hair) solid var(--u-edge-strong);}
 .hmid::before,.hmid::after{display:none;}
-.hscores{display:flex;align-items:center;gap:clamp(48px,89.6px,90px);line-height:1;transform:translateY(4px);}
-.hsc{font-family:'Orbitron',sans-serif;font-size:clamp(18px,33.28px,24px);font-weight:900;color:#fff;text-shadow:0 2px 4px rgba(0,0,0,.95);line-height:1;}
-.hsc.sh{text-shadow:0 0 10px rgba(30,114,220,.9),0 2px 4px rgba(0,0,0,.95)}
-.hsc.sa{text-shadow:0 0 10px rgba(220,32,32,.9),0 2px 4px rgba(0,0,0,.95)}
-.hsc-sep{color:rgba(255,255,255,.55);font-family:'Orbitron',sans-serif;font-weight:900;font-size:clamp(14px,25.6px,18px);}
+.hscores{display:flex;align-items:center;gap:.7em;line-height:1;transform:none;}
+.hsc{font-family:var(--u-font-num);font-size:var(--u-fs-num);color:var(--u-ink-strong);text-shadow:var(--u-text-shadow);line-height:1;}
+.hsc.sh{text-shadow:0 0 18px rgba(var(--u-home-rgb),.45),var(--u-text-shadow)}
+.hsc.sa{text-shadow:0 0 18px rgba(var(--u-away-rgb),.45),var(--u-text-shadow)}
+.hsc-sep{color:var(--u-ink-dim);font-family:var(--u-font-num);font-size:.9em;margin-top:-.1em;}
 .hclock{display:flex;align-items:baseline;gap:4px;}
-.htime{font-family:'Orbitron',sans-serif;font-size:clamp(12px,23.04px,16px);font-weight:700;color:#fff;letter-spacing:.06em;line-height:1;text-shadow:0 1px 3px rgba(0,0,0,.95)}
-.hhalf{font-size:clamp(6px,9.6px,8px);font-family:'Orbitron',sans-serif;letter-spacing:.22em;color:rgba(255,255,255,.7);text-align:center;text-shadow:0 1px 2px rgba(0,0,0,.95)}
+.htime{font-family:var(--u-font-num);font-size:.72em;color:var(--u-ink-strong);letter-spacing:var(--u-track-tight);line-height:1;text-shadow:0 0 8px rgba(var(--u-gold-rgb),.3)}
+.hhalf{font-size:.46em;font-family:var(--u-font-ui);font-weight:700;letter-spacing:var(--u-track-wide);color:var(--u-ink-dim);text-align:center;text-shadow:var(--u-text-shadow)}
 .posstrip{display:flex;width:clamp(70px,140.8px,120px);height:2px;border-radius:2px;overflow:hidden;background:rgba(255,255,255,.15)}
 .posstrip-h{background:linear-gradient(90deg,#2882f0,var(--blue));transition:width .6s}
 .posstrip-a{background:linear-gradient(90deg,#ff5555,var(--red));flex:1}
 /* Possession top badge stays but smaller */
-#possbar{display:none !important}
+#possbar{position:absolute;top:6px;left:50%;transform:translateX(-50%);display:flex;align-items:center;gap:6px;background:rgba(7,16,32,.92);border:1px solid rgba(30,114,220,.3);border-radius:3px;padding:3px 10px;z-index:15;pointer-events:none}
 .pdot{width:7px;height:7px;border-radius:50%}
 .pname{font-family:'Orbitron',sans-serif;font-size:8px;letter-spacing:.18em;color:var(--w)}
-#passhint{position:absolute;bottom:8px;left:50%;transform:translateX(-50%);background:rgba(5,7,12,.92);border:1px solid rgba(240,192,64,.4);border-radius:3px;padding:4px 12px;font-family:'Orbitron',sans-serif;font-size:8px;letter-spacing:.2em;color:var(--gold);pointer-events:none;z-index:15;white-space:nowrap;display:none}
-#pass-banner{position:absolute;top:6px;left:50%;transform:translateX(-50%);background:rgba(4,6,12,.92);border:1.5px solid var(--gold);border-radius:4px;padding:4px 14px;font-family:'Bebas Neue',sans-serif;font-size:13px;letter-spacing:.12em;color:var(--gold);z-index:25;text-align:center;display:none;pointer-events:none;white-space:nowrap}
+#passhint{position:absolute;bottom:8px;left:50%;transform:translateX(-50%);background:var(--u-panel-deep);border:var(--u-hair) solid var(--u-rule);border-radius:var(--u-r-sm);padding:4px 12px;font-family:var(--u-font-ui);font-weight:700;font-size:9px;letter-spacing:var(--u-track-wide);color:var(--u-accent);pointer-events:none;z-index:15;white-space:nowrap;display:none}
+#pass-banner{position:absolute;top:6px;left:50%;transform:translateX(-50%);background:var(--u-panel-deep);border:var(--u-hair) solid var(--u-gold);border-radius:var(--u-r-sm);padding:4px 14px;font-family:var(--u-font-display);font-weight:700;font-size:13px;letter-spacing:var(--u-track);color:var(--u-accent);z-index:25;text-align:center;display:none;pointer-events:none;white-space:nowrap}
 .mviews{flex:1;position:relative;overflow:hidden}
+
+/* ══ WORLD LAYER — full-window pitch behind the letterboxed UI ═══════════
+   fitViewport() pins the UI stage to a fixed 1280x720 so the layout is
+   identical on every device; on a ~2.25:1 phone that wastes ~21% of the
+   screen as black bars. The pitch has no reason to obey that box, so the
+   WebGL canvas is mounted here instead and rendered edge-to-edge. The UI
+   keeps its 16:9 safe area. Only #s-match goes transparent — .screen sets
+   no background of its own, so every other screen still needs #viewport's
+   fill behind it. */
+/* Hidden unless the match is on screen. #viewport only covers the 16:9
+   stage, so on a menu the letterbox strips have nothing above this layer
+   and the pitch would show through the sides. */
+#worldwrap{position:fixed;inset:0;z-index:0;pointer-events:none;display:none}
+#worldwrap.on{display:block}
+#worldwrap>canvas{position:absolute;inset:0;width:100%;height:100%;display:block}
+#viewport{z-index:1}
+#viewport.world-live,#viewport.world-live #s-match{background:transparent}
 canvas#C{position:absolute;inset:0;width:100%;height:100%}
 
 /* DUEL */
 /* Duel overlay */
-#duel-ov{position:absolute;inset:0;z-index:20;display:none;flex-direction:column;background:linear-gradient(180deg,rgba(6,12,24,.35) 0%,rgba(4,6,12,.15) 35%,rgba(4,6,12,.55) 100%),url('assets/wallpaper/duel.png') center/cover no-repeat}
+#duel-ov{position:absolute;inset:0;z-index:20;display:none;flex-direction:column;background:linear-gradient(180deg,rgba(4,7,14,.5) 0%,rgba(4,7,14,.3) 40%,rgba(4,7,14,.66) 100%)}
 #duel-ov.show{display:flex}
 .da-bg{position:absolute;inset:0;background:repeating-linear-gradient(-45deg,transparent,transparent 4px,rgba(255,255,255,.006) 4px,rgba(255,255,255,.006) 5px);pointer-events:none;z-index:0}
 .dvs{position:absolute;left:50%;top:35%;transform:translate(-50%,-50%);width:clamp(120px,230.4px,220px);height:clamp(120px,230.4px,220px);font-family:'Bebas Neue',sans-serif;font-size:0;letter-spacing:.06em;filter:drop-shadow(0 0 24px rgba(240,192,64,.5));opacity:0;pointer-events:none;z-index:5}
@@ -446,51 +494,6 @@ canvas#C{position:absolute;inset:0;width:100%;height:100%}
 }
 .dp-card-wrap.atk{border-right:1px solid rgba(255,255,255,.05)}
 
-/* ── 2v1 second-defender perspective-stack card ── */
-/* No big box — just the player art with a small label badge, layered behind main card. */
-.dpd2-wrap{
-  position:absolute;
-  top:clamp(20px,21.6px,60px);
-  bottom:clamp(100px,108px,180px);
-  width:clamp(240px,332.8px,360px);
-  background:transparent;
-  border:none;
-  padding:0;
-  display:flex;flex-direction:column;align-items:center;justify-content:flex-end;gap:4px;
-  z-index:3;
-  opacity:.85;
-  transform:scale(.92);
-  pointer-events:none;
-  animation:dpd2-pop .4s cubic-bezier(.3,1.6,.5,1);
-  filter:drop-shadow(0 8px 16px rgba(0,0,0,.6)) drop-shadow(0 0 18px rgba(240,48,48,.35));
-}
-.dpd2-wrap.on-right{right:clamp(-40px,-12.8px,0px);}
-.dpd2-wrap.on-left{left:clamp(-40px,-12.8px,0px);}
-.dpd2-wrap::after{
-  content:'';position:absolute;left:50%;bottom:clamp(40px,43.2px,70px);
-  width:55%;height:12px;
-  transform:translateX(-50%);
-  background:radial-gradient(ellipse at center,rgba(0,0,0,.6) 0%,rgba(0,0,0,.25) 55%,transparent 80%);
-  pointer-events:none;z-index:0;
-}
-@keyframes dpd2-pop{from{transform:scale(.4);opacity:0}to{transform:scale(.92);opacity:.85}}
-.dpd2-badge{
-  font-family:'Bebas Neue',sans-serif;font-size:10px;letter-spacing:.22em;
-  color:#ff9999;background:rgba(184,22,22,.55);
-  padding:3px 10px;border-radius:4px;border:1px solid rgba(255,136,136,.45);
-  order:3;
-  margin-top:4px;
-}
-.dpd2-av{
-  width:100%;flex:1;min-height:clamp(180px,158.4px,280px);
-  background-size:contain;background-repeat:no-repeat;background-position:center bottom;
-  order:1;
-}
-.dpd2-info{text-align:center;width:100%;display:flex;flex-direction:column;align-items:center;gap:2px;order:2;}
-.dpd2-nm{font-family:'Bebas Neue',sans-serif;font-size:clamp(13px,16.64px,16px);color:rgba(255,255,255,.85);letter-spacing:.08em;text-shadow:0 2px 6px rgba(0,0,0,.8);}
-.dpd2-ps{font-family:'Orbitron',sans-serif;font-size:9px;color:rgba(255,255,255,.45);letter-spacing:.1em;}
-.dpd2-energy{display:none;}
-.dpd2-energy-fill{display:none;}
 
 /* Role label above */
 .dp-role{
@@ -700,7 +703,7 @@ canvas#C{position:absolute;inset:0;width:100%;height:100%}
 .dtw{display:inline-flex;align-items:center;gap:10px;flex-shrink:0;white-space:nowrap;}
 .dtr{position:relative;width:34px;height:34px;flex-shrink:0;flex:0 0 34px;}
 .dtr svg{transform:rotate(-90deg)}
-.dtn{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;font-family:'Orbitron',sans-serif;font-size:11px;font-weight:700;color:var(--gold)}
+.dtn{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;font-family:'Orbitron',sans-serif;font-size:11px;font-weight:700;color:var(--u-accent)}
 .dtn.urg{color:var(--red);animation:urgP .5s infinite alternate}
 @keyframes urgP{from{opacity:1}to{opacity:.3}}
 .di{font-family:'Orbitron',sans-serif;font-size:clamp(7px,10.88px,9px);letter-spacing:.18em;color:var(--dim)}
@@ -727,9 +730,6 @@ canvas#C{position:absolute;inset:0;width:100%;height:100%}
 .dact-atk:hover .dact3d-face{border-color:rgba(40,120,220,.8);background:linear-gradient(180deg,rgba(255,255,255,.09) 0%,transparent 40%),rgba(8,20,70,.95);}
 .dact-atk.dact-sel .dact3d-face{border-color:var(--blue);background:linear-gradient(180deg,rgba(60,140,255,.14) 0%,rgba(6,16,60,.96) 100%);box-shadow:0 0 16px rgba(30,114,220,.5);}
 .dact-atk.dact-sel .dact3d-bot{background:var(--blue);box-shadow:0 0 10px rgba(30,114,220,.6);}
-/* 2v1 second-move selection — orange glow so user sees both picks */
-.dact-atk.dact-sel2 .dact3d-face{border-color:#ff9440;background:linear-gradient(180deg,rgba(255,148,64,.18) 0%,rgba(60,28,4,.96) 100%);box-shadow:0 0 16px rgba(255,148,64,.55);}
-.dact-atk.dact-sel2 .dact3d-bot{background:#ff9440;box-shadow:0 0 10px rgba(255,148,64,.6);}
 /* DEF = red */
 .dact-def .dact3d-face{border-color:rgba(200,50,50,.45);}
 .dact-def .dact3d-bot{background:rgba(120,20,20,.9);box-shadow:0 2px 8px rgba(0,0,0,.5);}
@@ -738,7 +738,7 @@ canvas#C{position:absolute;inset:0;width:100%;height:100%}
 .dact-def.dact-sel .dact3d-bot{background:var(--red);box-shadow:0 0 10px rgba(220,32,32,.6);}
 /* SPECIAL = gold */
 .dact-sp .dact3d-face{border-color:rgba(220,160,20,.4);}
-.dact-sp .dact3d-l{color:var(--gold);}
+.dact-sp .dact3d-l{color:var(--u-magic);}
 .dact-sp .dact3d-bot{background:rgba(100,60,0,.9);}
 .dact-sp:hover .dact3d-face{border-color:rgba(240,192,64,.7);}
 .dact-sp.dact-sel .dact3d-face{border-color:var(--gold);background:linear-gradient(180deg,rgba(255,200,40,.18) 0%,rgba(50,24,0,.96) 100%);box-shadow:0 0 20px rgba(240,192,64,.6);}
@@ -768,9 +768,9 @@ canvas#C{position:absolute;inset:0;width:100%;height:100%}
 #duel-res{position:absolute;inset:0;z-index:35;display:none;align-items:center;justify-content:center;flex-direction:column;background:rgba(4,6,12,.82)}
 #duel-res.show{display:flex;animation:rFI .25s}
 @keyframes rFI{from{opacity:0}to{opacity:1}}
-.rbadge{font-family:'Bebas Neue',sans-serif;font-size:clamp(44px,115.2px,100px);letter-spacing:.06em;line-height:1;filter:drop-shadow(0 0 36px currentColor)}
+.rbadge{font-family:'Bold Pixel','Bebas Neue',sans-serif;font-size:clamp(44px,115.2px,100px);letter-spacing:.06em;line-height:1;filter:drop-shadow(0 0 36px currentColor)}
 .rdet{font-family:'Orbitron',sans-serif;font-size:11px;letter-spacing:.28em;margin-top:9px;opacity:.85}
-.ract{font-family:'Rajdhani',sans-serif;font-size:13px;color:var(--dim);margin-top:7px;letter-spacing:.1em}
+.ract{font-family:'Bold Pixel','Rajdhani',sans-serif;font-size:13px;color:var(--dim);margin-top:7px;letter-spacing:.1em}
 
 /* GOAL */
 .gfl{position:absolute;inset:0;z-index:80;pointer-events:none;opacity:0;display:flex;flex-direction:column;align-items:center;justify-content:center}
@@ -835,8 +835,8 @@ canvas#C{position:absolute;inset:0;width:100%;height:100%}
   .sc-face{max-width:1126.4px;}
   .sc-lines{display:none;}
 }
-.mcomm{padding:0 14px;background:linear-gradient(90deg,#0d1d3a 0%,#071020 60%,#0d1d3a 100%);border-top:1px solid #1a3060;font-size:11px;font-family:'Rajdhani',sans-serif;font-weight:600;color:rgba(255,255,255,.6);flex-shrink:0;display:flex;align-items:center;gap:8px;height:clamp(22px,25.2px,28px);position:relative;overflow:hidden}
-.mcomm::before{content:'LIVE';font-family:'Orbitron',sans-serif;font-size:7px;letter-spacing:.2em;background:var(--red);color:#fff;padding:1px 5px;border-radius:2px;flex-shrink:0}
+.mcomm{padding:0 14px;background:linear-gradient(90deg,var(--u-bg-raise) 0%,var(--u-bg) 60%,var(--u-bg-raise) 100%);border-top:var(--u-hair) solid var(--u-edge-strong);font-size:11px;font-family:var(--u-font-ui);font-weight:600;color:var(--u-ink-dim);flex-shrink:0;display:flex;align-items:center;gap:8px;height:clamp(22px,25.2px,28px);position:relative;overflow:hidden}
+.mcomm::before{content:'LIVE';font-family:var(--u-font-ui);font-weight:700;font-size:8px;letter-spacing:var(--u-track-wide);background:var(--u-bad);color:var(--u-ink-strong);padding:1px 5px;border-radius:var(--u-r-sm);flex-shrink:0}
 .cdot{width:4px;height:4px;border-radius:50%;background:var(--gold);flex-shrink:0;animation:blk 1.2s infinite}
 @keyframes blk{0%,100%{opacity:1}50%{opacity:.12}}
 
@@ -876,7 +876,7 @@ canvas#C{position:absolute;inset:0;width:100%;height:100%}
 .bs-v{font-family:'Orbitron',sans-serif;font-size:clamp(15px,30.72px,22px);font-weight:700;color:#fff}
 .bs-l{font-size:clamp(6px,9.6px,8px);font-family:'Orbitron',sans-serif;letter-spacing:.2em;color:var(--dim);margin-top:3px}
 /* Buttons */
-.bkbtn{padding:clamp(9px,10.8px,13px) clamp(24px,51.2px,40px);background:transparent;border:1.5px solid var(--gold);color:var(--gold);font-family:'Bebas Neue',sans-serif;font-size:clamp(14px,25.6px,19px);letter-spacing:.17em;cursor:pointer;transition:.18s;border-radius:3px}
+.bkbtn{padding:clamp(9px,10.8px,13px) clamp(24px,51.2px,40px);background:transparent;border:1.5px solid var(--gold);color:var(--u-ink);font-family:'Bebas Neue',sans-serif;font-size:clamp(14px,25.6px,19px);letter-spacing:.17em;cursor:pointer;transition:.18s;border-radius:3px}
 .bkbtn:hover{background:var(--gold);color:#06080e}
 .wintag{font-family:'Bebas Neue',sans-serif;font-size:clamp(14px,28.16px,22px);letter-spacing:.18em;color:var(--gold);filter:drop-shadow(0 0 14px rgba(240,192,64,.55));margin-bottom:4px}
 .end-btns{display:flex;gap:10px;margin-top:clamp(8px,10.8px,14px);flex-wrap:wrap;justify-content:center}
@@ -904,14 +904,14 @@ canvas#C{position:absolute;inset:0;width:100%;height:100%}
   backdrop-filter:blur(4px);
   touch-action:manipulation;
 }
-.tm-back-float:hover{border-color:var(--gold);color:var(--gold)}
+.tm-back-float:hover{border-color:var(--u-accent);color:var(--u-accent)}
 .tm-section{background:rgba(255,255,255,.035);border:1px solid rgba(255,255,255,.08);border-radius:12px;padding:12px}
 .tm-section.stretch{margin-top:auto}
 .tm-title.sm{font-size:16px;margin-bottom:10px}
 .tm-formations.compact{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px;margin:0}
 .tm-selected-card{display:flex;flex-direction:column;gap:8px;min-height:110px;background:linear-gradient(180deg,rgba(255,255,255,.03),rgba(255,255,255,.01));border:1px solid rgba(255,255,255,.08);border-radius:10px;padding:10px}
 .tm-selected-top{display:flex;justify-content:space-between;gap:8px;align-items:center}
-.tm-selected-slot{font-family:'Bebas Neue',sans-serif;font-size:26px;letter-spacing:.08em;color:var(--gold)}
+.tm-selected-slot{font-family:'Bebas Neue',sans-serif;font-size:26px;letter-spacing:.08em;color:var(--u-accent)}
 .tm-selected-role{font-family:'Orbitron',sans-serif;font-size:9px;letter-spacing:.2em;color:var(--dim)}
 .tm-selected-player{font-family:'Rajdhani',sans-serif;font-size:20px;font-weight:700;color:#fff;line-height:1.05}
 .tm-selected-help{font-family:'Rajdhani',sans-serif;font-size:13px;color:rgba(255,255,255,.72);line-height:1.15}
@@ -931,10 +931,10 @@ canvas#C{position:absolute;inset:0;width:100%;height:100%}
 .tm-bench-item.active{border-color:rgba(46,130,240,.7);background:rgba(46,130,240,.08)}
 .tm-bench-jersey{width:40px;height:40px;border-radius:10px;background:linear-gradient(180deg,#1258b0,#0c4182);border:2px solid #2882f0;display:flex;align-items:center;justify-content:center;font-family:'Orbitron',sans-serif;font-size:14px;color:#fff}
 .tm-bench-main{min-width:0}.tm-bench-name{font-family:'Rajdhani',sans-serif;font-size:18px;font-weight:700;color:#fff;line-height:1}.tm-bench-meta{font-family:'Orbitron',sans-serif;font-size:9px;letter-spacing:.18em;color:var(--dim);margin-top:4px}
-.tm-bench-stats{font-family:'Orbitron',sans-serif;font-size:10px;letter-spacing:.14em;color:var(--gold);text-align:right}
+.tm-bench-stats{font-family:'Orbitron',sans-serif;font-size:10px;letter-spacing:.14em;color:var(--u-accent);text-align:right}
 .tm-card.v6{width:72px;height:54px;border-radius:12px;background:linear-gradient(180deg,#1258b0,#0c4182);border:2px solid #2a86ff;justify-content:flex-start;padding-top:4px;gap:2px;cursor:pointer;transition:.15s transform,.15s box-shadow,.15s border-color}
 .tm-card.v6:hover{transform:translate(-50%,-50%) scale(1.03)}
-.tm-card.v6.selected{border-color:var(--gold);box-shadow:0 0 0 2px rgba(240,192,64,.22),0 0 22px rgba(240,192,64,.18),0 6px 18px rgba(0,0,0,.35)}
+.tm-card.v6.selected{border-color:var(--u-accent);box-shadow:0 0 0 2px rgba(var(--u-accent-rgb),.22),0 0 22px rgba(var(--u-accent-rgb),.18),0 6px 18px rgba(0,0,0,.35)}
 .tm-card.v6 .abbr{font-size:13px;opacity:.9}
 .tm-card.v6 .slot{font-family:'Orbitron',sans-serif;font-size:8px;letter-spacing:.14em;color:rgba(255,255,255,.78);line-height:1}
 .tm-card.v6 .pname{font-size:11px;max-width:60px;font-weight:700;opacity:1}
@@ -945,16 +945,16 @@ canvas#C{position:absolute;inset:0;width:100%;height:100%}
 .tm-formation-btn{width:100%;display:flex;align-items:center;gap:8px;padding:10px 14px;border-radius:10px;border:1px solid rgba(240,192,64,.4);background:rgba(240,192,64,.06);cursor:pointer;transition:.15s}
 .tm-formation-btn:hover{background:rgba(240,192,64,.12);border-color:rgba(240,192,64,.7)}
 .tm-formation-lbl{font-family:'Orbitron',sans-serif;font-size:8px;letter-spacing:.22em;color:var(--dim);flex-shrink:0}
-.tm-formation-val{font-family:'Bebas Neue',sans-serif;font-size:22px;letter-spacing:.08em;color:var(--gold);flex:1;text-align:center}
-.tm-formation-arrow{font-size:14px;color:var(--gold);flex-shrink:0}
+.tm-formation-val{font-family:'Bebas Neue',sans-serif;font-size:22px;letter-spacing:.08em;color:var(--u-accent);flex:1;text-align:center}
+.tm-formation-arrow{font-size:14px;color:var(--u-accent);flex-shrink:0}
 
 /* ── FORMATION POPUP ─────────────────────────────────────────────── */
 .tm-formation-popup{position:absolute;inset:0;z-index:100;display:flex;align-items:center;justify-content:center;background:rgba(4,6,12,.82);backdrop-filter:blur(4px)}
 .tm-formation-modal{background:linear-gradient(160deg,#0a1628,#060e1e);border:1px solid rgba(255,255,255,.12);border-radius:16px;padding:24px;display:flex;flex-direction:column;gap:16px;min-width:280px}
-.tm-formation-modal-title{font-family:'Bebas Neue',sans-serif;font-size:20px;letter-spacing:.1em;color:var(--gold);text-align:center}
+.tm-formation-modal-title{font-family:'Bebas Neue',sans-serif;font-size:20px;letter-spacing:.1em;color:var(--u-accent);text-align:center}
 .tm-formation-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:10px}
 .tm-fopt{padding:14px 10px;border-radius:10px;border:1px solid rgba(255,255,255,.12);background:#0b1524;color:#fff;font-family:'Bebas Neue',sans-serif;font-size:18px;letter-spacing:.08em;cursor:pointer;transition:.15s}
-.tm-fopt:hover,.tm-fopt.active{border-color:var(--gold);color:var(--gold);background:rgba(240,192,64,.08)}
+.tm-fopt:hover,.tm-fopt.active{border-color:var(--u-accent);color:var(--u-accent);background:rgba(var(--u-accent-rgb),.08)}
 
 /* ── PLAYER INFO PANEL ───────────────────────────────────────────── */
 .tm-player-info-section{display:flex;gap:8px;align-items:flex-start}
@@ -963,7 +963,7 @@ canvas#C{position:absolute;inset:0;width:100%;height:100%}
 .tm-player-name-big{font-family:'Bebas Neue',sans-serif;font-size:22px;letter-spacing:.06em;color:#fff;line-height:1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .tm-player-stats-row{display:flex;gap:4px;flex-wrap:wrap;margin-top:3px}
 .tm-pstat{text-align:center;background:rgba(255,255,255,.05);border-radius:5px;padding:3px 6px;border:1px solid rgba(255,255,255,.06);flex:1}
-.tm-pstat-v{font-family:'Orbitron',sans-serif;font-size:11px;font-weight:700;color:var(--gold)}
+.tm-pstat-v{font-family:'Orbitron',sans-serif;font-size:11px;font-weight:700;color:var(--u-accent)}
 .tm-pstat-l{font-size:6px;font-family:'Orbitron',sans-serif;letter-spacing:.1em;color:var(--dim)}
 
 /* Special skill badge */
@@ -985,7 +985,7 @@ canvas#C{position:absolute;inset:0;width:100%;height:100%}
 .tm-skill-name{
   font-family:'Bebas Neue',sans-serif;
   font-size:14px;letter-spacing:.08em;
-  color:var(--gold);line-height:1;
+  color:var(--u-ink);line-height:1;
 }
 .tm-skill-badge.gk .tm-skill-name{color:#44b4ff;}
 .tm-skill-type{
@@ -1020,7 +1020,7 @@ canvas#C{position:absolute;inset:0;width:100%;height:100%}
 .tm-card.v6.gk-card{ border-color:#f0c040; border-width:3px; }
 .tm-card.v6.gk-card .tm-card-jersey{ background:rgba(180,120,0,.8); color:#fff; }
 .tm-card.v6.gk-card.selected{ border-color:#fff; box-shadow:0 0 0 2px rgba(255,255,255,.4),0 0 18px rgba(240,192,64,.5); }
-.tm-card.v6.selected{border-color:var(--gold);box-shadow:0 0 0 2px rgba(240,192,64,.3),0 0 18px rgba(240,192,64,.25)}
+.tm-card.v6.selected{border-color:var(--u-accent);box-shadow:0 0 0 2px rgba(var(--u-accent-rgb),.3),0 0 18px rgba(var(--u-accent-rgb),.25)}
 .tm-card.v6.drag-over{border-color:#00c8ff;box-shadow:0 0 14px rgba(0,200,255,.6)}
 .tm-card-jersey{font-family:'Orbitron',sans-serif;font-size:9px;font-weight:700;color:#fff;background:rgba(0,0,0,.55);border-radius:3px;padding:1px 3px;align-self:flex-start;line-height:1;flex-shrink:0;position:relative;z-index:2}
 .tm-card-name{font-family:'Rajdhani',sans-serif;font-size:9px;font-weight:700;color:#fff;text-align:center;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;background:rgba(0,0,0,.65);border-radius:3px;padding:1px 3px;width:100%;position:relative;z-index:2}
@@ -1057,7 +1057,7 @@ canvas#C{position:absolute;inset:0;width:100%;height:100%}
 
 /* Inline roster — appears below reserves when a reserve slot is tapped */
 .tm-inline-roster{border-top:1px solid rgba(255,255,255,.08);padding-top:8px;max-height:200px;overflow:hidden;display:flex;flex-direction:column;flex-shrink:0}
-.tm-inline-roster .tm-bench-sub{font-size:10px;margin:0 0 6px;color:var(--gold);font-family:'Orbitron',sans-serif;letter-spacing:.14em;flex-shrink:0}
+.tm-inline-roster .tm-bench-sub{font-size:10px;margin:0 0 6px;color:var(--u-ink-dim);font-family:'Orbitron',sans-serif;letter-spacing:.14em;flex-shrink:0}
 .tm-inline-roster .tm-bench-list{overflow-y:auto;flex:1;min-height:0}
 
 @media (max-width:0px) {
@@ -1228,7 +1228,7 @@ html,body{overscroll-behavior:none;}
 
 /* Topbar */
 .cr-topbar{flex-shrink:0;display:flex;align-items:center;gap:10px;padding:10px 16px;background:linear-gradient(180deg,#0a1628,#071020);border-bottom:1px solid rgba(255,255,255,.07);}
-.cr-title{font-family:'Bebas Neue',sans-serif;font-size:clamp(16px,30.72px,22px);letter-spacing:.12em;color:var(--gold);}
+.cr-title{font-family:'Bebas Neue',sans-serif;font-size:clamp(16px,30.72px,22px);letter-spacing:.12em;color:var(--u-ink);}
 .cr-sub{font-family:'Orbitron',sans-serif;font-size:7px;letter-spacing:.2em;color:var(--dim);margin-left:2px;}
 .cr-topbar .back-btn{margin-left:auto;}
 
@@ -1243,7 +1243,7 @@ html,body{overscroll-behavior:none;}
 .cr-strip-name{font-family:'Bebas Neue',sans-serif;font-size:clamp(16px,28.16px,22px);letter-spacing:.08em;line-height:1;}
 .cr-strip-meta{font-family:'Orbitron',sans-serif;font-size:6px;letter-spacing:.16em;color:var(--dim);margin-top:2px;}
 .cr-strip-right{text-align:right;flex-shrink:0;}
-.cr-strip-season{font-family:'Bebas Neue',sans-serif;font-size:clamp(14px,23.04px,18px);letter-spacing:.1em;color:var(--gold);}
+.cr-strip-season{font-family:'Bebas Neue',sans-serif;font-size:clamp(14px,23.04px,18px);letter-spacing:.1em;color:var(--u-accent);}
 .cr-strip-md{font-family:'Orbitron',sans-serif;font-size:6px;letter-spacing:.13em;color:var(--dim);}
 
 /* Hub layout */
@@ -1253,17 +1253,17 @@ html,body{overscroll-behavior:none;}
 .cr-panel-flex2{flex:2;min-height:0;}
 .cr-panel-flex1{flex:1;min-height:0;}
 .cr-panel-hdr{padding:7px 12px;background:rgba(255,255,255,.03);border-bottom:1px solid rgba(255,255,255,.06);font-family:'Orbitron',sans-serif;font-size:7px;letter-spacing:.2em;color:var(--dim);flex-shrink:0;display:flex;justify-content:space-between;}
-.cr-panel-hdr span{color:var(--gold);}
+.cr-panel-hdr span{color:var(--u-ink);}
 .cr-panel-body{padding:8px 10px;flex:1;overflow-y:auto;min-height:0;}
 .cr-pos-panel{padding:8px 12px;}
 .cr-stat-lbl{font-family:'Orbitron',sans-serif;font-size:6px;letter-spacing:.16em;color:var(--dim);margin-bottom:3px;}
-.cr-position{font-family:'Bebas Neue',sans-serif;font-size:clamp(26px,51.2px,42px);letter-spacing:.06em;color:var(--gold);line-height:1;}
+.cr-position{font-family:'Bebas Neue',sans-serif;font-size:clamp(26px,51.2px,42px);letter-spacing:.06em;color:var(--u-ink);line-height:1;}
 .cr-pts-line{font-family:'Orbitron',sans-serif;font-size:6px;letter-spacing:.14em;color:var(--dim);margin-top:3px;}
 
 /* Club select */
 .cr-clubs-scroll{flex:1;overflow-y:auto;padding:14px;}
 .cr-save-row{display:flex;gap:8px;margin-bottom:12px;}
-.cr-continue-btn{flex:1;padding:13px;background:rgba(240,192,64,.1);border:1.5px solid rgba(240,192,64,.35);border-radius:9px;color:var(--gold);font-family:'Bebas Neue',sans-serif;font-size:clamp(14px,23.04px,18px);letter-spacing:.12em;cursor:pointer;transition:.15s;}
+.cr-continue-btn{flex:1;padding:13px;background:rgba(var(--u-accent-rgb),.1);border:1.5px solid rgba(var(--u-accent-rgb),.35);border-radius:9px;color:var(--u-accent);font-family:'Bebas Neue',sans-serif;font-size:clamp(14px,23.04px,18px);letter-spacing:.12em;cursor:pointer;transition:.15s;}
 .cr-continue-btn:hover{background:rgba(240,192,64,.18);}
 .cr-newgame-btn{padding:13px 14px;background:rgba(220,32,32,.06);border:1px solid rgba(220,32,32,.22);border-radius:9px;color:rgba(220,32,32,.65);font-family:'Orbitron',sans-serif;font-size:7px;letter-spacing:.15em;cursor:pointer;}
 .cr-div-hdr{font-family:'Bebas Neue',sans-serif;font-size:clamp(13px,23.04px,17px);letter-spacing:.1em;color:rgba(255,255,255,.25);padding:8px 0 6px;border-top:1px solid rgba(255,255,255,.06);margin-top:4px;}
@@ -1287,7 +1287,7 @@ html,body{overscroll-behavior:none;}
 .cr-trow:last-child{border-bottom:none;}
 .cr-thdr{color:var(--dim);font-size:6px;letter-spacing:.12em;padding-bottom:5px;border-bottom:1px solid rgba(255,255,255,.08);}
 .cr-me{background:rgba(240,192,64,.06);border-radius:4px;padding-left:4px;margin:0 -4px;}
-.cr-me .cr-tpos,.cr-me .cr-tname{color:var(--gold);}
+.cr-me .cr-tpos,.cr-me .cr-tname{color:var(--u-accent);}
 .cr-tpos{color:var(--dim);font-size:7px;}
 .cr-tname{font-family:'Rajdhani',sans-serif;font-weight:700;font-size:clamp(9px,14.08px,11px);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
 .cr-tpts{font-weight:900;}
@@ -1357,7 +1357,7 @@ html,body{overscroll-behavior:none;}
 .cr-res-outcome.draw{background:rgba(240,192,64,.07);color:var(--gold);border:1px solid rgba(240,192,64,.2);}
 .cr-res-outcome.loss{background:rgba(220,32,32,.09);color:var(--red);border:1px solid rgba(220,32,32,.24);}
 .cr-res-detail{font-family:'Orbitron',sans-serif;font-size:7px;letter-spacing:.13em;color:var(--dim);margin-bottom:14px;line-height:1.6;}
-.cr-res-continue{padding:9px 26px;background:rgba(240,192,64,.09);border:1px solid rgba(240,192,64,.28);border-radius:5px;color:var(--gold);font-family:'Bebas Neue',sans-serif;font-size:16px;letter-spacing:.14em;cursor:pointer;transition:.13s;}
+.cr-res-continue{padding:9px 26px;background:rgba(var(--u-accent-rgb),.09);border:1px solid rgba(var(--u-accent-rgb),.28);border-radius:5px;color:var(--u-accent);font-family:'Bebas Neue',sans-serif;font-size:16px;letter-spacing:.14em;cursor:pointer;transition:.13s;}
 .cr-res-continue:hover{background:rgba(240,192,64,.18);}
 
 /* Season end */
@@ -1472,14 +1472,13 @@ html,body{overscroll-behavior:none;}
 
 /* ─── IMAGE-BASED ACTION BUTTONS (overrides 3D face/bot styling) ─── */
 .dact3d{padding:0;background:none;border:none;}
-.dact3d-img{display:block;width:clamp(38px,57.6px,54px)!important;max-width:54px!important;height:auto!important;filter:drop-shadow(0 3px 5px rgba(0,0,0,.55));transition:filter .15s,transform .12s;pointer-events:none;}
+.dact3d-img{display:block;width:clamp(49px,73.7px,69px)!important;max-width:69px!important;height:auto!important;filter:drop-shadow(0 3px 5px rgba(0,0,0,.55));transition:filter .15s,transform .12s;pointer-events:none;}
 .dact3d:hover .dact3d-img{filter:drop-shadow(0 5px 9px rgba(0,0,0,.7)) brightness(1.08);transform:translateY(-1px);}
 .dact3d:active .dact3d-img{transform:translateY(2px);filter:drop-shadow(0 1px 2px rgba(0,0,0,.7)) brightness(.95);}
 .dact3d .dact3d-c{position:absolute;bottom:-4px;left:50%;transform:translateX(-50%);font-family:'Orbitron',sans-serif;font-size:clamp(8px,12.16px,11px);letter-spacing:.06em;color:#fff;background:rgba(0,0,0,.78);padding:1px 7px;border-radius:3px;white-space:nowrap;border:1px solid rgba(255,255,255,.12);z-index:3;}
 
 /* selection glows per type — applied to image */
 .dact-atk.dact-sel  .dact3d-img{filter:drop-shadow(0 0 18px rgba(60,150,255,1)) drop-shadow(0 0 32px rgba(60,150,255,.7)) drop-shadow(0 3px 5px rgba(0,0,0,.55))!important;animation:dactSelPulse 1.1s ease-in-out infinite!important;}
-.dact-atk.dact-sel2 .dact3d-img{filter:drop-shadow(0 0 18px rgba(255,148,64,1)) drop-shadow(0 0 32px rgba(255,148,64,.7)) drop-shadow(0 3px 5px rgba(0,0,0,.55))!important;animation:dactSelPulse 1.1s ease-in-out infinite!important;}
 .dact-def.dact-sel  .dact3d-img{filter:drop-shadow(0 0 18px rgba(255,60,60,1)) drop-shadow(0 0 32px rgba(255,60,60,.7)) drop-shadow(0 3px 5px rgba(0,0,0,.55))!important;animation:dactSelPulse 1.1s ease-in-out infinite!important;}
 .dact-sp.dact-sel   .dact3d-img{filter:drop-shadow(0 0 20px rgba(255,210,80,1)) drop-shadow(0 0 36px rgba(255,210,80,.8)) drop-shadow(0 3px 5px rgba(0,0,0,.55))!important;animation:dactSelPulse 1.1s ease-in-out infinite!important;}
 .dact-ss.dact-sel   .dact3d-img{filter:drop-shadow(0 0 20px rgba(80,220,255,1)) drop-shadow(0 0 36px rgba(80,220,255,.8)) drop-shadow(0 3px 5px rgba(0,0,0,.55))!important;animation:dactSelPulse 1.1s ease-in-out infinite!important;}
@@ -1491,7 +1490,6 @@ html,body{overscroll-behavior:none;}
 /* selected button gets a ring outline behind the image */
 .dact3d.dact-sel{outline:2px solid currentColor;outline-offset:3px;border-radius:8px;}
 .dact-atk.dact-sel{color:rgba(60,150,255,.9);}
-.dact-atk.dact-sel2{color:rgba(255,148,64,.9);outline-color:rgba(255,148,64,.9);}
 .dact-def.dact-sel{color:rgba(255,60,60,.9);}
 .dact-sp.dact-sel{color:rgba(255,210,80,.95);}
 .dact-ss.dact-sel{color:rgba(80,220,255,.9);}
@@ -1511,10 +1509,11 @@ html,body{overscroll-behavior:none;}
    we don't override.
    ═══════════════════════════════════════════════════════════════════ */
 
+/* Duel now plays over the LIVE (frozen) pitch — no separate stadium image, just
+   a translucent dim so the field shows through behind the duel UI. */
 #duel-ov.duel-aaa{
   background:
-    linear-gradient(180deg,rgba(6,12,24,.35) 0%,rgba(4,6,12,.15) 30%,rgba(4,6,12,.7) 100%),
-    url('assets/wallpaper/duel.png') center/cover no-repeat;
+    linear-gradient(180deg,rgba(4,7,14,.5) 0%,rgba(4,7,14,.28) 40%,rgba(4,7,14,.68) 100%);
 }
 
 /* ── Atmospheric blue/red auras ───────────────────────────────────── */
@@ -1881,8 +1880,6 @@ html,body{overscroll-behavior:none;}
 .duel-aaa .dp-ball.ball-left{ left:42%;}
 .duel-aaa .dp-ball.ball-right{ left:58%;}
 
-/* Hide legacy 2v1 second defender stack — visual clutter under new layout */
-.duel-aaa .dpd2-wrap{ opacity:.7; transform:scale(.78);}
 
 /* Make duel bar pop more above auras */
 .duel-aaa .duelbar{
@@ -2229,8 +2226,8 @@ html,body{overscroll-behavior:none;}
   letter-spacing:.16em !important;
 }
 .duel-aaa .dact3d-img{
-  width:clamp(68px,108.8px,110px) !important;
-  max-width:clamp(68px,108.8px,110px) !important;
+  width:clamp(87px,139.3px,141px) !important;
+  max-width:clamp(87px,139.3px,141px) !important;
 }
 .duel-aaa .dact3d-c{
   font-size:clamp(9px,13.44px,12px) !important;
@@ -2553,8 +2550,8 @@ html,body{overscroll-behavior:none;}
   }
   .duel-aaa .dact3d-l{ font-size:11px !important; letter-spacing:.06em !important;}
   .duel-aaa .dact3d-img{
-    width:30px !important;
-    max-width:30px !important;
+    width:39px !important;
+    max-width:39px !important;
   }
   .duel-aaa .dact3d-i{ font-size:13px !important;}
   .duel-aaa .dact3d-c{ font-size:7px !important; padding:1px 4px !important;}
@@ -2678,7 +2675,7 @@ html,body{overscroll-behavior:none;}
 .dtw .dtr{filter:drop-shadow(0 0 10px rgba(240,192,64,.45));}
 #dta{stroke:#ffd24a;stroke-width:3.5;}
 .dtn{
-  font-family:'Bebas Neue',sans-serif !important;
+  font-family:'Bold Pixel','Bebas Neue',sans-serif !important;
   font-size:19px !important;color:#ffd970 !important;
   text-shadow:0 0 12px rgba(240,192,64,.8),0 2px 6px #000 !important;
 }
@@ -2700,10 +2697,6 @@ html,body{overscroll-behavior:none;}
   cursor:pointer;
 }
 @keyframes goPulse{from{box-shadow:0 0 18px rgba(240,192,64,.45),inset 0 1px 0 rgba(255,255,255,.55)}to{box-shadow:0 0 36px rgba(240,192,64,.85),inset 0 1px 0 rgba(255,255,255,.55)}}
-/* 2v1 second card — pushed inside the field, never over the main panel */
-.duel-aaa .dpd2-wrap{opacity:.62 !important;transform:scale(.72) !important;z-index:2 !important;}
-.dpd2-wrap.on-right{right:296px !important;}
-.dpd2-wrap.on-left{left:296px !important;}
 /* Cut-in perf: drop the expensive filter on huge portraits */
 .ci-port{filter:none !important;}
 .ci-half{contain:layout paint;}
@@ -2771,7 +2764,7 @@ html,body{overscroll-behavior:none;}
   box-shadow:inset 0 0 14px rgba(0,0,0,.6);
 }
 
-/* ── DUEL CARD V4.2 — full content fits, 2v1 chip in-card ──────── */
+/* ── DUEL CARD V4.2 — full content fits ──────── */
 /* Fixed card height: ends just above the zone/timer row, shows everything */
 .duel-aaa .dpc{top:8px !important;bottom:auto !important;height:372px !important;}
 .dc-tab{font-size:11px;padding:3px 12px;}
@@ -2789,25 +2782,6 @@ html,body{overscroll-behavior:none;}
 .dss-portrait{width:56px !important;height:38px !important;}
 .dss-name{font-size:13px !important;}
 .dss-desc{font-size:8px !important;line-height:1.3 !important;}
-/* 2v1 second-defender chip — lives inside the defender card */
-.dpd2-chip{
-  flex:0 0 auto;display:flex;align-items:center;gap:8px;
-  margin:4px 9px 8px;padding:4px 8px;border-radius:5px;
-  background:rgba(255,255,255,.05);
-  border:1px solid rgba(255,255,255,.25);
-  animation:dpd2chipIn .3s cubic-bezier(.3,1.5,.5,1);
-}
-@keyframes dpd2chipIn{from{transform:translateY(8px);opacity:0}to{transform:none;opacity:1}}
-.d2c-av{
-  flex:0 0 30px;width:30px;height:30px;border-radius:4px;
-  background-size:cover;background-position:center 10%;
-  background-color:rgba(0,0,0,.4);border:1px solid rgba(255,255,255,.15);
-}
-.d2c-info{min-width:0;}
-.d2c-nm{font-family:'Bebas Neue',sans-serif;font-size:14px;letter-spacing:.06em;color:#fff;line-height:1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
-.d2c-sub{font-family:'Orbitron',sans-serif;font-size:7.5px;letter-spacing:.18em;margin-top:2px;}
-/* Old free-floating 2v1 art rules neutralized */
-.dpd2-wrap.on-left,.dpd2-wrap.on-right{all:revert;}
 
 /* ── DUEL CARD V4.3 — the actual clipping fix ──────────────────── */
 /* Base .dpc-info has flex-shrink:0, so it overflowed the fixed-height card
@@ -2834,16 +2808,16 @@ html,body{overscroll-behavior:none;}
 }
 #dpad .db{
   width:64px;height:64px;border-radius:50%;
-  background:rgba(8,14,28,.55);
-  border:1.5px solid rgba(255,255,255,.3);
-  color:#fff;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:1px;
-  font-family:'Bebas Neue',sans-serif;cursor:pointer;
+  background:var(--u-panel-thin);
+  border:1.5px solid var(--u-edge-strong);
+  color:var(--u-ink-strong);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:1px;
+  font-family:var(--u-font-ui);font-weight:700;cursor:pointer;
   backdrop-filter:blur(3px);
   transition:transform .08s,background .12s,opacity .15s;
   -webkit-tap-highlight-color:transparent;
 }
 #dpad .db i{font-style:normal;font-size:20px;line-height:1;}
-#dpad .db span{font-size:8px;letter-spacing:.14em;opacity:.8;}
+#dpad .db span{font-size:8px;letter-spacing:var(--u-track);opacity:.8;}
 #dpad .tri{grid-area:tri;border-color:rgba(60,220,120,.6);}  #dpad .tri i{color:#3cdc78;}
 #dpad .sq{grid-area:sq;border-color:rgba(255,105,180,.6);}   #dpad .sq i{color:#ff69b4;}
 #dpad .ci{grid-area:ci;border-color:rgba(255,80,80,.6);}     #dpad .ci i{color:#ff5050;}
@@ -3333,7 +3307,7 @@ html,body{overscroll-behavior:none;}
 .pz-tn{font-family:'Bebas Neue',sans-serif;font-size:clamp(16px,1.6vw,22px);letter-spacing:.06em;line-height:1}
 .pz-tag{font-family:'Orbitron',sans-serif;font-size:8px;letter-spacing:.2em;color:#48586a;margin-top:3px}
 .pz-side.home .pz-tag{color:#7ea0ff}.pz-side.away .pz-tag{color:#f03030}
-.pz-fm{font-family:'Orbitron',sans-serif;font-size:10px;color:var(--gold,#f0c040);letter-spacing:.1em;margin-bottom:8px;opacity:.85}
+.pz-fm{font-family:'Orbitron',sans-serif;font-size:10px;color:var(--u-ink-dim);letter-spacing:.1em;margin-bottom:8px;opacity:.85}
 
 /* square pitch — same coords table the formation editor uses */
 .pz-pitch-wrap{width:100%;aspect-ratio:1/1;border-radius:12px;overflow:hidden;position:relative;
@@ -3354,7 +3328,7 @@ html,body{overscroll-behavior:none;}
 .pz-card .jr{position:absolute;top:2px;left:2px;background:rgba(0,0,0,.55);font-family:'Orbitron',sans-serif;
   font-size:7px;padding:1px 3px;border-radius:3px;color:#fff;line-height:1.3}
 .pz-card .ovr{position:absolute;top:2px;right:2px;background:rgba(0,0,0,.55);font-family:'Orbitron',sans-serif;
-  font-size:7px;padding:1px 3px;border-radius:3px;color:var(--gold,#f0c040);line-height:1.3}
+  font-size:7px;padding:1px 3px;border-radius:3px;color:var(--u-accent);line-height:1.3}
 .pz-card .nm{background:rgba(0,0,0,.62);font-family:'Bebas Neue',sans-serif;font-size:8.5px;letter-spacing:.03em;
   text-align:center;padding:1.5px 1px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .pz-card.gk{border-color:var(--gold,#f0c040)}
@@ -3371,7 +3345,7 @@ html,body{overscroll-behavior:none;}
   background:rgba(6,8,14,.92);border:1px solid var(--bdr,rgba(240,192,64,.18));border-radius:6px;padding:6px 20px;opacity:.6;z-index:2}
 .pz-score b{font-family:'Orbitron',sans-serif;font-size:18px;letter-spacing:.06em}
 .pz-vs{font-family:'Orbitron',sans-serif;color:#48586a;font-size:13px}
-.pz-time{font-family:'Orbitron',sans-serif;font-size:11px;color:var(--gold,#f0c040);letter-spacing:.08em}
+.pz-time{font-family:'Orbitron',sans-serif;font-size:11px;color:var(--u-ink-strong);letter-spacing:.08em}
 .pz-score .pz-tm{font-family:'Bebas Neue',sans-serif;font-size:13px;letter-spacing:.1em}
 
 .pz-pausewrap{display:flex;align-items:center;justify-content:center;padding:12px}
@@ -3380,13 +3354,13 @@ html,body{overscroll-behavior:none;}
 .pz-pause.hide{display:none}
 .pz-pause-hd{padding:18px 24px 12px;border-bottom:1px solid var(--bdr,rgba(240,192,64,.18));text-align:center}
 .pz-eyebrow{font-family:'Orbitron',sans-serif;font-size:9px;letter-spacing:.32em;color:#48586a}
-.pz-pause-hd h1{font-family:'Bebas Neue',sans-serif;font-size:30px;letter-spacing:.1em;color:var(--gold,#f0c040);
+.pz-pause-hd h1{font-family:'Bebas Neue',sans-serif;font-size:30px;letter-spacing:.1em;color:var(--u-ink);
   text-shadow:0 0 18px rgba(240,192,64,.35);margin-top:2px}
 .pz-opts{padding:12px}
 .pz-opt{display:flex;align-items:center;gap:12px;padding:11px 14px;border-radius:7px;cursor:pointer;
   border:1px solid transparent;margin-bottom:5px;transition:.15s}
 .pz-opt:hover{background:rgba(240,192,64,.07);border-color:var(--bdr,rgba(240,192,64,.18))}
-.pz-opt.pz-sel{background:linear-gradient(90deg,rgba(240,192,64,.16),rgba(240,192,64,.03));border-color:var(--gold,#f0c040)}
+.pz-opt.pz-sel{background:linear-gradient(90deg,rgba(var(--u-accent-rgb),.16),rgba(var(--u-accent-rgb),.03));border-color:var(--u-accent)}
 .pz-ic{width:28px;height:28px;border-radius:6px;display:flex;align-items:center;justify-content:center;
   background:rgba(255,255,255,.05);font-size:13px;flex-shrink:0}
 .pz-opt.pz-sel .pz-ic{background:var(--gold,#f0c040);color:#0a0c12}
@@ -3404,7 +3378,7 @@ html,body{overscroll-behavior:none;}
   box-shadow:0 24px 70px rgba(0,0,0,.75);overflow:hidden}
 .pz-mdata.show{display:block}
 .pz-mdata-hd{padding:16px 24px 10px;border-bottom:1px solid var(--bdr,rgba(240,192,64,.18));text-align:center;position:relative}
-.pz-mdata-hd h1{font-family:'Bebas Neue',sans-serif;font-size:26px;letter-spacing:.1em;color:var(--gold,#f0c040);margin-top:2px}
+.pz-mdata-hd h1{font-family:'Bebas Neue',sans-serif;font-size:26px;letter-spacing:.1em;color:var(--u-ink);margin-top:2px}
 .pz-mdata-back{position:absolute;left:18px;top:18px;font-family:'Orbitron',sans-serif;font-size:9px;letter-spacing:.14em;
   color:#48586a;cursor:pointer;border:1px solid rgba(255,255,255,.15);border-radius:4px;padding:5px 9px}
 .pz-mdata-back:hover{color:#fff;border-color:var(--bdr,rgba(240,192,64,.18))}
@@ -3482,7 +3456,7 @@ html.ue-phone #s-match .pause-btn.aaa-pause,html.ue-tablet #s-match .pause-btn.a
 html.ue-phone .dact3d-face,html.ue-tablet .dact3d-face{
   padding:calc(8px*var(--tb)) calc(13px*var(--tb));}
 html.ue-phone .dact3d-img,html.ue-tablet .dact3d-img{
-  width:calc(48px*var(--tb))!important;max-width:none!important;}
+  width:calc(62px*var(--tb))!important;max-width:none!important;}
 
 /* --- pause-menu option rows (if reachable on touch) --- */
 html.ue-phone .pz-opt,html.ue-tablet .pz-opt{min-height:calc(46px*var(--tb));}
@@ -3524,8 +3498,8 @@ html.ue-phone #vjoy-base{transform:scale(calc(0.5 + 0.5*var(--tb)));transform-or
    gradient underneath guarantees the menu always looks intentional.
    hero.png is the new slot — menu-bg.png / wallpaper/home.png are the files
    this project already ships, so the menu has art before you add hero.png. */
-.ue-art{position:absolute;inset:-4%;z-index:0;background:
-  url('assets/home/hero.png') center 22%/cover no-repeat,
+.ue-art{position:absolute;inset:-1.5%;z-index:0;background:
+  url('assets/home/menu-hero2.png') center center/cover no-repeat,
   url('assets/home/menu-bg.png') center 22%/cover no-repeat,
   url('assets/wallpaper/home.png') center 22%/cover no-repeat,
   radial-gradient(60% 70% at 50% 40%,#12305e,#050d1c 70%);
@@ -3538,8 +3512,8 @@ html.ue-phone #vjoy-base{transform:scale(calc(0.5 + 0.5*var(--tb)));transform-or
   background:radial-gradient(50% 50% at 50% 50%,rgba(111,180,255,.3),rgba(5,13,28,0) 70%);
   animation:ueBloom 6.5s ease-in-out infinite;}
 .ue-vig{position:absolute;inset:0;z-index:2;pointer-events:none;background:
-  linear-gradient(90deg,var(--ue-bg) 8%,rgba(5,13,28,.86) 22%,rgba(5,13,28,.1) 44%,rgba(5,13,28,.05) 62%,rgba(5,13,28,.82) 88%,var(--ue-bg) 100%),
-  linear-gradient(0deg,var(--ue-bg) 3%,transparent 26%,transparent 76%,rgba(5,13,28,.92) 100%);}
+  linear-gradient(90deg,var(--ue-bg) 8%,rgba(5,13,28,.86) 22%,rgba(5,13,28,.1) 44%,rgba(5,13,28,.03) 62%,rgba(5,13,28,.04) 84%,rgba(5,13,28,.34) 100%),
+  linear-gradient(0deg,var(--ue-bg) 2%,transparent 22%,transparent 78%,rgba(5,13,28,.88) 100%);}
 .ue-scan{position:absolute;inset:0;z-index:2;pointer-events:none;
   background:repeating-linear-gradient(0deg,rgba(0,0,0,.2) 0 1px,transparent 1px 3px);}
 .ue-sweepband{position:absolute;left:0;right:0;height:120px;z-index:2;pointer-events:none;
@@ -3614,7 +3588,7 @@ html.ue-phone #vjoy-base{transform:scale(calc(0.5 + 0.5*var(--tb)));transform-or
 .ue-logo .ue-ghost{position:absolute;left:56px;top:-10px;font-family:Anton,sans-serif;
   font-size:clamp(48px,6.5vw,88px);line-height:1;color:rgba(255,255,255,.07);letter-spacing:-.04em;}
 .ue-logo-in{position:relative;animation:ueGlowB 3.4s ease-in-out infinite;}
-.ue-logo-in b{display:block;font:800 italic clamp(40px,5.4vw,78px)/.82 'Barlow Condensed';letter-spacing:-.02em;color:#fff;}
+.ue-logo-in b{display:block;font:900 clamp(34px,4.7vw,66px)/.92 'Cinzel',Georgia,serif;letter-spacing:.015em;color:#fff;}
 .ue-logo-in b+b{color:var(--ue-gold);}
 .ue-tagline{margin-top:10px;font:700 clamp(10px,.95vw,14px)/1 'Barlow Condensed';letter-spacing:.28em;color:rgba(234,241,251,.72);}
 
@@ -3625,7 +3599,7 @@ html.ue-phone #vjoy-base{transform:scale(calc(0.5 + 0.5*var(--tb)));transform-or
   transition:background .15s,border-color .15s;position:relative;overflow:hidden;}
 .ue-item:hover,.ue-item:focus-visible{background:rgba(47,141,255,.1);border-left-color:var(--ue-accent);outline:none;}
 .ue-item svg{width:clamp(18px,1.7vw,24px);height:clamp(18px,1.7vw,24px);flex:none;fill:none;stroke:var(--ue-accent);stroke-width:1.7;}
-.ue-item-l{font:800 italic clamp(16px,1.6vw,24px)/1 'Barlow Condensed';letter-spacing:.03em;}
+.ue-item-l{font:700 clamp(15px,1.45vw,22px)/1.05 'Cinzel',Georgia,serif;letter-spacing:.02em;}
 .ue-item-s{font:700 clamp(9px,.8vw,11px)/1.5 'Barlow Condensed';letter-spacing:.16em;color:var(--ue-dim);}
 .ue-item.active{color:#03102a;border-left-color:transparent;height:clamp(44px,6.8vh,62px);
   background:linear-gradient(90deg,var(--ue-accent) 0%,var(--ue-accent-d) 62%,rgba(22,96,216,0) 100%);
@@ -3655,7 +3629,7 @@ html.ue-phone #vjoy-base{transform:scale(calc(0.5 + 0.5*var(--tb)));transform-or
 .ue-tile-art{position:absolute;inset:0;background-size:cover;background-position:center;opacity:.6;}
 .ue-tile-scrim{position:absolute;inset:0;background:linear-gradient(90deg,#061020 32%,rgba(6,16,32,.2) 100%);}
 .ue-tile-txt{position:absolute;left:clamp(10px,1.2vw,18px);top:clamp(10px,1.2vw,18px);right:clamp(10px,1.2vw,18px);pointer-events:none;}
-.ue-tile-txt h4{margin:0;font:800 italic clamp(15px,1.7vw,25px)/.95 'Barlow Condensed';}
+.ue-tile-txt h4{margin:0;font:700 clamp(14px,1.55vw,23px)/1 'Cinzel',Georgia,serif;letter-spacing:.02em;}
 .ue-tile-txt p{margin:clamp(6px,1vh,12px) 0 0;font:700 clamp(10px,.9vw,13px)/1.5 'Barlow Condensed';letter-spacing:.12em;color:rgba(234,241,251,.6);}
 .ue-tile-txt .gold{font:800 italic clamp(12px,1.1vw,17px)/1 'Barlow Condensed';color:var(--ue-gold);}
 .ue-tile-txt .acc{color:var(--ue-accent);}
@@ -3677,7 +3651,7 @@ html.ue-phone #vjoy-base{transform:scale(calc(0.5 + 0.5*var(--tb)));transform-or
 .ue-online svg{width:17px;height:17px;fill:none;stroke:currentColor;stroke-width:1.8;}
 
 /* ---------- keyframes ---------- */
-@keyframes ueKen{0%,100%{transform:scale(1.02) translateX(0)}50%{transform:scale(1.09) translateX(-14px)}}
+@keyframes ueKen{0%,100%{transform:scale(1.03) translateX(0)}50%{transform:scale(1.055) translateX(-9px)}}
 @keyframes ueHalo{0%,100%{opacity:.35;transform:scale(.96)}50%{opacity:.85;transform:scale(1.06)}}
 @keyframes ueBloom{0%,100%{opacity:.18;transform:scale(1)}50%{opacity:.42;transform:scale(1.12)}}
 @keyframes ueScan{0%{transform:translateY(-120px)}100%{transform:translateY(104vh)}}
@@ -3706,4 +3680,480 @@ html.ue-phone #vjoy-base{transform:scale(calc(0.5 + 0.5*var(--tb)));transform-or
 @media(prefers-reduced-motion:reduce){
   .ue-art,.ue-halo,.ue-bloom,.ue-sweepband,.ue-conf,.ue-logo-in,.ue-script b+b,.ue-item.active::after{animation:none!important;}
   .ue-conf{display:none;}
+}
+
+/* ═══════════════════════════════════════════════════════════════════
+   FF HD-2D PREMIUM DUEL  (v42)
+   Elegant serif type (Cinzel) + cream/gold double-frame panels with
+   ornamental corner brackets and gold section dividers — the Octopath /
+   Final Fantasy command-menu look. Appended last so it wins by order;
+   team blue/red identity kept as an inner tint. Numbers stay retro.
+   ═══════════════════════════════════════════════════════════════════ */
+/* --ff-gold / --ff-gold-lo / --ff-cream now live in tokens.css (A.1). */
+
+/* — Serif typography — the single biggest premium lever — */
+.duel-aaa .dpnm,
+.duel-aaa .duelzone{ font-family:'Cinzel',Georgia,serif; font-weight:700; letter-spacing:.06em; }
+.duel-aaa .dside-h{ font-family:'Cinzel',Georgia,serif; font-weight:700; color:var(--u-ink); letter-spacing:.14em; }
+.duel-aaa .dss-name{ font-family:'Cinzel',Georgia,serif; font-weight:700; letter-spacing:.02em; color:var(--ff-cream); }
+.duel-aaa .dact3d-l{ font-family:'Cinzel',Georgia,serif; font-weight:700; letter-spacing:.04em; }
+/* stat & overall numbers keep the retro-pixel accent */
+.duel-aaa .dside-ovr-num,
+.duel-aaa .dst-v{ font-family:'Bold Pixel','Orbitron',sans-serif; }
+
+/* — Panel: deep glass + cream/gold double frame — */
+.duel-aaa .dpc{
+  background:linear-gradient(180deg,rgba(16,20,32,.74),rgba(6,9,16,.86));
+  border:1px solid rgba(244,236,212,.42);
+  box-shadow:
+    0 0 0 1px rgba(0,0,0,.65) inset,
+    0 0 0 3px rgba(232,210,154,.14),
+    0 12px 40px rgba(0,0,0,.62);
+}
+/* keep a whisper of team identity on the frame */
+.duel-aaa .dp-card-wrap.atk .dpc{ border-color:rgba(200,222,255,.5); }
+.duel-aaa .dp-card-wrap:not(.atk) .dpc{ border-color:rgba(255,214,214,.5); }
+/* gold hairline banner along the card top */
+.duel-aaa .dpc::before{
+  content:''!important; position:absolute; top:0; left:8px; right:8px; height:2px; z-index:6;
+  background:linear-gradient(90deg,transparent,var(--ff-gold) 20%,var(--ff-cream) 50%,var(--ff-gold) 80%,transparent);
+  opacity:.85; box-shadow:0 0 8px rgba(232,210,154,.5);
+}
+/* ornamental corner brackets (all four) via non-stretching SVG border-image */
+.duel-aaa .dpc::after{
+  content:''; position:absolute; inset:0; z-index:7; pointer-events:none;
+  padding:0; border:11px solid transparent;
+  border-image:url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='60' height='60'><g fill='none' stroke='%23e8d29a' stroke-width='2.4'><path d='M2 16 L2 2 L16 2'/><path d='M44 2 L58 2 L58 16'/><path d='M58 44 L58 58 L44 58'/><path d='M16 58 L2 58 L2 44'/></g></svg>") 16 stretch;
+  filter:drop-shadow(0 0 3px rgba(232,210,154,.35));
+}
+
+/* — Section headers: gold diamond marker + gradient rule — */
+.duel-aaa .dside-h{
+  border-bottom:1px solid transparent;
+  border-image:linear-gradient(90deg,rgba(232,210,154,.55),rgba(232,210,154,.05)) 1;
+  position:relative; padding-left:14px;
+}
+.duel-aaa .dside-h::before{
+  content:'◆'; position:absolute; left:0; top:50%; transform:translateY(-50%);
+  font-size:7px; color:var(--u-ink-dim); text-shadow:0 0 6px rgba(var(--u-accent-rgb),.7);
+}
+
+/* — Zone banner: gold-framed plaque — */
+.duel-aaa .duelzone{
+  background:linear-gradient(180deg,rgba(20,16,8,.7),rgba(8,7,4,.8));
+  border:1px solid rgba(232,210,154,.5);
+  box-shadow:0 0 0 1px rgba(0,0,0,.6) inset,0 0 12px rgba(232,210,154,.15);
+  color:var(--ff-cream);
+}
+
+/* — VS glyph: elegant serif crest — */
+.duel-aaa .dvs{ filter:drop-shadow(0 0 14px rgba(232,210,154,.35)); }
+
+/* — Command buttons: warmer selected-state glow keeps the gold thread — */
+.duel-aaa .dact3d-face{
+  background:linear-gradient(180deg,rgba(255,255,255,.06) 0%,transparent 42%),linear-gradient(180deg,rgba(14,18,30,.96),rgba(6,9,16,.98));
+}
+
+/* ═══════════════════════════════════════════════════════════════════
+   LIVE DUEL — PREMIUM FF/SQUARE-ENIX SKIN (v103)
+   Wires the duel-mockup look into #duel-ov. Team colour per side via
+   --tc / --tf (set by fCard). Layout mirrors the static mockup.
+   ═══════════════════════════════════════════════════════════════════ */
+/* The stage (#viewport) is pinned to a fixed 1280x720 by fitViewport() and
+   scaled to the device with --vp-scale, so vw/vh INSIDE it measure the browser
+   window, not the stage. On a short landscape phone window this collapsed the
+   duel's base em from 18px to ~10px while px-floored labels stayed put, which
+   is what shrank the headers and threw the panel proportions out.
+   18px == min(1.42vw,2.5vh) evaluated at 1280x720, so desktop is unchanged. */
+#duel-ov.duel-aaa{ font-size:18px; }
+#duel-ov .dvs{ display:none!important; }
+/* let the real (frozen) pitch show through — only darken the edges a touch */
+#duel-ov .da-bg{ background:radial-gradient(120% 85% at 50% 42%,transparent 40%,rgba(3,6,12,.55) 100%)!important; }
+#duel-ov .daura{ opacity:.5; }
+
+/* ---- SCOREBOARD (top centre, behind portraits) ---- */
+#duel-ov .dsb{ position:absolute; top:2.4%; left:50%; transform:translateX(-50%); z-index:2; display:flex; align-items:stretch;
+  height:4.3em; overflow:hidden; border-radius:.55em; border:1px solid rgba(244,236,212,.4);
+  background:linear-gradient(180deg,rgba(10,15,26,.94),rgba(4,7,13,.97));
+  box-shadow:0 0 0 1px rgba(0,0,0,.6) inset,0 8px 24px rgba(0,0,0,.55),0 0 18px rgba(232,210,154,.08); }
+#duel-ov .dsb-side{ display:flex; align-items:center; gap:.6em; padding:0 .85em; }
+#duel-ov .dsb-flag{ width:1.7em; height:1.16em; border-radius:2px; overflow:hidden; display:flex; align-items:center; justify-content:center; flex:none; box-shadow:0 1px 3px rgba(0,0,0,.6); }
+#duel-ov .dsb-flag img,#duel-ov .dsb-flag svg{ width:100%; height:100%; object-fit:cover; }
+#duel-ov .dsb-code{ font-family:'Rajdhani',sans-serif; font-weight:700; font-size:1.35em; letter-spacing:.06em; color:#fff; }
+#duel-ov .dsb-score{ font-family:'Bold Pixel','Orbitron',sans-serif; font-size:1.7em; font-weight:900; color:#fff; min-width:1.3em; text-align:center; text-shadow:0 2px 6px rgba(0,0,0,.8); }
+#duel-ov .dsb-mid{ display:flex; flex-direction:column; align-items:center; justify-content:center; padding:0 .9em; background:linear-gradient(180deg,rgba(0,0,0,.35),rgba(0,0,0,.15)); border-left:1px solid rgba(255,255,255,.12); border-right:1px solid rgba(255,255,255,.12); }
+#duel-ov .dsb-clock{ font-family:'Bold Pixel','Orbitron',sans-serif; font-size:1.15em; font-weight:700; color:var(--u-ink-strong); letter-spacing:.04em; line-height:1; text-shadow:0 0 10px rgba(var(--u-accent-rgb),.35); }
+#duel-ov .dsb-half{ font-family:'Rajdhani',sans-serif; font-weight:700; font-size:.6em; letter-spacing:.24em; color:#8fa2bd; margin-top:.35em; }
+#duel-ov .dsb-acc{ width:.28em; } #duel-ov .dsb-acc.b{ background:linear-gradient(180deg,#3b8dff,#1257b8); } #duel-ov .dsb-acc.r{ background:linear-gradient(180deg,#ff4d4d,#b81616); }
+
+/* ---- PORTRAITS (own layer; ball rides here) ---- */
+#duel-ov .dhero{ position:absolute; bottom:-2%; height:104%; width:29em; z-index:4; pointer-events:none; }
+#duel-ov .dhero.left{ left:3%; }
+#duel-ov .dhero.right{ right:3%; }
+#duel-ov .dhero .dpav{ z-index:4; }
+#duel-ov .dhero.right .dpav{ filter:drop-shadow(0 0 26px rgba(255,80,80,.45)) drop-shadow(0 14px 26px rgba(0,0,0,.75)); }
+/* GK SAVE (gk-mode): existing keeper screen (goal backdrop + central keeper art,
+   only the keeper visible) with the NEW infobox layered on. Hide the new
+   portraits/ball and the attacker's infobox; keep the keeper's infobox on top. */
+#duel-ov.gk-mode .dhero{ display:none!important; }
+#duel-ov.gk-mode .dp-ball{ display:none!important; }
+#duel-ov.gk-mode .dside.atk-info{ display:none!important; }
+#duel-ov.gk-mode .dside.gk-info{ z-index:20; }
+
+/* ---- BALL — at the carrier's feet, cut by lower edge is fine ---- */
+#duel-ov .dp-ball{ position:absolute; bottom:1%; top:auto; width:clamp(34px,5em,72px); height:clamp(34px,5em,72px); z-index:4;
+  background:url('assets/pitch/ball.png') center/contain no-repeat; transform:none;
+  filter:drop-shadow(0 0 16px rgba(255,215,60,.9)) drop-shadow(0 0 34px rgba(255,215,60,.4)); }
+#duel-ov .dp-ball.ball-left{ left:19%; right:auto; }
+#duel-ov .dp-ball.ball-right{ right:19%; left:auto; }
+#duel-ov .dp-ball.show{ display:block; animation:none; }
+
+/* ---- SIDE PANELS (info box + attached skill) ---- */
+#duel-ov .dside{ position:absolute; top:30%; width:23%; z-index:6; display:flex; flex-direction:column; gap:.55em; --tc:#3b8dff; --tf:#1257b8; }
+#duel-ov .dside.left{ left:1.4%; }
+#duel-ov .dside.right{ right:1.4%; text-align:left; }
+#duel-ov .dside .info{ position:relative; width:100%; padding:1.7px; border:0!important; border-radius:0!important;
+  background:linear-gradient(150deg,var(--tc),var(--tf) 72%)!important;
+  filter:drop-shadow(0 0 7px color-mix(in srgb,var(--tc) 45%,transparent)) drop-shadow(0 14px 28px rgba(0,0,0,.6)); box-shadow:none!important; backdrop-filter:none!important; overflow:visible!important; }
+#duel-ov .dside.left .info{ clip-path:polygon(0 0,45% 0,66% 40%,100% 40%,100% 100%,0 100%); }
+#duel-ov .dside.right .info{ clip-path:polygon(55% 0,100% 0,100% 100%,0 100%,0 40%,34% 40%); }
+#duel-ov .info-in{ background:linear-gradient(180deg,rgba(13,19,32,.94),rgba(4,7,13,.97)); backdrop-filter:blur(6px); padding:.7em .8em .75em; }
+#duel-ov .dside.left .info-in{ clip-path:polygon(0 0,45% 0,66% 40%,100% 40%,100% 100%,0 100%); }
+#duel-ov .dside.right .info-in{ clip-path:polygon(55% 0,100% 0,100% 100%,0 100%,0 40%,34% 40%); }
+#duel-ov .i-topcol{ width:65.7%; }
+#duel-ov .dside.right .i-topcol{ margin-left:auto; text-align:right; }
+
+#duel-ov .i-head{ display:flex; align-items:center; gap:.55em; margin-bottom:.15em; }
+#duel-ov .dside.right .i-head{ flex-direction:row-reverse; }
+#duel-ov .i-flag{ width:1.7em; height:1.16em; border-radius:2px; flex:none; overflow:hidden; display:flex; align-items:center; justify-content:center; box-shadow:0 1px 2px rgba(0,0,0,.6); }
+#duel-ov .i-flag img,#duel-ov .i-flag svg{ width:100%; height:100%; object-fit:cover; }
+#duel-ov .i-nat{ font-family:'Rajdhani',sans-serif; font-weight:700; font-size:1em; letter-spacing:.12em; color:#8fa2bd; }
+#duel-ov .i-name{ display:flex; align-items:baseline; gap:.4em; margin:.05em 0 .1em; }
+#duel-ov .dside.right .i-name{ flex-direction:row-reverse; }
+#duel-ov .i-num{ font-family:'Bold Pixel','Orbitron',sans-serif; font-weight:900; font-size:1.4em; line-height:.9; color:#fff; text-shadow:0 2px 6px rgba(0,0,0,.7); }
+#duel-ov .i-fam{ font-family:'Rajdhani',sans-serif; font-weight:700; font-size:1.35em; line-height:.95; color:#fff; letter-spacing:.01em; white-space:nowrap; }
+#duel-ov .i-role{ font-family:'Rajdhani',sans-serif; font-weight:700; letter-spacing:.24em; font-size:.74em; color:#8fa2bd; }
+#duel-ov .i-stars{ color:var(--gold-b,#f0c040); font-size:.82em; letter-spacing:.08em; margin:.2em 0 .4em; text-shadow:0 0 8px rgba(240,192,64,.4); }
+#duel-ov .i-stars .st-half{ opacity:.5; }
+
+#duel-ov .i-ovrrow{ display:flex; align-items:center; gap:.7em; margin-top:.55em; margin-bottom:.4em; }
+#duel-ov .i-ovr{ display:flex; flex-direction:column; align-items:center; line-height:1; flex:none; }
+#duel-ov .i-ovr b{ font-family:'Bold Pixel','Orbitron',sans-serif; font-size:2em; font-weight:900; color:var(--tc); }
+#duel-ov .i-ovr span{ font-family:'Rajdhani',sans-serif; font-weight:700; font-size:.7em; letter-spacing:.22em; color:#8fa2bd; margin-bottom:.15em; }
+#duel-ov .i-stats{ flex:1; display:flex; flex-direction:column; gap:.14em; min-width:0; }
+#duel-ov .st{ display:grid; grid-template-columns:4.4em 1fr 1.8em; align-items:center; gap:.5em; }
+#duel-ov .st-l{ font-family:'Rajdhani',sans-serif; font-weight:700; letter-spacing:.1em; font-size:.72em; color:#8fa2bd; }
+#duel-ov .st-bar{ height:.52em; background:rgba(255,255,255,.09); border-radius:3px; overflow:hidden; position:relative; }
+#duel-ov .st-bar i{ position:absolute; top:0; bottom:0; left:0; border-radius:3px; display:block; }
+#duel-ov .st-v{ font-family:'Bold Pixel','Orbitron',sans-serif; font-weight:700; font-size:.82em; color:#fff; text-align:right; }
+#duel-ov .i-stam-row{ display:flex; justify-content:space-between; align-items:baseline; font-size:.72em; margin-bottom:.25em; }
+#duel-ov .i-stam-l{ font-family:'Rajdhani',sans-serif; font-weight:700; letter-spacing:.18em; color:#8fa2bd; }
+#duel-ov .i-stam-v b{ font-family:'Bold Pixel','Orbitron',sans-serif; color:var(--tc); }
+#duel-ov .i-stam-v span{ color:#8fa2bd; }
+#duel-ov .i-stam-bar{ height:.42em; background:rgba(255,255,255,.09); border-radius:3px; overflow:hidden; position:relative; }
+#duel-ov .i-stam-bar i{ position:absolute; top:0; bottom:0; left:0; display:block; border-radius:3px; }
+
+/* ---- ATTACHED SPECIAL-SKILL PANEL ---- */
+/* single clean box — no rim/secondary box behind */
+#duel-ov .skill{ width:100%; padding:0; background:none!important; filter:drop-shadow(0 8px 18px rgba(0,0,0,.5)); }
+#duel-ov .skill-in{ border-radius:.4em; padding:.4em .65em .45em; background:linear-gradient(180deg,rgba(15,21,34,.96),rgba(5,8,14,.98)); border:1px solid color-mix(in srgb,var(--tc) 55%,transparent); }
+#duel-ov .sk-h{ font-family:'Cinzel',Georgia,serif; font-weight:700; letter-spacing:.2em; font-size:.6em; color:var(--u-ink-dim); position:relative; padding-left:.9em; margin-bottom:.2em; }
+#duel-ov .sk-h::before{ content:'◆'; position:absolute; left:0; top:.05em; font-size:.6em; color:var(--gold-b,#f0c040); }
+#duel-ov .sk-body{ display:flex; align-items:center; gap:.6em; justify-content:space-between; }
+#duel-ov .sk-tx{ min-width:0; }
+#duel-ov .sk-nm{ font-family:'Cinzel',Georgia,serif; font-weight:700; font-size:.92em; letter-spacing:.02em; color:var(--ff-cream,#f4ecd4); line-height:1.05; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+#duel-ov .sk-ds{ font-family:'Rajdhani',sans-serif; font-weight:600; font-size:.68em; color:#8fa2bd; margin-top:.08em; line-height:1.05; }
+#duel-ov .sk-cls{ flex:none; width:1.85em; height:1.85em; border-radius:.35em; display:flex; align-items:center; justify-content:center; font-family:'Cinzel',Georgia,serif; font-weight:900; font-size:1em; color:#fff; text-shadow:0 1px 3px rgba(0,0,0,.6); border:1px solid rgba(255,255,255,.4); }
+
+/* ---- ACTION BAR (bottom centre) — NO box behind; buttons float ---- */
+#duel-ov .duelbar{ position:absolute!important; left:50%; bottom:5.5%; transform:translateX(-50%); width:auto!important; max-width:92%; z-index:7;
+  padding:0!important; background:transparent!important; border:none!important; box-shadow:none!important; }
+#duel-ov .duelbar::before,#duel-ov .duelbar::after{ content:none!important; }
+#duel-ov .dueltop{ display:flex; align-items:center; justify-content:center; gap:.9em; margin-bottom:.5em; }
+/* GO — prominent button at the end of the action row; grey idle, gold armed */
+#duel-ov .dcfm{ margin-left:1em!important; opacity:1!important; pointer-events:none; align-self:center;
+  min-width:5.5em; height:3.2em; display:inline-flex!important; align-items:center; justify-content:center;
+  padding:0 1.1em!important; border-radius:.5em!important; font-family:'Cinzel',Georgia,serif!important; font-weight:900!important; letter-spacing:.22em!important; font-size:1.1em!important;
+  background:linear-gradient(180deg,rgba(44,52,66,.95),rgba(22,28,38,.98))!important; color:#8492a6!important; border:1px solid rgba(255,255,255,.2)!important; box-shadow:0 6px 16px rgba(0,0,0,.5)!important; }
+#duel-ov .dcfm.rdy{ background:linear-gradient(180deg,#ffd875,#e0a41c)!important; color:#2a1c00!important; border-color:#ffe9a8!important; pointer-events:all!important; box-shadow:0 0 18px rgba(240,192,64,.6)!important; animation:goPulse 1s ease-in-out infinite alternate; }
+@keyframes goPulse{from{box-shadow:0 0 10px rgba(240,192,64,.4)}to{box-shadow:0 0 22px rgba(240,192,64,.75)}}
+#duel-ov .duelzone{ font-family:'Cinzel',Georgia,serif; font-weight:700; letter-spacing:.08em; font-size:.85em; color:var(--ff-cream,#f4ecd4);
+  background:linear-gradient(180deg,rgba(20,16,8,.7),rgba(8,7,4,.8)); border:1px solid rgba(232,210,154,.5); border-radius:.35em; padding:.15em .7em; }
+#duel-ov .di{ font-family:'Rajdhani',sans-serif; font-weight:700; letter-spacing:.16em; font-size:.66em; color:#8fa2bd; }
+#duel-ov .duel-row{ display:flex; align-items:center; justify-content:center; gap:.5em; flex-wrap:wrap; }
+#duel-ov .dplbl{ font-family:'Cinzel',Georgia,serif; font-weight:700; letter-spacing:.14em; font-size:.62em; color:#8fa2bd; }
+#duel-ov [hidden]{ display:none!important; }
+
+/* ── Roadmap B.2 · on-screen PAUSE and GO removed ─────────────────────────
+   Both are keyboard/pad actions now (Esc or Tab = pause, Enter = confirm the
+   duel), so the pitch reads clean and nothing floats over the skill buttons.
+   Hidden rather than deleted so the elements still exist for the engine to
+   toggle .rdy on, and so a touch build can re-show them. */
+/* NOTE ON SPECIFICITY — the first version of these rules did not work.
+   Both buttons are already targeted by !important rules further up:
+     #s-match .pause-btn.aaa-pause { display:flex !important }      (1,2,0)
+     #duel-ov .dcfm               { display:inline-flex !important } (1,1,0)
+   When two declarations are both !important, SPECIFICITY decides — so
+   `#pauseBtn` (1,0,0) lost. These selectors match that specificity and come
+   later in the file, so they win. */
+#s-match .pause-btn.aaa-pause, #pauseBtn, .pause-btn.aaa-pause{ display:none !important; }
+#duel-ov .dcfm, #dcfm, .dcfm{ display:none !important; }
+
+/* Pixel fonts must never be synthesised — faux bold/italic destroys the grid
+   and fills counters (the score zero rendered as a solid square). */
+.font-pixel,.hsc,.hsc-sep,.htime,.rbadge,.ract,
+.duel-aaa .dst-v,
+#duel-ov .dsb-score,#duel-ov .dsb-clock,#duel-ov .i-num,
+#duel-ov .i-ovr b,#duel-ov .st-v,#duel-ov .i-stam-v b{
+  font-synthesis:none; font-synthesis-weight:none; font-synthesis-style:none;
+}
+
+/* ══ DUEL ACTION ICONS — drawn, not PNG (roadmap A.2) ═══════════════════
+   The glyph inherits `currentColor`, so selection retints the icon itself
+   instead of only bolting a glow onto a fixed bitmap.
+   Specificity note: the old `.dact3d-img` rules used !important, so these are
+   scoped under #duel-ov / .duel-aaa to sit above them without another
+   specificity fight (see the PAUSE/GO lesson). */
+#duel-ov .dact3d-ico,.duel-aaa .dact3d-ico{
+  display:block; width:clamp(34px,3.4vw,46px); margin:0 auto;
+  color:var(--u-ink-dim);
+  filter:drop-shadow(0 2px 4px rgba(0,0,0,.6));
+  transition:color var(--u-fast) var(--u-ease),
+             filter var(--u-fast) var(--u-ease),
+             transform var(--u-fast) var(--u-ease);
+}
+#duel-ov .dact3d-ico svg,.duel-aaa .dact3d-ico svg{display:block;width:100%;height:auto;}
+#duel-ov .dact3d:hover .dact3d-ico,.duel-aaa .dact3d:hover .dact3d-ico{
+  color:var(--u-ink); transform:translateY(-1px);
+}
+#duel-ov .dact3d:active .dact3d-ico,.duel-aaa .dact3d:active .dact3d-ico{
+  transform:translateY(1px);
+}
+/* Selected — the glyph takes the action's colour and lights up. One rule per
+   family so attack / defence / special / super stay legible apart. */
+#duel-ov .dact-atk.dact-sel .dact3d-ico,.duel-aaa .dact-atk.dact-sel .dact3d-ico{
+  color:var(--u-home); filter:drop-shadow(0 0 10px rgba(var(--u-home-rgb),.85));
+}
+#duel-ov .dact-def.dact-sel .dact3d-ico,.duel-aaa .dact-def.dact-sel .dact3d-ico{
+  color:var(--u-away); filter:drop-shadow(0 0 10px rgba(var(--u-away-rgb),.85));
+}
+#duel-ov .dact-sp.dact-sel .dact3d-ico,.duel-aaa .dact-sp.dact-sel .dact3d-ico{
+  color:var(--u-magic); filter:drop-shadow(0 0 10px rgba(var(--u-gold-rgb),.9));
+}
+#duel-ov .dact-ss.dact-sel .dact3d-ico,.duel-aaa .dact-ss.dact-sel .dact3d-ico{
+  color:var(--u-special); filter:drop-shadow(0 0 12px rgba(68,200,255,.9));
+}
+/* Unaffordable / locked reads as dimmed, not as a different icon. */
+#duel-ov .dact-dis .dact3d-ico,.duel-aaa .dact-dis .dact3d-ico{
+  color:var(--u-ink-mute); filter:none; opacity:.55;
+}
+/* The PNGs are gone — make sure a stale one can never render. */
+#duel-ov .dact3d-img,.duel-aaa .dact3d-img{display:none!important;}
+
+/* ══ DUEL ACTIONS — RPG COMMAND LIST (roadmap A.2) ══════════════════════
+   Matched to the reference mockup: NO container panel, NO all-caps, label in
+   Cinzel (the same face as the SUPER SHOT skill name), tiny muted cost caption,
+   and only the SELECTED row carries a filled gradient bar.
+
+   The old panel box lives in index.html's inline <style> as
+   `.duel-aaa .dmenu{border;background;backdrop-filter}` — that block sits after
+   this stylesheet in document order, so these rules are written at #duel-ov
+   (1,1,0) to out-specify `.duel-aaa` (0,2,0) rather than rely on order. */
+
+/* ── container: no box at all, rows sit on the art ── */
+#duel-ov .dmenu{
+  /* No container: each ACTION is its own box (see .dact3d below), separated by
+     a small gap — exactly like the reference. */
+  background:none!important; box-shadow:none!important;
+  border:none!important; border-width:0!important; border-style:none!important;
+  backdrop-filter:none!important; -webkit-backdrop-filter:none!important;
+  padding:0!important; border-radius:0!important;
+  flex:0 1 auto; min-width:12.6em; align-items:stretch!important; gap:0!important;
+}
+#duel-ov #abtns,#duel-ov #dbtns{ align-items:flex-start; gap:2.2em; }
+#duel-ov .dmenu-btns{
+  display:flex!important; flex-direction:column!important;
+  align-items:stretch!important; gap:.42em!important; width:100%;
+}
+
+/* ── quiet section header ── */
+#duel-ov .dmenu-h{
+  font-family:var(--u-font-display)!important; font-weight:700!important;
+  font-size:.56em!important; letter-spacing:var(--u-track-wide)!important;
+  text-align:left; padding:0 0 .55em .7em; opacity:.7;
+  text-shadow:0 2px 5px rgba(0,0,0,.9);
+}
+#duel-ov .dmenu.normal .dmenu-h{ color:rgba(var(--u-accent-rgb),.95)!important; }
+#duel-ov .dmenu.special .dmenu-h{ color:rgba(var(--u-magic-rgb),.95)!important; }
+
+/* ── the row ── */
+#duel-ov .dact3d{
+  display:flex!important; align-items:center; gap:.7em;
+  width:100%; padding:.62em .9em;   /* taller: 15px rows were untappable twice */
+  /* its own panel — dark, slightly translucent, thin edge */
+  /* appearance:none is required or mobile Safari renders this as a native
+     control and silently drops the gradient AND the border — which is what
+     made the rows look fully transparent on the phone while being correct on
+     desktop. The solid colour after the gradient is a second safety net: if a
+     browser drops the image layer, the panel still paints. */
+  appearance:none!important; -webkit-appearance:none!important; -moz-appearance:none!important;
+  background:linear-gradient(180deg,
+      rgba(var(--u-panel-rgb),.97),rgba(var(--u-panel-rgb),.90))
+      rgba(var(--u-panel-rgb),.95)!important;
+  background-clip:padding-box!important;
+  border:var(--u-hair) solid var(--u-edge-strong)!important;
+  border-radius:var(--u-r-md)!important;
+  box-shadow:0 2px 8px rgba(0,0,0,.45);
+  text-align:left; filter:none;
+  transition:background var(--u-fast) var(--u-ease),
+             border-color var(--u-fast) var(--u-ease),
+             box-shadow var(--u-fast) var(--u-ease),
+             transform var(--u-fast) var(--u-ease);
+}
+#duel-ov .dact3d:hover{ transform:translateX(3px); filter:none;
+  background:linear-gradient(180deg,
+      rgba(var(--u-panel-rgb),.97),rgba(var(--u-panel-rgb),.88))!important; }
+
+/* ── resting column identity ────────────────────────────────────────────
+   The container has no box any more (each action is its own rectangle), so
+   the blue/purple that used to live on the .dmenu border had nowhere to go
+   and the two columns read identically until something was selected. The
+   family colour now sits on the ROW edge: present at rest, brighter on
+   hover, and still fully filled when selected. */
+#duel-ov .dact-atk,#duel-ov .dact-def{
+  border-color:rgba(var(--u-accent-rgb),.45)!important;
+  box-shadow:0 2px 8px rgba(0,0,0,.45),inset 0 0 14px rgba(var(--u-accent-rgb),.12);
+}
+#duel-ov .dact-sp,#duel-ov .dact-ss{
+  border-color:rgba(var(--u-magic-rgb),.45)!important;
+  box-shadow:0 2px 8px rgba(0,0,0,.45),inset 0 0 14px rgba(var(--u-magic-rgb),.12);
+}
+#duel-ov .dact-atk:hover,#duel-ov .dact-def:hover{
+  border-color:var(--u-accent-bright)!important;
+  box-shadow:0 2px 10px rgba(0,0,0,.5),inset 0 0 18px rgba(var(--u-accent-rgb),.22);
+}
+#duel-ov .dact-sp:hover,#duel-ov .dact-ss:hover{
+  border-color:rgba(var(--u-magic-rgb),.85)!important;
+  box-shadow:0 2px 10px rgba(0,0,0,.5),inset 0 0 18px rgba(var(--u-magic-rgb),.22);
+}
+#duel-ov .dact3d:active{ transform:translateX(1px); }
+
+/* icon — small, quiet, never competes with the word */
+#duel-ov .dact3d .dact3d-ico{
+  width:1.05em; flex:0 0 auto; margin:0; filter:none; opacity:.9;
+}
+/* label — Cinzel, Title Case, the SUPER SHOT face */
+#duel-ov .dact3d .dact3d-l{
+  flex:1 1 auto; min-width:0;
+  font-family:var(--u-font-display)!important; font-weight:700;
+  font-size:15px!important; letter-spacing:.02em!important; /* px: stage is fixed 1280x720 */
+  text-transform:none!important;
+  color:var(--u-ink);
+  white-space:nowrap; overflow:hidden; text-overflow:ellipsis;
+  text-shadow:0 2px 6px rgba(0,0,0,.92);
+}
+/* cost — small caption, stays out of the way */
+#duel-ov .dact3d .dact3d-c{
+  position:static!important; transform:none!important;
+  flex:0 0 auto; background:none!important; border:none!important; padding:0!important;
+  font-family:var(--u-font-ui)!important; font-weight:700;
+  font-size:9px!important; letter-spacing:.08em; /* px: stage is fixed 1280x720 */
+  margin:0!important; color:var(--u-ink-dim); opacity:1; white-space:nowrap;
+  text-shadow:0 1px 3px rgba(0,0,0,.9);
+}
+
+/* ── SELECTED — the filled bar, bright at the left and fading out ── */
+#duel-ov .dact-atk.dact-sel,#duel-ov .dact-def.dact-sel{
+  background:linear-gradient(90deg,rgba(var(--u-accent-rgb),.62) 0%,var(--u-sel-fill) 62%)!important;
+  border-color:var(--u-accent-bright)!important;
+  box-shadow:0 0 18px rgba(var(--u-accent-rgb),.45),inset 0 1px 0 rgba(255,255,255,.22);
+}
+#duel-ov .dact-sp.dact-sel,#duel-ov .dact-ss.dact-sel{
+  background:linear-gradient(90deg,rgba(var(--u-magic-rgb),.62) 0%,#2a0f5c 62%)!important;
+  border-color:rgba(var(--u-magic-rgb),.95)!important;
+  box-shadow:0 0 18px rgba(var(--u-magic-rgb),.45),inset 0 1px 0 rgba(255,255,255,.22);
+}
+#duel-ov .dact-sel .dact3d-l{ color:var(--u-ink-strong); }
+#duel-ov .dact-sel .dact3d-c{ color:rgba(255,255,255,.72); }
+#duel-ov .dact-sel .dact3d-ico{ color:var(--u-ink-strong); opacity:1; }
+
+/* idle icon tint per family */
+#duel-ov .dact-atk .dact3d-ico,#duel-ov .dact-def .dact3d-ico{ color:rgba(var(--u-accent-rgb),.9); }
+#duel-ov .dact-sp .dact3d-ico,#duel-ov .dact-ss .dact3d-ico{ color:rgba(var(--u-magic-rgb),.9); }
+
+/* unaffordable */
+#duel-ov .dact-dis{ opacity:.38; }
+#duel-ov .dact-dis .dact3d-l{ color:var(--u-ink-mute); }
+
+/* the PNGs are gone — a stale one must never render */
+#duel-ov .dact3d-img,.duel-aaa .dact3d-img{display:none!important;}
+
+/* ══ DUEL SPRITES — new pixel art (2026-09-08) ═════════════════════════
+   conti.png 338x499 (front, attacker) and shester.png 400x477 (back, defender)
+   replace the 1023x1537 illustrations. They are LOW-RES PIXEL ART with
+   different aspect ratios, so: never stretch (contain, bottom-anchored, each
+   keeps its own ratio) and never smooth (image-rendering:pixelated).
+   Sized in ONE place so every future player inherits it — only the two
+   --duel-hero-h values below need touching.  */
+#duel-ov{
+  /* Perspective: the attacker is FURTHER up the pitch, so he is both smaller
+     AND sits higher in frame; the defender is nearest the camera, so he is
+     bigger and grounded lowest. Sharing one baseline read as a flat cut-out.
+     All four numbers are the whole tuning surface for every player. */
+  --duel-hero-h: 63%;       /* attacker — was 74%, −15% */
+  --duel-hero-h-cpu: 73%;   /* defender — was 86%, −15% */
+  --duel-hero-lift: 8%;     /* how far ABOVE the defender's baseline he stands */
+  --duel-hero-inset: 15%;   /* distance in from the screen edge (was 5%/4%) */
+}
+#duel-ov .dhero{
+  position:absolute; bottom:0; height:var(--duel-hero-h); width:21em;
+  z-index:4; pointer-events:none;
+}
+/* Both placement AND perspective follow the SLOT. The sprites are a matched
+   pair — front posed facing right, back posed facing left — so left is always
+   the front view and right always the back view. The back view is the one
+   nearest the camera, hence bigger and grounded lowest; the front view stands
+   further up the pitch, so it is smaller and lifted. Sides swap at half time
+   (homeLeft), which is how the human goes from front view to back view. */
+#duel-ov .dhero.left{
+  left:var(--duel-hero-inset); right:auto;
+  height:var(--duel-hero-h);
+  bottom:var(--duel-hero-lift);        /* further up the pitch = smaller, raised */
+}
+#duel-ov .dhero.right{
+  right:calc(var(--duel-hero-inset) - 2%); left:auto;
+  height:var(--duel-hero-h-cpu);
+  bottom:0;                            /* nearest the camera, lowest baseline */
+}
+
+#duel-ov .dhero .dpav{
+  position:absolute!important; bottom:0!important; top:auto!important;
+  left:50%!important; transform:translateX(-50%);
+  width:100%!important; height:100%!important;
+  background-size:contain!important;
+  background-position:center bottom!important;
+  background-repeat:no-repeat!important;
+  image-rendering:pixelated; image-rendering:crisp-edges;
+  /* one grounded shadow, no team-coloured rim — see the aura removal below */
+  filter:drop-shadow(0 10px 18px rgba(0,0,0,.75))!important;
+}
+/* the shake stays (author is animating a proper idle later) */
+
+/* ══ LIGHTING REMOVED — author: drop the red/blue lights and the circle ════
+   Kept as explicit kills rather than edits so the originals stay readable. */
+#duel-ov .daura,.duel-aaa .daura,
+#duel-ov .daura.blue,#duel-ov .daura.red,
+.duel-aaa .daura.blue,.duel-aaa .daura.red{
+  display:none!important; opacity:0!important; background:none!important;
+}
+/* team-coloured spotlight + ring behind the old card portraits */
+#duel-ov .dp-card-wrap::before,#duel-ov .dp-card-wrap::after,
+.duel-aaa .dp-card-wrap::before,.duel-aaa .dp-card-wrap::after,
+#duel-ov .dp-card-wrap.atk::before,#duel-ov .dp-card-wrap.atk::after,
+.duel-aaa .dp-card-wrap.atk::before,.duel-aaa .dp-card-wrap.atk::after{
+  display:none!important; background:none!important; box-shadow:none!important; border:none!important;
+}
+/* the red rim on the CPU sprite */
+#duel-ov .dhero.right .dpav{
+  filter:drop-shadow(0 10px 18px rgba(0,0,0,.75))!important;
 }
