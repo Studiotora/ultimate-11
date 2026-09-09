@@ -4,6 +4,13 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
+<!-- Never cache the document itself. Cache-busting via ?v= on the assets only
+     works if THIS file is re-fetched; a stale index.html keeps requesting the
+     old ?v= numbers and every edit looks like "nothing changed". This has
+     cost several debugging rounds — do not remove. -->
+<meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+<meta http-equiv="Pragma" content="no-cache">
+<meta http-equiv="Expires" content="0">
 <meta name="viewport" content="width=device-width,initial-scale=1.0,maximum-scale=1.0,user-scalable=no,viewport-fit=cover">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-capable" content="yes">
@@ -12,7 +19,35 @@
 <title>Ultimate Eleven - Football Strategy Game | Beta</title>
 <meta name="description" content="Ultimate Eleven - A Captain Tsubasa inspired football strategy game with 11 vs 11 gameplay">
 <link href="https://fonts.googleapis.com/css2?family=Anton&family=Barlow+Condensed:ital,wght@0,500;0,600;0,700;0,800;1,700;1,800&family=Permanent+Marker&family=Bebas+Neue&family=Rajdhani:wght@600;700&family=Orbitron:wght@400;700&family=Cinzel:wght@500;700;900&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="style.css?v=58">
+<link rel="stylesheet" href="tokens.css?v=5">
+<link rel="stylesheet" href="style.css?v=78">
+<script>
+/* BUILD STAMP — prints which ?v= of each asset actually loaded. A stale
+   index.html keeps requesting old versions and every edit looks like nothing
+   changed; this makes that obvious in one glance instead of a debug round. */
+addEventListener('DOMContentLoaded',function(){
+  var css=[].slice.call(document.querySelectorAll('link[rel=stylesheet]'))
+    .map(function(l){return l.getAttribute('href');})
+    .filter(function(h){return h && h.indexOf('fonts.googleapis')<0;});
+  var js=[].slice.call(document.querySelectorAll('script[src]'))
+    .map(function(s){return s.getAttribute('src');})
+    .filter(function(s){return s && /^(game|ult11|tokens)/.test(s);});
+  console.log('%c[UE build]','color:#f0c040;font-weight:bold',
+    css.concat(js).join('  |  '));
+  /* TEMPORARY DIAGNOSTIC — remove once the stale-cache issue is confirmed gone.
+     Shows the loaded style.css / game.js versions on screen so a screenshot is
+     enough to tell a stale build from a real bug. */
+  try{
+    var v=function(list,name){for(var i=0;i<list.length;i++){if(list[i].indexOf(name)===0)return list[i].replace(name,'').replace('?v=','v');}return '?';};
+    var b=document.createElement('div');
+    b.textContent='BUILD  css '+v(css,'style.css')+'  tok '+v(css,'tokens.css')+'  js '+v(js,'game.js');
+    b.style.cssText='position:fixed;right:6px;bottom:4px;z-index:99999;pointer-events:none;'
+      +'font:700 10px/1 Rajdhani,sans-serif;letter-spacing:.14em;color:#f0c040;'
+      +'background:rgba(0,0,0,.55);padding:3px 7px;border:1px solid rgba(240,192,64,.45);border-radius:3px;';
+    document.body.appendChild(b);
+  }catch(e){}
+});
+</script>
 <style>
 /* CAREER MODE - inline to bypass cache */
 #s-career-clubs{background:radial-gradient(ellipse 80% 50% at 50% 0%,rgba(30,114,220,.08),transparent 60%),#06080e;overflow:hidden;}
@@ -1358,7 +1393,7 @@
   </div>
 </div>
 
-<script src="game.js?v=111" defer></script>
+<script src="game.js?v=118" defer></script>
 <!-- ps1-mod.js removed: P3D is the only renderer, its post-FX drew into the hidden 2D canvas.
      Re-add this line to restore it: <script src="ps1-mod.js?v=1" defer></script> -->
 <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js" defer></script>
@@ -1374,9 +1409,9 @@
 <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/postprocessing/MaskPass.js" defer></script>
 <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/postprocessing/UnrealBloomPass.js" defer></script>
 <script src="ult11-bowl2.js?v=5" defer></script>
-<script src="ult11-pitch3d.js?v=57" defer></script>
+<script src="ult11-pitch3d.js?v=58" defer></script>
 <script src="ult11-sfx.js?v=5" defer></script>
-<script src="ult11-camlab.js?v=5" defer></script>
+<script src="ult11-camlab.js?v=6" defer></script>
 <script src="ult11-team.js?v=5" defer></script>
 <script src="ult11-custom.js?v=6" defer></script>
 <script src="ult11-cup.js?v=6" defer></script>

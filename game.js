@@ -38,15 +38,15 @@ window.addEventListener('beforeunload', function() {
 
 const T={
   germany:{name:'Germany',flag:'🇩🇪',p:[
-    {id:101,name:'K.Muller',pos:'GK',spd:66,pwr:74,tec:72,def:93,rar:2,jersey:1,sav:88,ref:80},
-    {id:102,name:'H.Kaltz',pos:'LB',spd:78,pwr:74,tec:72,def:80,rar:1,jersey:7},
+    {id:101,name:'K.Steiner',pos:'GK',spd:66,pwr:74,tec:72,def:93,rar:2,jersey:1,sav:88,ref:80},
+    {id:102,name:'H.Reinhardt',pos:'LB',spd:78,pwr:74,tec:72,def:80,rar:1,jersey:7},
     {id:103,name:'K.Schmidt',pos:'CB1',spd:68,pwr:82,tec:66,def:86,rar:2},
     {id:104,name:'E.Schmidt',pos:'CB2',spd:66,pwr:84,tec:64,def:88,rar:2},
     {id:105,name:'Teigerbran',pos:'RB',spd:76,pwr:80,tec:78,def:80,rar:2,jersey:23},
     {id:106,name:'C.Haine',pos:'CM1',spd:82,pwr:78,tec:86,def:62,rar:2},
     {id:107,name:'Shester',pos:'CM2',spd:80,pwr:82,tec:88,def:64,rar:2,jersey:10},
     {id:108,name:'M.Goethe',pos:'LW',spd:84,pwr:80,tec:82,def:56,rar:2},
-    {id:109,name:'K.H.Schneider',pos:'ST',spd:86,pwr:96,tec:84,def:50,rar:2,jersey:11},
+    {id:109,name:'K.H.Falkner',pos:'ST',spd:86,pwr:96,tec:84,def:50,rar:2,jersey:11},
     {id:110,name:'Margus',pos:'RW',spd:84,pwr:82,tec:80,def:54,rar:1,jersey:9},
     {id:111,name:'Meyer',pos:'CB1',spd:68,pwr:78,tec:66,def:82,rar:1,jersey:4},
   ],reserves:[111]},
@@ -280,19 +280,19 @@ const T={
     {id:217,name:'Y.Isagi',pos:'LW',spd:86,pwr:76,tec:82,def:56,rar:2,jersey:19},
   ],reserves:[212,213,214,215,216,217]},
   italy:{name:'Italy',flag:'🇮🇹',formation:'4-1-3-2',p:[
-    {id:301,name:'G.Buffon',   pos:'GK', spd:66,pwr:74,tec:72,def:92,rar:2,jersey:1, sav:90,ref:82},
-    {id:302,name:'S.Gentile',  pos:'LB', spd:74,pwr:72,tec:70,def:84,rar:2,jersey:3},
+    {id:301,name:'G.Donati',   pos:'GK', spd:66,pwr:74,tec:72,def:92,rar:2,jersey:1, sav:90,ref:82},
+    {id:302,name:'S.Aldini',  pos:'LB', spd:74,pwr:72,tec:70,def:84,rar:2,jersey:3},
     {id:303,name:'F.Feo',      pos:'CB1',spd:68,pwr:80,tec:66,def:86,rar:1,jersey:5},
-    {id:304,name:'F.Cannavaro',pos:'CB2',spd:70,pwr:82,tec:72,def:90,rar:2,jersey:4},
+    {id:304,name:'F.Bertoldi',pos:'CB2',spd:70,pwr:82,tec:72,def:90,rar:2,jersey:4},
     {id:312,name:'A.Ferlora',  pos:'RB', spd:78,pwr:74,tec:76,def:78,rar:1,jersey:17},
     {id:305,name:'T.Frisina',  pos:'CM1',spd:76,pwr:90,tec:84,def:82,rar:2,jersey:6, pas:83,sho:96},
-    {id:306,name:'F.Totti',    pos:'CM2',spd:78,pwr:84,tec:90,def:66,rar:2,jersey:10},
-    {id:307,name:'A.Delpiero', pos:'CM3',spd:80,pwr:82,tec:88,def:62,rar:2,jersey:2},
-    {id:311,name:'R.Baggio',   pos:'LW', spd:84,pwr:80,tec:90,def:50,rar:2,jersey:7},
+    {id:306,name:'F.Conti',    pos:'CM2',spd:78,pwr:84,tec:90,def:66,rar:2,jersey:10},
+    {id:307,name:'A.Corsaro', pos:'CM3',spd:80,pwr:82,tec:88,def:62,rar:2,jersey:2},
+    {id:311,name:'R.Manzini',   pos:'LW', spd:84,pwr:80,tec:90,def:50,rar:2,jersey:7},
     {id:309,name:'M.Mancuso',  pos:'ST', spd:84,pwr:87,tec:86,def:54,rar:1,jersey:9, sho:91},
     {id:310,name:'E.Vella',    pos:'RW', spd:96,pwr:86,tec:80,def:52,rar:1,jersey:11},
     // Reserves
-    {id:308,name:'A.Pirlo',    pos:'CM3',spd:74,pwr:76,tec:92,def:68,rar:2,jersey:8},
+    {id:308,name:'A.Sereni',    pos:'CM3',spd:74,pwr:76,tec:92,def:68,rar:2,jersey:8},
     {id:313,name:'C.Impero',   pos:'CM1',spd:76,pwr:76,tec:80,def:70,rar:1,jersey:18},
     {id:314,name:'G.Gino',     pos:'GK', spd:64,pwr:68,tec:66,def:82,rar:1,jersey:24,sav:78,ref:70}],
   reserves:[308,313,314]},
@@ -442,13 +442,17 @@ const PLAYER_ARCHETYPES={
   'M.Soda':       {passBias:0.90,dribbleBias:1.05,shootBias:1.10,oneTwoBias:0.90,longShotBias:1.08,pressResistance:1.00,wideRunBias:1.05,specialBias:1.05,defensiveAggression:1.05},
   'S.Aoi':        {passBias:1.15,dribbleBias:1.15,shootBias:1.10,oneTwoBias:1.10,longShotBias:0.95,pressResistance:1.10,wideRunBias:1.05,specialBias:1.10,defensiveAggression:0.88},
   'K.H.Schneider':{passBias:0.82,dribbleBias:1.05,shootBias:1.35,oneTwoBias:0.82,longShotBias:1.20,pressResistance:1.10,wideRunBias:0.92,specialBias:1.18,defensiveAggression:1.02},
+  'K.H.Falkner'  :{passBias:0.82,dribbleBias:1.05,shootBias:1.35,oneTwoBias:0.82,longShotBias:1.20,pressResistance:1.10,wideRunBias:0.92,specialBias:1.18,defensiveAggression:1.02},
   'Natureza':     {passBias:1.00,dribbleBias:1.35,shootBias:1.20,oneTwoBias:1.00,longShotBias:1.08,pressResistance:1.25,wideRunBias:1.08,specialBias:1.15,defensiveAggression:0.92},
   'Rivaul':       {passBias:1.18,dribbleBias:1.10,shootBias:1.08,oneTwoBias:1.12,longShotBias:1.10,pressResistance:1.14,wideRunBias:0.94,specialBias:1.08,defensiveAggression:0.95},
   'C.Santana':    {passBias:0.92,dribbleBias:1.08,shootBias:1.22,oneTwoBias:0.94,longShotBias:1.08,pressResistance:1.10,wideRunBias:0.96,specialBias:1.10,defensiveAggression:1.00},
   'Michael':      {passBias:1.20,dribbleBias:1.10,shootBias:1.18,oneTwoBias:1.05,longShotBias:1.08,pressResistance:1.14,wideRunBias:0.92,specialBias:1.12,defensiveAggression:0.98},
   'A.Pirlo':      {passBias:1.28,dribbleBias:0.82,shootBias:0.88,oneTwoBias:1.10,longShotBias:1.12,pressResistance:1.00,wideRunBias:0.90,specialBias:0.95,defensiveAggression:0.82},
+  'A.Sereni' :      {passBias:1.28,dribbleBias:0.82,shootBias:0.88,oneTwoBias:1.10,longShotBias:1.12,pressResistance:1.00,wideRunBias:0.90,specialBias:0.95,defensiveAggression:0.82},
   'F.Totti':      {passBias:1.12,dribbleBias:1.00,shootBias:1.15,oneTwoBias:1.02,longShotBias:1.10,pressResistance:1.04,wideRunBias:0.90,specialBias:1.08,defensiveAggression:0.90},
+  'F.Conti' :      {passBias:1.12,dribbleBias:1.00,shootBias:1.15,oneTwoBias:1.02,longShotBias:1.10,pressResistance:1.04,wideRunBias:0.90,specialBias:1.08,defensiveAggression:0.90},
   'R.Baggio':     {passBias:1.15,dribbleBias:1.15,shootBias:1.05,oneTwoBias:1.10,longShotBias:0.98,pressResistance:1.12,wideRunBias:0.94,specialBias:1.05,defensiveAggression:0.82},
+  'R.Manzini' :     {passBias:1.15,dribbleBias:1.15,shootBias:1.05,oneTwoBias:1.10,longShotBias:0.98,pressResistance:1.12,wideRunBias:0.94,specialBias:1.05,defensiveAggression:0.82},
   'L.Messi':      {passBias:1.18,dribbleBias:1.35,shootBias:1.18,oneTwoBias:1.12,longShotBias:1.00,pressResistance:1.26,wideRunBias:0.92,specialBias:1.08,defensiveAggression:0.80},
   'R.Carlos':     {passBias:1.00,dribbleBias:1.10,shootBias:1.20,oneTwoBias:0.95,longShotBias:1.25,pressResistance:1.15,wideRunBias:1.30,specialBias:1.00,defensiveAggression:1.10},
   'Z.Zidane':     {passBias:1.25,dribbleBias:1.20,shootBias:1.10,oneTwoBias:1.15,longShotBias:1.05,pressResistance:1.30,wideRunBias:0.88,specialBias:1.05,defensiveAggression:0.85},
@@ -468,13 +472,17 @@ const STAR_STAT_OVERRIDES={
   'M.Soda':        {spd:76,dri:74,pas:72,sho:82,def:74,pow:70},
   'S.Aoi':         {spd:78,dri:84,pas:80,sho:84,def:68,pow:74},
   'K.H.Schneider': {spd:87,dri:84,pas:76,sho:96,def:52,pow:95},
+  'K.H.Falkner'  : {spd:87,dri:84,pas:76,sho:96,def:52,pow:95},
   'Natureza':      {spd:94,dri:98,pas:90,sho:96,def:52,pow:93},
   'Rivaul':        {spd:84,dri:94,pas:95,sho:90,def:60,pow:86},
   'C.Santana':     {spd:85,dri:89,pas:80,sho:92,def:54,pow:90},
   'Michael':       {spd:89,dri:95,pas:94,sho:97,def:72,pow:94},
   'A.Pirlo':       {spd:70,dri:84,pas:98,sho:84,def:70,pow:74},
+  'A.Sereni' :       {spd:70,dri:84,pas:98,sho:84,def:70,pow:74},
   'F.Totti':       {spd:79,dri:88,pas:91,sho:92,def:68,pow:86},
+  'F.Conti' :       {spd:79,dri:88,pas:91,sho:92,def:68,pow:86},
   'R.Baggio':      {spd:84,dri:94,pas:93,sho:88,def:52,pow:80},
+  'R.Manzini' :      {spd:84,dri:94,pas:93,sho:88,def:52,pow:80},
   'T.Frisina':     {spd:76,dri:82,pas:83,sho:96,def:82,pow:90},
   'M.Mancuso':     {spd:84,dri:86,pas:78,sho:91,def:54,pow:87},
   'E.Vella':       {spd:96,dri:84,pas:74,sho:86,def:52,pow:86},
@@ -617,16 +625,25 @@ function genericPlayerImage(){
   return genericPlayerImage._cache;
 }
 
-/* ── Brand safety (roadmap 0.3) ───────────────────────────────────────────────
-   Real federation and club crests are registered trademarks and must not ship.
-   The files in assets/team/ and assets/career/clubs/ are the REAL ones (the
-   Italy badge is the actual FIGC crest, etc), so with BRAND_SAFE on nothing
-   loads them: emblem lookups go to a fake/ subfolder first and otherwise fall
-   back to art we generate ourselves — the procedural club shield, or the plain
-   national flag emoji (a national flag is not a trademark; a federation crest
-   is). Drop replacements into assets/team/fake/{key}.png and they appear with
-   no code change. Flip BRAND_SAFE to false only for local reference. */
-const BRAND_SAFE = true;
+/* ── Emblem source switch ─────────────────────────────────────────────────
+   The crests in assets/team/ and assets/career/clubs/ are the author's OWN
+   copyright-free lookalikes — deliberately close to the real federation and
+   club badges without being them. They are the shipping art, so this stays OFF.
+   Turning BRAND_SAFE on re-routes every emblem lookup to a fake/ subfolder and
+   falls back to generated art (the procedural club shield, or the national flag
+   emoji). Kept as a switch so a crest can be swapped later without touching
+   five separate call sites. */
+const BRAND_SAFE = false;
+
+/* Duel hero sprites come from the sliced front/back sheets (roadmap D.0):
+   assets/players/front/{lastname}.png and .../back/{lastname}.png.
+   false  = a player with no sheet renders NOTHING. Author's call: missing art
+            should be obvious rather than papered over with the old full-body
+            illustrations, which read as a different game next to pixel art.
+            Note this also blanks career/story duel portraits.
+   true   = fall back to the previous portrait chain (club art, team crest,
+            SVG silhouette). Flip this one line to restore the old behaviour. */
+const DUEL_SPRITE_FALLBACK = false;
 function emblemSrcs(k, isClub){
   if(BRAND_SAFE)
     return isClub ? [`assets/team/fake/${k}.png`,`assets/career/clubs/fake/club${k}.png`]
@@ -863,11 +880,12 @@ function showReferee(msg,duration=1200){
 
 let selHome=null,selAway=null,HT=null,AT=null;
 let hSq={},aSq={};
-// Default: Japan (home) vs All Stars (away)
-const _japanIdx=DEMO_TEAMS.indexOf('japan');
-const _allstarIdx=DEMO_TEAMS.indexOf('allstar');
-let homeIdx=_japanIdx>=0?_japanIdx:0;
-let awayIdx=_allstarIdx>=0?_allstarIdx:1;
+// Default: Italy (home) vs Germany (away) — the two squads with finished,
+// original names, so a fresh exhibition match opens on our best foot.
+const _homeDefIdx=DEMO_TEAMS.indexOf('italy');
+const _awayDefIdx=DEMO_TEAMS.indexOf('germany');
+let homeIdx=_homeDefIdx>=0?_homeDefIdx:0;
+let awayIdx=_awayDefIdx>=0?_awayDefIdx:1;
 function calcTeamOvr(team){
   // Team OVR = the strongest XI a team can field. Average the best 11 by rating
   // so a deep/weak bench (or an under-marked `reserves` list) can never drag the
@@ -3501,6 +3519,17 @@ window.addEventListener('keydown',e=>{
      Attacking: O shoot, P super, L pass.  Defending: O shoulder, P tackle,
      L switch player. */
   if(e.repeat)return;
+  /* Roadmap B.2 — the on-screen PAUSE and GO buttons are gone, so these two
+     keys are now the only way to reach those actions (plus a pad later).
+     Esc/Tab = pause · Enter = confirm the duel (only fires when the duel is
+     actually ready, mirroring the old button's .rdy state). */
+  if(k==='escape'||k==='tab'){ e.preventDefault();
+    if(typeof togglePause==='function') togglePause(); return; }
+  if(k==='enter'){ e.preventDefault();
+    if(G.awaitKickoff==='h'){ doKickoff(); return; }
+    const cf=document.getElementById('dcfm');
+    if(cf && cf.classList.contains('rdy') && typeof confirmDuel==='function') confirmDuel();
+    return; }
   if(k==='o'){ e.preventDefault();
     if(G.awaitKickoff==='h'){doKickoff();return;}
     if(G.poss==='h') manualShot('shoot'); else startLunge('h','shoulder'); return; }
@@ -5069,10 +5098,41 @@ function fCard(role,pl,s,displayRole){
   try { isClubTeam = !!(teamKey && ((CR_CLUBS&&CR_CLUBS[teamKey])||(window.ST_CLUBS&&window.ST_CLUBS[teamKey]))); } catch(e){ isClubTeam=false; }
   const isGK = pl && pl.pos==='GK';
 
+  // ── Duel hero sprite (roadmap D.0) ──────────────────────────────────────
+  // Perspective is driven by displayRole, NOT by `role`. `role` is only the
+  // SLOT (a=left, d=right); the left slot holds the DEFENDER whenever the away
+  // side is attacking, so keying the view off the slot would show the wrong
+  // face every other duel. Attacker faces the camera, defender is seen from
+  // behind — and the same class drives the size/lift split in style.css.
+  const _isAtk   = String(displayRole||'').toUpperCase()==='ATTACKER';
+  const _heroDir = _isAtk ? 'front' : 'back';
+  // Same shape as the existing portrait chain: the named player first, then the
+  // team's generic card, then nothing. A team card means a player with no sheet
+  // of his own still shows a correctly-kitted body instead of a hole.
+  //   assets/players/front/conti.png  ->  assets/players/front/italy.png
+  // teamKey is the club key in career mode and the nation key in friendlies,
+  // so one directory covers both.
+  const _heroChain = [];
+  if(lastName) _heroChain.push('assets/players/'+_heroDir+'/'+lastName+'.png');
+  if(teamKey)  _heroChain.push('assets/players/'+_heroDir+'/'+teamKey+'.png');
+  const _heroBox = avEl.closest ? avEl.closest('.dhero') : null;
+  if(_heroBox){
+    _heroBox.classList.toggle('is-atk', _isAtk);
+    _heroBox.classList.toggle('is-def', !_isAtk);
+  }
+  // Sliced sheets are bottom-anchored on one shared canvas per player, so both
+  // views need no per-character CSS — see sheet-slicer.html.
+  const _showHero=(src)=>{
+    avEl.style.cssText='background:url("'+src+'") center bottom/contain no-repeat;color:transparent';
+    avEl.textContent='';
+  };
+  const _hideHero=()=>{ avEl.style.cssText='background:none;color:transparent'; avEl.textContent=''; };
+
   // GK: try per-player card first ({lastname}{clubkey}.png for clubs, or
   // assets/players/{lastname}.png for nationals), then fall back to the
   // universal gk.png placeholder, then to SVG silhouette.
   const _hpMain=_storyHeroCardPath(pl);
+  const _legacyPortrait=()=>{
   if(pl && isGK){
     const ln=(lastName||'').replace(/[^a-z0-9]/g,'');
     const specific = _hpMain || (isClubTeam
@@ -5136,6 +5196,23 @@ function fCard(role,pl,s,displayRole){
     avEl.style.cssText=`background:transparent;color:${tf};display:flex;align-items:center;justify-content:center;font-size:clamp(56px,128px,110px);font-family:'Bebas Neue',sans-serif;opacity:.18`;
     avEl.textContent='?';
   }
+  };
+
+  // Hide first so a missing sheet never flashes the previous player's art
+  // while the probe is in flight.
+  const _tryHero=(i)=>{
+    if(i>=_heroChain.length){
+      if(DUEL_SPRITE_FALLBACK) _legacyPortrait(); else _hideHero();
+      return;
+    }
+    const _hp=new Image();
+    _hp.onload =()=>_showHero(_heroChain[i]);
+    _hp.onerror=()=>_tryHero(i+1);
+    _hp.src=_heroChain[i];
+  };
+  _hideHero();
+  _tryHero(0);
+
   document.getElementById(p+'nm').textContent=pl?pl.name.split('.').pop():'—';
   document.getElementById(p+'ps').textContent=pl?pl.pos:'—';document.getElementById(p+'ps').style.color=tl;
   document.getElementById(p+'r').textContent=rl(pl?.rar||1);document.getElementById(p+'r').style.color=rcol;
@@ -5330,6 +5407,7 @@ const SPECIALS={
   'Aoi':        {l:'Fantasista Shot',  i:'✨',c:400},
   // ── EUROPE / WORLD ────────────────────────────────────────────
   'Schneider':  {l:'Fire Shot',        i:'🔥',c:400},
+  'Falkner':    {l:'Fire Shot',        i:'🔥',c:400},
   'Deuter':     {l:'Death Ball',       i:'💀',c:400},
   'Espadas':    {l:'El Tornado',       i:'🌪',c:400},
   'Napoleon':   {l:'Cannon Shot',      i:'💥',c:400},
@@ -5367,7 +5445,9 @@ const GK_SUPERS={
   'Wakabayashi': {l:'SSGK',         i:'🌟'},
   'Wakashimazu': {l:'God Hand',     i:'🤚'},
   'Muller':      {l:'Iron Wall',    i:'🧱'},
+  'Steiner':     {l:'Iron Wall',    i:'🧱'},
   'Buffon':      {l:'Colossus',     i:'🏛'},
+  'Donati':      {l:'Colossus',     i:'🏛'},
   'Casillas':    {l:'San Iker',     i:'🛡'},
   'Salinas':     {l:'El Muro',      i:'⚔️'},
   'Morisaki':    {l:'Miracle Hand', i:'✋'},
@@ -5391,18 +5471,53 @@ const BTN_IMG_MAP = {
   'super-pass':'special-pass','super-dribble':'special-dribble','super-one-two':'special-onetwo',
   'super-tackle':'special-tackle','super-intercept':'special-intercept','super-block':'special-block'
 };
-function actBtnInner(actionId, costTxt){
-  const img = BTN_IMG_MAP[actionId] || actionId;
-  return '<img class="dact3d-img" style="width:78px;max-width:78px;height:auto;display:block;" src="assets/ui/btn-'+img+'.png" alt=""><span class="dact3d-c">'+costTxt+'</span>';
+/* Action icons are inline SVG, not PNGs (roadmap A.2).
+   The old assets/ui/btn-*.png baked their glow and colour into the pixels, so a
+   selected button could only get an outer drop-shadow — the icon itself could
+   never change. These draw with `currentColor`, so CSS retints the glyph on
+   hover/selection and they stay crisp at any size. 17 image requests removed. */
+const ACT_SVG = (function(){
+  const g = (d)=>'<g fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round">'+d+'</g>';
+  return {
+    pass:      g('<circle cx="7" cy="16.5" r="3.6"/><path d="M10.4 13.6c2.8-4.6 7.4-5.8 10.4-4.8"/><path d="M18.6 6.4l2.6 2.2-2.1 2.6"/>'),
+    dribble:   g('<circle cx="17.5" cy="16.5" r="3.6"/><path d="M3 18.5l4-4.2 3 3 4-5.3"/>'),
+    shoot:     g('<circle cx="16" cy="12" r="5"/><path d="M2.5 8h5M1.5 12h4.2M2.5 16h5"/>'),
+    onetwo:    g('<path d="M4.5 9.5h12l-3.2-3.2"/><path d="M19.5 15h-12l3.2 3.2"/>'),
+    tackle:    g('<circle cx="18" cy="7.5" r="3"/><path d="M2.5 19.5l6.5-3.2 4 2"/><path d="M9 16.3l3.2-4.3"/>'),
+    intercept: g('<path d="M3.5 12h6.5"/><path d="M12.5 5.5v13"/><path d="M15.5 9l3.6 3-3.6 3"/>'),
+    block:     g('<path d="M12 3l7 3v6c0 4.2-2.9 7.3-7 9-4.1-1.7-7-4.8-7-9V6z"/>'),
+    save:      g('<path d="M6.5 20.5v-7.8a2.6 2.6 0 0 1 5.2 0V7.2a2 2 0 0 1 4 0v5.5h.9a2.4 2.4 0 0 1 2.4 2.4v1.5a4 4 0 0 1-4 4z"/>'),
+    punch:     g('<path d="M5 12.5V9.6a2 2 0 0 1 4 0m0 0V7.2a2 2 0 0 1 4 0v2.4m0 0a2 2 0 0 1 4 0v5.6a5 5 0 0 1-5 5h-2a5 5 0 0 1-5-5z"/>'),
+    special:   '<path d="M12 2.2l2.5 6.9L21.5 11.6l-6.9 2.5L12 21l-2.5-6.9L2.5 11.6l6.9-2.5z" fill="currentColor"/>',
+    super:     '<path d="M12 2.2l2.5 6.9L21.5 11.6l-6.9 2.5L12 21l-2.5-6.9L2.5 11.6l6.9-2.5z" fill="currentColor"/>'
+  };
+})();
+function actIconSvg(actionId){
+  // super-* / special-* reuse the base glyph; the panel already colours them
+  const base = String(actionId||'').replace(/^(super|special)-/,'');
+  const key  = BTN_IMG_MAP[base] || BTN_IMG_MAP[actionId] || base;
+  const body = ACT_SVG[key] || ACT_SVG[base] || ACT_SVG.special;
+  return '<span class="dact3d-ico" aria-hidden="true"><svg viewBox="0 0 24 24">'+body+'</svg></span>';
+}
+function actLabelFor(actionId,label){
+  if(label) return String(label);
+  // The label used to live inside the button PNG; derive a sane one if missing.
+  return String(actionId||'').replace(/^(super|special)-/,'').replace(/-/g,' ').toUpperCase();
+}
+function actBtnInner(actionId, costTxt, label){
+  return actIconSvg(actionId)
+       + '<span class="dact3d-l">'+actLabelFor(actionId,label)+'</span>'
+       + '<span class="dact3d-c">'+costTxt+'</span>';
 }
 function superToggleInner(on){
-  return '<img class="dact3d-img" style="width:78px;max-width:78px;height:auto;display:block;" src="assets/ui/btn-super.png" alt=""><span class="dact3d-c">'+(on?'ON':'OFF')+'</span>';
+  return actIconSvg('super')
+       + '<span class="dact3d-l">SUPER</span>'
+       + '<span class="dact3d-c">'+(on?'ON':'OFF')+'</span>';
 }
 
 // Apply/clear selection visuals directly via inline styles (cache-proof)
 const SEL_GLOW = {
   'dact-atk':'rgba(60,150,255,1)',
-  'dact-atk-2':'rgba(255,148,64,1)',
   'dact-def':'rgba(255,60,60,1)',
   'dact-sp':'rgba(255,210,80,1)',
   'dact-ss':'rgba(80,220,255,1)'
@@ -5421,7 +5536,7 @@ function applySelStyle(btn, mode){
     btn.style.background='';btn.style.boxShadow='';btn.style.opacity='';
     return;
   }
-  const key = mode==='sel2' ? 'dact-atk-2' : _btnType(btn);
+  const key = _btnType(btn);
   const c = SEL_GLOW[key] || 'rgba(255,255,255,.95)';
   if(img){
     img.style.filter='brightness(1.18) saturate(1.2) drop-shadow(0 3px 5px rgba(0,0,0,.55))';
@@ -5438,7 +5553,7 @@ function applySelStyle(btn, mode){
 // Dim sibling buttons (non-selected) for clarity
 function dimSiblings(container){
   container.querySelectorAll('.dact3d').forEach(b=>{
-    const isSel = b.classList.contains('dact-sel') || b.classList.contains('dact-sel2');
+    const isSel = b.classList.contains('dact-sel');
     const img = b.querySelector('img.dact3d-img');
     if(isSel){
       b.style.opacity='1';
@@ -5504,7 +5619,7 @@ function bldA(carrier,isShot){
     const costTxt=cost>0?(ok?'−'+cost+' SP':'⚡ LOW'):'FREE';
     const btn=document.createElement('button');
     btn.className='dact3d '+(isSp?'dact-sp':'dact-atk')+(ok?'':' dact-dis');
-    btn.innerHTML=actBtnInner(id,costTxt);
+    btn.innerHTML=actBtnInner(id,costTxt,lbl);
     if(ok)btn.onclick=()=>selA({id:id,l:lbl,i:icon,sp:isSp,ot:ot},btn);
     return btn;
   };
@@ -5539,7 +5654,7 @@ function bldD(def,ds,isShot){
     const costTxt=cost>0?(ok?'−'+cost+' SP':'⚡ LOW'):'FREE';
     const btn=document.createElement('button');
     btn.className='dact3d '+(isSp?'dact-ss':'dact-def')+(ok?'':' dact-dis');
-    btn.innerHTML=actBtnInner(id,costTxt);
+    btn.innerHTML=actBtnInner(id,costTxt,lbl);
     if(ok)btn.onclick=()=>selD({id:id,l:lbl,i:icon},btn);else btn.disabled=true;
     return btn;
   };
@@ -5572,7 +5687,7 @@ function bldD(def,ds,isShot){
 function selA(a,btn){
   btnPop(btn);
   G.D.ak=a.id;G.D.pk=null;
-  document.querySelectorAll('#abtns .dact3d').forEach(b=>{b.classList.remove('dact-sel');b.classList.remove('dact-sel2');applySelStyle(b,'clear');});
+  document.querySelectorAll('#abtns .dact3d').forEach(b=>{b.classList.remove('dact-sel');applySelStyle(b,'clear');});
   btn.classList.add('dact-sel');
   applySelStyle(btn,'sel');
   dimSiblings(document.getElementById('abtns'));
@@ -8906,8 +9021,8 @@ function _txRenderLog(){
 
   function renderTeamSelect(){
     const root=document.getElementById('s-ts'); if(!root) return;
-    if(!selHome) selHome='japan';
-    if(!selAway) selAway='allstar';
+    if(!selHome) selHome='italy';
+    if(!selAway) selAway='germany';
     if(CR_CLUBS[selHome]){ try{crBuildClubTeam(selHome);}catch(e){} }
     if(CR_CLUBS[selAway]){ try{crBuildClubTeam(selAway);}catch(e){} }
     HT=T[selHome]; AT=T[selAway];
