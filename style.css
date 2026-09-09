@@ -172,8 +172,8 @@ html,body{width:100%;height:100%;height:-webkit-fill-available;overflow:hidden;b
   margin-left:-1px;
 }
 .hm-item:hover:not(.locked),.hm-item.active{
-  border-left-color:var(--gold);
-  background:rgba(240,192,64,.06);
+  border-left-color:var(--u-accent);
+  background:rgba(var(--u-accent-rgb),.06);
 }
 .hm-item.active .hm-item-lbl{color:var(--gold);}
 .hm-item.active .hm-item-num{color:var(--gold);opacity:.7;}
@@ -227,7 +227,7 @@ html,body{width:100%;height:100%;height:-webkit-fill-available;overflow:hidden;b
 .ts-cat-btn:hover{border-color:rgba(240,192,64,.5);color:#fff}
 .ts-cat-btn.active{background:linear-gradient(180deg,#ffd566 0%,#f0c040 50%,#a8771a 100%);color:#1a0f00;border-color:#ffe28a;box-shadow:0 0 18px rgba(240,192,64,.4),inset 0 1px 0 rgba(255,255,255,.4)}
 .back-btn{padding:4px 10px;background:transparent;border:1px solid rgba(255,255,255,.15);color:var(--dim);font-family:'Orbitron',sans-serif;font-size:8px;letter-spacing:.2em;cursor:pointer;border-radius:3px;transition:.15s}
-.back-btn:hover{border-color:var(--gold);color:var(--gold)}
+.back-btn:hover{border-color:var(--u-accent);color:var(--u-accent)}
 /* Two-column layout — fills landscape perfectly */
 .ts-body{flex:1;display:flex;flex-direction:row;overflow:hidden;gap:0}
 .ts-col{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:clamp(4px,10.24px,10px);gap:clamp(3px,5.04px,8px);border-right:1px solid rgba(255,255,255,.06)}
@@ -281,7 +281,7 @@ html,body{width:100%;height:100%;height:-webkit-fill-available;overflow:hidden;b
 .ts-picker{position:relative;display:flex;align-items:center;justify-content:center;width:min(100%,360px);max-width:360px;min-height:220px;padding:0 58px;margin:0 auto}
 .ts-nav{position:absolute;top:50%;transform:translateY(-50%);width:46px;height:46px;border-radius:50%;border:1px solid rgba(255,255,255,.18);background:rgba(7,16,30,.96);color:#fff;font-family:"Orbitron",sans-serif;font-size:18px;cursor:pointer;z-index:3;box-shadow:0 6px 18px rgba(0,0,0,.45)}
 .ts-nav.left{left:4px}.ts-nav.right{right:4px}
-.ts-nav:hover{border-color:var(--gold);color:var(--gold)}
+.ts-nav:hover{border-color:var(--u-accent);color:var(--u-accent)}
 .ts-sel-strip.big{min-height:250px;width:100%;max-width:330px;justify-content:center;gap:12px;padding:20px 16px;border:1px solid rgba(255,255,255,.08);border-radius:10px;background:rgba(7,16,30,.72)}
 
 #s-team{background:linear-gradient(160deg,rgba(6,14,30,.82) 0%,rgba(4,8,14,.72) 100%),url('assets/wallpaper/teamedit.png') center/cover no-repeat;overflow:hidden}
@@ -295,7 +295,7 @@ html,body{width:100%;height:100%;height:-webkit-fill-available;overflow:hidden;b
 .tm-title{font-family:'Bebas Neue',sans-serif;font-size:18px;letter-spacing:.1em;color:var(--gold);margin-bottom:8px}
 .tm-formations{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:6px;margin-bottom:12px}
 .tm-fbtn{padding:7px 8px;border:1px solid rgba(255,255,255,.12);background:#0b1524;color:#fff;border-radius:8px;cursor:pointer;font-family:'Bebas Neue',sans-serif;letter-spacing:.1em;font-size:14px}
-.tm-fbtn.active{border-color:var(--gold);color:var(--gold);box-shadow:0 0 0 1px rgba(240,192,64,.18) inset;background:linear-gradient(180deg,rgba(240,192,64,.08),rgba(11,21,36,1))}
+.tm-fbtn.active{border-color:var(--u-accent);color:var(--u-accent);box-shadow:0 0 0 1px rgba(var(--u-accent-rgb),.18) inset;background:linear-gradient(180deg,rgba(var(--u-accent-rgb),.08),rgba(11,21,36,1))}
 .tm-slots{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px;align-content:start}
 .tm-slot{background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.08);border-radius:8px;padding:8px}
 .tm-slot label{display:block;font-family:'Orbitron',sans-serif;font-size:7px;letter-spacing:.18em;color:var(--dim);margin-bottom:5px}
@@ -887,7 +887,7 @@ canvas#C{position:absolute;inset:0;width:100%;height:100%}
   backdrop-filter:blur(4px);
   touch-action:manipulation;
 }
-.tm-back-float:hover{border-color:var(--gold);color:var(--gold)}
+.tm-back-float:hover{border-color:var(--u-accent);color:var(--u-accent)}
 .tm-section{background:rgba(255,255,255,.035);border:1px solid rgba(255,255,255,.08);border-radius:12px;padding:12px}
 .tm-section.stretch{margin-top:auto}
 .tm-title.sm{font-size:16px;margin-bottom:10px}
@@ -917,7 +917,7 @@ canvas#C{position:absolute;inset:0;width:100%;height:100%}
 .tm-bench-stats{font-family:'Orbitron',sans-serif;font-size:10px;letter-spacing:.14em;color:var(--gold);text-align:right}
 .tm-card.v6{width:72px;height:54px;border-radius:12px;background:linear-gradient(180deg,#1258b0,#0c4182);border:2px solid #2a86ff;justify-content:flex-start;padding-top:4px;gap:2px;cursor:pointer;transition:.15s transform,.15s box-shadow,.15s border-color}
 .tm-card.v6:hover{transform:translate(-50%,-50%) scale(1.03)}
-.tm-card.v6.selected{border-color:var(--gold);box-shadow:0 0 0 2px rgba(240,192,64,.22),0 0 22px rgba(240,192,64,.18),0 6px 18px rgba(0,0,0,.35)}
+.tm-card.v6.selected{border-color:var(--u-accent);box-shadow:0 0 0 2px rgba(var(--u-accent-rgb),.22),0 0 22px rgba(var(--u-accent-rgb),.18),0 6px 18px rgba(0,0,0,.35)}
 .tm-card.v6 .abbr{font-size:13px;opacity:.9}
 .tm-card.v6 .slot{font-family:'Orbitron',sans-serif;font-size:8px;letter-spacing:.14em;color:rgba(255,255,255,.78);line-height:1}
 .tm-card.v6 .pname{font-size:11px;max-width:60px;font-weight:700;opacity:1}
@@ -937,7 +937,7 @@ canvas#C{position:absolute;inset:0;width:100%;height:100%}
 .tm-formation-modal-title{font-family:'Bebas Neue',sans-serif;font-size:20px;letter-spacing:.1em;color:var(--gold);text-align:center}
 .tm-formation-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:10px}
 .tm-fopt{padding:14px 10px;border-radius:10px;border:1px solid rgba(255,255,255,.12);background:#0b1524;color:#fff;font-family:'Bebas Neue',sans-serif;font-size:18px;letter-spacing:.08em;cursor:pointer;transition:.15s}
-.tm-fopt:hover,.tm-fopt.active{border-color:var(--gold);color:var(--gold);background:rgba(240,192,64,.08)}
+.tm-fopt:hover,.tm-fopt.active{border-color:var(--u-accent);color:var(--u-accent);background:rgba(var(--u-accent-rgb),.08)}
 
 /* ── PLAYER INFO PANEL ───────────────────────────────────────────── */
 .tm-player-info-section{display:flex;gap:8px;align-items:flex-start}
@@ -1003,7 +1003,7 @@ canvas#C{position:absolute;inset:0;width:100%;height:100%}
 .tm-card.v6.gk-card{ border-color:#f0c040; border-width:3px; }
 .tm-card.v6.gk-card .tm-card-jersey{ background:rgba(180,120,0,.8); color:#fff; }
 .tm-card.v6.gk-card.selected{ border-color:#fff; box-shadow:0 0 0 2px rgba(255,255,255,.4),0 0 18px rgba(240,192,64,.5); }
-.tm-card.v6.selected{border-color:var(--gold);box-shadow:0 0 0 2px rgba(240,192,64,.3),0 0 18px rgba(240,192,64,.25)}
+.tm-card.v6.selected{border-color:var(--u-accent);box-shadow:0 0 0 2px rgba(var(--u-accent-rgb),.3),0 0 18px rgba(var(--u-accent-rgb),.25)}
 .tm-card.v6.drag-over{border-color:#00c8ff;box-shadow:0 0 14px rgba(0,200,255,.6)}
 .tm-card-jersey{font-family:'Orbitron',sans-serif;font-size:9px;font-weight:700;color:#fff;background:rgba(0,0,0,.55);border-radius:3px;padding:1px 3px;align-self:flex-start;line-height:1;flex-shrink:0;position:relative;z-index:2}
 .tm-card-name{font-family:'Rajdhani',sans-serif;font-size:9px;font-weight:700;color:#fff;text-align:center;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;background:rgba(0,0,0,.65);border-radius:3px;padding:1px 3px;width:100%;position:relative;z-index:2}
@@ -3343,7 +3343,7 @@ html,body{overscroll-behavior:none;}
 .pz-opt{display:flex;align-items:center;gap:12px;padding:11px 14px;border-radius:7px;cursor:pointer;
   border:1px solid transparent;margin-bottom:5px;transition:.15s}
 .pz-opt:hover{background:rgba(240,192,64,.07);border-color:var(--bdr,rgba(240,192,64,.18))}
-.pz-opt.pz-sel{background:linear-gradient(90deg,rgba(240,192,64,.16),rgba(240,192,64,.03));border-color:var(--gold,#f0c040)}
+.pz-opt.pz-sel{background:linear-gradient(90deg,rgba(var(--u-accent-rgb),.16),rgba(var(--u-accent-rgb),.03));border-color:var(--u-accent)}
 .pz-ic{width:28px;height:28px;border-radius:6px;display:flex;align-items:center;justify-content:center;
   background:rgba(255,255,255,.05);font-size:13px;flex-shrink:0}
 .pz-opt.pz-sel .pz-ic{background:var(--gold,#f0c040);color:#0a0c12}
@@ -3966,7 +3966,7 @@ html.ue-phone #vjoy-base{transform:scale(calc(0.5 + 0.5*var(--tb)));transform-or
   text-align:left; padding:0 0 .55em .7em; opacity:.7;
   text-shadow:0 2px 5px rgba(0,0,0,.9);
 }
-#duel-ov .dmenu.normal .dmenu-h{ color:rgba(var(--u-home-rgb),.95)!important; }
+#duel-ov .dmenu.normal .dmenu-h{ color:rgba(var(--u-accent-rgb),.95)!important; }
 #duel-ov .dmenu.special .dmenu-h{ color:rgba(var(--u-magic-rgb),.95)!important; }
 
 /* ── the row ── */
@@ -3974,8 +3974,16 @@ html.ue-phone #vjoy-base{transform:scale(calc(0.5 + 0.5*var(--tb)));transform-or
   display:flex!important; align-items:center; gap:.7em;
   width:100%; padding:.40em .9em;
   /* its own panel — dark, slightly translucent, thin edge */
+  /* appearance:none is required or mobile Safari renders this as a native
+     control and silently drops the gradient AND the border — which is what
+     made the rows look fully transparent on the phone while being correct on
+     desktop. The solid colour after the gradient is a second safety net: if a
+     browser drops the image layer, the panel still paints. */
+  appearance:none!important; -webkit-appearance:none!important; -moz-appearance:none!important;
   background:linear-gradient(180deg,
-      rgba(var(--u-panel-rgb),.93),rgba(var(--u-panel-rgb),.80))!important;
+      rgba(var(--u-panel-rgb),.93),rgba(var(--u-panel-rgb),.80))
+      rgba(var(--u-panel-rgb),.90)!important;
+  background-clip:padding-box!important;
   border:var(--u-hair) solid var(--u-edge-strong)!important;
   border-radius:var(--u-r-md)!important;
   box-shadow:0 2px 8px rgba(0,0,0,.45);
@@ -3996,16 +4004,16 @@ html.ue-phone #vjoy-base{transform:scale(calc(0.5 + 0.5*var(--tb)));transform-or
    family colour now sits on the ROW edge: present at rest, brighter on
    hover, and still fully filled when selected. */
 #duel-ov .dact-atk,#duel-ov .dact-def{
-  border-color:rgba(var(--u-home-rgb),.45)!important;
-  box-shadow:0 2px 8px rgba(0,0,0,.45),inset 0 0 14px rgba(var(--u-home-rgb),.12);
+  border-color:rgba(var(--u-accent-rgb),.45)!important;
+  box-shadow:0 2px 8px rgba(0,0,0,.45),inset 0 0 14px rgba(var(--u-accent-rgb),.12);
 }
 #duel-ov .dact-sp,#duel-ov .dact-ss{
   border-color:rgba(var(--u-magic-rgb),.45)!important;
   box-shadow:0 2px 8px rgba(0,0,0,.45),inset 0 0 14px rgba(var(--u-magic-rgb),.12);
 }
 #duel-ov .dact-atk:hover,#duel-ov .dact-def:hover{
-  border-color:rgba(var(--u-home-rgb),.85)!important;
-  box-shadow:0 2px 10px rgba(0,0,0,.5),inset 0 0 18px rgba(var(--u-home-rgb),.22);
+  border-color:var(--u-accent-bright)!important;
+  box-shadow:0 2px 10px rgba(0,0,0,.5),inset 0 0 18px rgba(var(--u-accent-rgb),.22);
 }
 #duel-ov .dact-sp:hover,#duel-ov .dact-ss:hover{
   border-color:rgba(var(--u-magic-rgb),.85)!important;
@@ -4039,21 +4047,21 @@ html.ue-phone #vjoy-base{transform:scale(calc(0.5 + 0.5*var(--tb)));transform-or
 
 /* ── SELECTED — the filled bar, bright at the left and fading out ── */
 #duel-ov .dact-atk.dact-sel,#duel-ov .dact-def.dact-sel{
-  background:linear-gradient(90deg,rgba(var(--u-home-rgb),.92) 0%,rgba(var(--u-home-rgb),.55) 55%,rgba(var(--u-home-rgb),.30) 100%)!important;
-  border-color:rgba(var(--u-home-rgb),.95)!important;
-  box-shadow:0 0 20px rgba(var(--u-home-rgb),.55),inset 0 1px 0 rgba(255,255,255,.28);
+  background:linear-gradient(90deg,rgba(var(--u-accent-rgb),.62) 0%,var(--u-sel-fill) 62%)!important;
+  border-color:var(--u-accent-bright)!important;
+  box-shadow:0 0 18px rgba(var(--u-accent-rgb),.45),inset 0 1px 0 rgba(255,255,255,.22);
 }
 #duel-ov .dact-sp.dact-sel,#duel-ov .dact-ss.dact-sel{
-  background:linear-gradient(90deg,rgba(var(--u-magic-rgb),.92) 0%,rgba(var(--u-magic-rgb),.55) 55%,rgba(var(--u-magic-rgb),.30) 100%)!important;
+  background:linear-gradient(90deg,rgba(var(--u-magic-rgb),.62) 0%,#2a0f5c 62%)!important;
   border-color:rgba(var(--u-magic-rgb),.95)!important;
-  box-shadow:0 0 20px rgba(var(--u-magic-rgb),.55),inset 0 1px 0 rgba(255,255,255,.28);
+  box-shadow:0 0 18px rgba(var(--u-magic-rgb),.45),inset 0 1px 0 rgba(255,255,255,.22);
 }
 #duel-ov .dact-sel .dact3d-l{ color:var(--u-ink-strong); }
 #duel-ov .dact-sel .dact3d-c{ color:rgba(255,255,255,.72); }
 #duel-ov .dact-sel .dact3d-ico{ color:var(--u-ink-strong); opacity:1; }
 
 /* idle icon tint per family */
-#duel-ov .dact-atk .dact3d-ico,#duel-ov .dact-def .dact3d-ico{ color:rgba(var(--u-home-rgb),.9); }
+#duel-ov .dact-atk .dact3d-ico,#duel-ov .dact-def .dact3d-ico{ color:rgba(var(--u-accent-rgb),.9); }
 #duel-ov .dact-sp .dact3d-ico,#duel-ov .dact-ss .dact3d-ico{ color:rgba(var(--u-magic-rgb),.9); }
 
 /* unaffordable */
@@ -4084,20 +4092,19 @@ html.ue-phone #vjoy-base{transform:scale(calc(0.5 + 0.5*var(--tb)));transform-or
   position:absolute; bottom:0; height:var(--duel-hero-h); width:21em;
   z-index:4; pointer-events:none;
 }
-/* Horizontal placement is the SLOT — which side of the screen this card is. */
-#duel-ov .dhero.left { left:var(--duel-hero-inset); right:auto; }
-#duel-ov .dhero.right{ right:calc(var(--duel-hero-inset) - 2%); left:auto; }
-
-/* Perspective is the ROLE, not the slot. fCard() stamps .is-atk / .is-def on
-   the hero box. The left slot holds the DEFENDER whenever the away side is
-   attacking (see leftRole/rightRole at the opDuel call site), so binding size
-   and lift to .left/.right drew the NEAR player small-and-raised every other
-   duel — the exact perspective error these numbers exist to fix. */
-#duel-ov .dhero.is-atk{
+/* Both placement AND perspective follow the SLOT. The sprites are a matched
+   pair — front posed facing right, back posed facing left — so left is always
+   the front view and right always the back view. The back view is the one
+   nearest the camera, hence bigger and grounded lowest; the front view stands
+   further up the pitch, so it is smaller and lifted. Sides swap at half time
+   (homeLeft), which is how the human goes from front view to back view. */
+#duel-ov .dhero.left{
+  left:var(--duel-hero-inset); right:auto;
   height:var(--duel-hero-h);
   bottom:var(--duel-hero-lift);        /* further up the pitch = smaller, raised */
 }
-#duel-ov .dhero.is-def{
+#duel-ov .dhero.right{
+  right:calc(var(--duel-hero-inset) - 2%); left:auto;
   height:var(--duel-hero-h-cpu);
   bottom:0;                            /* nearest the camera, lowest baseline */
 }

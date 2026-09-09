@@ -1,0 +1,180 @@
+/* ═══════════════════════════════════════════════════════════════════════════
+   ULTIMATE ELEVEN — DESIGN TOKENS                        roadmap A.1 · 2026-09
+   ---------------------------------------------------------------------------
+   THE single source of truth for colour, type and geometry.
+   Target look: Octopath Traveler / HD-2D — near-black translucent panels, one
+   warm gold rule, serif small-caps, pixel numerals.
+
+   RULES
+   1. No raw colour literals in style.css. Use a token.
+   2. No new font family without editing this file.
+   3. Legacy aliases at the bottom map the old variable names onto tokens, so
+      the ~200 rules that already use var(--gold) etc. are token-driven with no
+      edit. Do not add new uses of the legacy names — use the --u-* tokens.
+   4. Loaded BEFORE style.css in index.html so style.css can override during
+      the A.2 retrofit.
+
+   Audit that produced this palette (2026-09-08): style.css contained 178
+   distinct hex colours and 480 distinct rgba() values across 3 competing
+   variable systems (--gold*, --ue-*, --ff-*). Everything below is consolidated
+   from the colours actually in use, not invented.
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+:root{
+
+  /* ── SURFACES ─────────────────────────────────────────────────────────────
+     Deep, cool, near-black. HD-2D panels sit ON the art, so they are dark and
+     translucent rather than opaque grey. */
+  --u-void:        #000000;                      /* letterbox bars only */
+  --u-bg:          #030a18;                      /* app / viewport ground */
+  --u-bg-raise:    #071634;                      /* raised ground, tiles */
+  --u-panel-rgb:   2,10,26;                      /* panel surface triplet */
+  --u-panel:       rgba(var(--u-panel-rgb),.88);  /* standard panel fill */
+  --u-panel-thin:  rgba(var(--u-panel-rgb),.55);  /* translucent overlay control */
+  --u-panel-solid: #0a1a3a;                      /* when it must be opaque */
+  --u-panel-deep:  rgba(1,6,18,.94);             /* modal / overlay fill */
+  --u-scrim:       rgba(2,8,20,.66);             /* dim the art behind UI */
+  --u-inset:       rgba(0,0,0,.28);              /* recessed plate inside a panel */
+
+  /* ── INK ─────────────────────────────────────────────────────────────────
+     Cream over pure white — pure white reads clinical against warm gold. */
+  --u-ink:         #fbfbfc;                      /* primary text */
+  --u-ink-strong:  #ffffff;                      /* numerals, key values */
+  --u-ink-dim:     #9fb2cc;                      /* secondary / labels */
+  --u-ink-mute:    #48586a;                      /* disabled, captions */
+
+  /* ── ACCENT — BLUE is the accent ─────────────────────────────────────────
+     Measured off the reference mockups (2026-09-09): counting UI chrome only,
+     navy surface 87.5%, accent blue 10.9%, gold 1.7%. Blue carries every rule,
+     frame, marker and selection; gold is demoted to ratings and trim.
+     Kept SEPARATE from --u-home so a red home team cannot re-hue the UI. */
+  --u-accent-rgb:  38,126,226;                   /* measured #267ee2 */
+  --u-accent:      rgb(var(--u-accent-rgb));
+  --u-accent-bright: #4a9bf0;                    /* hover / focus edge */
+  --u-sel-fill:    #04275f;                      /* selected row INTERIOR — deep,
+                                                    the bright edge does the work */
+
+  /* ── GOLD — ratings, awards and trim only ────────────────────────────────
+     No longer a frame colour. See STYLE.md for why this rule changed. */
+  --u-gold-rgb:    240,192,64;                   /* EDIT THIS to re-hue the UI */
+  --u-gold:        rgb(var(--u-gold-rgb));       /* the rule / accent */
+  --u-gold-bright: #ffd24a;                      /* hover, active, focus */
+  --u-gold-pale:   #ffe27a;                      /* small highlights */
+  --u-gold-deep:   #a8771a;                      /* pressed, shadowed edge */
+  --u-cream:       #f4ecd4;                      /* gold-adjacent text */
+
+  /* ── TEAM ────────────────────────────────────────────────────────────────
+     Home = blue, away = red. Set on elements as --tc/--tf by fCard(). */
+  --u-home-rgb:    40,130,240;
+  --u-away-rgb:    240,48,48;
+  --u-home:        rgb(var(--u-home-rgb));
+  --u-home-deep:   #1258b0;
+  --u-away:        rgb(var(--u-away-rgb));
+  --u-away-deep:   #b81616;
+
+  /* ── STATE ───────────────────────────────────────────────────────────────── */
+  --u-good:        #20c878;                      /* success, stamina full */
+  --u-warn:        #ffb020;                      /* caution, low stamina */
+  --u-bad:         #dc2020;                      /* failure, red card */
+  --u-special:     #44c8ff;                      /* super/special actions */
+  --u-magic-rgb:   150,96,255;                   /* SPECIAL actions — purple.
+                                                    Gold is reserved for UI chrome
+                                                    (rules/frames), never actions. */
+  --u-magic:       rgb(var(--u-magic-rgb));
+
+  /* ── LINES ───────────────────────────────────────────────────────────────
+     One hairline language: a thin warm rule, or a faint white edge. Never a
+     thick border — HD-2D panels are defined by contrast, not by chrome. */
+  --u-rule:        rgba(var(--u-accent-rgb),.45); /* the accent hairline */
+  --u-rule-soft:   rgba(var(--u-accent-rgb),.20); /* barely-there accent */
+  --u-edge:        rgba(255,255,255,.08);        /* neutral inner edge */
+  --u-edge-strong: rgba(255,255,255,.18);
+
+  /* ── SHADOW / GLOW ───────────────────────────────────────────────────────── */
+  --u-shadow-1:    0 2px 6px rgba(0,0,0,.55);
+  --u-shadow-2:    0 6px 18px rgba(0,0,0,.60);
+  --u-shadow-3:    0 14px 40px rgba(0,0,0,.70);
+  --u-glow-gold:   0 0 16px rgba(var(--u-gold-rgb),.35);   /* gold objects only */
+  --u-glow-accent: 0 0 16px rgba(var(--u-accent-rgb),.42);
+  --u-glow-home:   0 0 16px rgba(var(--u-home-rgb),.50);
+  --u-glow-away:   0 0 16px rgba(var(--u-away-rgb),.50);
+  --u-text-shadow: 0 2px 4px rgba(0,0,0,.95);    /* legibility over art */
+
+  /* ── GEOMETRY ────────────────────────────────────────────────────────────
+     Small radii only. Octopath frames are near-square with cut corners; the
+     duel infobox notch is the one signature shape. */
+  --u-r-sm:        3px;
+  --u-r-md:        6px;
+  --u-r-lg:        10px;
+  --u-hair:        1px;                          /* every border width */
+  --u-notch:       14px;                         /* duel infobox diagonal cut */
+
+  /* ── TYPE ────────────────────────────────────────────────────────────────
+     Three faces, three jobs. Nothing else ships.
+       display — Cinzel serif: titles, team names, section headers, in caps
+       ui      — Rajdhani: everything readable; labels, buttons, body
+       num     — Bold Pixel: score, clock, OVR, stats, shirt numbers ONLY
+     NOTE: BoldPixels is single-weight — never ask for a synthetic bold, see
+     the @font-face weight range and font-synthesis:none in style.css. */
+  --u-font-display: 'Cinzel', Georgia, 'Times New Roman', serif;
+  --u-font-ui:      'Rajdhani', 'Segoe UI', system-ui, sans-serif;
+  --u-font-num:     'Bold Pixel', 'Orbitron', monospace;
+
+  /* Type scale — relative, so a panel sets its own em and children follow.
+     Panels set font-size:min(1.55vw,2.7vh) style clamps; these are the steps. */
+  --u-fs-xs:       .62em;                        /* micro labels, ALL CAPS */
+  --u-fs-sm:       .78em;                        /* secondary text */
+  --u-fs-md:       1em;                          /* body */
+  --u-fs-lg:       1.22em;                       /* card names */
+  --u-fs-xl:       1.6em;                        /* screen titles */
+  --u-fs-num:      1.58em;                       /* numerals in the HUD — the pixel
+                                                    zero needs size for its counter */
+
+  --u-track-tight: .04em;
+  --u-track:       .10em;                        /* default caps tracking */
+  --u-track-wide:  .22em;                        /* micro caps labels */
+
+  /* ── MOTION ───────────────────────────────────────────────────────────────── */
+  --u-fast:        .14s;
+  --u-base:        .26s;
+  --u-slow:        .5s;
+  --u-ease:        cubic-bezier(.3,.8,.4,1);
+
+  /* ═══ LEGACY ALIASES ══════════════════════════════════════════════════
+     The old names, now defined HERE instead of in style.css, so this file is
+     the only place colour lives. ~200 existing rules already use these, so the
+     UI becomes reskinnable today without editing 3800 lines.
+
+     A.1 IS A REFACTOR: every alias below reproduces its previous value exactly,
+     so nothing changes on screen. Where the legacy value differs from the token
+     it should eventually use, that is marked `A.2:` — those are deliberate
+     visual decisions for the retrofit step, not to be smuggled in here.
+     Do not add new uses of these names; use the --u-* tokens. */
+  --gold:      var(--u-gold);
+  --gold-b:    var(--u-gold-bright);
+  --gold2:     #7a5a08;                    /* A.2: → --u-gold-deep */
+  --red:       var(--u-bad);
+  --rf:        var(--u-away-deep);
+  --rl:        var(--u-away);
+  --blue:      #1e72dc;                    /* A.2: → --u-home */
+  --bf:        var(--u-home-deep);
+  --bl:        var(--u-home);
+  --sp:        var(--u-special);
+  --green:     var(--u-good);
+  --bg:        var(--u-bg);
+  --panel:     rgba(5,7,12,.97);           /* A.2: → --u-panel-deep */
+  --bdr:       var(--u-rule-soft);
+  --dim:       var(--u-ink-mute);
+  --w:         #eceff4;                    /* A.2: → --u-ink (warmer cream) */
+
+  /* duel premium set — was a second :root further down style.css */
+  --ff-gold:   #e8d29a;                    /* A.2: → --u-gold-pale */
+  --ff-gold-lo:#b9975a;
+  --ff-cream:  var(--u-cream);
+}
+
+/* The home menu still carries its own component-scoped palette on .ue-home
+   (--ue-accent / --ue-gold / --ue-bg ...). It is intentionally left alone in
+   A.1 because folding it in changes how that screen looks — that is an A.2
+   decision. Until then, the home screen is NOT reskinnable from this file.
+   See STYLE.md § "Known gaps". */
