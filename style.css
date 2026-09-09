@@ -3956,7 +3956,7 @@ html.ue-phone #vjoy-base{transform:scale(calc(0.5 + 0.5*var(--tb)));transform-or
 #duel-ov #abtns,#duel-ov #dbtns{ align-items:flex-start; gap:2.2em; }
 #duel-ov .dmenu-btns{
   display:flex!important; flex-direction:column!important;
-  align-items:stretch!important; gap:.34em!important; width:100%;
+  align-items:stretch!important; gap:.42em!important; width:100%;
 }
 
 /* ── quiet section header ── */
@@ -3972,7 +3972,7 @@ html.ue-phone #vjoy-base{transform:scale(calc(0.5 + 0.5*var(--tb)));transform-or
 /* ── the row ── */
 #duel-ov .dact3d{
   display:flex!important; align-items:center; gap:.7em;
-  width:100%; padding:.40em .9em;
+  width:100%; padding:.62em .9em;   /* taller: 15px rows were untappable twice */
   /* its own panel — dark, slightly translucent, thin edge */
   /* appearance:none is required or mobile Safari renders this as a native
      control and silently drops the gradient AND the border — which is what
@@ -3981,8 +3981,8 @@ html.ue-phone #vjoy-base{transform:scale(calc(0.5 + 0.5*var(--tb)));transform-or
      browser drops the image layer, the panel still paints. */
   appearance:none!important; -webkit-appearance:none!important; -moz-appearance:none!important;
   background:linear-gradient(180deg,
-      rgba(var(--u-panel-rgb),.93),rgba(var(--u-panel-rgb),.80))
-      rgba(var(--u-panel-rgb),.90)!important;
+      rgba(var(--u-panel-rgb),.97),rgba(var(--u-panel-rgb),.90))
+      rgba(var(--u-panel-rgb),.95)!important;
   background-clip:padding-box!important;
   border:var(--u-hair) solid var(--u-edge-strong)!important;
   border-radius:var(--u-r-md)!important;

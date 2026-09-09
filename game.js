@@ -5099,13 +5099,16 @@ function fCard(role,pl,s,displayRole){
   const isGK = pl && pl.pos==='GK';
 
   // ── Duel hero sprite (roadmap D.0) ──────────────────────────────────────
-  // Perspective is driven by displayRole, NOT by `role`. `role` is only the
-  // SLOT (a=left, d=right); the left slot holds the DEFENDER whenever the away
-  // side is attacking, so keying the view off the slot would show the wrong
-  // face every other duel. Attacker faces the camera, defender is seen from
-  // behind — and the same class drives the size/lift split in style.css.
-  const _isAtk   = String(displayRole||'').toUpperCase()==='ATTACKER';
-  const _heroDir = _isAtk ? 'front' : 'back';
+  // The view follows the SLOT, not the role. The art is a matched pair for a
+  // left-right confrontation: the front sprite is posed facing RIGHT and the
+  // back sprite facing LEFT. So whoever stands on the left must be the front
+  // view and whoever stands on the right must be the back view, or the two of
+  // them end up facing away from each other. Which player occupies which slot
+  // already flips at half time via homeLeft (G.half===1) at the opDuel call
+  // site, so the human is seen from the front in the first half and from
+  // behind in the second — the sides swap, the geometry stays correct.
+  const _isLeft  = (role === 'a');
+  const _heroDir = _isLeft ? 'front' : 'back';
   // Same shape as the existing portrait chain: the named player first, then the
   // team's generic card, then nothing. A team card means a player with no sheet
   // of his own still shows a correctly-kitted body instead of a hole.
@@ -5115,11 +5118,6 @@ function fCard(role,pl,s,displayRole){
   const _heroChain = [];
   if(lastName) _heroChain.push('assets/players/'+_heroDir+'/'+lastName+'.png');
   if(teamKey)  _heroChain.push('assets/players/'+_heroDir+'/'+teamKey+'.png');
-  const _heroBox = avEl.closest ? avEl.closest('.dhero') : null;
-  if(_heroBox){
-    _heroBox.classList.toggle('is-atk', _isAtk);
-    _heroBox.classList.toggle('is-def', !_isAtk);
-  }
   // Sliced sheets are bottom-anchored on one shared canvas per player, so both
   // views need no per-character CSS — see sheet-slicer.html.
   const _showHero=(src)=>{
@@ -5559,8 +5557,11 @@ function dimSiblings(container){
       b.style.opacity='1';
       if(img)img.style.opacity='1';
     } else {
-      b.style.opacity='.42';
-      if(img)img.style.opacity='.55';
+      // .42 was low enough that the unselected rows read as empty text on the
+      // pitch. Inline opacity also beats any alpha set in the stylesheet, so
+      // this is the value that actually controls how solid the menu looks.
+      b.style.opacity='.78';
+      if(img)img.style.opacity='.72';
     }
   });
 }
@@ -5685,6 +5686,14 @@ function bldD(def,ds,isShot){
 }
 
 function selA(a,btn){
+  // Second tap on the already-selected action confirms it. The GO button is
+  // gone, so this is the only confirm phones have; PC keeps Enter as well.
+  // Gated on #dcfm.rdy so a pass/one-two still can't fire before a target is
+  // picked — that is the same readiness test the old button used.
+  if(btn.classList.contains('dact-sel') &&
+     document.getElementById('dcfm').classList.contains('rdy')){
+    confirmDuel(); return;
+  }
   btnPop(btn);
   G.D.ak=a.id;G.D.pk=null;
   document.querySelectorAll('#abtns .dact3d').forEach(b=>{b.classList.remove('dact-sel');applySelStyle(b,'clear');});
@@ -5705,7 +5714,12 @@ function selA(a,btn){
     chkRdy();
   }
 }
-function selD(a,btn){btnPop(btn);G.D.defA=a.id;document.querySelectorAll('#dbtns .dact3d').forEach(b=>{b.classList.remove('dact-sel');applySelStyle(b,'clear');});btn.classList.add('dact-sel');applySelStyle(btn,'sel');dimSiblings(document.getElementById('dbtns'));chkRdy();}
+function selD(a,btn){
+  if(btn.classList.contains('dact-sel') &&
+     document.getElementById('dcfm').classList.contains('rdy')){
+    confirmDuel(); return;
+  }
+  btnPop(btn);G.D.defA=a.id;document.querySelectorAll('#dbtns .dact3d').forEach(b=>{b.classList.remove('dact-sel');applySelStyle(b,'clear');});btn.classList.add('dact-sel');applySelStyle(btn,'sel');dimSiblings(document.getElementById('dbtns'));chkRdy();}
 function chkRdy(){
   const akB=baseAction(G.D.ak||'');
   const needsPk=akB==='pass'||akB==='one-two';
