@@ -383,11 +383,11 @@ html,body{width:100%;height:100%;height:-webkit-fill-available;overflow:hidden;b
   position:absolute; top:clamp(4px,0.9vh,10px); left:50%; transform:translateX(-50%);
   display:flex; align-items:stretch; justify-content:center;
   width:max-content; max-width:96%; margin:0;
-  flex-shrink:0; height:clamp(34px,4.6vh,46px);
+  flex-shrink:0; height:34px; /* was clamp(34px,4.6vh,46px) — floor at design size */
   background:linear-gradient(180deg,var(--u-panel),var(--u-panel-deep));
   border:var(--u-hair) solid var(--u-rule); border-radius:var(--u-r-md);
   box-shadow:var(--u-shadow-2),var(--u-glow-gold);
-  overflow:hidden; z-index:12; font-size:min(1.55vw,2.7vh);
+  overflow:hidden; z-index:12; font-size:19.44px; /* was min(1.55vw,2.7vh) — see #duel-ov note */
 }
 .mhud::after{display:none;}
 /* Team cluster — name centered, emblem pinned to outer edge (inside the white slanted box of the scoreboard graphic) */
@@ -3742,7 +3742,13 @@ html.ue-phone #vjoy-base{transform:scale(calc(0.5 + 0.5*var(--tb)));transform-or
    Wires the duel-mockup look into #duel-ov. Team colour per side via
    --tc / --tf (set by fCard). Layout mirrors the static mockup.
    ═══════════════════════════════════════════════════════════════════ */
-#duel-ov.duel-aaa{ font-size:min(1.42vw,2.5vh); }
+/* The stage (#viewport) is pinned to a fixed 1280x720 by fitViewport() and
+   scaled to the device with --vp-scale, so vw/vh INSIDE it measure the browser
+   window, not the stage. On a short landscape phone window this collapsed the
+   duel's base em from 18px to ~10px while px-floored labels stayed put, which
+   is what shrank the headers and threw the panel proportions out.
+   18px == min(1.42vw,2.5vh) evaluated at 1280x720, so desktop is unchanged. */
+#duel-ov.duel-aaa{ font-size:18px; }
 #duel-ov .dvs{ display:none!important; }
 /* let the real (frozen) pitch show through — only darken the edges a touch */
 #duel-ov .da-bg{ background:radial-gradient(120% 85% at 50% 42%,transparent 40%,rgba(3,6,12,.55) 100%)!important; }
@@ -3981,8 +3987,30 @@ html.ue-phone #vjoy-base{transform:scale(calc(0.5 + 0.5*var(--tb)));transform-or
 }
 #duel-ov .dact3d:hover{ transform:translateX(3px); filter:none;
   background:linear-gradient(180deg,
-      rgba(var(--u-panel-rgb),.97),rgba(var(--u-panel-rgb),.88))!important;
-  border-color:var(--u-edge-strong)!important; }
+      rgba(var(--u-panel-rgb),.97),rgba(var(--u-panel-rgb),.88))!important; }
+
+/* ── resting column identity ────────────────────────────────────────────
+   The container has no box any more (each action is its own rectangle), so
+   the blue/purple that used to live on the .dmenu border had nowhere to go
+   and the two columns read identically until something was selected. The
+   family colour now sits on the ROW edge: present at rest, brighter on
+   hover, and still fully filled when selected. */
+#duel-ov .dact-atk,#duel-ov .dact-def{
+  border-color:rgba(var(--u-home-rgb),.45)!important;
+  box-shadow:0 2px 8px rgba(0,0,0,.45),inset 0 0 14px rgba(var(--u-home-rgb),.12);
+}
+#duel-ov .dact-sp,#duel-ov .dact-ss{
+  border-color:rgba(var(--u-magic-rgb),.45)!important;
+  box-shadow:0 2px 8px rgba(0,0,0,.45),inset 0 0 14px rgba(var(--u-magic-rgb),.12);
+}
+#duel-ov .dact-atk:hover,#duel-ov .dact-def:hover{
+  border-color:rgba(var(--u-home-rgb),.85)!important;
+  box-shadow:0 2px 10px rgba(0,0,0,.5),inset 0 0 18px rgba(var(--u-home-rgb),.22);
+}
+#duel-ov .dact-sp:hover,#duel-ov .dact-ss:hover{
+  border-color:rgba(var(--u-magic-rgb),.85)!important;
+  box-shadow:0 2px 10px rgba(0,0,0,.5),inset 0 0 18px rgba(var(--u-magic-rgb),.22);
+}
 #duel-ov .dact3d:active{ transform:translateX(1px); }
 
 /* icon — small, quiet, never competes with the word */
@@ -3993,7 +4021,7 @@ html.ue-phone #vjoy-base{transform:scale(calc(0.5 + 0.5*var(--tb)));transform-or
 #duel-ov .dact3d .dact3d-l{
   flex:1 1 auto; min-width:0;
   font-family:var(--u-font-display)!important; font-weight:700;
-  font-size:clamp(15px,1.15vw,20px)!important; letter-spacing:.02em!important;
+  font-size:15px!important; letter-spacing:.02em!important; /* px: stage is fixed 1280x720 */
   text-transform:none!important;
   color:var(--u-cream);
   white-space:nowrap; overflow:hidden; text-overflow:ellipsis;
@@ -4004,7 +4032,7 @@ html.ue-phone #vjoy-base{transform:scale(calc(0.5 + 0.5*var(--tb)));transform-or
   position:static!important; transform:none!important;
   flex:0 0 auto; background:none!important; border:none!important; padding:0!important;
   font-family:var(--u-font-ui)!important; font-weight:700;
-  font-size:clamp(9px,.68vw,11px)!important; letter-spacing:.08em;
+  font-size:9px!important; letter-spacing:.08em; /* px: stage is fixed 1280x720 */
   margin:0!important; color:var(--u-ink-dim); opacity:1; white-space:nowrap;
   text-shadow:0 1px 3px rgba(0,0,0,.9);
 }
