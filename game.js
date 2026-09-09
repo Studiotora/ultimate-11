@@ -4879,7 +4879,13 @@ function _setImgChain(img,paths){let i=0;img.onerror=()=>{i++;if(i<paths.length)
 let _bustEls=null,_bustKey={h:null,a:null};
 function _ensureBusts(){
   if(_bustEls)return _bustEls;
-  const vp=document.getElementById('viewport')||document.body;
+  // Anchored to the WINDOW, not the 1280x720 stage. position:fixed does NOT
+  // escape a transformed ancestor, and #viewport is transform-scaled — so a
+  // fixed bust inside it would still measure against the stage. It has to be a
+  // body child, exactly like #dpad. The scale is then re-applied by hand so the
+  // chip keeps the size it had inside the stage (the radar showed what happens
+  // when you move something out and forget that part).
+  const vp=document.body;
   const mk=(side)=>{
     const right=side==='a';
     const w=document.createElement('div');
@@ -4888,8 +4894,9 @@ function _ensureBusts(){
     // image renders 200x200. The plate eats 24px off the bottom, which means the
     // image area must be a full 200px tall or the chin gets clipped by the name
     // bar (it was 164px — losing the bottom 18%). 200 + 24 = 224.
-    w.style.cssText='position:absolute;bottom:26px;'+(right?'right:18px;':'left:18px;')+
-      'width:200px;height:224px;z-index:5;pointer-events:none;display:none;overflow:hidden;';
+    w.style.cssText='position:fixed;bottom:22px;'+(right?'right:16px;':'left:16px;')+
+      'width:200px;height:224px;z-index:2;pointer-events:none;display:none;overflow:hidden;'+
+      'transform:scale(var(--vp-scale,1));transform-origin:'+(right?'right bottom;':'left bottom;');
     const img=document.createElement('div');
     img.className='bust-img';
     img.style.cssText='position:absolute;left:0;right:0;top:0;bottom:24px;'+
