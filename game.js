@@ -728,6 +728,7 @@ function clubBadgeImage(clubKey){
 function showSc(id){
   document.querySelectorAll('.screen').forEach(s=>s.classList.remove('active'));
   document.getElementById(id).classList.add('active');
+  _setWorldLive(id==='s-match');
   if(id==='s-home'){hmHover('friendly');returnToMenuMusic();}
   if(id==='s-career-clubs'){crBuildClubList();}
   if(id==='s-ts'){if(typeof syncTeamSelections==='function')syncTeamSelections(); if(typeof _pvpInjectToggle==='function')_pvpInjectToggle();}
@@ -2880,7 +2881,10 @@ function playerImg(pl){
     }
     return null;
   }
-  // Friendly/national players: assets/players/{lastname}.png
+  // Friendly/national players: the front sheet, then the team/captain card.
+  // The old full-body illustration at assets/players/{lastname}.png is retired
+  // (author, 2026-09-09) — GK art and the team captain png are the exceptions,
+  // and the GK keeps its own branch above.
   const key=playerLastName(pl);
   if(!key)return null;
   if(IMG_CACHE[key]==='err')return null;
@@ -2898,7 +2902,7 @@ function playerImg(pl){
       fb.src=`assets/players/${tk}.png`;
     } else IMG_CACHE[key]='err';
   };
-  img.src=`assets/players/${key}.png`;
+  img.src=`assets/players/front/${key}.png`;
   return null;
 }
 
@@ -2916,23 +2920,77 @@ function preloadSquadImages(){
 // playerImg() returns.
 const FACE_CROP_CACHE={};
 const FACE_CROP_SIZE=128;
+
+/* ── front-sprite source for the in-field face ────────────────────────────
+   The old full-body illustrations are retired: the in-field circle now crops
+   the SAME artwork the duel uses, so a player is recognisably one man without
+   any palette/posterise reconciliation (this is what A.3 was originally for).
+   Front only — a tiny circle showing the back of someone's head is useless. */
+const FRONT_IMG_CACHE={};
+function frontSpriteFor(pl){
+  const ln=playerLastName(pl);
+  if(!ln) return null;
+  const hit=FRONT_IMG_CACHE[ln];
+  if(hit) return hit==='err' ? null : hit;
+  if(hit==='err') return null;
+  const im=new Image();
+  FRONT_IMG_CACHE[ln]=im;
+  im.onerror=()=>{FRONT_IMG_CACHE[ln]='err';};
+  im.src='assets/players/front/'+ln+'.png';
+  return im;
+}
+
+/* Head anchor. Every sheet is drawn in the same right-leaning duel stance, so
+   the head sits 8-19% RIGHT of image centre — measured across all seven. The
+   old centred crop would clip the face on every single player. Find it instead:
+   topmost opaque row, then the horizontal centroid of the band below it.
+   Scanned on a ~128px aspect-correct proxy, so it costs a few thousand reads
+   per player instead of ~730k, and only once. */
+const HEAD_BOX_CACHE={};
+function headBox(img){
+  const key=img.src;
+  if(HEAD_BOX_CACHE[key]) return HEAD_BOX_CACHE[key];
+  const iw=img.naturalWidth, ih=img.naturalHeight;
+  const PW=128, PH=Math.max(1,Math.round(PW*ih/iw)), scale=iw/PW;
+  const t=document.createElement('canvas'); t.width=PW; t.height=PH;
+  const tx=t.getContext('2d',{willReadFrequently:true});
+  tx.drawImage(img,0,0,PW,PH);
+  let d; try{ d=tx.getImageData(0,0,PW,PH).data; }catch(e){ return null; }
+  const rowHas=y=>{ for(let x=0;x<PW;x++) if(d[(y*PW+x)*4+3]>8) return true; return false; };
+  let top=-1,bot=-1;
+  for(let y=0;y<PH;y++) if(rowHas(y)){top=y;break;}
+  for(let y=PH-1;y>=0;y--) if(rowHas(y)){bot=y;break;}
+  let box;
+  if(top<0){ box={sx:0, sy:0, size:Math.min(iw,ih)}; }
+  else{
+    const figH=Math.max(1,bot-top);
+    const band=Math.max(2,Math.round(figH*0.16));
+    let sum=0,cnt=0;
+    for(let y=top;y<Math.min(PH,top+band);y++)
+      for(let x=0;x<PW;x++) if(d[(y*PW+x)*4+3]>8){ sum+=x; cnt++; }
+    const hx=cnt?sum/cnt:PW/2;
+    const size=figH*0.30;                       // head plus a little shoulder
+    box={ sx:(hx-size/2)*scale, sy:(top-figH*0.03)*scale, size:size*scale };
+  }
+  HEAD_BOX_CACHE[key]=box;
+  return box;
+}
+
 function getFaceCrop(pl){
   if(!pl)return null;
-  const img=playerImg(pl);
+  const img=frontSpriteFor(pl);
   if(!img||!img.complete||!img.naturalWidth)return null;
   const cacheKey=img.src;
   const cached=FACE_CROP_CACHE[cacheKey];
   if(cached)return cached;
+  const box=headBox(img);
+  if(!box)return null;
   const off=document.createElement('canvas');
   off.width=FACE_CROP_SIZE;off.height=FACE_CROP_SIZE;
   const octx=off.getContext('2d');
   octx.imageSmoothingEnabled=true;
   octx.imageSmoothingQuality='high';
-  const iw=img.naturalWidth, ih=img.naturalHeight;
-  const cropSize=Math.min(iw, ih*0.38);
-  const sx=(iw-cropSize)/2;
-  const sy=ih*0.02;
-  octx.drawImage(img, sx, sy, cropSize, cropSize, 0, 0, FACE_CROP_SIZE, FACE_CROP_SIZE);
+  octx.drawImage(img, box.sx, box.sy, box.size, box.size, 0, 0, FACE_CROP_SIZE, FACE_CROP_SIZE);
   FACE_CROP_CACHE[cacheKey]=off;
   return off;
 }
@@ -3043,6 +3101,11 @@ function drawT(s){
       if(portraitCrop){
         cx.save();
         cx.beginPath();cx.arc(px,py,r-sc,0,Math.PI*2);cx.clip();
+        // The sheets are drawn facing RIGHT. Mirror when this side is attacking
+        // left so the face always looks the way the player is heading — both
+        // teams show a face, never the back of a head. Flips at half time
+        // because dirFor() is derived from G.half.
+        if(dirFor(s)<0){ cx.translate(px,0); cx.scale(-1,1); cx.translate(-px,0); }
         cx.drawImage(portraitCrop, px-r, py-r, r*2, r*2);
         cx.restore();
         cx.beginPath();cx.arc(px,py,r,0,Math.PI*2);
@@ -4794,11 +4857,13 @@ function _portraitChainFor(pl,side){
   if(isGK){
     return _pre.concat(isClub
       ?[`assets/career/clubs/${ln}${effTeam}.png`,'assets/career/clubs/gk.png',_GENERIC_PLAYER_SVG_URL]
-      :[`assets/players/${lastName}.png`,'assets/career/clubs/gk.png',_GENERIC_PLAYER_SVG_URL]);
+      :[`assets/players/${lastName}.png`,'assets/career/clubs/gk.png',_GENERIC_PLAYER_SVG_URL]);  // GK art stays
   }
   return _pre.concat(isClub
     ?[`assets/career/clubs/${ln}${effTeam}.png`,`assets/career/clubs/${effTeam}.png`,_GENERIC_PLAYER_SVG_URL]
-    :[`assets/players/${lastName}.png`,`assets/players/${effTeam}.png`,_GENERIC_PLAYER_SVG_URL]);
+    // Outfield: the new front sheet, then the team/captain card. The old
+    // full-body illustration at assets/players/{lastname}.png is retired.
+    :[`assets/players/front/${lastName}.png`,`assets/players/${effTeam}.png`,_GENERIC_PLAYER_SVG_URL]);
 }
 /* ── hot DOM cache + gen-guarded timer helper ── */
 const _DOM={};
@@ -4819,8 +4884,12 @@ function _ensureBusts(){
     const right=side==='a';
     const w=document.createElement('div');
     w.id='bust-'+side;
+    // The face crop is SQUARE and the background is sized to 100% width, so the
+    // image renders 200x200. The plate eats 24px off the bottom, which means the
+    // image area must be a full 200px tall or the chin gets clipped by the name
+    // bar (it was 164px — losing the bottom 18%). 200 + 24 = 224.
     w.style.cssText='position:absolute;bottom:26px;'+(right?'right:18px;':'left:18px;')+
-      'width:200px;height:188px;z-index:5;pointer-events:none;display:none;overflow:hidden;';
+      'width:200px;height:224px;z-index:5;pointer-events:none;display:none;overflow:hidden;';
     const img=document.createElement('div');
     img.className='bust-img';
     img.style.cssText='position:absolute;left:0;right:0;top:0;bottom:24px;'+
@@ -4880,6 +4949,27 @@ function updBusts(){
     let posTxt=pl.pos||'';try{posTxt=displayPosLabel(k)||posTxt;}catch(e){}
     el.querySelector('.b-pos').textContent=posTxt;
     const imgEl=el.querySelector('.bust-img');
+    // Mirror so the face looks the way this side is attacking. The sheets are
+    // drawn facing right, and dirFor() flips at half time, so both teams always
+    // show a face pointing up the pitch rather than the back of a head.
+    imgEl.style.transform = dirFor(side)<0 ? 'scaleX(-1)' : '';
+
+    // Outfield players take the head crop from their front sheet — the same
+    // artwork the duel uses, so one man looks like one man. Keepers still use
+    // the old chain (author: GK art stays until it is redone).
+    if(pl.pos!=='GK'){
+      const spr=frontSpriteFor(pl);
+      if(!spr){ imgEl.style.backgroundImage=''; return; }
+      const paint=()=>{
+        if(_bustKey[side]!==sig) return;          // player changed while loading
+        const crop=getFaceCrop(pl);
+        imgEl.style.backgroundImage = crop ? `url(${crop.toDataURL()})` : '';
+      };
+      if(spr.complete && spr.naturalWidth) paint();
+      else { spr.addEventListener('load',paint,{once:true});
+             spr.addEventListener('error',()=>{ if(_bustKey[side]===sig) imgEl.style.backgroundImage=''; },{once:true}); }
+      return;
+    }
     const chain=_portraitChainFor(pl,side);
     let i=0;const t=new Image();
     t.onload=()=>{if(_bustKey[side]===sig)imgEl.style.backgroundImage=`url(${chain[i]})`;};
@@ -5264,8 +5354,8 @@ function fCard(role,pl,s,displayRole){
     const _lnK = _ln.replace(/[^a-z0-9]/g,'');
     const _hpMini=_storyHeroCardPath(pl);
     const _baseChain = (_hpMini?[_hpMini]:[]).concat(isClubTeam
-      ? [`assets/career/clubs/${_lnK}${teamKey}.png`, `assets/career/clubs/${teamKey}.png`, `assets/players/${_ln}.png`, _GENERIC_PLAYER_SVG_URL]
-      : [`assets/players/${_ln}.png`, `assets/profile/${_ln}.png`, `assets/players/${teamKey}.png`, _GENERIC_PLAYER_SVG_URL]);
+      ? [`assets/career/clubs/${_lnK}${teamKey}.png`, `assets/career/clubs/${teamKey}.png`, _GENERIC_PLAYER_SVG_URL]
+      : [`assets/players/front/${_ln}.png`, `assets/players/${teamKey}.png`, _GENERIC_PLAYER_SVG_URL]);
     // Top of card = dedicated PROFILE art; bottom special = dedicated SHOOT art.
     // Each falls back to the existing portrait chain if the new art isn't present yet.
     const _profileChain = [`assets/players/profile/${_ln}.png`].concat(_baseChain);
@@ -7816,7 +7906,7 @@ function buildFormationMenu(){
       const _hpForm=_storyHeroCardPath(pl);
       const specific = _hpForm || (isClubTeam
         ? `assets/career/clubs/${ln}${teamKey}.png`
-        : `assets/players/${lastName}.png`);
+        : `assets/players/front/${lastName}.png`);
       const placeholder = isGKSlotPl
         ? `assets/career/clubs/gk.png`
         : (isClubTeam ? `assets/career/clubs/${teamKey}.png` : `assets/players/${teamKey}.png`);
@@ -8059,8 +8149,32 @@ function fitViewport(){
   }
   document.body.style.background='#000';
 }
+/* ── WORLD LAYER ──────────────────────────────────────────────────────────
+   The UI stage is locked to 1280x720 (see fitViewport) which letterboxes wide
+   phones. This layer sits behind it at full window size and hosts the visible
+   WebGL canvas, so the pitch fills the screen while the UI keeps its 16:9 safe
+   area. Mounted here because ult11-pitch3d.js looks for #worldwrap when it
+   creates that canvas, and it is deferred after this file. */
+function _mountWorldLayer(){
+  if(document.getElementById('worldwrap')) return;
+  const w=document.createElement('div');
+  w.id='worldwrap';
+  document.body.insertBefore(w, document.body.firstChild);
+}
+/* Only the match screen may show the world through the stage — every other
+   screen is transparent and relies on #viewport's own fill. */
+function _setWorldLive(on){
+  const vp=document.getElementById('viewport'), w=document.getElementById('worldwrap');
+  if(w)  w.classList.toggle('on', !!on);
+  if(vp) vp.classList.toggle('world-live', !!on);
+  // the layer is display:none until now, so the canvas had no size to measure —
+  // let it lay out, then let P3D's resize listener pick up the real dimensions
+  if(on) requestAnimationFrame(()=>dispatchEvent(new Event('resize')));
+}
+
+_mountWorldLayer();
 fitViewport();
-document.addEventListener('DOMContentLoaded',fitViewport);
+document.addEventListener('DOMContentLoaded',()=>{_mountWorldLayer();fitViewport();});
 window.addEventListener('load',fitViewport);
 window.addEventListener('resize',fitViewport);
 window.addEventListener('orientationchange',()=>setTimeout(fitViewport,200));
