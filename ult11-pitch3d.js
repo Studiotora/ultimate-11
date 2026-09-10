@@ -1343,7 +1343,16 @@
     const ALL_POOL=Object.keys(TRAIL_STYLES);
     function _hash(str){ let h=0; str=String(str||'');
       for(let i=0;i<str.length;i++) h=(h*31+str.charCodeAt(i))|0; return Math.abs(h); }
+    /* Debug override. Which trail a player gets is a hash of his name plus his
+       stats, so in normal play you only ever see the handful your squad rolls
+       and there is no way to compare them. P3D.forceTrail('dragon') pins every
+       shot to one style until you clear it. */
+    let _trailForce=null;
     function trailStyleFor(pl){
+      if(_trailForce&&TRAIL_STYLES[_trailForce]){
+        const fs=TRAIL_STYLES[_trailForce];
+        return {k:_trailForce,st:fs,col:fs.col};
+      }
       if(!pl) return {k:'standard',st:TRAIL_STYLES.standard,col:TRAIL_STYLES.standard.col};
       const nm=String(pl.origName||pl.name||''), h=_hash(nm), low=nm.toLowerCase();
       let k;
@@ -2526,7 +2535,7 @@
          assets/cutscene/{lastname}.webm | .mp4 | .png
          assets/cutscene/{teamkey}-shoot.webm | .mp4 | .png   (team fallback) */
     const DIVE={cols:5,rows:3};
-    let cineWindupTex=null,cineWindupAR=0.65,cineGkTex=null,diveSheet=null;
+    let cineWindupTex=null,cineWindupAR=0.65,cineWindupIsTeam=false,cineGkTex=null,diveSheet=null;
     const _cineTexCache={}, _cineSheetCache={};
     function _cineTex(url,cb){
       if(_cineTexCache[url]!==undefined){cb(_cineTexCache[url]);return;}
@@ -2550,8 +2559,8 @@
     }
     function _chain(urls,loader,cb){
       (function nxt(i){
-        if(i>=urls.length){cb(null);return;}
-        loader(urls[i],r=>{ (r&&r!=='none')?cb(r):nxt(i+1); });
+        if(i>=urls.length){cb(null,-1);return;}
+        loader(urls[i],r=>{ (r&&r!=='none')?cb(r,i):nxt(i+1); });
       })(0);
     }
     function _keyChain(key,teamFile,defFile){
@@ -2560,8 +2569,14 @@
     }
     // Called from start(): repoint the three slots at this fixture's teams.
     function cineLoadFor(asKey,dsKey){
+      const _hasKey=!!(asKey!=null&&String(asKey).length);
       _chain(_keyChain(asKey,'_windup.png','striker_windup.png'),_cineTex,
-        r=>{ if(r){cineWindupTex=r.tex;cineWindupAR=r.ar||0.65;} });
+        (r,i)=>{ cineWindupIsTeam=false;
+                 if(r){ cineWindupTex=r.tex; cineWindupAR=r.ar||0.65;
+                        /* index 0 is the {teamkey}_windup.png override; anything
+                           else is the shared striker_windup.png, which the team
+                           sheet's own super row now outranks. */
+                        cineWindupIsTeam=(_hasKey&&i===0); } });
       _chain(_keyChain(dsKey,'_gk_cine.png','gk_cine.png'),_cineTex,
         r=>{ if(r)cineGkTex=r.tex; });
       _chain(_keyChain(dsKey,'_gk_dive.png','gk_dive.png'),_cineSheet,
@@ -2657,6 +2672,56 @@
     };
     /* exposed for game.js: tackle/shoulder lunges drive a sheet frame */
     P3D.forceAnim=function(id,face,anim,idx,flip){ try{ forceAnim(id,face||'side',anim,idx||0,!!flip); }catch(e){} };
+    /* P3D.forceTrail('flame') pins every shot's comet to one style;
+       P3D.forceTrail(null) hands it back to the per-player hash.
+       P3D.trailList() returns the names. */
+    P3D.forceTrail=function(name){
+      if(name==null){ _trailForce=null; return null; }
+      const k=String(name).toLowerCase();
+      if(!TRAIL_STYLES[k]) throw new Error('[P3D] no such trail: '+k+' - try '+Object.keys(TRAIL_STYLES).join(', '));
+      _trailForce=k;
+      if(_trailFx) _trailFx=trailStyleFor(null);   // repaint a shot already in flight
+      return k;
+    };
+    P3D.trailList=function(){ return Object.keys(TRAIL_STYLES); };
+    /* ?trail=dragon in the URL does the same thing without a console, which is
+       the only way to try these on a PHONE. Persisted to localStorage so it
+       survives the reloads a deployed build does, and cleared with ?trail=off.
+       Inert unless the param or the stored key is present - nothing about the
+       shipped game changes for a normal player. */
+    (function(){
+      try{
+        const q=new URLSearchParams(location.search||'');
+        let want=q.has('trail')?String(q.get('trail')||'').toLowerCase():null;
+        if(want==='off'||want===''){ localStorage.removeItem('u11.trail'); want=null; }
+        else if(want){ localStorage.setItem('u11.trail',want); }
+        else { want=(localStorage.getItem('u11.trail')||'').toLowerCase()||null; }
+        if(want&&TRAIL_STYLES[want]){
+          _trailForce=want;
+          window.U11DBG&&U11DBG('[3D] trail pinned to '+want+' (url/localStorage)');
+        } else if(want){
+          console.warn('[P3D] unknown ?trail='+want+' - valid: '+Object.keys(TRAIL_STYLES).join(', '));
+          localStorage.removeItem('u11.trail');
+        }
+      }catch(e){}
+    })();
+    /* Read-only peek at the running cinematic + the shooter's forced cell.
+       The super row is timed against a hold the 3D side never sees directly,
+       so "is it on the right frame yet" is not answerable from a screenshot. */
+    P3D.cineState=function(){
+      if(!cine)return null;
+      const o={mode:cine.mode,t:+cine.t.toFixed(2),ft:+cine.ft.toFixed(2),
+               superRow:!!cine._superRow,flip:!!cine._shFlip,holdMs:(cine.o&&cine.o.holdMs)||null,
+               windupIsTeam:cineWindupIsTeam,
+               trail:(_trailFx?_trailFx.k:null), trailCol:(_trailFx?_trailFx.col:null),
+               trailForced:_trailForce, ribbonPts:(RIBS[0]?RIBS[0].pts.length:0)};
+      const g=sprites[cine.o.as+':'+cine.o.sk];
+      if(g&&g.tex){ const L=g._L||GRID;
+        o.sheet=(g._sheetImg&&g._sheetImg.src||'').split('/').pop()+' '+L.cols+'x'+L.rows;
+        o.cell={col:Math.round(Math.abs(g.tex.offset.x*L.cols))-(g.tex.repeat.x<0?1:0),
+                row:L.rows-1-Math.round(g.tex.offset.y*L.rows), mirrored:g.tex.repeat.x<0}; }
+      return o;
+    };
     function cineEnd(){
       if(!cine)return;
       try{hideHoldFx();_fxT=0;}catch(e){}
@@ -2717,6 +2782,7 @@
             +' ('+(shooter?((shooter.origName||shooter.name)+' pwr'+shooter.pwr+' tec'+shooter.tec):'?')+')');
         }catch(e){}
         if(typeof ball!=='undefined'&&ball){ball.x=sp.x;ball.y=sp.y;ball.bz=0;}
+        try{ cineCamera2(); }catch(e){}   // place the frontal camera before frame 1
         return true;
       },
       fly(onArrive){
@@ -2744,6 +2810,26 @@
       },
       abort(){ if(cine&&cine.v2){cine.o.onDone=null;cineEnd();} }
     };
+    /* Which way must the shooter be MIRRORED?
+       Sheet art faces screen-right. In open play syncPlayers reads that from
+       world x, but under the frontal hold camera the shot direction points
+       straight AT the lens, so world x tells us nothing — the same world
+       heading can land on either side of the screen depending on which side
+       holdSide put the camera. So project the shooter's forward vector and
+       read the sign of its SCREEN motion, exactly as syncPlayers does for
+       live players. Sticky when the vector is near-parallel to the view, so
+       he never strobes as the camera crosses his facing axis. */
+    const _cf1=new T.Vector3(), _cf2=new T.Vector3();
+    function cineShooterFlip(c){
+      const swx=ex2wx(c.fx),swz=ey2wz(c.fy);
+      const gwx=ex2wx(c.gx),gwz=ey2wz(c.gy);
+      let dx=gwx-swx,dz=gwz-swz;const L=Math.hypot(dx,dz)||1;dx/=L;dz/=L;
+      _cf1.set(swx,1.0,swz).project(camera);
+      _cf2.set(swx+dx,1.0,swz+dz).project(camera);
+      const sdx=_cf2.x-_cf1.x;
+      if(Math.abs(sdx)<2e-4) return !!c._shFlip;
+      return (c._shFlip=(sdx<0));
+    }
     function cineStep2(dt){
       const c=cine; if(!c)return;
       if(c._lm!==c.mode){c._lm=c.mode;window.U11DBG&&U11DBG('[3D] cine v2 mode='+c.mode+' (frames running)');}
@@ -2755,7 +2841,20 @@
       let bx=c.fx,by=c.fy,bz=0;
       if(c.mode==='hold'){
         const g=sprites[sid];
-        if(cineWindupTex&&g&&g.sprite){                // dedicated wind-up sprite
+        /* SUPER ROW (12x8 sheets, row 6 cols 6-11): frames 0-2 charge,
+           3 contact, 4-5 follow-through. The hold owns the charge only — the
+           strike frames belong to fly(), below. Spread over the real hold so
+           the energy peaks on release rather than snapping to full at 0.4s.
+           A per-team {key}_windup.png still wins if one exists; the shared
+           striker_windup.png does not. */
+        const _sL=(g&&g._L)||GRID;
+        if(c._superRow===undefined)
+          c._superRow=!!(_sL&&_sL.super&&_sL.rowFor&&!cineWindupIsTeam);
+        if(c._superRow&&g&&g.sprite){
+          const hm=Math.max(240,(c.o&&c.o.holdMs)||2250)/1000;
+          forceAnim(sid,'side','super',Math.min(2,Math.floor(c.t/hm*3)),cineShooterFlip(c));
+        }
+        else if(cineWindupTex&&g&&g.sprite){           // dedicated wind-up sprite
           if(!c.shRestore)c.shRestore={g,map:g.sprite.material.map,silMap:g.sil?g.sil.material.map:null};
           if(g.sprite.material.map!==cineWindupTex){
             cineWindupTex.repeat.set(1,1); cineWindupTex.offset.set(0,0);
@@ -2788,8 +2887,20 @@
           const ease=Math.sin(Math.PI*Math.min(1,c.ft*1.05));
           const smo=1+(smoMax-1)*ramp*ease;
           c.ft+=dt/(dur*smo);
-          const kf=Math.min(3,Math.floor((c.ft*dur)/0.14));
-          forceAnimT(sid,'up','shoot',kf/3,false);    // kick frames, back view
+          if(c._superRow){
+            /* frames 3,4,5 at ~9fps: contact, then follow-through.
+               The mirror is LOCKED to whatever the charge ended on, not
+               recomputed: the chase camera is swinging from in front of him
+               to behind him during exactly these three frames, so a live test
+               flips him mid-kick - and it lands on the contact frame, the one
+               moment nobody is looking anywhere else. He is off-frame long
+               before the swing makes the frozen mirror wrong. */
+            forceAnim(sid,'side','super',3+Math.min(2,Math.floor((c.ft*dur)/0.11)),
+                      !!c._shFlip);
+          }else{
+            const kf=Math.min(3,Math.floor((c.ft*dur)/0.14));
+            forceAnimT(sid,'up','shoot',kf/3,false);  // kick frames, back view
+          }
           if(c.ft>=1){
             c.ft=1;c.mode='wait';
             if(c.onArrive&&!c.arrived){c.arrived=true;const cb=c.onArrive;c.onArrive=null;setTimeout(cb,0);}

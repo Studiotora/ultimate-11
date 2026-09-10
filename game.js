@@ -4162,7 +4162,12 @@ function superShotCine(){
   const carrier=sq(s)[G.ck],cp=PP[s]&&PP[s][G.ck];
   if(!carrier||!cp){U11DBG('SSC: no carrier/pos → legacy');return false;}
   if(rollShotMiss(s,'special')){U11DBG('SSC: miss roll');clearInterval(G.di);G_moveTarget=null;shotMissed(s);return true;}
-  if(!(window.P3D&&P3D.on&&P3D.superCine2&&P3D.superCine2.start({as:s,sk:G.ck,ds,dir:dirFor(s),gx:goalXFor(s),asKey:(s==='h'?selHome:selAway),dsKey:(ds==='h'?selHome:selAway)}))){U11DBG('SSC: start() failed → legacy');return false;}
+  /* WIND-UP HOLD — halved from 4500ms. The hold is only a camera/charge beat
+     before the skill banner; 4.5s made every super shot feel like a loading
+     screen. Declared here (not at the timer below) because the 3D side needs
+     it to pace the 6-frame charge so the energy peaks exactly on release. */
+  const SSC_HOLD=2250;
+  if(!(window.P3D&&P3D.on&&P3D.superCine2&&P3D.superCine2.start({as:s,sk:G.ck,ds,dir:dirFor(s),gx:goalXFor(s),holdMs:SSC_HOLD,asKey:(s==='h'?selHome:selAway),dsKey:(ds==='h'?selHome:selAway)}))){U11DBG('SSC: start() failed → legacy');return false;}
   U11DBG('SSC: start ok, hold cam');
   clearInterval(G.di);G_moveTarget=null;
   G.phase='pass_anim';
@@ -4177,12 +4182,9 @@ function superShotCine(){
   const _ln=(carrier.origName||carrier.name).split('.').pop().toLowerCase().trim();
   const _tk=String((s==='h'?selHome:selAway)||'').toLowerCase();
   const _bases=_tk?[_ln,_tk+'-shoot']:[_ln];       // player video → team video → PNG
-  /* WIND-UP HOLD — halved from 4500ms. The hold is only a camera/charge beat
-     before the skill banner; 4.5s made every super shot feel like a loading
-     screen. We also PREFETCH the clip during the hold so the video is already
-     buffered when the banner opens — the perceived wait drops much further
-     than the 2.25s the timer alone saves. */
-  const SSC_HOLD=2250;
+  /* PREFETCH the clip during the hold so the video is already buffered when
+     the banner opens — the perceived wait drops much further than the 2.25s
+     the shortened timer alone saves. */
   try{
     _bases.forEach(b=>{
       ['webm','mp4'].forEach(ext=>{
