@@ -1952,6 +1952,7 @@ function tick(dt=1){
 
   moveOffBall(s,ds,dt);
   stepLunge(dt);
+  stepJumps();
   applyRepulsion();
   clampAllToPitch();
 }
@@ -2402,6 +2403,17 @@ function startAnim(){
   (function loop(ts){
     const dt=_lastFrameTs?Math.min((ts-_lastFrameTs)/16.667,3):1;
     _lastFrameTs=ts;
+    /* B.1 — one poll per frame drives keyboard, pad and touch alike. The
+       Gamepad API is state-only (no events), so everything has to be polled
+       for a key and a pad button to behave identically. */
+    if(typeof UEInput!=='undefined'){
+      try{ UEInput.poll(); }catch(e){ console.warn('[input] poll threw in loop',e); }
+      if(!G_joyActive){                        // a joystick drag still wins
+        const mv=UEInput.move();
+        G_inputVec.x=mv.x; G_inputVec.y=mv.y;
+      }
+      G_sprint=UEInput.held('SPRINT')||G_touchSprint;
+    }
     if(G.paused){draw();raf=requestAnimationFrame(loop);return;}
     if(G.phase==='duel' && typeof pvpDuelInput==='function') pvpDuelInput();
     if(G.phase==='moving')tick(dt);
@@ -2919,7 +2931,14 @@ function preloadSquadImages(){
 // from 128→30 which looks crisp. Re-uses the same Image object that
 // playerImg() returns.
 const FACE_CROP_CACHE={};
-const FACE_CROP_SIZE=128;
+/* 128 was sized for the old ~30px face circle on the pitch. The bust HUD draws
+   the same crop at 200 design px, which on a phone is ~371 DEVICE px once
+   --vp-scale and DPR are applied — so a 128px source was being blown up ~2.9x
+   AND had already thrown away half the detail on the way in (the head region
+   is ~265px in the sheet). Render at the crop's own resolution instead: the
+   source->canvas step becomes 1:1 and the only resampling left is a single
+   mild upscale at paint time. Clamped so a stray asset cannot allocate wildly. */
+const FACE_CROP_MIN=128, FACE_CROP_MAX=512;
 
 /* ── front-sprite source for the in-field face ────────────────────────────
    The old full-body illustrations are retired: the in-field circle now crops
@@ -2985,12 +3004,13 @@ function getFaceCrop(pl){
   if(cached)return cached;
   const box=headBox(img);
   if(!box)return null;
+  const S=Math.max(FACE_CROP_MIN, Math.min(FACE_CROP_MAX, Math.round(box.size)));
   const off=document.createElement('canvas');
-  off.width=FACE_CROP_SIZE;off.height=FACE_CROP_SIZE;
+  off.width=S;off.height=S;
   const octx=off.getContext('2d');
   octx.imageSmoothingEnabled=true;
   octx.imageSmoothingQuality='high';
-  octx.drawImage(img, box.sx, box.sy, box.size, box.size, 0, 0, FACE_CROP_SIZE, FACE_CROP_SIZE);
+  octx.drawImage(img, box.sx, box.sy, box.size, box.size, 0, 0, S, S);
   FACE_CROP_CACHE[cacheKey]=off;
   return off;
 }
@@ -3555,65 +3575,166 @@ function openPvpSetup(onConfirm){
   bind={P1:null,P2:null}; paint(); ov.classList.add('show'); pollFrame();
 }
 
-const G_keys={};
-function _recomputeInputFromKeys(){
-  if(G_joyActive)return; // joystick drag has priority
-  let x=0,y=0;
-  if(G_keys['a']||G_keys['arrowleft'])x-=1;
-  if(G_keys['d']||G_keys['arrowright'])x+=1;
-  if(G_keys['w']||G_keys['arrowup'])y-=1;
-  if(G_keys['s']||G_keys['arrowdown'])y+=1;
-  const len=Math.hypot(x,y);
-  if(len>0){G_inputVec.x=x/len;G_inputVec.y=y/len;}
-  else{G_inputVec.x=0;G_inputVec.y=0;}
+/* G_keys / _recomputeInputFromKeys removed — ult11-input.js owns key
+   state now, and startAnim()'s loop syncs G_inputVec from UEInput.move(). */
+/* ══ B.1 · SEMANTIC ACTIONS ════════════════════════════════════════════════
+   One implementation per action. UEInput fires these for keyboard and pad; the
+   on-screen buttons call the same functions, so a control never has two
+   behaviours that can drift apart.
+
+   Each is written as ATTACK / DEFEND because that is how the bindings are
+   designed — the same button does a different job depending on possession.
+   See ult11-input.js for the binding table. */
+let G_touchSprint=false;   // held state from the on-screen button
+
+function actShoot(){        // X/□ · E    — shoot / tackle
+  if(G.awaitKickoff==='h'){doKickoff();return;}
+  if(G.poss==='h') manualShot('shoot'); else startLunge('h','shoulder');
 }
+function actCross(){        // B/○ · R    — cross / slide tackle
+  if(G.awaitKickoff==='h'){doKickoff();return;}
+  if(G.poss==='h'){ if(G.phase==='moving') directionalPass(); else togglePassMode(); }
+  else startLunge('h','tackle');
+}
+function actPass(){         // Y/△ · Q    — short pass / contain
+  if(G.awaitKickoff==='h'){doKickoff();return;}
+  if(G.poss==='h') togglePassMode();
+  // defending: contain is Phase C work — no-op rather than a wrong action
+}
+function actSwitch(){       // LB/L1 · F  — switch player (defence only)
+  if(G.awaitKickoff==='h'){doKickoff();return;}
+  if(G.poss!=='h') switchDefender();
+}
+function actSuper(){        // RT+X · V   — special / super
+  if(G.awaitKickoff==='h'){doKickoff();return;}
+  if(G.poss==='h' && G.phase==='moving') manualShot('special');
+}
+function actJump(){         // A/✕ · Space — jump / block
+  // Phase C builds the jump; bound now so the layer is complete and the
+  // binding never has to move once it exists.
+  if(typeof playerJump==='function') playerJump('h');
+}
+function actPause(){ if(typeof togglePause==='function') togglePause(); }
+function actConfirm(){
+  if(G.awaitKickoff==='h'){ doKickoff(); return; }
+  const cf=document.getElementById('dcfm');
+  if(cf && cf.classList.contains('rdy') && typeof confirmDuel==='function') confirmDuel();
+}
+
+/* ══ B.1 · MENU NAVIGATION ════════════════════════════════════════════════
+   A pad has to work before kick-off, not only during a match. Every menu here
+   is plain DOM, so instead of hand-authoring a focus map per screen this scans
+   the active .screen for anything clickable, orders it by position and walks
+   it — new screens get pad support for free.
+
+   Disabled on the match screen, where the same stick steers a player. */
+const NAV_SEL='button:not([disabled]),.ue-item,.hm-item,.tm-card,.ts-team,.cr-club-card,[data-nav]';
+let _navEls=[], _navIdx=-1, _navScreen='';
+
+function _navScreenEl(){
+  const scr=document.querySelector('.screen.active');
+  if(!scr || scr.id==='s-match') return null;    // in-match input owns the stick
+  return scr;
+}
+function _navScan(scr){
+  _navEls=[...scr.querySelectorAll(NAV_SEL)].filter(e=>{
+    if(e.disabled) return false;
+    const cs=getComputedStyle(e);
+    if(cs.display==='none'||cs.visibility==='hidden'||parseFloat(cs.opacity)===0) return false;
+    const r=e.getBoundingClientRect();
+    return r.width>6 && r.height>6;
+  }).sort((a,b)=>{
+    const ra=a.getBoundingClientRect(), rb=b.getBoundingClientRect();
+    // row-major: bucket the tops so a ragged row still reads left-to-right
+    return (Math.round(ra.top/14)-Math.round(rb.top/14)) || (ra.left-rb.left);
+  });
+}
+function _navPaint(){
+  _navEls.forEach((e,i)=>e.classList.toggle('pad-focus', i===_navIdx));
+  const el=_navEls[_navIdx];
+  if(el&&el.scrollIntoView) try{ el.scrollIntoView({block:'nearest',inline:'nearest'}); }catch(e){}
+}
+function _navSync(){
+  const scr=_navScreenEl();
+  if(!scr){ _navScreen=''; return null; }
+  if(scr.id!==_navScreen){ _navScreen=scr.id; _navScan(scr); _navIdx=-1; }
+  if(!_navEls.length) _navScan(scr);
+  return scr;
+}
+function _navStep(d){
+  if(!_navSync() || !_navEls.length) return;
+  // first press just reveals the cursor rather than jumping past item one
+  _navIdx = (_navIdx<0) ? 0 : (_navIdx+d+_navEls.length)%_navEls.length;
+  _navPaint();
+}
+function _navConfirm(){
+  if(!_navSync() || !_navEls.length) return false;
+  if(_navIdx<0){ _navStep(0); return true; }
+  const el=_navEls[_navIdx];
+  if(!el) return false;
+  el.click();
+  // the click usually swaps screens; rescan shortly after it settles
+  setTimeout(()=>{ _navScreen=''; _navSync(); _navPaint(); },140);
+  return true;
+}
+function _navBack(){
+  const scr=_navSync(); if(!scr) return;
+  const back=scr.querySelector('.back-btn,.bkbtn,.tm-back-float,[data-nav-back]');
+  if(back) back.click();
+}
+
+/* A pad that is connected but invisible feels broken. This says otherwise. */
+function _padChip(){
+  let c=document.getElementById('padchip');
+  if(!c){
+    c=document.createElement('div'); c.id='padchip';
+    c.textContent='PAD CONNECTED';
+    document.body.appendChild(c);
+  }
+  const on = (typeof UEInput!=='undefined') && UEInput.hasPad() && !!_navScreenEl();
+  c.style.display = on ? 'block' : 'none';
+  /* Live readout while we chase the "pad connected but nothing happens" case.
+     polls frozen  -> the rAF driver is dead
+     polls climbing + buttons listed -> binding/handler problem, not the loop
+     items 0 -> the focus scan found nothing on this screen */
+  if(on && UEInput.debug){
+    const d=UEInput.debug();
+    // everSeen/axisPeak are sticky, so pressing everything once then reading
+    // the chip tells us whether the browser gets ANY input from this pad.
+    c.textContent='PAD '+d.pad+' · polls '+d.polls+
+                  ' · everSeen ['+(d.everDown||[]).join(',')+']'+
+                  ' · axisPeak '+d.axisPeak+
+                  ' · last '+d.lastFired+' · items '+_navEls.length;
+  }
+}
+setInterval(_padChip, 700);
+
+if(typeof UEInput!=='undefined'){
+  UEInput.on('SHOOT',  actShoot)
+         .on('CROSS',  actCross)
+         .on('PASS',   actPass)
+         .on('SWITCH', actSwitch)
+         .on('SUPER',  actSuper)
+         .on('JUMP',   actJump)
+         .on('PAUSE',  actPause)
+         // CONFIRM serves both worlds: a menu if one is up, else the duel.
+         .on('CONFIRM',()=>{ if(!_navConfirm()) actConfirm(); })
+         .on('CANCEL', _navBack)
+         .on('NAV_UP',   ()=>_navStep(-1))
+         .on('NAV_DOWN', ()=>_navStep( 1))
+         .on('NAV_LEFT', ()=>_navStep(-1))
+         .on('NAV_RIGHT',()=>_navStep( 1));
+}
+
+/* Keys that still need the DOM event itself — preventDefault only. Tab would
+   move focus and Space would scroll; UEInput reads the key state separately. */
 window.addEventListener('keydown',e=>{
   const t=e.target;
   if(t&&(t.tagName==='INPUT'||t.tagName==='TEXTAREA'||t.isContentEditable))return;
   const k=e.key.toLowerCase();
-  if(['w','a','s','d','arrowup','arrowdown','arrowleft','arrowright'].includes(k)){
-    G_keys[k]=true;_recomputeInputFromKeys();
-    if(k.startsWith('arrow'))e.preventDefault();
-    return;
-  }
-  /* Face-button keys — same four actions as the on-screen pad, so the
-     tackle is reachable without chasing a small target with the mouse.
-       O = △   P = □   K = ○ sprint   L = ✕
-     Attacking: O shoot, P super, L pass.  Defending: O shoulder, P tackle,
-     L switch player. */
-  if(e.repeat)return;
-  /* Roadmap B.2 — the on-screen PAUSE and GO buttons are gone, so these two
-     keys are now the only way to reach those actions (plus a pad later).
-     Esc/Tab = pause · Enter = confirm the duel (only fires when the duel is
-     actually ready, mirroring the old button's .rdy state). */
-  if(k==='escape'||k==='tab'){ e.preventDefault();
-    if(typeof togglePause==='function') togglePause(); return; }
-  if(k==='enter'){ e.preventDefault();
-    if(G.awaitKickoff==='h'){ doKickoff(); return; }
-    const cf=document.getElementById('dcfm');
-    if(cf && cf.classList.contains('rdy') && typeof confirmDuel==='function') confirmDuel();
-    return; }
-  if(k==='o'){ e.preventDefault();
-    if(G.awaitKickoff==='h'){doKickoff();return;}
-    if(G.poss==='h') manualShot('shoot'); else startLunge('h','shoulder'); return; }
-  if(k==='p'){ e.preventDefault();
-    if(G.awaitKickoff==='h'){doKickoff();return;}
-    if(G.poss==='h'){ if(G.phase==='moving') manualShot('special'); else togglePassMode(); }
-    else startLunge('h','tackle'); return; }
-  if(k==='l'){ e.preventDefault();
-    if(G.awaitKickoff==='h'){doKickoff();return;}
-    if(G.poss==='h'){ if(G.phase==='moving') directionalPass(); else togglePassMode(); }
-    else switchDefender(); return; }
-  if(k==='k'){ e.preventDefault(); G_sprint=true;
-    const b=G_dpadEl&&G_dpadEl.querySelector('[data-a="sprint"]'); if(b)b.classList.add('held'); return; }
+  if(k==='tab'||k===' '||k==='enter'||k.startsWith('arrow')) e.preventDefault();
+  return;
 });
-window.addEventListener('keyup',e=>{
-  const k=e.key.toLowerCase();
-  if(k==='k'){ G_sprint=false;
-    const b=G_dpadEl&&G_dpadEl.querySelector('[data-a="sprint"]'); if(b)b.classList.remove('held'); }
-  if(G_keys[k]!==undefined){G_keys[k]=false;_recomputeInputFromKeys();}
-});
-window.addEventListener('blur',()=>{for(const k in G_keys)G_keys[k]=false;G_sprint=false;_recomputeInputFromKeys();});
 
 // ── Virtual joystick (touch) ─────────────────────────────────────
 /* ══════ ON-SCREEN CONTROL LAYOUT (Camera Lab → CONTROLS) ══════
@@ -3688,7 +3809,7 @@ function _buildJoystick(){
     knob.style.left='50%';knob.style.top='50%';
     G_inputVec.x=0;G_inputVec.y=0;
     G_joyActive=false;touchId=null;
-    _recomputeInputFromKeys();
+    // next frame's UEInput sync restores keyboard/pad steering if any is held
   };
   base.addEventListener('touchstart',e=>{
     e.preventDefault();e.stopPropagation();
@@ -3738,25 +3859,29 @@ function _buildDpad(){
   const w=document.createElement('div');
   w.id='dpad';
   w.innerHTML=`
-    <button class="db tri" data-a="shoot"><i>△</i><span>SHOOT</span></button>
-    <button class="db sq"  data-a="pass"><i>□</i><span>SUPER</span></button>
-    <button class="db ci"  data-a="sprint"><i>○</i><span>SPRINT</span></button>
-    <button class="db xx"  data-a="switch"><i>✕</i><span>PASS</span></button>`;
+    <button class="db tri" data-a="pass"><i>△</i><span>PASS</span></button>
+    <button class="db sq"  data-a="shoot"><i>□</i><span>SHOOT</span></button>
+    <button class="db ci"  data-a="cross"><i>○</i><span>CROSS</span></button>
+    <button class="db xx"  data-a="jump"><i>✕</i><span>JUMP</span></button>
+    <button class="db sh sh-l" data-a="switch"><i>L1</i><span>SWITCH</span></button>
+    <button class="db sh sh-r" data-a="sprint"><i>R1</i><span>SPRINT</span></button>
+    <button class="db sup" data-a="super"><i>★</i><span>SUPER</span></button>`;
   document.body.appendChild(w);
   G_dpadEl=w;
   const tap=(sel,fn)=>{const b=w.querySelector(sel);b.addEventListener('pointerdown',e=>{e.preventDefault();e.stopPropagation();fn();},{passive:false});};
-  tap('[data-a="shoot"]',()=>{
-    if(G.poss==='h') manualShot('shoot');
-    else startLunge('h','shoulder');           // △ becomes SHOULDER on defence
-  });
-  tap('[data-a="pass"]',()=>{ if(G.awaitKickoff==='h'){doKickoff();return;}
-    if(G.poss==='h'){ if(G.phase==='moving') manualShot('special'); else togglePassMode(); }
-    else startLunge('h','tackle');             // □ becomes TACKLE on defence
-  });
-  tap('[data-a="switch"]',()=>{ if(G.awaitKickoff==='h'){doKickoff();return;} if(G.poss==='h'){ if(G.phase==='moving') directionalPass(); else togglePassMode(); } else switchDefender(); });
+  /* B.1 — the on-screen buttons call the SAME action functions the keyboard
+     and pad fire, so a control can never grow two behaviours that drift.
+     The touch layout still only has four face buttons for seven actions —
+     redesigning it is B.4; these keep today's behaviour exactly. */
+  tap('[data-a="pass"]',   actPass);    // △ short pass / contain
+  tap('[data-a="shoot"]',  actShoot);   // □ shoot      / tackle
+  tap('[data-a="cross"]',  actCross);   // ○ cross      / slide
+  tap('[data-a="jump"]',   actJump);    // ✕ jump       / block
+  tap('[data-a="switch"]', actSwitch);  // L1 switch player
+  tap('[data-a="super"]',  actSuper);   // ★ conditional — see _updateDpad
   const xb=w.querySelector('[data-a="sprint"]');
-  const on=e=>{e.preventDefault();G_sprint=true;xb.classList.add('held');};
-  const off=()=>{G_sprint=false;xb.classList.remove('held');};
+  const on=e=>{e.preventDefault();G_touchSprint=true;xb.classList.add('held');};
+  const off=()=>{G_touchSprint=false;xb.classList.remove('held');};
   xb.addEventListener('touchstart',on,{passive:false});
   xb.addEventListener('touchend',off);xb.addEventListener('touchcancel',off);
   xb.addEventListener('mousedown',on);xb.addEventListener('mouseup',off);xb.addEventListener('mouseleave',off);
@@ -3765,20 +3890,41 @@ function _buildDpad(){
 function _updateDpad(show){
   if(!G_dpadEl){if(show)_buildDpad();if(!G_dpadEl)return;}
   G_dpadEl.style.display=show?'grid':'none';
-  if(!show){G_sprint=false;return;}
+  if(!show){G_touchSprint=false;G_sprint=false;return;}
   const atk=G.poss==='h';
-  /* Super shot has no defensive equivalent, so the attacking face buttons are
-     free while defending — △ SHOULDER, □ TACKLE. */
-  const tri=G_dpadEl.querySelector('[data-a="shoot"]');
-  const sqB=G_dpadEl.querySelector('[data-a="pass"]');
-  const triL=tri.querySelector('span'), sqL=sqB.querySelector('span');
-  if(triL) triL.textContent = atk?'SHOOT':'SHOULDER';
-  if(sqL)  sqL.textContent  = atk?'SUPER':'TACKLE';
-  tri.classList.remove('dim'); sqB.classList.remove('dim');
+  /* One button, two jobs — the label has to say which one you are about to get,
+     or the pad is a memory test. Mirrors the binding table in ult11-input.js. */
+  const LBL={ pass:['PASS','CONTAIN'], shoot:['SHOOT','TACKLE'],
+              cross:['CROSS','SLIDE'], jump:['JUMP','BLOCK'] };
+  for(const key in LBL){
+    const b=G_dpadEl.querySelector('[data-a="'+key+'"]'); if(!b) continue;
+    const sp=b.querySelector('span'); if(sp) sp.textContent = LBL[key][atk?0:1];
+    b.classList.remove('dim');
+  }
+  // Switching only means anything while defending.
+  const sw=G_dpadEl.querySelector('[data-a="switch"]');
+  if(sw) sw.classList.toggle('dim', atk);
+
+  // A lunge locks the tackle buttons out until it resolves.
   const _lk=(()=>{ const dk=G.chk||ROLES.engager; if(!dk)return 0;
     const ph=_phys['h:'+dk]; return (ph&&ph._lungeLock)||0; })();
-  if(!atk && Date.now()<_lk){ tri.classList.add('dim'); sqB.classList.add('dim'); }
-  G_dpadEl.querySelector('[data-a="switch"]').classList.remove('dim'); // ✕ never dims: PASS on attack, SWITCH on defence
+  if(!atk && Date.now()<_lk){
+    G_dpadEl.querySelector('[data-a="shoot"]').classList.add('dim');
+    G_dpadEl.querySelector('[data-a="cross"]').classList.add('dim');
+  }
+
+  /* SUPER is RT+X on a pad, a chord a phone cannot make. It gets its own
+     button — shown ONLY when the carrier actually has a super available, so
+     the button existing IS the prompt. */
+  const sup=G_dpadEl.querySelector('[data-a="super"]');
+  if(sup){
+    let ok=false;
+    try{
+      const cp=atk && G.ck ? sq('h')[G.ck] : null;
+      ok=!!(cp && G.phase==='moving' && typeof getSpecial==='function' && getSpecial(cp));
+    }catch(e){ ok=false; }
+    sup.style.display = ok ? 'flex' : 'none';
+  }
 }
 // ── FIELD HUD CHIPS — controlled player + opponent (bottom-left) ──
 let _hudKeys='';
@@ -4268,6 +4414,60 @@ const LUNGE={
   tackle  :{wind:70, dur:430, reach:1.9, speed:2.6, recover:850, foul:0.22, track:0.16, lean:0.85},
   shoulder:{wind:90, dur:480, reach:1.5, speed:1.9, recover:480, foul:0.07, track:0.26, lean:0.30}
 };
+/* ══ JUMP (roadmap C.2) ═══════════════════════════════════════════════════
+   The counter to a tackle. Time it right and the challenge passes underneath:
+   you keep the ball and NO duel opens. Mistime it and the tackle lands as
+   normal. That is the whole skill expression in the moment, and it is why the
+   tackle needed a readable wind-up first — you cannot react to what you
+   cannot see.
+
+   Height is a sine arc so the player decelerates into the peak and accelerates
+   out of it, which reads as weight. The invulnerable window is deliberately
+   NARROWER than the airborne time: leaving the ground early or landing late
+   still gets you tackled, so the timing has to be genuine. */
+const JUMP={
+  dur:700,          // matches the 6-frame jump animation
+  invulnFrom:0.20,  // fraction of the arc where the legs are actually clear
+  invulnTo:0.68,
+  landLock:220      // recovery after landing, so it cannot be spammed
+};
+function _jumpPh(side,k){ const ph=_phys[side+':'+k]; return (ph&&ph._jumpT0)?ph:null; }
+function jumpProgress(side,k){
+  const ph=_jumpPh(side,k); if(!ph) return -1;
+  const t=(Date.now()-ph._jumpT0)/JUMP.dur;
+  if(t>=1){ delete ph._jumpT0; return -1; }
+  return t;
+}
+function jumpHeight(side,k){
+  const t=jumpProgress(side,k);
+  return t<0 ? 0 : Math.sin(Math.PI*t);      // 0 → 1 → 0
+}
+function isAirborne(side,k){
+  const t=jumpProgress(side,k);
+  return t>=JUMP.invulnFrom && t<=JUMP.invulnTo;
+}
+function playerJump(side){
+  if(!G||G.phase!=='moving'||G.paused||G._cineHold) return;
+  // whoever this side is currently steering: the carrier, or the engager
+  const k=(G.poss===side) ? G.ck : (G.chk||(typeof ROLES!=='undefined'&&ROLES?ROLES.engager:null));
+  if(!k||!PP[side]||!PP[side][k]) return;
+  const ph=physOf(side,k,sq(side)[k]);
+  if(ph._jumpT0 && Date.now()-ph._jumpT0 < JUMP.dur) return;   // already up
+  if(ph._jumpLock && Date.now() < ph._jumpLock) return;        // still landing
+  ph._jumpT0=Date.now();
+  ph._jumpLock=Date.now()+JUMP.dur+JUMP.landLock;
+  try{ if(window.P3D&&P3D.action) P3D.action(side,k,'jump'); }catch(e){}
+  try{ if(window.SFX&&SFX.whoosh) SFX.whoosh(0.35); }catch(e){}
+}
+/* Push every live jump height to the renderer once per tick. */
+function stepJumps(){
+  if(!window.P3D||!P3D.setJump) return;
+  ['h','a'].forEach(side=>{
+    const q=sq(side); if(!q) return;
+    for(const k in q) P3D.setJump(side+':'+k, jumpHeight(side,k));
+  });
+}
+
 let _lunge=null;   // {side,k,kind,t0,phase,dx,dy,gen}
 function lungeActive(side,k){ return !!(_lunge&&_lunge.side===side&&_lunge.k===k); }
 function isLunging(side,k){ return lungeActive(side,k)&&_lunge.phase==='go'; }
@@ -4320,6 +4520,18 @@ function stepLunge(dt){
     P3D.lunge(_lunge.side+':'+_lunge.k, 0, true); }catch(e){}
   const cp=PP[G.poss]&&PP[G.poss][G.ck];
   const hit=cp && dist(dp,cp)<CONTACT()*L.reach;
+  /* HURDLED — the carrier left the ground in time, so the challenge goes under
+     him. Treated exactly like a whiff: the tackler still pays the full recovery
+     for committing, and no duel opens. */
+  if(hit && isAirborne(G.poss, G.ck)){
+    const side=_lunge.side, dk=_lunge.k;
+    _lunge=null;
+    try{ if(window.P3D&&P3D.lunge)P3D.lunge(side+':'+dk,0,false); if(P3D.clearAction)P3D.clearAction(side,dk); }catch(e){}
+    const ph=physOf(side,dk,sq(side)[dk]);
+    ph._lungeLock=Date.now()+L.recover;
+    try{ say('Hurdled! '+(playerSurname(sq(G.poss)[G.ck].name)||'')+' rides the challenge.'); }catch(e){}
+    return;
+  }
   if(hit){
     const side=_lunge.side, dk=_lunge.k, kind=_lunge.kind;
     _lunge=null;

@@ -94,7 +94,7 @@
     pitchPx:2048,        // turf texture width in texels (higher = crisper pitch; upscaled)
     gfx:{ sky:true, masts:true, lamps:true, boards:true, flags:true, flashes:true, floods:true, banners:true },
     // super-shot cinematic camera (console-tunable): hold = charging aura, chase = ball flight
-    cine:{ holdDist:9.6, holdHeight:1.55, holdSide:1.1, holdLookAhead:20, holdLookY:1.25,
+    cine:{ holdFront:true, holdDist:9.6, holdHeight:1.55, holdSide:1.1, holdLookAhead:20, holdLookY:1.25,
            // chase: sits well back and off to the side so the tail reads in
            // profile instead of the camera riding on top of the ball
            chaseDist:16.5, chaseHeight:4.2, chaseSide:5.5, chaseLookY:1.0,
@@ -1543,10 +1543,20 @@
     //   row 6 = shoulder  (3 frames: lean → charge → follow-through)
     // Side-view art, so every facing maps to the same row. Detected by aspect
     // (~1.07) or a "12x8" in the filename. Sheet MUST be a clean 8×408px grid.
+    /* Rows 6 and 7 each carry TWO 6-frame animations across the 12 columns, so
+       everything — including the super-shot cine — stays on one sheet:
+         row 6 · cols 0-5  standing tackle      · cols 6-11  SUPER SHOT
+         row 7 · cols 0-5  slide tackle         · cols 6-11  JUMP
+       Ranges are [startColumn, frameCount] — see cellOf(). Upgraded from 3 to 6
+       frames each (2026-09-10 art), which is what finally gives the tackle a
+       readable wind-up instead of a single contact pose. */
     const L12x8={cols:12, rows:8, idle:[0,12], run:[0,12], pass:[0,8], shoot:[0,12],
-      tackle:[0,3], shoulder:[0,3], idleFps:4, fpsScale:0.9,
+      shoulder:[0,6], super:[6,6],
+      tackle:[0,6],   jump:[6,6],
+      idleFps:4, fpsScale:0.9,
       rowFor:{ idle:{down:0, up:1, side:0}, run:{side:3, down:4, up:5}, act:{down:2, up:2, side:2},
-               tackle:{side:7, down:7, up:7}, shoulder:{side:6, down:6, up:6} }};
+               shoulder:{side:6, down:6, up:6}, super:{side:6, down:6, up:6},
+               tackle:{side:7, down:7, up:7},   jump:{side:7, down:7, up:7} }};
     // Dedicated 4x4 keeper sheet (assets/ps1/gk_cine.png):
     //   row 0 = idle · row 1 = run · rows 2-3 = cinematic dives/saves (see GK_POSE).
     // Front-facing art, so every facing maps to the same in-play row.
@@ -1767,8 +1777,13 @@
         const A=P3D.anim||ANIM;
         const rng=L[act.name]||L.pass;
         let dur;
-        if(act.name==='tackle')        dur=(A.tackleMs||430);      // whole slide plays across the lunge
-        else if(act.name==='shoulder') dur=(A.shoulderMs||480);
+        /* Six frames now, not three. Held at roughly 10fps so the wind-up,
+           the contact and the recovery each get a readable beat — at the old
+           430ms these ran ~14fps and the whole challenge was a blur. */
+        if(act.name==='tackle')        dur=(A.tackleMs||620);      // slide, plays across the lunge
+        else if(act.name==='shoulder') dur=(A.shoulderMs||560);
+        else if(act.name==='jump')     dur=(A.jumpMs||700);
+        else if(act.name==='super')    dur=(A.superMs||950);
         else dur=(act.name==='shoot'?(A.shootMs||720):(A.passMs||520))*Math.max(0.6,rng[1]/8);
         const el=now-act.t0;
         if(el<dur){ const fi=Math.min(rng[1]-1, Math.floor(el/dur*rng[1]));
@@ -1799,7 +1814,8 @@
     }
     /* one-shot action triggers — auto-detected from engine phase transitions */
     const ACT={};
-    P3D.action=function(s,k,name){ if(COL[name]||name==='tackle'||name==='shoulder') ACT[s+':'+k]={name,t0:performance.now()}; };
+    const ONE_SHOT={tackle:1, shoulder:1, jump:1, super:1};
+    P3D.action=function(s,k,name){ if(COL[name]||ONE_SHOT[name]) ACT[s+':'+k]={name,t0:performance.now()}; };
     P3D.clearAction=function(s,k){ delete ACT[s+':'+k]; };   // snap back to run/idle (lunge end)
     let _lastCarrier=null,_prevKick=false;
     function watchActions(){
@@ -1859,15 +1875,21 @@
           const padB=an?an.padB:0, acx=an?(st.flip?1-an.cx:an.cx):0.5;
           o.sprite.center.set(acx,padB);
           o.sprite.scale.set(wWorld, hWorld, 1);
-          o.sprite.position.set(wx,0.05+(P3D.spriteY||0),wz);
+          // airborne lift — the sprite rises, the shadow below does not, which
+          // is the only thing that actually sells a jump in a billboard engine
+          const _jt=P3D.jump[id]||0;
+          o.sprite.position.set(wx, 0.05+(P3D.spriteY||0)+_jt*hWorld*P3D.jumpPeak, wz);
           // ---- shadows ----
           const Lt=P3D.light, az=Lt.azim, el=Math.max(0.05,Math.min(1,Lt.elev));
           const cdx=-Math.sin(az), cdz=-Math.cos(az);        // cast direction (away from sun)
           // small soft CONTACT patch under the feet
           const baseR=Math.max(0.3, wWorld*0.5);
           o.shadow.position.set(wx,0.04,wz);
-          o.shadow.scale.set(baseR, baseR*0.55, 1);
-          o.shadow.material.opacity=Lt.shadow*0.55;
+          // shadow stays on the grass and shrinks away as he climbs — this is
+          // what reads as height, more than the lift itself
+          const _sh=1-_jt*0.45;
+          o.shadow.scale.set(baseR*_sh, baseR*0.55*_sh, 1);
+          o.shadow.material.opacity=Lt.shadow*0.55*(1-_jt*0.55);
           // SILHOUETTE cast: lay the sprite flat, stretch away from the sun
           const projLen=hWorld*(0.55+(1-el)*Lt.shadowLen*2.6);
           o.sil.position.set(wx+cdx*projLen*(0.5-padB), 0.045, wz+cdz*projLen*(0.5-padB));
@@ -1987,8 +2009,12 @@
     }
     function drawRadar3D(ctx,w,h){
       if(typeof PP==='undefined'||!PP) return;
-      const rw=Math.min(220,w*0.28), rh=rw*0.52, rx=(w-rw)/2, ry=h-rh-14;
-      ctx.save(); ctx.globalAlpha=.92;
+      // Work in stage units and scale once, so every hardcoded size in here
+      // (dot radii, line widths, the 14px margin) keeps the proportions it had
+      // before the canvas moved to the full-window layer.
+      const S=_vpScale, lw=w/S, lh=h/S;
+      const rw=Math.min(220,lw*0.28), rh=rw*0.52, rx=(lw-rw)/2, ry=lh-rh-14;
+      ctx.save(); ctx.scale(S,S); ctx.globalAlpha=.92;
       // frame
       ctx.beginPath();
       if(ctx.roundRect) ctx.roundRect(rx-3,ry-3,rw+6,rh+6,6); else ctx.rect(rx-3,ry-3,rw+6,rh+6);
@@ -2611,6 +2637,13 @@
     /* Slide read-out without new art: lean the sprite and kick up turf.
        THREE.SpriteMaterial supports `rotation`, so a committed lunge can tilt
        into the challenge and spray dust behind the boot. */
+    /* Live jump heights, 0..1, keyed 'side:playerKey'. The engine owns the arc;
+       this only lifts the billboard. Peak is a fraction of the sprite's own
+       world height so it scales with whatever the camera is doing. */
+    P3D.jump={};
+    P3D.jumpPeak=0.55;
+    P3D.setJump=function(id,t){ if(t>0.001) P3D.jump[id]=t; else delete P3D.jump[id]; };
+
     P3D.lunge=function(id,lean,dust){
       const o=sprites[id]; if(!o)return;
       if(o.sprite&&o.sprite.material) o.sprite.material.rotation=lean||0;
@@ -2688,6 +2721,11 @@
       },
       fly(onArrive){
         if(!(cine&&cine.v2&&cine.mode==='hold'))return;
+        /* Hand the chase the camera we already have. Without this the chase
+           branch snaps to its own position on the first frame and the
+           frontal-to-behind move reads as a hard cut; seeded, the existing
+           chaseLag lerp swings it round the shooter instead. */
+        cine._cam={x:camera.position.x, y:camera.position.y, z:camera.position.z};
         cine.mode='fly';cine.ft=0;cine.onArrive=onArrive;
         try{ kickBurst(cine); }catch(e){}
         try{ // kick burst flash (radial white), ~0.3s
@@ -2870,15 +2908,24 @@
       const swx=ex2wx(c.fx),swz=ey2wz(c.fy);
       const gwx=ex2wx(c.gx),gwz=ey2wz(c.gy);
       if(c.mode==='hold'){
-        // Behind the shooter ALONG the shooter→goal line — goal centred ahead,
-        // full body in the lower frame, slight over-the-shoulder offset.
+        /* FRONTAL while he loads the shot (author, 2026-09-10). The camera sits
+           between the shooter and the goal, looking BACK at him, so the wind-up
+           plays to the lens - you see the face and the plant, not a pair of
+           shoulders. It swings behind him the instant the ball is struck: see
+           fly(), which seeds the chase from wherever this frame left the camera
+           so the two shots are one continuous move rather than a cut. */
         let dx=gwx-swx,dz=gwz-swz;const L=Math.hypot(dx,dz)||1;dx/=L;dz/=L;
         const CC=P3D.cine||{};
         const dv=(CC.holdDist||9.6)-Math.min(0.8,c.t*0.16);      // slow dolly-in
         const sd=(CC.holdSide!=null?CC.holdSide:1.1);
-        camera.position.set(swx-dx*dv-dz*sd, (CC.holdHeight||1.55), swz-dz*dv+dx*sd);
-        const la=Math.min(L*0.6,(CC.holdLookAhead||20));
-        camera.lookAt(swx+dx*la, (CC.holdLookY||1.25), swz+dz*la);
+        const front=(CC.holdFront!==false);                      // false = old over-the-shoulder
+        const sgn=front?1:-1;
+        camera.position.set(swx+sgn*dx*dv-dz*sd, (CC.holdHeight||1.55), swz+sgn*dz*dv+dx*sd);
+        if(front) camera.lookAt(swx, (CC.holdLookY||1.25), swz);          // on the shooter
+        else {
+          const la=Math.min(L*0.6,(CC.holdLookAhead||20));
+          camera.lookAt(swx+dx*la, (CC.holdLookY||1.25), swz+dz*la);
+        }
       }else if(c.mode==='out'){
         // Outcome: FIXED frontal frame on the goal (goal + keeper + net), no motion.
         let dx=swx-gwx,dz=swz-gwz;const L=Math.hypot(dx,dz)||1;dx/=L;dz/=L;
@@ -2979,8 +3026,20 @@
       }
     }
 
+    /* The HUD canvas used to live inside the transform-scaled UI stage, so a
+       220px radar was drawn in stage units and shrank with --vp-scale. It now
+       sits on the full-window layer, where 220px is literal — which is why the
+       radar ballooned. Keep drawing in stage units and scale the whole thing. */
+    let _vpScale=1;
+    function readVpScale(){
+      const v=parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--vp-scale'));
+      _vpScale=(v&&isFinite(v)&&v>0)?v:1;
+    }
+    readVpScale();
+
     /* ---- size sync to #C ---- */
     function resize(){
+      readVpScale();
       const w=gl.clientWidth||CV.clientWidth||CV.width, h=gl.clientHeight||CV.clientHeight||CV.height;
       if(!w||!h) return;
       camera.aspect=w/h; camera.updateProjectionMatrix();

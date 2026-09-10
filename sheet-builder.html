@@ -1,0 +1,455 @@
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Ultimate Eleven — Sheet Builder</title>
+<style>
+/* ═══════════════════════════════════════════════════════════════════════════
+   SHEET BUILDER — local asset tool, not part of the game build.
+   Adds animation rows to the 12-column player sheet without hand-aligning
+   anything in an image editor.
+
+   WHY IT EXISTS
+   The player sheet is 12 cols x 8 rows and every row is spoken for
+   (idle-down, idle-up, act, run-side, run-down, run-up, shoulder, tackle), so
+   a jump has nowhere to live. Adding a row by hand means matching a 291x408
+   grid and, harder, matching the BASELINE the other rows stand on — get that
+   wrong by a few pixels and the player bobs when the animation changes.
+   This tool finds the baseline from an existing row and anchors new frames to
+   it automatically.
+   ═══════════════════════════════════════════════════════════════════════════ */
+*{box-sizing:border-box}
+html,body{margin:0;height:100%}
+body{background:#030a18;color:#fbfbfc;font-family:'Rajdhani','Segoe UI',system-ui,sans-serif;
+     font-size:15px;display:flex;flex-direction:column}
+h1{font-family:'Cinzel',Georgia,serif;font-size:1.1rem;letter-spacing:.18em;margin:0;
+   color:#267ee2;text-transform:uppercase}
+h2{font-family:'Cinzel',Georgia,serif;font-size:.72rem;letter-spacing:.2em;text-transform:uppercase;
+   color:#267ee2;margin:0 0 .6em;padding-bottom:.4em;border-bottom:1px solid rgba(38,126,226,.28)}
+h2+h2,.row+h2,button+h2,.hint+h2{margin-top:1.5em}
+header{display:flex;align-items:center;gap:1.2em;flex:0 0 auto;padding:.8em 1.2em;
+       background:rgba(2,10,26,.9);border-bottom:1px solid rgba(38,126,226,.4)}
+header .sub{color:#9fb2cc;font-size:.82rem}
+header .spacer{flex:1}
+main{flex:1;display:flex;min-height:0}
+.col{padding:1em 1.1em;overflow:auto}
+#left{flex:0 0 250px;border-right:1px solid rgba(255,255,255,.08)}
+#mid{flex:1;min-width:0;display:flex;flex-direction:column;gap:.9em}
+#right{flex:0 0 300px;border-left:1px solid rgba(255,255,255,.08)}
+
+#drop,#dropRow{border:1px dashed rgba(38,126,226,.45);border-radius:6px;padding:1.1em .8em;
+  text-align:center;color:#9fb2cc;cursor:pointer;font-size:.84rem;line-height:1.5;transition:.14s}
+#drop:hover,#drop.over,#dropRow:hover,#dropRow.over{border-color:#4a9bf0;color:#fbfbfc;background:rgba(38,126,226,.08)}
+#drop b,#dropRow b{color:#4a9bf0;display:block;font-size:.94rem;letter-spacing:.05em}
+
+.rowitem{display:flex;align-items:center;gap:.55em;padding:.42em .55em;margin-top:.28em;
+  background:rgba(0,0,0,.3);border:1px solid rgba(255,255,255,.08);border-radius:3px;
+  cursor:pointer;font-size:.84rem}
+.rowitem:hover{border-color:rgba(38,126,226,.5)}
+.rowitem.sel{border-color:#4a9bf0;background:rgba(38,126,226,.14)}
+.rowitem .n{width:20px;color:#4a9bf0;font-weight:700;text-align:center}
+.rowitem .nm{flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.rowitem .tag{font-size:.66rem;color:#48586a;letter-spacing:.08em}
+.rowitem.newrow .tag{color:#20c878}
+
+.canvwrap{position:relative;border:1px solid rgba(255,255,255,.08);border-radius:4px;overflow:auto;
+  background:linear-gradient(45deg,#0a1424 25%,transparent 25%,transparent 75%,#0a1424 75%),
+             linear-gradient(45deg,#0a1424 25%,#050d1a 25%,#050d1a 75%,#0a1424 75%);
+  background-size:18px 18px;background-position:0 0,9px 9px;max-height:46vh}
+.canvwrap canvas{display:block;image-rendering:pixelated}
+#previewWrap{border:1px solid rgba(255,255,255,.08);border-radius:4px;
+  background:radial-gradient(ellipse at 50% 80%,#16233a,#05080f);
+  display:flex;align-items:center;justify-content:center;padding:10px;min-height:230px}
+#preview{image-rendering:pixelated}
+
+.row{margin-bottom:.75em}
+.row label{display:flex;justify-content:space-between;align-items:baseline;font-size:.7rem;
+  letter-spacing:.14em;text-transform:uppercase;color:#9fb2cc;margin-bottom:.28em}
+.row label span{color:#fbfbfc;font-variant-numeric:tabular-nums;letter-spacing:0}
+input[type=range]{width:100%;accent-color:#267ee2;margin:0}
+input[type=number],select{width:100%;padding:.38em .5em;background:#0a1a3a;color:#fbfbfc;
+  border:1px solid rgba(255,255,255,.18);border-radius:3px;font:inherit}
+button{font-family:'Cinzel',Georgia,serif;font-size:.72rem;letter-spacing:.14em;text-transform:uppercase;
+  padding:.58em .85em;width:100%;cursor:pointer;background:rgba(2,10,26,.9);color:#fbfbfc;
+  border:1px solid rgba(38,126,226,.45);border-radius:3px;transition:.14s}
+button:hover:not(:disabled){background:rgba(38,126,226,.16);border-color:#4a9bf0;color:#4a9bf0}
+button:disabled{opacity:.33;cursor:default}
+button.primary{border-color:#4a9bf0;color:#4a9bf0}
+button+button{margin-top:.4em}
+.hint{font-size:.73rem;color:#48586a;line-height:1.55;margin:.45em 0 0}
+.hint code,code{font-family:ui-monospace,Consolas,monospace;color:#9fb2cc;font-size:.94em}
+.stat{display:flex;justify-content:space-between;font-size:.75rem;padding:.16em 0;color:#9fb2cc}
+.stat b{color:#fbfbfc;font-weight:600;font-variant-numeric:tabular-nums}
+.warn{border:1px solid rgba(255,176,32,.45);background:rgba(255,176,32,.09);border-radius:3px;
+  padding:.5em .65em;font-size:.75rem;color:#ffb020;line-height:1.5;margin-top:.5em}
+pre{background:rgba(0,0,0,.4);border:1px solid rgba(255,255,255,.1);border-radius:4px;
+  padding:.6em .7em;font-family:ui-monospace,Consolas,monospace;font-size:.7rem;color:#9fb2cc;
+  white-space:pre-wrap;max-height:150px;overflow:auto}
+</style>
+
+<header>
+  <h1>Sheet Builder</h1>
+  <div class="sub">add animation rows to the 12-column player sheet</div>
+  <div class="spacer"></div>
+  <div class="sub" id="sheetinfo">no sheet loaded</div>
+</header>
+
+<main>
+  <div class="col" id="left">
+    <h2>Base sheet</h2>
+    <div id="drop"><b>Drop home.png</b>or click to browse</div>
+    <div id="rowlist"></div>
+    <p class="hint" id="rowhint"></p>
+  </div>
+
+  <div class="col" id="mid">
+    <div>
+      <h2>Sheet &mdash; grid overlay</h2>
+      <div class="canvwrap"><canvas id="sheet"></canvas></div>
+    </div>
+    <div>
+      <h2>Row preview &mdash; does the motion read?</h2>
+      <div id="previewWrap"><canvas id="preview" width="291" height="408"></canvas></div>
+    </div>
+  </div>
+
+  <div class="col" id="right">
+    <h2>Playback</h2>
+    <div class="row">
+      <label>FPS <span id="vFps">7</span></label>
+      <input type="range" id="fps" min="2" max="24" value="7">
+      <p class="hint">The game plays tackle at <b>3 frames over 430&nbsp;ms</b> &mdash; about 7&nbsp;fps.
+        Match that here and you see exactly what the match shows.</p>
+    </div>
+    <button id="playBtn">Pause</button>
+
+    <h2>Add / replace a row</h2>
+    <div id="dropRow"><b>Drop a frame strip</b>horizontal filmstrip, or one frame</div>
+    <div class="row" style="margin-top:.7em">
+      <label>Frames in strip <span id="vFrames">3</span></label>
+      <input type="range" id="frames" min="1" max="12" value="3">
+    </div>
+    <div class="row">
+      <label>Target row <span id="vTarget">8 (new)</span></label>
+      <input type="range" id="target" min="0" max="8" value="8">
+    </div>
+    <div class="row">
+      <label>Match baseline of row <span id="vBase">3</span></label>
+      <input type="range" id="baserow" min="0" max="8" value="3">
+      <p class="hint">Feet must land on the same line as the other rows or the player
+        bobs when the animation changes. This reads the baseline off that row.</p>
+    </div>
+    <div class="row">
+      <label>Scale <span id="vScale">100</span>%</label>
+      <input type="range" id="scale" min="40" max="160" value="100">
+    </div>
+    <div class="row">
+      <label>Nudge Y <span id="vDy">0</span>px</label>
+      <input type="range" id="dy" min="-120" max="120" value="0">
+    </div>
+    <div class="row">
+      <label>Background key <span id="vTol">42</span></label>
+      <input type="range" id="tol" min="0" max="140" value="42">
+    </div>
+    <button id="applyBtn" disabled>Place into row</button>
+    <div id="warn"></div>
+
+    <h2>Result</h2>
+    <div class="stat"><span>Sheet</span><b id="sSize">&mdash;</b></div>
+    <div class="stat"><span>Cell</span><b id="sCell">&mdash;</b></div>
+    <div class="stat"><span>Rows</span><b id="sRows">&mdash;</b></div>
+    <button id="exportBtn" class="primary" disabled>Export sheet PNG</button>
+
+    <h2>Layout snippet</h2>
+    <p class="hint">Paste into <code>ult11-pitch3d.js</code> once the row exists.</p>
+    <pre id="snippet">load a sheet first</pre>
+  </div>
+</main>
+
+<script>
+'use strict';
+const $ = id => document.getElementById(id);
+
+/* The 12x8 layout as ult11-pitch3d.js defines it. Row 8+ is what we are adding. */
+const ROW_NAMES = [
+  ['idle · down',      'idle'],
+  ['idle · up',        'idle'],
+  ['act (pass/shoot)', 'act'],
+  ['run · side',       'run'],
+  ['run · down',       'run'],
+  ['run · up',         'run'],
+  ['shoulder charge',  'shoulder'],
+  ['slide tackle',     'tackle'],
+  ['JUMP (new)',       'jump'],
+  ['BLOCK (new)',      'block']
+];
+
+const S = { img:null, cols:12, rows:8, cw:0, ch:0, canvas:null, sel:0, strip:null, playing:true };
+
+/* ── base sheet ──────────────────────────────────────────────────────────── */
+const drop = $('drop');
+const picker = Object.assign(document.createElement('input'), {type:'file', accept:'image/*'});
+picker.style.display='none'; document.body.appendChild(picker);
+drop.onclick = () => picker.click();
+picker.onchange = () => { if(picker.files[0]) loadSheet(picker.files[0]); picker.value=''; };
+['dragenter','dragover'].forEach(e=>drop.addEventListener(e,ev=>{ev.preventDefault();drop.classList.add('over');}));
+['dragleave','drop'].forEach(e=>drop.addEventListener(e,ev=>{ev.preventDefault();drop.classList.remove('over');}));
+drop.addEventListener('drop', ev => { const f=ev.dataTransfer.files[0]; if(f) loadSheet(f); });
+
+function loadSheet(file){
+  const url = URL.createObjectURL(file);
+  const im = new Image();
+  im.onload = () => {
+    URL.revokeObjectURL(url);
+    S.img = im;
+    // 12 columns is fixed for this project; rows follow from the cell being
+    // square-ish. Detect rather than assume, so a 9-row sheet reloads correctly.
+    S.cols = 12;
+    const cw = im.width / S.cols;
+    S.rows = Math.max(1, Math.round(im.height / cw * 0.712)) || 8;
+    // snap to a whole number of rows that divides cleanly
+    for(const r of [6,8,9,10,12]) if(Math.abs(im.height/r - 408*(cw/291)) < 12) S.rows = r;
+    S.cw = im.width / S.cols;
+    S.ch = im.height / S.rows;
+    // working copy we can draw into
+    const c = document.createElement('canvas');
+    c.width = im.width; c.height = im.height;
+    c.getContext('2d').drawImage(im,0,0);
+    S.canvas = c;
+    S.sel = Math.min(S.sel, S.rows-1);
+    $('sheetinfo').textContent = im.width+'×'+im.height+' · '+S.cols+'×'+S.rows+' · cell '+Math.round(S.cw)+'×'+Math.round(S.ch);
+    $('target').max = S.rows;            // allow one past the end = append
+    $('baserow').max = S.rows-1;
+    $('target').value = S.rows;
+    $('exportBtn').disabled = false;
+    renderRows(); renderSheet(); updateStats(); updateSnippet(); syncLabels();
+  };
+  im.src = url;
+}
+
+function renderRows(){
+  const w = $('rowlist'); w.innerHTML='';
+  for(let r=0;r<S.rows;r++){
+    const el = document.createElement('div');
+    const known = ROW_NAMES[r];
+    el.className = 'rowitem' + (r===S.sel?' sel':'') + (r>7?' newrow':'');
+    el.innerHTML = '<div class="n">'+r+'</div><div class="nm">'+(known?known[0]:'row '+r)+'</div>'+
+                   '<div class="tag">'+(known?known[1]:'—')+'</div>';
+    el.onclick = () => { S.sel=r; renderRows(); renderSheet(); syncLabels(); };
+    w.appendChild(el);
+  }
+  $('rowhint').textContent = S.rows>8
+    ? 'Row 8+ is new — remember the layout snippet.'
+    : 'All 8 rows are in use. A jump needs row 8.';
+}
+
+/* ── sheet with grid ─────────────────────────────────────────────────────── */
+function renderSheet(){
+  if(!S.canvas) return;
+  const view = $('sheet');
+  const maxW = 900, sc = Math.min(1, maxW/S.canvas.width);
+  view.width = Math.round(S.canvas.width*sc);
+  view.height = Math.round(S.canvas.height*sc);
+  const x = view.getContext('2d');
+  x.imageSmoothingEnabled = false;
+  x.clearRect(0,0,view.width,view.height);
+  x.drawImage(S.canvas,0,0,view.width,view.height);
+  // grid
+  x.lineWidth = 1;
+  x.strokeStyle = 'rgba(255,255,255,.14)';
+  for(let c=1;c<S.cols;c++){ const px=Math.round(c*S.cw*sc)+.5; x.beginPath();x.moveTo(px,0);x.lineTo(px,view.height);x.stroke(); }
+  for(let r=1;r<S.rows;r++){ const py=Math.round(r*S.ch*sc)+.5; x.beginPath();x.moveTo(0,py);x.lineTo(view.width,py);x.stroke(); }
+  // selected row
+  x.strokeStyle = '#4a9bf0'; x.lineWidth = 2;
+  x.strokeRect(1, Math.round(S.sel*S.ch*sc)+1, view.width-2, Math.round(S.ch*sc)-2);
+  // baseline of the reference row
+  const br = +$('baserow').value;
+  const bl = baselineOf(br);
+  if(bl!=null){
+    const py = Math.round((br*S.ch + bl)*sc)+.5;
+    x.strokeStyle='rgba(32,200,120,.85)'; x.lineWidth=1;
+    x.setLineDash([6,4]); x.beginPath();x.moveTo(0,py);x.lineTo(view.width,py);x.stroke(); x.setLineDash([]);
+  }
+}
+
+/* Lowest opaque pixel in a row, in cell-local px — the line the feet stand on. */
+const BASE_CACHE = {};
+function baselineOf(row){
+  if(!S.canvas || row>=S.rows) return null;
+  if(BASE_CACHE[row]!=null) return BASE_CACHE[row];
+  const x = S.canvas.getContext('2d', {willReadFrequently:true});
+  let d; try{ d = x.getImageData(0, Math.floor(row*S.ch), S.canvas.width, Math.floor(S.ch)).data; }
+  catch(e){ return null; }
+  const W = S.canvas.width, H = Math.floor(S.ch);
+  for(let y=H-1;y>=0;y--)
+    for(let px=0;px<W;px++)
+      if(d[(y*W+px)*4+3] > 12){ BASE_CACHE[row]=y; return y; }
+  BASE_CACHE[row]=null; return null;
+}
+
+/* ── row playback ────────────────────────────────────────────────────────── */
+let animT = 0, animFrame = 0;
+function tick(ts){
+  requestAnimationFrame(tick);
+  if(!S.canvas || !S.playing) return;
+  const fps = +$('fps').value;
+  if(ts - animT < 1000/fps) return;
+  animT = ts;
+  animFrame = (animFrame+1) % S.cols;
+  drawPreview();
+}
+function drawPreview(){
+  if(!S.canvas) return;
+  const p = $('preview');
+  p.width = Math.round(S.cw); p.height = Math.round(S.ch);
+  const x = p.getContext('2d');
+  x.imageSmoothingEnabled = false;
+  x.clearRect(0,0,p.width,p.height);
+  x.drawImage(S.canvas, Math.floor(animFrame*S.cw), Math.floor(S.sel*S.ch),
+              Math.floor(S.cw), Math.floor(S.ch), 0,0,p.width,p.height);
+  const scale = Math.min(220/p.height, 1.6);
+  p.style.width = Math.round(p.width*scale)+'px';
+  p.style.height = Math.round(p.height*scale)+'px';
+}
+requestAnimationFrame(tick);
+$('playBtn').onclick = () => { S.playing=!S.playing; $('playBtn').textContent = S.playing?'Pause':'Play'; };
+
+/* ── new row strip ───────────────────────────────────────────────────────── */
+const dropRow = $('dropRow');
+const picker2 = Object.assign(document.createElement('input'), {type:'file', accept:'image/*'});
+picker2.style.display='none'; document.body.appendChild(picker2);
+dropRow.onclick = () => picker2.click();
+picker2.onchange = () => { if(picker2.files[0]) loadStrip(picker2.files[0]); picker2.value=''; };
+['dragenter','dragover'].forEach(e=>dropRow.addEventListener(e,ev=>{ev.preventDefault();dropRow.classList.add('over');}));
+['dragleave','drop'].forEach(e=>dropRow.addEventListener(e,ev=>{ev.preventDefault();dropRow.classList.remove('over');}));
+dropRow.addEventListener('drop', ev => { const f=ev.dataTransfer.files[0]; if(f) loadStrip(f); });
+
+function loadStrip(file){
+  const url = URL.createObjectURL(file);
+  const im = new Image();
+  im.onload = () => { URL.revokeObjectURL(url); S.strip = im;
+    dropRow.innerHTML = '<b>'+im.width+'×'+im.height+'</b>strip loaded — set frames, then place';
+    $('applyBtn').disabled = !S.canvas; };
+  im.src = url;
+}
+
+/* Same border-flood key as sheet-slicer: only background CONNECTED to the edge
+   is removed, so an enclosed white kit survives. */
+function keyStrip(data, w, h, tol){
+  const n=w*h, bg=new Uint8Array(n), st=new Int32Array(n); let sp=0;
+  const dist=i=>{const p=i*4;return 255-Math.min(data[p],data[p+1],data[p+2]);};
+  const push=i=>{ if(bg[i])return; if(data[i*4+3]<8 || dist(i)<=tol){bg[i]=1;st[sp++]=i;} };
+  for(let x=0;x<w;x++){push(x);push((h-1)*w+x);}
+  for(let y=0;y<h;y++){push(y*w);push(y*w+w-1);}
+  while(sp>0){const i=st[--sp],x=i%w,y=(i/w)|0;
+    if(x>0)push(i-1); if(x<w-1)push(i+1); if(y>0)push(i-w); if(y<h-1)push(i+w);}
+  for(let i=0;i<n;i++) if(bg[i]) data[i*4+3]=0;
+}
+
+$('applyBtn').onclick = () => {
+  if(!S.canvas || !S.strip) return;
+  const frames = +$('frames').value;
+  const target = +$('target').value;
+  const baseRow = +$('baserow').value;
+  const scale = +$('scale').value/100;
+  const dy = +$('dy').value;
+  const tol = +$('tol').value;
+
+  // grow the sheet if we are appending past the last row
+  if(target >= S.rows){
+    const grown = document.createElement('canvas');
+    grown.width = S.canvas.width; grown.height = Math.round(S.ch*(target+1));
+    grown.getContext('2d').drawImage(S.canvas,0,0);
+    S.canvas = grown; S.rows = target+1;
+    $('target').max = S.rows; $('baserow').max = S.rows-1;
+  }
+
+  const baseY = baselineOf(baseRow);
+  const targetBaseline = (baseY!=null) ? baseY : Math.round(S.ch*0.94);
+
+  // key the strip once
+  const sc = document.createElement('canvas');
+  sc.width = S.strip.width; sc.height = S.strip.height;
+  const sx = sc.getContext('2d',{willReadFrequently:true});
+  sx.drawImage(S.strip,0,0);
+  const img = sx.getImageData(0,0,sc.width,sc.height);
+  keyStrip(img.data, sc.width, sc.height, tol);
+  sx.putImageData(img,0,0);
+
+  const fw = sc.width/frames;
+  const dst = S.canvas.getContext('2d');
+  dst.clearRect(0, Math.floor(target*S.ch), S.canvas.width, Math.ceil(S.ch));
+
+  for(let f=0; f<frames && f<S.cols; f++){
+    // trim this frame to its own alpha box so the anchor is the FIGURE,
+    // not whatever padding the generator happened to leave
+    const fx = Math.floor(f*fw), fwi = Math.floor(fw);
+    const fd = sx.getImageData(fx,0,fwi,sc.height).data;
+    let minX=1e9,maxX=-1,minY=1e9,maxY=-1;
+    for(let y=0;y<sc.height;y++) for(let x=0;x<fwi;x++)
+      if(fd[(y*fwi+x)*4+3]>8){ if(x<minX)minX=x; if(x>maxX)maxX=x; if(y<minY)minY=y; if(y>maxY)maxY=y; }
+    if(maxX<0) continue;
+    const bw=maxX-minX+1, bh=maxY-minY+1;
+    // fit to the cell, then apply the user's scale
+    const fit = Math.min(S.cw/bw, S.ch/bh) * scale;
+    const dw = bw*fit, dh = bh*fit;
+    const cx = f*S.cw + (S.cw-dw)/2;                      // centred horizontally
+    const cy = target*S.ch + targetBaseline - dh + dy;    // feet on the baseline
+    dst.drawImage(sc, fx+minX, minY, bw, bh, cx, cy, dw, dh);
+  }
+
+  delete BASE_CACHE[target];
+  S.sel = target; animFrame = 0;
+  renderRows(); renderSheet(); drawPreview(); updateStats(); updateSnippet(); syncLabels();
+  const w=$('warn');
+  w.innerHTML = (frames>S.cols)
+    ? '<div class="warn">Strip has more frames than the sheet has columns ('+S.cols+'). Extra frames were dropped.</div>' : '';
+};
+
+/* ── output ──────────────────────────────────────────────────────────────── */
+function updateStats(){
+  if(!S.canvas) return;
+  $('sSize').textContent = S.canvas.width+'×'+S.canvas.height;
+  $('sCell').textContent = Math.round(S.cw)+'×'+Math.round(S.ch);
+  $('sRows').textContent = S.cols+' cols × '+S.rows+' rows';
+}
+function updateSnippet(){
+  if(!S.canvas) return;
+  const extra = [];
+  for(let r=8;r<S.rows;r++){
+    const nm = (ROW_NAMES[r]&&ROW_NAMES[r][1]) || ('row'+r);
+    extra.push('  '+nm+':{side:'+r+', down:'+r+', up:'+r+'}');
+  }
+  $('snippet').textContent =
+'// ult11-pitch3d.js — L12x8 becomes L12x'+S.rows+'\n'+
+'const L12x'+S.rows+'={cols:12, rows:'+S.rows+', idle:[0,12], run:[0,12], pass:[0,8], shoot:[0,12],\n'+
+'  tackle:[0,3], shoulder:[0,3],'+(S.rows>8?' jump:[0,'+Math.min(S.cols,6)+'],':'')+' idleFps:4, fpsScale:0.9,\n'+
+'  rowFor:{ idle:{down:0, up:1, side:0}, run:{side:3, down:4, up:5}, act:{down:2, up:2, side:2},\n'+
+'           tackle:{side:7, down:7, up:7}, shoulder:{side:6, down:6, up:6}'+(extra.length?',\n'+extra.join(',\n'):'')+' }};\n\n'+
+'// layoutFor(): this sheet is '+S.canvas.width+'×'+S.canvas.height+', aspect '+(S.canvas.width/S.canvas.height).toFixed(3)+'\n'+
+'// so widen the 12x8 aspect test or name the file  ...12x'+S.rows+'.png';
+}
+function syncLabels(){
+  $('vFps').textContent = $('fps').value;
+  $('vFrames').textContent = $('frames').value;
+  $('vScale').textContent = $('scale').value;
+  $('vDy').textContent = $('dy').value;
+  $('vTol').textContent = $('tol').value;
+  $('vBase').textContent = $('baserow').value;
+  const t=+$('target').value;
+  $('vTarget').textContent = t + (t>=8?' (new)':' · '+((ROW_NAMES[t]&&ROW_NAMES[t][0])||''));
+}
+['fps','frames','scale','dy','tol','baserow','target'].forEach(id=>{
+  $(id).addEventListener('input',()=>{ syncLabels(); if(id==='baserow') renderSheet(); });
+});
+syncLabels();
+
+$('exportBtn').onclick = () => {
+  if(!S.canvas) return;
+  S.canvas.toBlob(b=>{
+    const a=document.createElement('a');
+    a.href=URL.createObjectURL(b);
+    a.download='home.12x'+S.rows+'.png';
+    a.click();
+    setTimeout(()=>URL.revokeObjectURL(a.href),4000);
+  },'image/png');
+};
+</script>
