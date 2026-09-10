@@ -1302,6 +1302,27 @@
         for(let j=0;j<6;j++) R.colr[k+j]=0; }
       R.g.attributes.position.needsUpdate=true; R.g.attributes.color.needsUpdate=true;
     }
+    /* Ball height along the flight, 0..1 -> engine bz.
+       'normal' is the old symmetric arc blended into a hover so the ball
+       arrives at goal height instead of dropping to the grass in front of
+       the keeper. 'drive' is the Tsubasa Drive Shot: it CLIMBS hard, hangs,
+       then knifes down under the bar - asymmetric, which is the whole point.
+       The descent is what makes it read as a drive rather than a lob. */
+    function shotArc(kind,fe,stl){
+      const loft=(stl&&stl.loft!=null)?stl.loft:1;
+      if(kind==='drive'){
+        const climb=Math.pow(Math.min(1,fe/0.42),0.62);              // fast rise
+        /* max(0,...) is NOT paranoia: at fe=1, (1-0.42)/0.58 evaluates to
+           1.0000000000000002, so the base lands on -2.2e-16 and a negative
+           base with a fractional exponent is NaN - which would blank the ball
+           on the last frame of every drive shot. */
+        const fall =(fe<=0.42)?1:Math.pow(Math.max(0,1-(fe-0.42)/0.58),2.4);   // steep dive
+        return 54*climb*fall*loft+1.6;
+      }
+      const arc=(46*3.2*fe*(1-fe)*0.7+8*Math.sin(fe*Math.PI))*loft;
+      const land=4, bl=Math.max(0,(fe-0.5)/0.5);
+      return arc*(1-bl)+land*bl;
+    }
     /* ── SHOT STYLE — who is shooting decides how the ball travels ──
        power  (PWR well above TEC): flat, fast, straight drive, topspin
        curve  (TEC well above PWR): slower banana that bows away from the
@@ -1337,15 +1358,43 @@
       aura     :{w:1.05,strands:3,wob:0.50,wf:9 ,glow:2.9,pR:3,pG:6 ,ring:0.16,col:'#ff5ca8'},
       tiger    :{w:1.30,strands:3,wob:0.60,wf:10,glow:3.2,pR:3,pG:7 ,ring:0.13,col:'#ffb020',hotP:1},
       after    :{w:0.00,strands:0,wob:0.00,wf:0 ,glow:2.0,pR:0,pG:0 ,ring:0   ,col:'#6fd0ff',ghost:1},
-      dragon   :{w:1.25,strands:2,wob:0.90,wf:5 ,glow:2.7,pR:3,pG:8 ,ring:0   ,col:'#ff3a2a',hotP:1},
+      /* DRAGON - Frisina's signature. Four braided strands, a very hot core,
+         a fast ring cadence for the heat pulses, and crucially pG NEGATIVE:
+         `p.vy -= p.g*dt`, so a negative g accelerates particles UPWARD and
+         skips the floor bounce (which only runs when g>0). That turns the
+         debris into rising embers, which is the one thing separating fire
+         from orange sparks falling. */
+      dragon   :{w:1.45,strands:4,wob:0.72,wf:6 ,glow:3.4,pR:6,pG:-1.8,ring:0.10,col:'#ff3a2a',hotP:1},
+      /* DRIVE - Mancuso's. Deep blue, tight and near-straight: a drive shot is
+         not lightning, it is a projectile. Its drama is the TRAJECTORY
+         (arc:'drive'), not the wobble. */
+      drive    :{w:1.00,strands:3,wob:0.12,wf:2 ,glow:2.8,pR:4,pG:6 ,ring:0.18,col:'#2f6dff'},
       ice      :{w:0.90,strands:2,wob:0.35,wf:3 ,glow:2.3,pR:3,pG:10,ring:0   ,col:'#8fe8ff',hotP:1},
       nature   :{w:0.85,strands:2,wob:0.55,wf:3 ,glow:2.0,pR:2,pG:1 ,ring:0   ,col:'#4fe06a'},
       galaxy   :{w:0.70,strands:2,wob:1.10,wf:6 ,glow:2.6,pR:4,pG:0 ,ring:0   ,col:'#b07cff'}
     };
     const TRAIL_TINTS=['#ffd24a','#ff6a1e','#4fa8ff','#46e0ff','#9b5cff',
                        '#2ee06a','#ff4fa0','#ffffff','#a8ff5c','#ff3a6a'];
+    /* SIGNATURE SHOTS. Named players get a fixed trail AND a fixed
+       trajectory instead of the stat-and-hash roll everyone else gets. Keyed
+       on lowercase surname, so 'T.Frisina' / 'Frisina' / 'frisina' all hit.
+       `label` is wired but NOT displayed: game.js's getSpecial() deliberately
+       returns a generic 'SUPER SHOT' for everyone ("Named skills removed from
+       screen"). That was a decision, so it is left alone - turning it back on
+       is one line in getSpecial(). */
+    const SIGNATURES={
+      mancuso:{ trail:'drive',  arc:'drive',  label:'DRIVE SHOT'   },
+      vella:  { trail:'nature', arc:'normal', label:'EMERALD SHOT', col:'#19e07a' },
+      frisina:{ trail:'dragon', arc:'normal', label:'DRAGON SHOT'  }
+    };
+    function signatureFor(pl){
+      if(!pl) return null;
+      const nm=String(pl.origName||pl.name||'').toLowerCase();
+      for(const k in SIGNATURES){ if(nm.indexOf(k)>=0) return SIGNATURES[k]; }
+      return null;
+    }
     // players who always get the dragon
-    const DRAGON_NAMES=['frisina','xiao','michael','micheal'];
+    const DRAGON_NAMES=['xiao','michael','micheal'];
     const TECH_POOL=['lightning','wind','ice','galaxy','aura','nature','after','shadow'];
     const ALL_POOL=Object.keys(TRAIL_STYLES);
     function _hash(str){ let h=0; str=String(str||'');
@@ -1361,6 +1410,9 @@
         return {k:_trailForce,st:fs,col:fs.col};
       }
       if(!pl) return {k:'standard',st:TRAIL_STYLES.standard,col:TRAIL_STYLES.standard.col};
+      const sig=signatureFor(pl);
+      if(sig){ const st=TRAIL_STYLES[sig.trail]||TRAIL_STYLES.standard;
+               return {k:sig.trail,st,col:sig.col||st.col,sig}; }
       const nm=String(pl.origName||pl.name||''), h=_hash(nm), low=nm.toLowerCase();
       let k;
       if(DRAGON_NAMES.some(d=>low.indexOf(d)>=0)) k='dragon';
@@ -2450,6 +2502,46 @@
       if(t<0.92) return 0;
       return 0.35;
     }
+    /* SPEED LINES DURING THE FLIGHT.
+       These existed only in drawHoldFx, i.e. only while the player was
+       STANDING STILL, and hideHoldFx() killed them on the exact frame the
+       ball started moving. Exactly inverted: they were decorating the pause
+       and absent from the part that is supposed to feel fast.
+       Camera-space, radiating from the BALL's projected position, sparse and
+       short-lived so they read as speed rather than as a starburst. */
+    function drawFlyLines(c,dt,bwx,bwy,bwz){
+      ensureHoldFx();
+      const W2=fxCv.width,H2=fxCv.height,g=fxCtx;
+      g.clearRect(0,0,W2,H2);
+      const sp=projectToScreen(bwx,bwy,bwz,W2,H2);
+      if(!(sp.x>-W2&&sp.x<W2*2)) return;                 // ball off-frame: nothing to radiate from
+      const FX=_trailFx||trailStyleFor(null);
+      const cc=new T.Color(FX.col||'#ffd24a');
+      const cr=Math.round(cc.r*255),cgn=Math.round(cc.g*255),cb=Math.round(cc.b*255);
+      /* Fade in over the first fifth of the flight and out over the last
+         third - lines that persist all the way to the keeper stop reading as
+         acceleration and start reading as a static filter. */
+      const ft=Math.min(1,c.ft||0);
+      const amp=Math.min(1,ft/0.18)*Math.min(1,(1-ft)/0.32);
+      if(amp<=0.01) return;
+      g.save(); g.globalCompositeOperation='lighter';
+      const R=Math.hypot(W2,H2);
+      const N=26;
+      for(let i=0;i<N;i++){
+        const a=(i/N)*Math.PI*2+Math.sin(i*12.9898)*0.6;
+        const r0=H2*(0.10+0.10*((i*2654435761>>>0)%100)/100);
+        const r1=r0+R*(0.18+0.30*((i*40503>>>0)%100)/100)*amp;
+        const x0=sp.x+Math.cos(a)*r0, y0=sp.y+Math.sin(a)*r0;
+        const x1=sp.x+Math.cos(a)*r1, y1=sp.y+Math.sin(a)*r1;
+        const al=(0.10+0.16*Math.abs(Math.sin(i*2.3)))*amp;
+        const lg=g.createLinearGradient(x0,y0,x1,y1);
+        lg.addColorStop(0,'rgba(255,250,235,'+al.toFixed(3)+')');
+        lg.addColorStop(1,'rgba('+cr+','+cgn+','+cb+',0)');
+        g.strokeStyle=lg; g.lineWidth=1.0+((i%4===0)?1.6:0);
+        g.beginPath(); g.moveTo(x0,y0); g.lineTo(x1,y1); g.stroke();
+      }
+      g.restore();
+    }
     function drawHoldFx(c,dt){
       ensureHoldFx();
       if(bloomPass){ bloomPass.strength=P3D.fx.bloom*0.4; bloomPass.threshold=Math.max(P3D.fx.bloomThresh,0.93); }
@@ -2761,6 +2853,8 @@
                windupIsTeam:cineWindupIsTeam,
                trail:(_trailFx?_trailFx.k:null), trailCol:(_trailFx?_trailFx.col:null),
                trailForced:_trailForce, ribbonPts:(RIBS[0]?RIBS[0].pts.length:0),
+               arc:(cine.arc||'normal'), strands:(_trailFx&&_trailFx.st?_trailFx.st.strands:null),
+               ribsVisible:RIBS.filter(function(R){return R.mesh&&R.mesh.visible;}).length,
                hitStop:+(cine._hitStop||0).toFixed(3), chg:+chargeCurve(Math.min(1,_fxT/2.0)).toFixed(3),
                cam:[+camera.position.x.toFixed(4),+camera.position.y.toFixed(4),+camera.position.z.toFixed(4)]};
       const g=sprites[cine.o.as+':'+cine.o.sk];
@@ -2826,6 +2920,8 @@
           const st=shotStyleFor(shooter), pp=shotPerp(sp.x,sp.y,stopX,gp.y);
           Object.assign(cine,{style:st,perpX:pp.px,perpY:pp.py,curveAmt:W*0.05*st.curve,dur:1.6/st.speed});
           _trailFx=trailStyleFor(shooter); try{ clearTrail(); }catch(e){}
+          cine.arc=(_trailFx&&_trailFx.sig&&_trailFx.sig.arc)||'normal';
+          if(cine.arc==='drive') cine.curveAmt*=0.35;   // a drive barely bends
           window.U11DBG&&U11DBG('[3D] super shot: '+st.kind+' / trail '+_trailFx.k
             +' ('+(shooter?((shooter.origName||shooter.name)+' pwr'+shooter.pwr+' tec'+shooter.tec):'?')+')');
         }catch(e){}
@@ -2945,8 +3041,36 @@
             if(g.sil){ g.sil.position.x=g.sprite.position.x; }
           }
         }
+        /* PRE-IMPACT BURST. Anime energy explodes slightly BEFORE the strike,
+           not on it - the burst is the anticipation, the kick is the payoff.
+           Fires once, inside the held-breath stillness, so the quiet frame is
+           not actually empty: the ground rings go out while the player is
+           motionless, and THEN he kicks. */
+        {
+          const _hp=Math.min(1,_fxT/2.0);
+          if(!c._preBurst && _hp>=0.845){
+            c._preBurst=true;
+            try{
+              const _bx=ex2wx(c.fx), _bz=ey2wz(c.fy);
+              const _hh=PLEN*(P3D.spriteFrac!=null?P3D.spriteFrac:0.045);
+              const _pc=(_trailFx&&_trailFx.col)||c.col||'#ffd24a';
+              spawnRing(_bx,_bz,'#ffffff',_hh*0.25,_hh*3.2,0.34);
+              spawnRing(_bx,_bz,_pc,_hh*0.4,_hh*5.6,0.5);
+              for(let i=0;i<14;i++){
+                const a=Math.random()*Math.PI*2, sp2=1.6+Math.random()*2.2;
+                spawnPart(_bx,_hh*0.18,_bz, Math.cos(a)*sp2, 1.2+Math.random()*2.4, Math.sin(a)*sp2,
+                          Math.random()<0.5?'#ffffff':_pc, _hh*(0.05+Math.random()*0.07),
+                          0.35+Math.random()*0.35, -0.4);
+              }
+              shakeCam(0.07,220);                     // a tremor, not the impact
+            }catch(e){}
+          }
+        }
         drawHoldFx(c,dt);                              // sakuga charge: lines/aura/glow
       }else if(c.mode==='fly'||c.mode==='wait'){
+        /* hideHoldFx() still runs once, to drop the 3D aura layers and the
+           charge vignette. The 2D canvas is then re-shown by drawFlyLines,
+           which owns it for the rest of the flight. */
         if(!c._fxOff){c._fxOff=true;_fxT=0;hideHoldFx();}
         if(c.shRestore&&!c._shBack){                  // shooter back on his sheet for kick frames
           const r=c.shRestore;
@@ -2988,14 +3112,7 @@
         const fe=ft*ft*(3-2*ft);
         bx=c.fx+(c.tx-c.fx)*fe; by=c.fy+(c.ty-c.fy)*fe;
         if(c.curveAmt){ const off=Math.sin(Math.PI*fe)*c.curveAmt; bx+=c.perpX*off; by+=c.perpY*off; }  // banana
-        {
-          // The old arc drove bz to 0 at fe=1, so every shot — even a flat
-          // power drive — dropped to the grass right in front of the keeper.
-          // Blend the arc into the hover height so it arrives at goal height.
-          const arc=(46*3.2*fe*(1-fe)*0.7+8*Math.sin(fe*Math.PI))*stl.loft;
-          const land=4, bl=Math.max(0,(fe-0.5)/0.5);
-          bz=arc*(1-bl)+land*bl;
-        }
+        bz=shotArc(c.arc,fe,stl);
         if(c.mode==='wait')bz=4+Math.sin(c.t*6)*0.8;  // hover short of the keeper
       }else if(c.mode==='out'){
         c.ot+=dt;
@@ -3035,6 +3152,7 @@
       }
       c._pbw={x:bwx,z:bwz};
       try{ shotBallFx(c,bwx,bwy,bwz,d,(c.mode==='fly'||(c.mode==='out'&&c.isGoal)),c.mode==='wait'); }catch(e){}
+      if(c.mode==='fly'){ try{ drawFlyLines(c,dt,bwx,bwy,bwz); }catch(e){} }
       if(c.mode==='out'&&c.ot>=0.55&&!c._impact){ c._impact=true; try{ impactBurst(c,bwx,bwy,bwz,d); }catch(e){} }
       c._bw={x:bwx,y:bwy,z:bwz};
     }
