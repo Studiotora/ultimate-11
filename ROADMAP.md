@@ -429,12 +429,12 @@ exist until there is an input layer to bind them to.
   super f0→r6c6 … f5→r6c11, shoulder f0→r6c0 … f5→r6c5.
 
   **Still to hook up:**
-  - `away.png` was NOT rebuilt (still 09-06). The away team plays the old 3-frame
-    art through a 6-frame range, so its rows 6/7 will be wrong until re-baked.
+  - `away.png` — ✅ re-baked by the author 2026-09-10 (3492x3264, 12x8, same
+    291x408 cells as `home.png`). Placeholder art, not the final Germany kit,
+    but the row layout is correct so rows 6/7 now play the right frames.
   - **JUMP — ✅ BUILT (js v135 / pitch3d v62).** See C.2a below.
-  - **SUPER cine camera — DONE (pitch3d v63).** See C.2b below. The super ROW
-    itself is still not the sprite used during the hold — that remains the
-    single `striker_windup.png` texture.
+  - **SUPER cine camera — ✅ DONE (pitch3d v63).** See C.2b below.
+  - **SUPER row on screen — ✅ DONE (js v136 / pitch3d v65).** See C.2c below.
 
 
 - **C.2a · JUMP + HURDLE — ✅ DONE 2026-09-10** (js v135 / pitch3d v62).
@@ -489,10 +489,135 @@ exist until there is an input layer to bind them to.
   **Verified** by driving `superCine2.start()` directly: the hold frame shows
   the shooter front-on with the goal and hoardings behind him.
 
-  **Not done:** the hold still uses the single `striker_windup.png` texture
-  rather than the new 6-frame super row (row 6, cols 6-11). Swapping it means
-  removing the texture override in `cineStep2`, which also does per-frame
-  scaling - worth doing carefully rather than at the end of a session.
+  **Follow-up:** the hold sprite was swapped to the new super row in C.2c.
+
+- **C.2c · SUPER SHOT SPRITE - DONE 2026-09-10** (js v136 / pitch3d v65).
+
+  The frontal camera in C.2b was pointing at the wrong sprite: a single-frame
+  `striker_windup.png` drawn from BEHIND. Now the shooter plays his own team
+  sheet's super row — **row 6, cols 6-11**: frames 0-2 charge, 3 contact,
+  4-5 follow-through.
+
+  **Split across the two shot phases.** The hold owns the charge (0-2), `fly()`
+  owns the strike (3-5). The kick is therefore the continuation of the charge
+  rather than a cut to the old back-view shoot row.
+
+  **The charge is paced against the real hold.** `superShotCine()` now declares
+  `SSC_HOLD` before `start()` and passes it as `holdMs`, so the 3D side spreads
+  three frames across the hold it is actually going to get instead of snapping
+  to full charge at ~0.4s and sitting there. One source of truth for the
+  duration; change 2250 and the animation re-paces itself.
+
+  **The mirror could not be read from world x.** Sheet art faces screen-right
+  and `syncPlayers` picks the mirror from world x, but under the frontal camera
+  the shot direction points straight AT the lens — the same world heading lands
+  on either side of screen depending on which side `holdSide` put the camera.
+  `cineShooterFlip()` projects the shooter's forward vector and reads the sign
+  of its SCREEN motion, exactly as `syncPlayers` does for live players, sticky
+  when the vector is near-parallel to the view. `start()` also seeds the hold
+  camera, because `cineStep2` runs BEFORE `cineCamera2` and would otherwise
+  test frame 1 against the previous (chase) camera and pop.
+
+  **The strike frames lock the mirror** to whatever the charge ended on. Tested
+  live it flipped mid-kick — the chase camera swings from in front of him to
+  behind him during exactly those three frames, and the flip landed on the
+  contact frame. He is off-frame long before a frozen mirror goes wrong.
+
+  A per-team `{key}_windup.png` still wins if one exists; the shared
+  `striker_windup.png` no longer does. `_chain()` reports which URL won so
+  `cineLoadFor` can tell an override from the default.
+
+  **Verified** in a live match (Italy vs Germany, `home.png` 12x8): hold walks
+  r6c6 → c7 → c8 and holds on c8; `fly()` continues c9 → c10 → c11;
+  `mirrored:false` across both phases with no flip at contact. Added
+  `P3D.cineState()` — mode, t/ft, superRow, flip, sheet and the shooter's
+  forced cell — because "is it on the right frame" is not answerable from a
+  screenshot.
+
+  **Harness note:** the Browser pane suspends `requestAnimationFrame` entirely
+  while hidden, so the cinematic only advances one frame per screenshot, with
+  `dt` clamped to 50ms. That skips frames on sampling and is NOT a game bug —
+  the contact frame (c9) could only be caught by cranking `P3D.cine.slowMo`.
+  Same class of artifact as the parked controller work in B.1.
+
+  **C.5c · IMPACT / TIMING PASS - ✅ DONE 2026-09-11** (pitch3d v71).
+
+  Author's verdict on the deployed build: *"our shoots are still so flat with
+  nothing that gives 'super shot incoming', it's just a ball being shot with a
+  colorful effect."* Correct, and an audit says the cause was not the shaders:
+
+  | | before |
+  |---|---|
+  | hit-stop / freeze frame | **none anywhere** |
+  | camera shake at contact | **none** - `shakeScreen` existed but the cine never called it |
+  | ball deformation | none - `scale.setScalar()` in all 3 places |
+  | defender reaction | **zero** |
+  | net reaction | **none** |
+
+  Everything drawn was either ON the ball or ON a screen overlay. Nothing
+  happened TO the world, which is what reads as decoration rather than force.
+  So the timing was fixed FIRST - better-looking decoration on the same flat
+  beat would still have read flat.
+
+  **1. Hit-stop** (`hitStopMs:110`). Zeroing the sim `dt` freezes everything
+  downstream that integrates it - `c.t`, `c.ft`, the sprite frame, the ball
+  lerp, the trail - while real time keeps running so the freeze self-terminates
+  and the shake carries on through it. Consumes only as much `dt` as the freeze
+  has left and passes the remainder through; zeroing the whole frame overshoots
+  by up to one frame and puts a hitch on the frame the freeze ends.
+
+  **2. Camera shake** (`shakeAmp:0.22`, `shakeMs:420`) on the 3D camera, not
+  the DOM stage - during the cine the stage is a near-static frame, so
+  `shakeScreen` would have done very little even if it had been called.
+  Driven by REAL dt so it shakes THROUGH the hit-stop: freeze plus shake reads
+  as impact, freeze alone reads as a dropped frame.
+
+  **3. Staged charge.** Was `chg=min(1,_fxT/2)` with every layer scaling by
+  that one value - one continuous swell. Now `chargeCurve()`:
+  gather (0-0.45) -> tremble (0.45-0.82) -> **held breath, a DIP to 0.45**
+  (0.82-0.92) -> release spike to 1.25. The dip is the point; the release only
+  reads as a release because everything goes quiet first. Overshoot past 1 is
+  deliberate - every layer is additively blended, so >1 reads as hotter.
+
+  **4. Shooter tremble.** `chargeTremble()` physically vibrates the sprite,
+  peaking in the tremble stage and going to **exactly zero** through the held
+  breath. Intensity alone is not enough: a player standing perfectly still
+  inside a growing glow still reads as a decal. Applied after syncPlayers has
+  placed him, so it needs no cleanup.
+
+  **5. Hold takes the TRAIL colour, not the kit colour** (`holdTrailCol`).
+  See C.5b - the charge was `sideColor()`, so all twelve styles produced an
+  identical hold, and the hold is the longest and largest part of the shot.
+
+  **NOT done, by the author's explicit decision:** the anime Z-stretch smear on
+  the ball. The ball is becoming a pixel billboard, and stretching it would
+  shear the pixel grid. It stays round.
+
+  **Verified in a live match.** Hit-stop: `ft` held at 0 for exactly 3 painted
+  frames (110ms / 50ms clamped dt) before advancing, `hitStop` 0.11 -> spent.
+  Charge: `chg=0.081` at `t=0.22` - correctly low, the gather stage eases in
+  rather than ramping linearly. Trail tint: `#7fd8ff` (lightning cyan), not
+  Italy blue.
+
+  Shake: isolated in `out` mode, whose camera is a fixed `position.set(...,3.2,
+  ...)` with no lerp. Reading y = **3.2575 / 3.1992** instead of exactly 3.2
+  proved the shake was live - and since no shake had been fired by hand at that
+  point, it proved the AUTOMATIC trigger in `fly()` fires. A manual
+  `P3D.shake(0.5, 6000)` then moved y across 3.19 -> 2.87 -> 3.40. The
+  frontal-to-chase swing moves the camera far more than the shake does, which
+  is why `P3D.shake()` exists at all: the shake cannot be measured from camera
+  positions while that swing is running.
+
+  **Queued next:** the world still does not react. Turf pulled INTO the charge,
+  a ground crack under the plant foot, defenders flinching, the net bulging -
+  that is what `ParticleSystem` / `GroundDecals` / `BurstSphere` are for, and
+  they now land on a sequence that already has a beat.
+
+  Author's ball sheet saved to `assets/ps1/ball_spin_4x4.png` (1254x1254, 16
+  frames). **Two gotchas before wiring:** cell is 313.5px, NOT an integer; and
+  the background is white with no alpha, on a ball that is itself mostly white
+  - a naive white key destroys it, so this needs the same border-flood keying
+  as the Germany kit in D.0.
 
 - **C.1 · Tempo pass** — global speed +~30% (player run, ball travel, animation, and
   crucially *transition/cutscene length*). Expose every constant in a debug tuning
@@ -527,6 +652,93 @@ exist until there is an input layer to bind them to.
 - **C.5 · Super shot payoff** — the special shots must *look* super: screen shake,
   speed lines, time compression, ball travelling visibly faster than any normal shot.
   Cheap, and it's the moment people screenshot.
+
+  **C.5a · RIBBON GEOMETRY PORT - ✅ DONE 2026-09-10** (`ult11-ribbon.js`,
+  `lab/lab-ribbon.html`).
+
+  Source: `src/effects/RibbonGeometry.js` from
+  **AvatarCastingAbilitiesThreeJS** (achrefelouafi), **MIT**. Code is MIT and
+  reusable with attribution — the header in `ult11-ribbon.js` carries it. The
+  repo's ASSETS (Mixamo `Standing Idle.fbx`, `spruit_sunrise.hdr`) are licensed
+  SEPARATELY and were not taken.
+
+  **Do NOT upgrade three to r185 to use that repo.** We pin r128 and load the
+  composer from `examples/js`, which no longer exists after ~r148. r152 also
+  rewrote colour management and r155 changed lighting units — upgrading would
+  re-grade every colour set in A.2 and force a build step. Port DOWN instead,
+  file by file. The GLSL is the portable part; the JS API is the gap.
+
+  **Why this file and not our own `makeRibbon`.** The existing ribbon is fine
+  geometrically (billboard, whip taper, age fade) but it writes a per-vertex
+  `color` on a `MeshBasicMaterial`, so it can only ever be a tinted additive
+  strip — "lightning" and "flame" differ by hue and wobble, nothing more. The
+  ported builder writes the attributes an effect SHADER needs: `aDist`
+  (arc-length ratio), `aSide` (-1/+1 edge), `aRandom`, `aNormal`, and opt-in
+  `aCenter`/`aTangent` so a fragment shader can raymarch around the polyline
+  and treat the ribbon as a proxy hull. That is the unlock; the geometry swap
+  on its own is only a modest win, and TRAIL_STYLES stays exactly as it is.
+
+  It also adds **UPRIGHT** — a vertical curtain whose lower edge sits on the
+  polyline. Nothing we have does that; it is the mode for a ground crack or a
+  standing flame wall.
+
+  **Measured:** our index-ratio parameterisation is off by **11%** against true
+  arc length on a normal curved-shot path (`i/(n-1)` vs distance), which is
+  what stretches the texture and the taper unevenly on a fast ball.
+
+  **r128 gotchas found while verifying** — both are real and will bite again:
+  - `BufferAttribute.addUpdateRange()` / `clearUpdateRanges()` are r159+. On
+    r128 it is the single `attribute.updateRange` object. The port
+    feature-tests, so the file runs on both.
+  - `attribute.needsUpdate` is a **write-only setter** on r128 (it only bumps
+    `.version`). Reading it back returns `undefined` — assert `.version > 0`.
+  - r128's `WebGLAttributes.updateBuffer()` **resets `updateRange.count` to -1**
+    after uploading, so a live geometry reads -1 on every frame after the
+    first. Assert the hint on a never-rendered probe.
+
+  **Verified:** `lab/lab-ribbon.html` on r128, 8 checks green across all four
+  modes (billboard / flat / upright / oriented), no console errors. Checks
+  cover attribute presence, `aSide` alternation, arc-length correctness to
+  2.9e-8, draw range, the upload hint, degenerate input (1 point and a
+  zero-length span), and the bounding sphere.
+
+  **C.5b · TRAIL STYLE OVERRIDE - ✅ DONE 2026-09-10** (pitch3d v67).
+
+  `P3D.forceTrail('dragon')` pins every shot's comet to one of the 12
+  TRAIL_STYLES; `P3D.forceTrail(null)` restores the per-player hash;
+  `P3D.trailList()` names them. Until now the style was a hash of the
+  shooter's name plus his stats, so in normal play you only ever saw the two
+  or three your squad happened to roll and there was no way to compare them
+  — twelve styles were shipped and effectively invisible.
+
+  `P3D.cineState()` now also reports `trail`, `trailCol`, `trailForced` and
+  `ribbonPts`.
+
+  **`?trail=dragon` in the URL does the same with no console** — which is the
+  only way to try these on a PHONE. Persisted to `localStorage` under
+  `u11.trail` so it survives reloads; `?trail=off` clears it. Inert unless the
+  param or the stored key is present, so nothing changes for a normal player
+  and there is no debug chrome shipped in the build.
+
+  **Verified:** `?trail=tiger` stores it, a plain reload keeps it, `?trail=off`
+  clears it, and `?trail=water` (not a style) is rejected and NOT stored —
+  which also proves the parse runs after TRAIL_STYLES exists.
+
+  **Verified:** lightning -> #7fd8ff, galaxy -> #b07cff, an unknown name
+  throws with the valid list, null clears back to the hash.
+
+  **The comet cannot be captured through the Browser pane** — worth writing
+  down so nobody wastes time retrying it. The pane suspends rAF while hidden
+  (one painted frame per screenshot) and `ribbonUpdate` expires trail points
+  by WALL CLOCK (`now - p.t > LIFE`, 430-1250ms). Roughly a second of real
+  time passes between screenshots, so every point laid has already expired by
+  the next paint and the ribbon is always empty. Only a real 60fps session
+  shows the trail. Same family as the r128/pane artifacts in B.1 and C.2c.
+
+  **Not wired into the match yet** — `makeRibbon`/`ribbonUpdate` in
+  ult11-pitch3d.js are untouched, deliberately. Next: a ShaderMaterial that
+  actually uses `aDist`/`aSide`/`aRandom`, then swap the comet over. After
+  that `BurstSphere` on the contact frame (C.2c frame 3) is the big one.
 
 ---
 

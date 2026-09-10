@@ -99,7 +99,14 @@
            // profile instead of the camera riding on top of the ball
            chaseDist:16.5, chaseHeight:4.2, chaseSide:5.5, chaseLookY:1.0,
            chaseLag:0.10, chaseLookAhead:4.5,
-           slowMo:1.6, slowInAt:0.12 },
+           slowMo:1.6, slowInAt:0.12,
+           /* IMPACT (2026-09-11). The shot used to go charge -> nothing ->
+              flight. There was no beat at the moment of contact at all, which
+              is most of why it read flat. */
+           hitStopMs:110,        // world freezes at the strike
+           shakeAmp:0.22,        // world units of camera shake on contact
+           shakeMs:420,
+           holdTrailCol:true },  // charge takes the player's TRAIL colour, not his kit
     // sprite animation cadence (frames per second) — console-tunable
     anim:{ runFpsMin:8, runFpsMax:13, idleFps:3, shootMs:720, passMs:520, tackleMs:430, shoulderMs:480 },
     ready:true
@@ -2423,15 +2430,49 @@
       if(fxCv){fxCtx.clearRect(0,0,fxCv.width,fxCv.height);fxCv.style.display='none';}
       [auraCore,auraFlame,auraFlame2,auraRing1,auraRing2,auraFloor,auraSil,ballGlowSp].forEach(o=>{ if(o) o.visible=false; });
     }
+    /* raw 0..1 hold progress -> staged intensity (can exceed 1 on the spike,
+       which is fine: every layer here is additively blended, so >1 just reads
+       as hotter). Stages: gather / tremble / held breath / release. */
+    function chargeCurve(t){
+      if(t<0.45){ const k=t/0.45; return 0.55*(k*k*(3-2*k)); }          // gather
+      if(t<0.82){ const k=(t-0.45)/0.37;                                // tremble
+                  return 0.55+0.45*k + 0.06*Math.sin(k*38)*k; }
+      if(t<0.92){ const k=(t-0.82)/0.10;                                // held breath
+                  return 1.0-0.55*(k*k*(3-2*k)); }
+      const k=(t-0.92)/0.08; return 0.45+0.80*(k*k*(3-2*k));            // release
+    }
+    /* How hard the shooter should be vibrating right now. Peaks in the tremble
+       stage and goes to ZERO during the held breath - the stillness is what
+       makes the release land. */
+    function chargeTremble(t){
+      if(t<0.45) return 0;
+      if(t<0.82) return (t-0.45)/0.37;
+      if(t<0.92) return 0;
+      return 0.35;
+    }
     function drawHoldFx(c,dt){
       ensureHoldFx();
       if(bloomPass){ bloomPass.strength=P3D.fx.bloom*0.4; bloomPass.threshold=Math.max(P3D.fx.bloomThresh,0.93); }
       _fxT+=dt;
-      const col=c.col||'#ffd24a';
+      /* The whole charge - bolts, speed lines, both rings, the floor glow -
+         used to be `c.col`, i.e. sideColor(), i.e. the KIT colour. So all
+         twelve trail styles produced an identical charge for a given team,
+         and the hold is the longest and largest part of the super shot: 2.25s
+         filling the screen. The comet that actually differed was small, fast
+         and gone in under a second. A player's signature move should carry
+         his signature colour. */
+      const _CCn=P3D.cine||{};
+      const col=((_CCn.holdTrailCol!==false)&&_trailFx&&_trailFx.col)||c.col||'#ffd24a';
       const W2=fxCv.width,H2=fxCv.height;
       const swx=ex2wx(c.fx),swz=ey2wz(c.fy);
       const hh=PLEN*(P3D.spriteFrac!=null?P3D.spriteFrac:0.045);
-      const chg=Math.min(1,_fxT/2.0);                        // charge 0→1 across the hold
+      /* STAGED CHARGE. This used to be a straight ramp and every element -
+         speed lines, rings, bolts, aura - scaled by that one value, so the
+         whole hold was a single continuous swell. Tsubasa does not swell, it
+         stages: gather, tremble, a held breath, release. The DIP at 0.82-0.92
+         is the important part; the release only reads as a release because
+         everything goes quiet just before it. */
+      const chg=chargeCurve(Math.min(1,_fxT/2.0));
       const sp=projectToScreen(swx,hh*0.5,swz,W2,H2);
       const cc=new T.Color(col), cr=Math.round(cc.r*255), cgn=Math.round(cc.g*255), cb=Math.round(cc.b*255);
       const g=fxCtx;
@@ -2684,6 +2725,11 @@
       return k;
     };
     P3D.trailList=function(){ return Object.keys(TRAIL_STYLES); };
+    /* P3D.shake(amp, ms) - fire the cine camera shake by hand. Exists to make
+       it tunable, and because during a real strike the frontal-to-chase swing
+       moves the camera far more than the shake does, so the shake cannot be
+       measured from camera positions while that swing is running. */
+    P3D.shake=function(amp,ms){ shakeCam(amp!=null?amp:0.22, ms!=null?ms:420); return true; };
     /* ?trail=dragon in the URL does the same thing without a console, which is
        the only way to try these on a PHONE. Persisted to localStorage so it
        survives the reloads a deployed build does, and cleared with ?trail=off.
@@ -2714,7 +2760,9 @@
                superRow:!!cine._superRow,flip:!!cine._shFlip,holdMs:(cine.o&&cine.o.holdMs)||null,
                windupIsTeam:cineWindupIsTeam,
                trail:(_trailFx?_trailFx.k:null), trailCol:(_trailFx?_trailFx.col:null),
-               trailForced:_trailForce, ribbonPts:(RIBS[0]?RIBS[0].pts.length:0)};
+               trailForced:_trailForce, ribbonPts:(RIBS[0]?RIBS[0].pts.length:0),
+               hitStop:+(cine._hitStop||0).toFixed(3), chg:+chargeCurve(Math.min(1,_fxT/2.0)).toFixed(3),
+               cam:[+camera.position.x.toFixed(4),+camera.position.y.toFixed(4),+camera.position.z.toFixed(4)]};
       const g=sprites[cine.o.as+':'+cine.o.sk];
       if(g&&g.tex){ const L=g._L||GRID;
         o.sheet=(g._sheetImg&&g._sheetImg.src||'').split('/').pop()+' '+L.cols+'x'+L.rows;
@@ -2793,6 +2841,9 @@
            chaseLag lerp swings it round the shooter instead. */
         cine._cam={x:camera.position.x, y:camera.position.y, z:camera.position.z};
         cine.mode='fly';cine.ft=0;cine.onArrive=onArrive;
+        const _CC=P3D.cine||{};
+        cine._hitStop=Math.max(0,(_CC.hitStopMs!=null?_CC.hitStopMs:110))/1000;
+        try{ shakeCam((_CC.shakeAmp!=null?_CC.shakeAmp:0.22),(_CC.shakeMs!=null?_CC.shakeMs:420)); }catch(e){}
         try{ kickBurst(cine); }catch(e){}
         try{ // kick burst flash (radial white), ~0.3s
           let b=document.getElementById('cine-burst');
@@ -2833,6 +2884,18 @@
     function cineStep2(dt){
       const c=cine; if(!c)return;
       if(c._lm!==c.mode){c._lm=c.mode;window.U11DBG&&U11DBG('[3D] cine v2 mode='+c.mode+' (frames running)');}
+      /* HIT-STOP. Zeroing dt freezes everything downstream that integrates it:
+         c.t, c.ft, the sprite frame, the ball lerp, the trail. Real time keeps
+         running so the freeze ends on schedule, and the shake (driven by real
+         dt in cineCamera2) carries on through it. */
+      if(c._hitStop>0){
+        /* Consume only as much dt as the freeze has left and let the rest
+           through, instead of zeroing the whole frame. Zeroing overshoots the
+           stop by up to one frame and puts a visible hitch on the frame the
+           freeze ends. */
+        const use=Math.min(dt,c._hitStop);
+        c._hitStop-=use; dt-=use;
+      }
       c.t+=dt;
       if(typeof G==='undefined'||!G||typeof PP==='undefined'||!PP[c.o.as]){cineEnd();return;}
       const sid=c.o.as+':'+c.o.sk;
@@ -2867,6 +2930,21 @@
           if(g.sil)g.sil.scale.set(hh*cineWindupAR,hh,1);
         }
         else forceAnim(sid,'up','shoot',0,false);       // fallback: sheet wind-up, back view
+        /* PHYSICAL tremble on the shooter himself. Intensity alone is not
+           enough - a player standing perfectly still inside a growing glow
+           still reads as a decal. syncPlayers has already placed him this
+           frame and will re-place him next, so nudging here is safe and needs
+           no cleanup. Goes to ZERO through the held-breath stage, which is
+           what makes the stillness land. */
+        if(g&&g.sprite){
+          const tr=chargeTremble(Math.min(1,_fxT/2.0));
+          if(tr>0){
+            const amp=PLEN*(P3D.spriteFrac!=null?P3D.spriteFrac:0.045)*0.035*tr;
+            g.sprite.position.x+=(Math.random()-0.5)*2*amp;
+            g.sprite.position.y+=(Math.random()-0.5)*2*amp*0.6;
+            if(g.sil){ g.sil.position.x=g.sprite.position.x; }
+          }
+        }
         drawHoldFx(c,dt);                              // sakuga charge: lines/aura/glow
       }else if(c.mode==='fly'||c.mode==='wait'){
         if(!c._fxOff){c._fxOff=true;_fxT=0;hideHoldFx();}
@@ -3014,7 +3092,25 @@
       if(g.sil){ g.sil.position.x=wx; g.sil.position.z=wz;
                  if(g.sil.material) g.sil.material.rotation=(c.gkTilt||0); }
     }
-    function cineCamera2(){
+    /* CAMERA SHAKE. shakeScreen() already existed in game.js but the super
+       cinematic never called it, and it shakes the DOM stage rather than the
+       3D camera - during the cine the stage is mostly a static frame, so it
+       would have done very little. This shakes the camera itself.
+       Driven by REAL dt, not the sim dt, so it keeps shaking THROUGH the
+       hit-stop: freeze plus shake is what reads as impact. Frozen and
+       perfectly still just reads as a dropped frame. */
+    let _shk={amp:0,t:0,dur:0};
+    function shakeCam(amp,ms){ _shk.amp=amp; _shk.dur=ms/1000; _shk.t=0; }
+    function applyShake(rdt){
+      if(_shk.t>=_shk.dur||_shk.dur<=0) return;
+      _shk.t+=rdt;
+      const k=Math.max(0,1-_shk.t/_shk.dur);
+      const a=_shk.amp*k*k;                       // quadratic falloff
+      camera.position.x+=(Math.random()-0.5)*2*a;
+      camera.position.y+=(Math.random()-0.5)*2*a;
+      camera.position.z+=(Math.random()-0.5)*2*a;
+    }
+    function cineCamera2(rdt){
       const c=cine; if(!c)return;
       const swx=ex2wx(c.fx),swz=ey2wz(c.fy);
       const gwx=ex2wx(c.gx),gwz=ey2wz(c.gy);
@@ -3062,6 +3158,7 @@
         const la=(CC.chaseLookAhead||4.5);
         camera.lookAt(b.x+dx*la, Math.max(0.8,b.y)+0.5, b.z+dz*la);
       }
+      applyShake(rdt||0);      // after every branch, so it shakes any framing
     }
 
     // timeline (s): 0–1.5 striker frontal + kick · 1.5 cut to GK ·
@@ -3190,7 +3287,7 @@
       monitorQuality(now);
       syncSheets(); watchActions(); syncPlayers();
       updateSelGlow();
-      if(cine){ try{ if(cine.v2){cineStep2(dt);cineCamera2();} else {cineStep(dt);cineCamera();} }catch(e){console.error('[P3D] cine error',e); cineEnd();} }
+      if(cine){ try{ if(cine.v2){cineStep2(dt);cineCamera2(dt);} else {cineStep(dt);cineCamera();} }catch(e){console.error('[P3D] cine error',e); cineEnd();} }
       else    { syncBall(); updateCamera(dt); }
       tickTrail(dt);
       try{ tickGfx(dt,now); }catch(e){}
