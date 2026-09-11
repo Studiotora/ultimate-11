@@ -1945,6 +1945,19 @@
       const _L=sheet.L||GRID;
       tex.repeat.set(1/_L.cols,1/_L.rows); tex.needsUpdate=true;
       const sp=new T.Sprite(new T.SpriteMaterial({map:tex,transparent:true,alphaTest:0.5}));
+      /* STUN GREY - desaturate this one player after the texture is read.
+         uGray is per-material (onBeforeCompile runs for every material, and the
+         identical source shares one program), so each player greys on his own.
+         Fed every frame from game.js stunLevel() in syncPlayers. */
+      const _gray={u:null};
+      sp.material.onBeforeCompile=function(sh){
+        sh.uniforms.uGray={value:0}; _gray.u=sh.uniforms.uGray;
+        const NL=String.fromCharCode(10);
+        sh.fragmentShader='uniform float uGray;'+NL+sh.fragmentShader.replace('#include <map_fragment>',
+          '#include <map_fragment>'+NL+
+          '{ float _l=dot(diffuseColor.rgb,vec3(0.299,0.587,0.114));'+
+          ' diffuseColor.rgb=mix(diffuseColor.rgb,vec3(_l)*0.82,uGray); }');
+      };
       sp.center.set(0.5,0); scene.add(sp);
       // soft round CONTACT shadow under the feet
       const sh=new T.Mesh(new T.PlaneGeometry(1,1),
@@ -1958,7 +1971,7 @@
                                  opacity:P3D.light.shadow,depthWrite:false}));
       sil.material.userData.isShadow=true;
       sil.renderOrder=2; scene.add(sil);
-      return sprites[id]={sprite:sp,shadow:sh,sil,tex,_sheetImg:sheet.img,_L:(sheet.L||GRID)};
+      return sprites[id]={sprite:sp,shadow:sh,sil,tex,_sheetImg:sheet.img,_L:(sheet.L||GRID),_gray};
     }
     function cellState(id,p,wx,wz,L){
       L=L||GRID;
@@ -2100,6 +2113,10 @@
           const o=ensureSprite(id,useSheet);
           if(o._sheetImg!==useSheet.img){         // (re)bind texture if the sheet changed
             o.tex.image=useSheet.img; o.tex.needsUpdate=true; o._sheetImg=useSheet.img;
+          }
+          if(o._gray&&o._gray.u){                  // stunned / slowed -> grey (game.js stunLevel)
+            let g=0; try{ g=(typeof stunLevel==='function')?stunLevel(s,k):0; }catch(e){}
+            o._gray.u.value=g;
           }
           // sprite height = fixed fraction of world pitch LENGTH (HD-2D scale).
           // P3D.spriteFrac defaults to ~0.045 of PLEN — tune in Camera Lab.
@@ -2999,6 +3016,7 @@
     };
     /* read-only: is the tackle warning showing, for whom, and how far into
        the wind-up. For tests - the Browser pane cannot always capture it. */
+    P3D.grayOf=function(id){ const o=sprites[id]; return (o&&o._gray&&o._gray.u)?+o._gray.u.value.toFixed(3):null; };
     P3D.teleState=function(){ const t=TELE; if(!t) return {built:false};
       return {built:true, id:t.id, visible:t.mesh.visible, kind:t.kind,
               opacity:+t.mesh.material.opacity.toFixed(2), scale:+t.mesh.scale.x.toFixed(2),

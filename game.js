@@ -1258,7 +1258,8 @@ function fieldSpdMult(pl){
   const base=clamp(1.0+(gs(pl,'spd')-72)*0.0145,0.75,1.35);
   const maxSp=pl.pos==='GK'?2000:1500;
   const fat=clamp(0.88+((pl.spirit||maxSp)/maxSp)*0.12,0.88,1.0);
-  return base*fat;
+  const stunM=(pl._slowUntil&&Date.now()<pl._slowUntil)?(pl._slowMult||0.6):1;   // stunned/slowed
+  return base*fat*stunM;
 }
 /* ══════════════ LOCKED · AI REALISM ══════════════
    Four systems that turn chess-piece movement into football movement.
@@ -1705,6 +1706,7 @@ function clampAllToPitch(){
 }
 function tick(dt=1){
   if(typeof pvpPumpInput==='function')pvpPumpInput();
+  if(G._pendingStun) firePendingStun();            // lost-duel stun starts with live play
   if(G._cineHold)return;                       // super-shot cinematic: world frozen
   /* iPos() puts everyone in their own half, but the AI kept ticking while the
      kick-off prompt was up, so players walked across the halfway line before
@@ -2036,6 +2038,7 @@ function moveOffBall(s,ds,dt=1){
       return;
     }
 
+    if(isStalled(s,k))return;                       // stunned: stays down
     // Cooling down — return to formation position
     if(ocd(s,k)){glide(cur,p.x*W,p.y*H,DRIFT_SPEED*0.6,pl,s,k);return;}
 
@@ -2368,7 +2371,9 @@ function applyRepulsion(){
   const _ds=G.poss==='h'?'a':'h';   // defending side owns ROLES.engager
   ['h','a'].forEach(side=>{
     const keys=Object.keys(sq(side)).filter(k=>sq(side)[k]&&PP[side][k]);
-    const _pinned=(k)=>k===G.ck||k==='GK'||(side===_ds&&k===ROLES.engager);
+    // a STUNNED player is pinned too: teammates within REPEL_DIST (~109 units)
+    // were shoving him up to 1.4/tick, so a "frozen" player slid ~130 units.
+    const _pinned=(k)=>k===G.ck||k==='GK'||(side===_ds&&k===ROLES.engager)||isStunned(sq(side)[k]);
     for(let i=0;i<keys.length;i++){
       for(let j=i+1;j<keys.length;j++){
         if(isLunging(side,keys[i])||isLunging(side,keys[j]))continue;  // let the lunge connect
@@ -4468,6 +4473,65 @@ function spendSpirit(pl,n){
 let _sayThT=0;
 function sayThrottled(m){ const n=Date.now(); if(n-_sayThT<1200) return; _sayThT=n; say(m); }
 
+/* ══ STUN (gameplay part 1b, author 2026-09-11) ══════════════════════════════
+   "Losing a tackle or a duel should leave the loser stunned for a few seconds,
+   otherwise they keep coming at you until they get you."
+   Two stages, both drawn GREY by the renderer (stunLevel):
+      stun  frozen - no movement, no tackle, no jump
+      slow  moves at slowMult and still cannot tackle, so he cannot come
+            straight back at you; the grey fades out across this stage
+   The old loser cooldown (scd, 2.5s) started the moment the duel was decided,
+   so most of it had run out behind the result banner, and during it the
+   player still drifted at 0.6 pace. A duel stun is therefore QUEUED at
+   resolution and only starts on the first tick of live play.
+   The cooldown (ocd) is stretched over stun+slow, which already keeps a player
+   out of the engager/cover roles - so the team keeps defending with someone
+   else, and a human loses control of the stunned man to the next defender. */
+const STUN={
+  duel : { stun:2000, slow:1800, slowMult:0.55 },   // lost a field duel, either side
+  whiff: { stun:1400, slow:1200, slowMult:0.60 },   // standing tackle missed or jumped
+  slide: { stun:2000, slow:1200, slowMult:0.60 }    // slide missed or jumped
+};
+function stunPlayer(side,k,kind){
+  const pl=sq(side)&&sq(side)[k]; const S=STUN[kind]||STUN.duel;
+  if(!pl) return;
+  const now=Date.now();
+  pl._stunUntil=now+S.stun;
+  pl._slowUntil=pl._stunUntil+S.slow;
+  pl._slowMult=S.slowMult;
+  pl._stunLen=S.stun; pl._slowLen=S.slow;
+  pl.cooldownUntil=Math.max(pl.cooldownUntil||0, pl._slowUntil);
+  // if he was the man doing the chasing, hand the job on right now
+  const defSide=(G.poss==='h')?'a':'h';
+  if(side===defSide && (ROLES.engager===k||ROLES.cover===k)){
+    try{ asnC(); }catch(e){}
+    if(!isCpuSide(side) && ROLES.engager && ROLES.engager!==k){
+      G.chk=ROLES.engager;
+      try{ if(typeof flashControlSwitch==='function')flashControlSwitch(side,ROLES.engager); }catch(e){}
+    }
+  }
+}
+function isStunned(pl){ return !!(pl&&pl._stunUntil&&Date.now()<pl._stunUntil); }
+function isSlowed(pl){ return !!(pl&&pl._slowUntil&&Date.now()<pl._slowUntil&&!isStunned(pl)); }
+/* 0..1 grey for the renderer: 1 through the stun, fading to 0 across the slow. */
+function stunLevel(side,k){
+  const pl=sq(side)&&sq(side)[k]; if(!pl||!pl._slowUntil) return 0;
+  const now=Date.now();
+  if(now<pl._stunUntil) return 1;
+  if(now<pl._slowUntil) return Math.max(0,(pl._slowUntil-now)/(pl._slowLen||1))*0.85;
+  return 0;
+}
+/* Queued at duel resolution, fired by the first live tick (see tick()).
+   NOT keyed on G.goalGen: afTurn bumps goalGen on every turnover, so a stun
+   checked against it cancelled itself in exactly the case that matters - the
+   carrier losing the ball. A goal and half-time clear the queue explicitly. */
+function queueDuelStun(side,k){ if(side&&k) G._pendingStun={side,k}; }
+function firePendingStun(){
+  const q=G._pendingStun; if(!q) return;
+  G._pendingStun=null;
+  stunPlayer(q.side,q.k,'duel');
+}
+
 /* ══ JUMP ═══════════════════════════════════════════════════════════════════
    The counter to a tackle. Time it right and the challenge passes underneath:
    you keep the ball and no duel opens. The invulnerable window is NARROWER
@@ -4506,6 +4570,7 @@ function playerJump(side){
   const ph=physOf(side,k,pl);
   if(ph._jumpT0 && Date.now()-ph._jumpT0 < JUMP.dur) return false;   // already up
   if(ph._jumpLock && Date.now() < ph._jumpLock) return false;        // still landing
+  if(isStunned(pl)) return false;                                     // dazed: cannot leave the ground
   if(!spendSpirit(pl,JUMP.cost)){
     if(!isCpuSide(side)) sayThrottled('Not enough spirit to jump ('+JUMP.cost+')');
     return false;
@@ -4533,7 +4598,8 @@ function isLunging(side,k){ return lungeActive(side,k)&&_lunge.phase==='strike';
    new tackle, until the stall runs out. */
 function isStalled(side,k){
   const ph=_phys[side+':'+k];
-  return !!(ph&&ph._stallUntil&&Date.now()<ph._stallUntil);
+  if(ph&&ph._stallUntil&&Date.now()<ph._stallUntil) return true;
+  return isStunned(sq(side)&&sq(side)[k]);          // stunned = frozen as well
 }
 function startLunge(side,kind,dkOpt){
   if(_lunge)return false;
@@ -4545,6 +4611,10 @@ function startLunge(side,kind,dkOpt){
   const now=Date.now();
   if(ph._lungeLock&&now<ph._lungeLock)return false;   // still recovering
   if(ph._stallUntil&&now<ph._stallUntil)return false; // still on the floor
+  if(isStunned(pl)||isSlowed(pl)){                   // cannot come straight back at you
+    if(!isCpuSide(side)) sayThrottled('Still recovering...');
+    return false;
+  }
   const dp=PP[side][dk], cp=PP[G.poss]&&PP[G.poss][G.ck];
   if(!cp)return false;
   const dx=cp.x-dp.x, dy=cp.y-dp.y, d=Math.hypot(dx,dy)||1;
@@ -4664,6 +4734,7 @@ function stepLunge(dt){
     endLunge(true);
     ph._lungeLock=now+L.recover; ph._stallUntil=now+L.stall;
     try{ if(window.P3D&&P3D.telegraph)P3D.telegraph(side+':'+dk,null); }catch(e){}
+    stunPlayer(side,dk,kind==='tackle'?'slide':'whiff');
     try{ say('Hurdled! '+(playerSurname(jpl.name)||'')+' rides the challenge.'); }catch(e){}
     return;
   }
@@ -4683,6 +4754,7 @@ function stepLunge(dt){
     endLunge(true);                              // let the recovery frames play out
     ph._lungeLock=now+L.recover; ph._stallUntil=now+L.stall;
     try{ if(window.P3D&&P3D.telegraph)P3D.telegraph(side+':'+dk,null); }catch(e){}
+    stunPlayer(side,dk,kind==='tackle'?'slide':'whiff');
     if(!isCpuSide(side)) say(kind==='tackle'?'Missed the slide!':'Missed the tackle!');
   }
 }
@@ -6711,6 +6783,8 @@ function resDuel(){
   updH();
   if(win&&dk)scd(ds,dk);        // loser: full cooldown
   if(!win)scd(as,G.ck);         // loser: full cooldown
+  // ...and a real stun for a lost FIELD duel, started when play resumes
+  if(!isShot) queueDuelStun(win?ds:as, win?dk:G.ck);
   // Only the loser gets cooldown — winner is free to act immediately
   const hW=(as==='h'&&win)||(as==='a'&&!win);
   const rc2=hW?'#20c878':'#dc2020';
@@ -6922,6 +6996,7 @@ function afGoal(scorer,s,gen){
   if(gen!==undefined && gen!==G.goalGen)return;
   if(G._scoringGoal)return;
   G._scoringGoal=true;
+  G._pendingStun=null;                             // nobody stays stunned through a goal
   G.goalGen++; // invalidate any other queued afGoal for this sequence
   closeDuel(); G.phase='idle'; G.pressing=false;
   const pb=document.getElementById('pressBtn');if(pb){pb.classList.remove('active');pb.textContent='PRESS';} if(s==='h')G.hG++; else G.aG++; if(s==='h')G.mom=Math.min(100,G.mom+16); else G.mom=Math.max(0,G.mom-16); updH();
@@ -7955,7 +8030,7 @@ function goFull(){
   document.getElementById('wtag').textContent=wt;showSc('s-end');
   returnToMenuMusic();
 }
-function secondHalf(){G.half=2;G.tL=2400;iPos();const q=sq('a');const kk=['CM2','CM1','ST'].find(k=>q[k])||Object.keys(q).find(k=>q[k]);G.poss='a';G.ck=kk;G.tP++;if(PP.a[kk]){PP.a[kk].x=W/2;PP.a[kk].y=H/2;}ball.x=W/2;ball.y=H/2;ball.tx=W/2;ball.ty=H/2;showSc('s-match');updH();updP();startMT();startAnim();startMatchMusic();say((AT?.name||'Away')+' kick off — 2nd half!');showReferee('2ND HALF');G.kickoffUntil=Date.now()+3000;G.phase='idle';setTimeout(()=>{armKickoff('a');},900);}
+function secondHalf(){G._pendingStun=null;G.half=2;G.tL=2400;iPos();const q=sq('a');const kk=['CM2','CM1','ST'].find(k=>q[k])||Object.keys(q).find(k=>q[k]);G.poss='a';G.ck=kk;G.tP++;if(PP.a[kk]){PP.a[kk].x=W/2;PP.a[kk].y=H/2;}ball.x=W/2;ball.y=H/2;ball.tx=W/2;ball.ty=H/2;showSc('s-match');updH();updP();startMT();startAnim();startMatchMusic();say((AT?.name||'Away')+' kick off — 2nd half!');showReferee('2ND HALF');G.kickoffUntil=Date.now()+3000;G.phase='idle';setTimeout(()=>{armKickoff('a');},900);}
 
 function initMatch(){
   Object.values(hSq).forEach(p=>{if(p){p.spirit=(p.pos==="GK"?2000:1500);p.cooldownUntil=0;}});Object.values(aSq).forEach(p=>{if(p){p.spirit=(p.pos==="GK"?2000:1500);p.cooldownUntil=0;}});
