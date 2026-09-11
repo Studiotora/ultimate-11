@@ -107,6 +107,12 @@
            shakeAmp:0.22,        // world units of camera shake on contact
            shakeMs:420,
            holdTrailCol:true },  // charge takes the player's TRAIL colour, not his kit
+    /* Shader trails. false falls back to the original additive vertex-colour
+       ribbons, so the two can be compared live: P3D.fxRibbon=false, take a
+       super shot, P3D.fxRibbon=true, take another. Needs ult11-ribbon.js and
+       ult11-fx-flame.js; if either is missing it degrades to the old path
+       instead of throwing. */
+    fxRibbon:true,
     // sprite animation cadence (frames per second) — console-tunable
     anim:{ runFpsMin:8, runFpsMax:13, idleFps:3, shootMs:720, passMs:520, tackleMs:430, shoulderMs:480 },
     ready:true
@@ -1248,6 +1254,21 @@
       return _ribTex;
     }
     function makeRibbon(maxN,col){
+      /* SHADER PATH. Geometry comes from the ported RibbonGeometry, which
+         writes aDist/aSide/aRandom; the material in ult11-fx-flame.js turns
+         those into heat, erosion and turbulence. Falls through to the legacy
+         builder below if either module failed to load. */
+      if(P3D.fxRibbon!==false && global_U11Ribbon() && global_U11Flame()){
+        try{
+          const rib=new (global_U11Ribbon().Geometry)(maxN);
+          const mat=global_U11Flame().material({preset:'standard'});
+          const mesh=new T.Mesh(rib.geometry,mat);
+          mesh.frustumCulled=false; mesh.visible=false; mesh.renderOrder=4;
+          scene.add(mesh);
+          return {mesh,pts:[],maxN,col:new T.Color(col),width:0.6,life:430,
+                  rib,mat,shader:true};
+        }catch(e){ console.warn('[P3D] shader ribbon failed, using legacy',e); }
+      }
       const g=new T.BufferGeometry();
       const pos=new Float32Array(maxN*2*3), colr=new Float32Array(maxN*2*3);
       const uv=new Float32Array(maxN*2*2);
@@ -1259,6 +1280,8 @@
       const mesh=new T.Mesh(g,m); mesh.frustumCulled=false; mesh.visible=false; scene.add(mesh);
       return {mesh,pts:[],maxN,col:new T.Color(col),width:0.6,life:430,g,pos,colr};
     }
+    function global_U11Ribbon(){ return window.U11Ribbon; }
+    function global_U11Flame(){ return window.U11Flame; }
     function ribbonPush(R,x,y,z){
       const L=R.pts[R.pts.length-1];
       if(L){
@@ -1279,6 +1302,26 @@
       const n=R.pts.length;
       if(n<2){ R.mesh.visible=false; return; }
       R.mesh.visible=true;
+      if(R.shader){
+        /* aDist runs 0 at the TAIL to 1 at the BALL, and points are appended
+           head-first and expired from the front - so aDist doubles as the age
+           axis and the shader does the taper, the heat gradient and the fade
+           that the legacy path baked into vertex colours on the CPU.
+           Only the whip profile stays here, because it changes the SILHOUETTE
+           and a fragment shader cannot widen geometry it was not given.
+           width is doubled: RibbonGeometry straddles the spine by width*0.5,
+           the legacy path offset by the full half-width either side. */
+        R.rib.build(R.pts,{
+          width:R.width*2,
+          mode:global_U11Ribbon().Mode.BILLBOARD,
+          cameraPosition:camera.position,
+          widthProfile:t=>0.04+0.96*Math.pow(t,0.55)
+        });
+        const u=R.mat.uniforms;
+        u.uTime.value=now*0.001;
+        u.uHeat.value=(R._heat!=null?R._heat:1);
+        return;
+      }
       const cp=camera.position;
       for(let i=0;i<n;i++){
         const p=R.pts[i], q=R.pts[Math.min(n-1,i+1)], o=R.pts[Math.max(0,i-1)];
@@ -1470,8 +1513,19 @@
           px=-dz/L; pz=dx/L; }
 
         RIBS.forEach((R,k)=>{
-          if(k>=ST.strands){ R.mesh.visible=false; R.pts.length=0; return; }
+          if(k>=ST.strands){ R.mesh.visible=false; R.pts.length=0; if(R.rib)R.rib.clear(); return; }
           R.col.set(tcol);
+          if(R.shader){
+            /* Repoint uniforms only when the style actually changes - calling
+               applyPreset every frame would be harmless but pointless, and it
+               would stamp over a hand-tuned uniform the moment anyone poked
+               one from the console. */
+            if(R._preset!==FX.k){ R._preset=FX.k;
+              try{ global_U11Flame().applyPreset(R.mat,FX.k,tcol); }catch(e){} }
+            /* Outer strands run cooler, so a 4-strand dragon reads as one
+               body of fire with a white spine rather than four equal ribbons. */
+            R._heat=(k===0)?1.0:Math.max(0.35,0.78-k*0.14);
+          }
           R.width=d*kw*ST.w*(k?0.62:1);
           const off=ST.wob? Math.sin(ph*ST.wf+k*2.1)*ST.wob*d*3*(k?1:0.35) : 0;
           const yo =ST.wob? Math.cos(ph*ST.wf+k*1.3)*ST.wob*d*1.1 : 0;
@@ -2737,7 +2791,8 @@
         t.sp.material.opacity=0.85*f; const s=t.size*(0.4+0.6*f); t.sp.scale.set(s,s,1); });
     }
     function clearTrail(){ TRAIL.forEach(t=>{t.alive=false;t.sp.visible=false;});
-      RIBS.forEach(R=>{ R.pts.length=0; R.mesh.visible=false; R.life=430; });
+      RIBS.forEach(R=>{ R.pts.length=0; R.mesh.visible=false; R.life=430;
+                        if(R.rib){ R.rib.clear(); R._preset=null; } });
       _ringT=0; _ghostT=0; }
     // force a sprite to an explicit sheet cell (used on shooter + GK)
     // layout-aware: pick a frame of an animation by index, or by 0..1 progress
