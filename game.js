@@ -3632,6 +3632,12 @@ const NAV_SEL='button:not([disabled]),.ue-item,.hm-item,.tm-card,.ts-team,.cr-cl
 let _navEls=[], _navIdx=-1, _navScreen='';
 
 function _navScreenEl(){
+  /* An open pop-up owns navigation. Without this the scan took the whole
+     screen, so the cursor could land on menu items BEHIND the Settings modal;
+     the How to Play guide also opens over a paused match, where screen nav is
+     otherwise switched off. */
+  const md=document.querySelector('.ae-modal.show');
+  if(md) return md;
   const scr=document.querySelector('.screen.active');
   if(!scr || scr.id==='s-match') return null;    // in-match input owns the stick
   return scr;
