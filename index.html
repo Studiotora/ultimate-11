@@ -444,7 +444,7 @@ addEventListener('DOMContentLoaded',function(){
               <tr><td>Choose who to pass to</td><td>Click the teammate</td><td>—</td><td>Tap the teammate</td></tr>
 
               <tr class="hp-sec"><td colspan="4">DEFENDING</td></tr>
-              <tr><td>Contain</td><td><kbd>Q</kbd></td><td>Y / △</td><td>CONTAIN</td></tr>
+              <tr><td>Contain <span style="color:#6b7d94">(coming soon)</span></td><td><kbd>Q</kbd></td><td>Y / △</td><td>CONTAIN</td></tr>
               <tr><td>Tackle</td><td><kbd>E</kbd></td><td>X / □</td><td>TACKLE</td></tr>
               <tr><td>Slide tackle</td><td><kbd>R</kbd></td><td>B / ○</td><td>SLIDE</td></tr>
               <tr><td>Block</td><td><kbd>Space</kbd></td><td>A / ✕</td><td>BLOCK</td></tr>
@@ -465,7 +465,8 @@ addEventListener('DOMContentLoaded',function(){
         <div class="hp-pane hp-play" data-pane="play">
           <h3>THE BASICS</h3>
           <p>Two teams, two halves. Run with the ball, pass it around and break through to get a shot
-            on goal. When a defender reaches the player on the ball, play stops for a <b>duel</b>.</p>
+            on goal. When a defender lands a <b>tackle</b> on the player with the ball, play stops for a
+            <b>duel</b>. Just getting close is not enough — someone has to commit.</p>
 
           <h3>DUELS</h3>
           <p>Both sides pick an action at the same time, then lock it in — tap or click it again,
@@ -481,6 +482,20 @@ addEventListener('DOMContentLoaded',function(){
             <li><b>Tackle</b> beats Dribble</li>
             <li><b>Block</b> beats Shoot — but a Super Shot usually still gets through</li>
           </ul>
+          <p>A defender who opens the duel with a clean tackle goes into it with an <b>edge</b> — a bigger
+            one after a slide.</p>
+
+          <h3>TACKLES &amp; JUMPING</h3>
+          <ul>
+            <li><b>Tackle</b> (<kbd>E</kbd> / X&nbsp;□) — quick and safe. Costs 50 spirit.</li>
+            <li><b>Slide tackle</b> (<kbd>R</kbd> / B&nbsp;○) — more reach and a bigger edge. Costs 80 spirit,
+              fouls more often, and if you miss you are left on the floor.</li>
+            <li>Watch the ring that appears under a defender as he winds up: <b>orange</b> is a tackle,
+              <b>red</b> is a slide. That is your cue to <b>Jump</b> (<kbd>Space</kbd> / A&nbsp;✕).</li>
+            <li>A jump costs 80 spirit — but clear a tackle with it and you get 40 back, keep the ball,
+              and no duel happens. Jump too early or too late and you are caught.</li>
+            <li>The slide is the easiest to read. The tackle comes in faster, so you need sharp timing.</li>
+          </ul>
 
           <h3>SPIRIT</h3>
           <p>Every player has spirit — their energy. Actions cost it: a pass is free, a dribble costs
@@ -495,18 +510,18 @@ addEventListener('DOMContentLoaded',function(){
           <h3>SHOTS &amp; KEEPERS</h3>
           <p>Every shot becomes a duel with the goalkeeper, who chooses Save, Punch or Super Save.</p>
 
-          <h3>BETWEEN DUELS</h3>
+          <h3>DEFENDING</h3>
           <ul>
-            <li><b>Jump</b> just as a tackle comes in and it passes underneath you — go too early or too
-              late and you get caught.</li>
-            <li>When defending, <b>Tackle</b> or <b>Slide</b> to win the ball, <b>Contain</b> to shadow the
-              attacker without diving in, and <b>Switch</b> to take control of a different player.</li>
+            <li>You have to <b>Tackle</b> or <b>Slide</b> to win the ball — the other team's player will
+              not stop just because you are next to him.</li>
+            <li><b>Switch</b> to take control of the defender nearest the ball.</li>
           </ul>
 
           <h3>TIPS</h3>
           <ul>
             <li>Passing costs nothing — use it to give tired runners a rest.</li>
             <li>Save 400 spirit for a Super Shot when you reach the box.</li>
+            <li>Keep at least 80 spirit on your dribbler, or he cannot jump a tackle.</li>
             <li>A defender who reads your move wins easily, so mix up your choices.</li>
           </ul>
         </div>
@@ -711,7 +726,12 @@ addEventListener('DOMContentLoaded',function(){
   <script>
   (function(){
     var K='ue_settings_v1';
-    var def={vol:70,menuMusic:true,matchMusic:true,ps1:true,debug:false,uisize:'auto'};
+    /* ps1:false is the author's own setup, baked in as the default 2026-09-11 (from ?export=settings on the phone).
+       vol and uisize were deliberately NOT copied: the author's phone was
+       muted (vol 0) and forced to LARGE buttons - as defaults those would start
+       every new player with no sound, and give PC players oversized buttons.
+       'auto' already picks the large size on phones. */
+    var def={vol:70,menuMusic:true,matchMusic:true,ps1:false,debug:false,uisize:'auto'};
     var S=load();
     function load(){try{return Object.assign({},def,JSON.parse(localStorage.getItem(K))||{});}catch(e){return Object.assign({},def);}}
     function save(){try{localStorage.setItem(K,JSON.stringify(S));}catch(e){}}
@@ -1592,7 +1612,7 @@ addEventListener('DOMContentLoaded',function(){
 </div>
 
 <script src="ult11-input.js?v=7" defer></script>
-<script src="game.js?v=137" defer></script>
+<script src="game.js?v=141" defer></script>
 <!-- ps1-mod.js removed: P3D is the only renderer, its post-FX drew into the hidden 2D canvas.
      Re-add this line to restore it: <script src="ps1-mod.js?v=1" defer></script> -->
 <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js" defer></script>
@@ -1610,7 +1630,7 @@ addEventListener('DOMContentLoaded',function(){
 <script src="ult11-bowl2.js?v=5" defer></script>
 <script src="ult11-ribbon.js?v=2" defer></script>
 <script src="ult11-fx-flame.js?v=7" defer></script>
-<script src="ult11-pitch3d.js?v=80" defer></script>
+<script src="ult11-pitch3d.js?v=84" defer></script>
 <script src="ult11-sfx.js?v=5" defer></script>
 <script src="ult11-camlab.js?v=6" defer></script>
 <script src="ult11-team.js?v=5" defer></script>

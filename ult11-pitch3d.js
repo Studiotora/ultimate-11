@@ -35,16 +35,20 @@
     on:true,
     suppress2D:true,     // when on, blank the 2D canvas so only 3D shows
     // camera (broadcast band — deliberately constrained so it can't break HD-2D)
-    cam:{ height:26, dist:46, fov:38, zoomIn:0.5,
+    /* cam / bowl / light / fx / spriteFrac / spriteY below are the author's own setup, baked in as the default 2026-09-11 (from ?export=settings on the phone).
+       Was: cam height 26 dist 46 fov 38 followLerp 11 zFollow 0.45 inwardYaw 0.55
+       lift 2 - bowl gap 0 rake 50 tierH 30 - spriteFrac 0.045. Anyone with their
+       own Camera Lab save still gets theirs; this is only what a NEW player sees. */
+    cam:{ height:6, dist:20, fov:30, zoomIn:0.5,
           phiMin:0.34, phiMax:0.82, thetaLimit:0.20,
           // ---- Camera Lab tunables ----
           phi:0.55,          // fixed elevation when not dragging
-          followLerp:11,     // how fast focus chases the carrier (higher = snappier)
-          zFollow:0.45,      // 0=stay sideways at midline, 1=fully follow Z
-          inwardYaw:0.55,    // how much the camera turns inward near the goals
+          followLerp:16.5,   // how fast focus chases the carrier (higher = snappier)
+          zFollow:1,         // 0=stay sideways at midline, 1=fully follow Z
+          inwardYaw:0,       // how much the camera turns inward near the goals
           lookY:1.0,         // height of the look-at point
-          lift:2 },          // extra camera height offset
-    bowl:{ yOff:0, gap:0, rake:50, tierH:30, sharp:false, roof:true,
+          lift:0 },          // extra camera height offset
+    bowl:{ yOff:0, gap:16, rake:64, tierH:29, sharp:false, roof:true,
            openFront:true, mode:'crowd', tiers:{1:true,2:true,3:true} },
     // ---- STADIUM VARIANT ----
     // 'classic' = segmented photo-textured bowl (default)
@@ -62,22 +66,22 @@
     })(),
     spriteScale:1.9,     // (legacy) billboard height vs engine token radius CR
     spriteY:-0.12,       // vertical plant offset (negative sinks feet into pitch for low-angle cam)
-    spriteFrac:0.045,    // billboard height as fraction of world pitch LENGTH (HD-2D)
+    spriteFrac:0.02,     // billboard height as fraction of world pitch LENGTH (HD-2D) - was 0.045
     // ---- LIGHTING / SHADOWS (Camera Lab → LIGHTING) ----
-    light:{ azim:3.14,    // sun NORTH → shadows cast SOUTH (+Z). Sun angle slider rotates this.
-            elev:0.78,    // sun height 0..1 (lower = longer shadows, lower glow)
-            key:1.35,     // directional key-light intensity (models the bowl)
+    light:{ azim:4.03,    // sun angle - slider rotates this (was 3.14)
+            elev:0.93,    // sun height 0..1 (lower = longer shadows, lower glow)
+            key:3,        // directional key-light intensity (models the bowl)
             ambient:0.55, // hemisphere ambient intensity
-            warmth:0.55,  // 0 cool → 1 warm (tints fog, key light, glow)
-            shadow:0.40,  // player shadow opacity
-            shade:0.45,   // stand/crowd darkening 0=bright .. 1=black (Stand shade slider)
-            shadowLen:1.0,// player shadow stretch (with elev)
+            warmth:0.97,  // 0 cool → 1 warm (tints fog, key light, glow)
+            shadow:0.9,   // player shadow opacity
+            shade:0.47,   // stand/crowd darkening 0=bright .. 1=black (Stand shade slider)
+            shadowLen:2,  // player shadow stretch (with elev)
             castSil:true, // stretched silhouette cast shadow — P3D.light.castSil=false to kill
-            glow:0.45 },  // warm sun-pool intensity on the pitch (0 = off)
+            glow:0.58 },  // warm sun-pool intensity on the pitch (0 = off)
     // ---- POST-PROCESSING (Camera Lab → POST FX); needs the post scripts in index.html ----
-    fx:{ on:true, bloom:0.55, bloomRadius:0.5, bloomThresh:0.82, tilt:0.45, vignette:0.5,
-         rays:0.0, rayDecay:0.95, raySamples:60,   // god rays OFF by default — author never uses them; they blow out the frame
-         sat:1.0, contrast:1.0, lift:0.0, split:0.0 },   // grade: saturation/contrast/lift + warm-cool split-tone
+    fx:{ on:true, bloom:0.1, bloomRadius:0.26, bloomThresh:0.48, tilt:1, vignette:0.63,
+         rays:0.0, rayDecay:0.8, raySamples:120,   // god rays OFF by default — author never uses them; they blow out the frame
+         sat:1.0, contrast:1.17, lift:0.04, split:1 },   // grade: saturation/contrast/lift + warm-cool split-tone
     // ---- QUALITY / PERFORMANCE ----
     // 'auto' watches the framerate and steps quality down (then back up) to
     // hold ~55fps. Force a tier with ?q=low|med|high (great for a stable
@@ -113,6 +117,18 @@
        ult11-fx-flame.js; if either is missing it degrades to the old path
        instead of throwing. */
     fxRibbon:true,
+    /* Shader-trail tuning (2026-09-11, first in-match look).
+       The lab ribbon was ~4.4x the ball's width at the head; in the match it
+       was ~1.8x, because width comes off the ball diameter and the chase
+       camera sits 16.5 units back. At a few pixels wide the noise erosion ate
+       the frayed edge AND the outer colours, leaving only the near-white hot
+       core - so the trail was both faint and washed out from one cause.
+         scale   width multiplier, shader trails only
+         heat    brightness multiplier on every strand
+         lifeMul trail length (ms) multiplier for shots
+         freeze  DEBUG: stop expiring points, so a trail can be screenshotted
+                 in the Browser pane (it only paints once per screenshot) */
+    trailFx:{ scale:2.6, heat:1.3, lifeMul:1.5, freeze:false },
     // sprite animation cadence (frames per second) — console-tunable
     anim:{ runFpsMin:8, runFpsMax:13, idleFps:3, shootMs:720, passMs:520, tackleMs:430, shoulderMs:480 },
     ready:true
@@ -1280,6 +1296,66 @@
       const mesh=new T.Mesh(g,m); mesh.frustumCulled=false; mesh.visible=false; scene.add(mesh);
       return {mesh,pts:[],maxN,col:new T.Color(col),width:0.6,life:430,g,pos,colr};
     }
+    /* ══ SCORCH ══ burn on the turf under a fire shot's path. Lives only for
+       the shot: it is laid while shotBallFx is feeding it, and the moment the
+       feed stops (ball leaves 'fly') the char fades over 1.4s and the embers
+       over 0.7s, then the points are dropped. Two meshes share one geometry
+       (see ult11-fx-flame.js for why it needs two). */
+    let SCORCH=null;
+    const SCORCH_Y=0.018;
+    function ensureScorch(){
+      if(SCORCH) return SCORCH;
+      const RB=global_U11Ribbon(), FL=global_U11Flame();
+      if(!RB||!FL||!FL.scorchMaterials) return null;
+      const rib=new RB.Geometry(160), M=FL.scorchMaterials();
+      const ch=new T.Mesh(rib.geometry,M.char), em=new T.Mesh(rib.geometry,M.ember);
+      [ch,em].forEach((m,i)=>{ m.frustumCulled=false; m.visible=false; m.renderOrder=1+i; scene.add(m); });
+      SCORCH={rib,M,ch,em,pts:[],life:0,emb:0,fed:false};
+      return SCORCH;
+    }
+    function scorchFeed(x,y,z,d){
+      const S=ensureScorch(); if(!S) return;
+      /* burn width follows the ball's HEIGHT: a ball skimming the grass
+         scorches a wide strip, one up at the bar barely singes it */
+      const hf=Math.max(0.22,Math.min(1,1-(y-0.35)/3.6));
+      const w=d*2.6*hf;
+      const L=S.pts[S.pts.length-1];
+      if(L){
+        const dx=x-L.x, dz=z-L.z, dd=Math.hypot(dx,dz), step=Math.max(0.12,d*0.5);
+        if(dd<step*0.5){ S.fed=true; return; }            // not moved enough to lay a point
+        if(dd>step*1.6){                                  // fill gaps so a fast ball burns a continuous strip
+          const n=Math.min(8,Math.floor(dd/step));
+          for(let i=1;i<n;i++){ const f=i/n;
+            S.pts.push({x:L.x+dx*f,y:SCORCH_Y,z:L.z+dz*f,w:L.w+(w-L.w)*f}); }
+        }
+      }
+      S.pts.push({x,y:SCORCH_Y,z,w});
+      while(S.pts.length>160) S.pts.shift();
+      S.fed=true;
+    }
+    function scorchClear(){ if(!SCORCH) return;
+      SCORCH.pts.length=0; SCORCH.life=0; SCORCH.emb=0; SCORCH.fed=false;
+      SCORCH.ch.visible=SCORCH.em.visible=false; SCORCH.rib.clear(); }
+    function scorchUpdate(dt,now){
+      const S=SCORCH; if(!S) return;
+      if(S.pts.length<2){ S.ch.visible=S.em.visible=false; return; }
+      const frozen=!!(P3D.trailFx&&P3D.trailFx.freeze);
+      if(S.fed||frozen){ S.life=Math.min(1,S.life+dt*8); S.emb=Math.min(1,S.emb+dt*8); }
+      else { S.life-=dt/1.4; S.emb=Math.max(0,S.emb-dt/0.7); }
+      S.fed=false;
+      if(S.life<=0){ scorchClear(); return; }
+      const n=S.pts.length;
+      S.rib.build(S.pts,{width:1, mode:global_U11Ribbon().Mode.FLAT,
+        /* absolute width per point; taper both ends so the burn starts and
+           finishes in a point instead of a square-cut strip */
+        widthProfile:(t,i)=>{ const p=S.pts[i]; const w=(p&&p.w)||0.5;
+          const a=Math.min(1,t/0.08), b=Math.min(1,(1-t)/0.10);
+          return w*(0.25+0.75*Math.min(a,b)); }});
+      S.M.char.uniforms.uLife.value=Math.max(0,S.life);
+      S.M.ember.uniforms.uEmber.value=S.emb;
+      S.M.ember.uniforms.uTime.value=now*0.001;
+      S.ch.visible=S.em.visible=true;
+    }
     function global_U11Ribbon(){ return window.U11Ribbon; }
     function global_U11Flame(){ return window.U11Flame; }
     function ribbonPush(R,x,y,z){
@@ -1298,7 +1374,8 @@
     }
     function ribbonUpdate(R,now){
       const LIFE=R.life||430;
-      while(R.pts.length&&now-R.pts[0].t>LIFE) R.pts.shift();
+      const _TF=P3D.trailFx||{};
+      if(!_TF.freeze) while(R.pts.length&&now-R.pts[0].t>LIFE) R.pts.shift();
       const n=R.pts.length;
       if(n<2){ R.mesh.visible=false; return; }
       R.mesh.visible=true;
@@ -1312,14 +1389,15 @@
            width is doubled: RibbonGeometry straddles the spine by width*0.5,
            the legacy path offset by the full half-width either side. */
         R.rib.build(R.pts,{
-          width:R.width*2,
+          width:R.width*2*(_TF.scale!=null?_TF.scale:2.6),
           mode:global_U11Ribbon().Mode.BILLBOARD,
           cameraPosition:camera.position,
-          widthProfile:t=>0.04+0.96*Math.pow(t,0.55)
+          widthProfile:(function(pre){ const F=global_U11Flame();
+            return (F&&F.trailProfile)?(t=>F.trailProfile(pre,t)):(t=>0.04+0.96*Math.pow(t,0.55)); })(R._preset)
         });
         const u=R.mat.uniforms;
         u.uTime.value=now*0.001;
-        u.uHeat.value=(R._heat!=null?R._heat:1);
+        u.uHeat.value=(R._heat!=null?R._heat:1)*(_TF.heat!=null?_TF.heat:1.3);
         return;
       }
       const cp=camera.position;
@@ -1354,6 +1432,20 @@
     function shotArc(kind,fe,stl){
       const loft=(stl&&stl.loft!=null)?stl.loft:1;
       if(kind==='drive'){
+        /* v2 (author, first look: "descends too early"). v1 peaked at 42% of
+           the flight and was back near the grass by ~80%, so the drop happened
+           mid-pitch where nobody is looking. A Tsubasa drive shot stays UP and
+           dips at the goal. Now: climb to just under the bar by 62%, hold,
+           then fall with k^2 - slow at first, steep at the end - so nearly
+           all of the drop lands in the final ~20% of the flight.
+           Ends at exactly 4 = the hover height 'wait' mode takes over at, so
+           there is no snap on the handoff (v1 ended at 1.6 and jumped). */
+        const P=0.62, peak=58;
+        const up=Math.pow(Math.min(1,fe/P),0.55);
+        const k=Math.max(0,(fe-P)/(1-P));
+        return 4*fe + peak*up*(1-k*k);
+      }
+      if(kind==='drive_v1'){
         const climb=Math.pow(Math.min(1,fe/0.42),0.62);              // fast rise
         /* max(0,...) is NOT paranoia: at fe=1, (1-0.42)/0.58 evaluates to
            1.0000000000000002, so the base lands on -2.2e-16 and a negative
@@ -1394,12 +1486,12 @@
        particle rate and ring cadence are what make them read apart. */
     const TRAIL_STYLES={
       standard :{w:1.00,strands:1,wob:0.00,wf:0 ,glow:2.2,pR:2,pG:9 ,ring:0   ,col:'#ffd24a'},
-      flame    :{w:1.15,strands:2,wob:0.30,wf:7 ,glow:2.7,pR:4,pG:4 ,ring:0   ,col:'#ff6a1e',hotP:1},
+      flame    :{w:1.15,strands:2,wob:0.30,wf:7 ,glow:2.7,pR:4,pG:4 ,ring:0   ,col:'#ff6a1e',hotP:1,scorch:1},
       lightning:{w:0.70,strands:3,wob:0.85,wf:22,glow:2.3,pR:1,pG:9 ,ring:0.17,col:'#7fd8ff'},
       wind     :{w:0.60,strands:3,wob:0.70,wf:4 ,glow:1.8,pR:2,pG:2 ,ring:0   ,col:'#bfe9ff'},
       shadow   :{w:1.20,strands:1,wob:0.25,wf:3 ,glow:2.4,pR:2,pG:2 ,ring:0   ,col:'#7a4cc4',dark:1},
       aura     :{w:1.05,strands:3,wob:0.50,wf:9 ,glow:2.9,pR:3,pG:6 ,ring:0.16,col:'#ff5ca8'},
-      tiger    :{w:1.30,strands:3,wob:0.60,wf:10,glow:3.2,pR:3,pG:7 ,ring:0.13,col:'#ffb020',hotP:1},
+      tiger    :{w:1.30,strands:3,wob:0.60,wf:10,glow:3.2,pR:3,pG:7 ,ring:0   ,col:'#ffb020',hotP:1,scorch:1},
       after    :{w:0.00,strands:0,wob:0.00,wf:0 ,glow:2.0,pR:0,pG:0 ,ring:0   ,col:'#6fd0ff',ghost:1},
       /* DRAGON - Frisina's signature. Four braided strands, a very hot core,
          a fast ring cadence for the heat pulses, and crucially pG NEGATIVE:
@@ -1407,7 +1499,12 @@
          skips the floor bounce (which only runs when g>0). That turns the
          debris into rising embers, which is the one thing separating fire
          from orange sparks falling. */
-      dragon   :{w:1.45,strands:4,wob:0.72,wf:6 ,glow:3.4,pR:6,pG:-1.8,ring:0.10,col:'#ff3a2a',hotP:1},
+      /* coil: strands 1..n wind a HELIX around the flight path instead of
+         wobbling beside it - the dragon wrapping the ball. r in ball
+         diameters, w in rad/s. ring:0 - the author asked for the path rings
+         to go; scorch burns the turf under the ball instead. */
+      dragon   :{w:1.45,strands:4,wob:0.72,wf:6 ,glow:3.4,pR:6,pG:-1.8,ring:0   ,col:'#ff3a2a',hotP:1,
+                 coil:{n:2,r:2.4,w:11,wid:0.24}, scorch:1},
       /* DRIVE - Mancuso's. Deep blue, tight and near-straight: a drive shot is
          not lightning, it is a projectile. Its drama is the TRAJECTORY
          (arc:'drive'), not the wobble. */
@@ -1503,7 +1600,8 @@
         if(_lastFxBall){
           const sx=x-_lastFxBall.x, sy=y-_lastFxBall.y, sz=z-_lastFxBall.z;
           const spd=Math.hypot(sx,sy,sz)*60;
-          const want=Math.max(430,Math.min(1250,380+spd*22));
+          const _lm=(P3D.fxRibbon!==false&&P3D.trailFx&&P3D.trailFx.lifeMul)||1;
+          const want=Math.max(430,Math.min(1250,380+spd*22))*_lm;
           RIBS.forEach(R=>{ R.life+=(want-R.life)*0.25; });
         }
 
@@ -1520,17 +1618,38 @@
                applyPreset every frame would be harmless but pointless, and it
                would stamp over a hand-tuned uniform the moment anyone poked
                one from the console. */
+            const _coil=ST.coil&&k>=1&&k<=ST.coil.n;
             if(R._preset!==FX.k){ R._preset=FX.k;
-              try{ global_U11Flame().applyPreset(R.mat,FX.k,tcol); }catch(e){} }
+              try{ global_U11Flame().applyPreset(R.mat,FX.k,tcol);
+                   /* coil ropes are thin: at the body's erosion they frayed to a
+                      pale dotted line. Erode them far less. */
+                   if(_coil) R.mat.uniforms.uErode.value*=0.42; }catch(e){} }
             /* Outer strands run cooler, so a 4-strand dragon reads as one
                body of fire with a white spine rather than four equal ribbons. */
-            R._heat=(k===0)?1.0:Math.max(0.35,0.78-k*0.14);
+            R._heat=(k===0)?1.0:(_coil?1.15:Math.max(0.35,0.78-k*0.14));
           }
-          R.width=d*kw*ST.w*(k?0.62:1);
+          /* coil strands are thin ROPES on a wide spiral; at the normal
+             strand width (~4x the ball) the helix was buried inside the
+             flame and read as nothing but a fatter trail */
+          const _coiled=ST.coil&&k>=1&&k<=ST.coil.n;
+          R.width=d*kw*ST.w*(_coiled?ST.coil.wid:(k?0.62:1));
+          if(ST.coil && k>=1 && k<=ST.coil.n){
+            /* HELIX. The angle advances with time while the ball advances along
+               the path, so points laid frame by frame trace a spiral in space.
+               px/pz is the horizontal perpendicular and +y is up, so the pair
+               spans the plane at right angles to the flight. Strands are
+               spaced evenly round the circle (n=2 -> a double helix). */
+            const th=ph*ST.coil.w+(k-1)*(Math.PI*2/ST.coil.n);
+            const rr=ST.coil.r*d, cx=Math.cos(th)*rr, cy=Math.sin(th)*rr;
+            ribbonPush(R, x+px*cx, Math.max(0.05,y+cy), z+pz*cx);
+            return;
+          }
           const off=ST.wob? Math.sin(ph*ST.wf+k*2.1)*ST.wob*d*3*(k?1:0.35) : 0;
           const yo =ST.wob? Math.cos(ph*ST.wf+k*1.3)*ST.wob*d*1.1 : 0;
           ribbonPush(R, x+px*off, y+yo, z+pz*off);
         });
+
+        if(ST.scorch){ try{ scorchFeed(x,y,z,d); }catch(e){} }
 
         // afterimage: no ribbon, discrete ghost balls instead
         if(ST.ghost){
@@ -1908,7 +2027,13 @@
         else if(act.name==='super')    dur=(A.superMs||950);
         else dur=(act.name==='shoot'?(A.shootMs||720):(A.passMs||520))*Math.max(0.6,rng[1]/8);
         const el=now-act.t0;
-        if(el<dur){ const fi=Math.min(rng[1]-1, Math.floor(el/dur*rng[1]));
+        if(act.frames){                       // explicit timeline wins over the even split
+          let acc=0, fi=-1;
+          for(let i=0;i<act.frames.length&&i<rng[1];i++){ acc+=act.frames[i]; if(el<acc){ fi=i; break; } }
+          if(fi>=0){ const cc=cellOf(L,face,act.name,fi); return {row:cc.row, col:cc.col, flip}; }
+          delete ACT[id];
+        }
+        else if(el<dur){ const fi=Math.min(rng[1]-1, Math.floor(el/dur*rng[1]));
           // tackle/shoulder are side-view only — keep the flip the lunge set
           const cc=cellOf(L,face,act.name,fi); return {row:cc.row, col:cc.col, flip}; }
         delete ACT[id];
@@ -1937,7 +2062,11 @@
     /* one-shot action triggers — auto-detected from engine phase transitions */
     const ACT={};
     const ONE_SHOT={tackle:1, shoulder:1, jump:1, super:1};
-    P3D.action=function(s,k,name){ if(COL[name]||ONE_SHOT[name]) ACT[s+':'+k]={name,t0:performance.now()}; };
+    /* opts.frames: explicit per-frame durations (ms). game.js passes these for
+       the tackles so the impact frame plays exactly when its hit window opens,
+       instead of frames being spread evenly across the whole animation. */
+    P3D.action=function(s,k,name,opts){ if(COL[name]||ONE_SHOT[name])
+      ACT[s+':'+k]={name,t0:performance.now(),frames:(opts&&opts.frames)||null}; };
     P3D.clearAction=function(s,k){ delete ACT[s+':'+k]; };   // snap back to run/idle (lunge end)
     let _lastCarrier=null,_prevKick=false;
     function watchActions(){
@@ -2845,6 +2974,53 @@
        world height so it scales with whatever the camera is doing. */
     P3D.jump={};
     P3D.jumpPeak=0.55;
+    /* ══ TACKLE TELEGRAPH ══ a ring at the tackler's feet for the whole
+       wind-up, contracting onto him as it completes, then a white flash on the
+       strike. At spriteFrac 0.02 the wind-up frames alone are a few pixels
+       tall - and the jump is only a skill if the challenge can be SEEN coming.
+       Orange = standing tackle, red = slide, so the carrier can read which. */
+    let TELE=null;
+    function ensureTele(){
+      if(TELE) return TELE;
+      /* NORMAL blending, not additive: additive red on a bright green pitch
+         washes to olive-yellow (the same trap as the fire trail) and at low
+         opacity it vanished under the possession ring. Drawn after the other
+         ground rings so nothing sits on top of it. */
+      const m=new T.Mesh(new T.PlaneGeometry(1,1), new T.MeshBasicMaterial({map:ringTex(), color:0xffa020,
+        transparent:true, opacity:0, depthWrite:false, blending:T.NormalBlending, fog:false}));
+      m.rotation.x=-Math.PI/2; m.renderOrder=6; m.visible=false; scene.add(m);
+      TELE={mesh:m,id:null,t0:0,wind:300,kind:'shoulder'};
+      return TELE;
+    }
+    P3D.telegraph=function(id,o){
+      const t=ensureTele();
+      if(!o){ if(!id||t.id===id){ t.id=null; t.mesh.visible=false; } return; }
+      t.id=id; t.t0=performance.now(); t.wind=o.wind||300; t.kind=o.kind||'shoulder';
+    };
+    /* read-only: is the tackle warning showing, for whom, and how far into
+       the wind-up. For tests - the Browser pane cannot always capture it. */
+    P3D.teleState=function(){ const t=TELE; if(!t) return {built:false};
+      return {built:true, id:t.id, visible:t.mesh.visible, kind:t.kind,
+              opacity:+t.mesh.material.opacity.toFixed(2), scale:+t.mesh.scale.x.toFixed(2),
+              color:'#'+t.mesh.material.color.getHexString()}; };
+    function tickTele(){
+      const t=TELE; if(!t||!t.id) return;
+      const g=sprites[t.id]; if(!g||!g.sprite){ t.mesh.visible=false; return; }
+      const el=performance.now()-t.t0, k=Math.min(1,el/t.wind);
+      const hh=PLEN*(P3D.spriteFrac!=null?P3D.spriteFrac:0.045);
+      t.mesh.position.set(g.sprite.position.x, 0.06, g.sprite.position.z);
+      if(k<1){
+        const sc=hh*(2.2-1.2*k); t.mesh.scale.set(sc,sc,1);
+        t.mesh.material.color.set(t.kind==='tackle'?0xff2a1a:0xffa020);
+        t.mesh.material.opacity=0.75+0.25*k;
+      }else{
+        const f=Math.max(0,1-(el-t.wind)/220);
+        if(f<=0){ t.id=null; t.mesh.visible=false; return; }
+        const sc=hh*(1.0+0.6*(1-f)); t.mesh.scale.set(sc,sc,1);
+        t.mesh.material.color.set(0xffffff); t.mesh.material.opacity=0.95*f;
+      }
+      t.mesh.visible=true;
+    }
     P3D.setJump=function(id,t){ if(t>0.001) P3D.jump[id]=t; else delete P3D.jump[id]; };
 
     P3D.lunge=function(id,lean,dust){
@@ -2909,6 +3085,18 @@
                trail:(_trailFx?_trailFx.k:null), trailCol:(_trailFx?_trailFx.col:null),
                trailForced:_trailForce, ribbonPts:(RIBS[0]?RIBS[0].pts.length:0),
                arc:(cine.arc||'normal'), strands:(_trailFx&&_trailFx.st?_trailFx.st.strands:null),
+               scorchPts:(SCORCH?SCORCH.pts.length:0), scorchVis:!!(SCORCH&&SCORCH.ch.visible),
+               scorchLife:(SCORCH?+SCORCH.life.toFixed(2):0),
+               /* head-to-head distance from the spine to each coil strand: a
+                  helix should hold these near coil.r * ball diameter */
+               coilGap:[1,2].map(function(k){ const A=RIBS[0]&&RIBS[0].pts, B=RIBS[k]&&RIBS[k].pts;
+                 if(!A||!B||!A.length||!B.length) return null; const a=A[A.length-1], b=B[B.length-1];
+                 return +Math.hypot(a.x-b.x,a.y-b.y,a.z-b.z).toFixed(2); }),
+               /* heights the ball actually passed through, tail -> head, read
+                  off the spine ribbon. With P3D.trailFx.freeze on this is the
+                  whole flight as rendered - the arc, without camera guesswork. */
+               trailY:(function(){ const P=RIBS[0]?RIBS[0].pts:[]; if(P.length<2) return [];
+                 const o=[]; for(let i=0;i<10;i++){ const q=P[Math.round(i*(P.length-1)/9)]; o.push(+q.y.toFixed(2)); } return o; })(),
                ribsVisible:RIBS.filter(function(R){return R.mesh&&R.mesh.visible;}).length,
                hitStop:+(cine._hitStop||0).toFixed(3), chg:+chargeCurve(Math.min(1,_fxT/2.0)).toFixed(3),
                cam:[+camera.position.x.toFixed(4),+camera.position.y.toFixed(4),+camera.position.z.toFixed(4)]};
@@ -2974,7 +3162,7 @@
           const shooter=(typeof sq==='function'&&sq(o.as))?sq(o.as)[o.sk]:null;
           const st=shotStyleFor(shooter), pp=shotPerp(sp.x,sp.y,stopX,gp.y);
           Object.assign(cine,{style:st,perpX:pp.px,perpY:pp.py,curveAmt:W*0.05*st.curve,dur:1.6/st.speed});
-          _trailFx=trailStyleFor(shooter); try{ clearTrail(); }catch(e){}
+          _trailFx=trailStyleFor(shooter); try{ clearTrail(); scorchClear(); }catch(e){}
           cine.arc=(_trailFx&&_trailFx.sig&&_trailFx.sig.arc)||'normal';
           if(cine.arc==='drive') cine.curveAmt*=0.35;   // a drive barely bends
           window.U11DBG&&U11DBG('[3D] super shot: '+st.kind+' / trail '+_trailFx.k
@@ -3463,6 +3651,8 @@
       if(cine){ try{ if(cine.v2){cineStep2(dt);cineCamera2(dt);} else {cineStep(dt);cineCamera();} }catch(e){console.error('[P3D] cine error',e); cineEnd();} }
       else    { syncBall(); updateCamera(dt); }
       tickTrail(dt);
+      try{ scorchUpdate(dt,now); }catch(e){}
+      try{ tickTele(); }catch(e){}
       try{ tickGfx(dt,now); }catch(e){}
       syncRef(dt);
       // anchor god rays at the sun's projected screen position

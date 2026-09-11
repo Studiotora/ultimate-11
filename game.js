@@ -1900,7 +1900,7 @@ function tick(dt=1){
       const manualMult=manualDef?1.3:1.0;
       // A committed lunge → skip normal chase steering, but DON'T return: flow
       // must reach stepLunge() at the tail (it owns the dash + hit detection).
-      if(!lungeActive(ds,ROLES.engager)){
+      if(!lungeActive(ds,ROLES.engager) && !isStalled(ds,ROLES.engager)){
         const step=MAX_DEF_STEP()*pressMult*sprintMult*manualMult*fieldSpdMult(engPl)*recoveryMult(ds,ROLES.engager,dp2)*dt;
         // momentum: steer velocity toward the chase direction rather than
         // teleporting along it, so acceleration and turning both cost time
@@ -1908,14 +1908,17 @@ function tick(dt=1){
         moveMomentum(dp2,_ephy,dp2.x+ux*step*8,dp2.y+uy*step*8,step,engPl,dt);
         dp2.x=clamp(dp2.x,W*.01,W*.99);
         dp2.y=clamp(dp2.y,H*.03,H*.97);
-        if(Date.now()>=(G.kickoffUntil||0) && dist(dp2,cp)<ENGAGE()){G.chk=ROLES.engager;opDuel(false);return;}
+        /* Tackles only: getting close no longer opens a duel by itself. The AI
+           engager has to decide to tackle, exactly as the human does. */
+        if(!TACKLE_ONLY_DUELS && Date.now()>=(G.kickoffUntil||0) && dist(dp2,cp)<ENGAGE()){G.chk=ROLES.engager;opDuel(false);return;}
+        if(TACKLE_ONLY_DUELS && isCpuSide(ds)) aiConsiderTackle(ds,ROLES.engager,dp2,cp);
       }
     }
   }
   // PRESS: second player (cover) also sprints toward carrier.
   // Human via the PRESS button; CPU automatically when trailing hard.
   const _covPress=(G.pressing&&ds==='h')||(ds==='a'&&teamStance('a')>0.55);
-  if(_covPress&&ROLES.cover&&!ocd(ds,ROLES.cover)){
+  if(_covPress&&ROLES.cover&&!ocd(ds,ROLES.cover)&&!isStalled(ds,ROLES.cover)){
     const dp2=PP[ds][ROLES.cover];
     if(dp2){
       const dx=cp.x-dp2.x,dy=cp.y-dp2.y;
@@ -1933,7 +1936,7 @@ function tick(dt=1){
      human-controlled, control TRANSFERS to him so the player is always the man
      making the challenge (previously the duel opened but you were still
      "being" the old engager, which felt like the game ignored you). */
-  if(Date.now()>=(G.kickoffUntil||0)){
+  if(!TACKLE_ONLY_DUELS && Date.now()>=(G.kickoffUntil||0)){   // (off: duels come from tackles now)
     const defQ=sq(ds);
     for(const k of Object.keys(defQ)){
       if(!defQ[k]||k===ROLES.engager||k==='GK'||ocd(ds,k))continue;
@@ -2209,6 +2212,10 @@ function moveOffBall(s,ds,dt=1){
   Object.keys(sq(ds)).forEach(k=>{
     if(!sq(ds)[k]||!PP[ds][k])return;
     if(k===ROLES.engager)return; // handled in tick()
+    /* On the floor after a missed tackle: stays put even if the chase has been
+       handed to someone else. Without this, a whiffed slider who stopped being
+       the engager glided straight back into shape as an off-ball player. */
+    if(isStalled(ds,k))return;
     const cur=PP[ds][k];
     const p=fp(k,ds==='h'?'home':'away',G.half);
     const pl=sq(ds)[k];
@@ -3750,9 +3757,11 @@ window.addEventListener('keydown',e=>{
    dx   = shift right (+) / left (-) in px
    dy   = shift up (+) / down (-) in px
    Persisted in localStorage('ue_ctrl'). */
+/* author's own setup, baked in as the default 2026-09-11 (from ?export=settings on the phone).
+   Was joy op 1.00 / pad op 0.82, both size 1.00. */
 window.UECTRL = window.UECTRL || {
-  joy:{ op:1.00, size:1.00, dx:0, dy:0 },
-  pad:{ op:0.82, size:1.00, dx:0, dy:0 }
+  joy:{ op:0.34, size:0.95, dx:0, dy:0 },
+  pad:{ op:0.42, size:0.82, dx:0, dy:0 }
 };
 try{ const s=JSON.parse(localStorage.getItem('ue_ctrl')||'null');
   if(s){ if(s.joy)Object.assign(UECTRL.joy,s.joy); if(s.pad)Object.assign(UECTRL.pad,s.pad); } }catch(e){}
@@ -4406,38 +4415,72 @@ function _switchEngager(ds){
   const pl=sq(ds)[best];
   say('Switched to '+(pl?pl.name:'defender'));
 }
-/* ══ TACKLE / SHOULDER CHARGE ═══════════════════════════════════════
-   A committed lunge, not a proximity check. Wind-up → travel (steering
-   locked) → contact or whiff → recovery lockout. Only the controlled
-   defender may lunge, so the AI never triple-commits.
-      tackle   — short, fast, big reach, long recovery if missed
-      shoulder — slower, shorter, must stay in contact briefly, low foul risk
-   Contact is measured against CONTACT(), the same sprite-overlap range the
-   duel trigger uses. */
-const LUNGE={
-  // track = how much the lunge may re-aim during the first 45% of travel.
-  // Fully locked steering meant any small change of direction beat it, which
-  // made connecting nearly impossible; a little tracking keeps the commitment
-  // feel while letting a well-timed challenge actually land.
-  tackle  :{wind:70, dur:430, reach:1.9, speed:2.6, recover:850, foul:0.22, track:0.16, lean:0.85},
-  shoulder:{wind:90, dur:480, reach:1.5, speed:1.9, recover:480, foul:0.07, track:0.26, lean:0.30}
-};
-/* ══ JUMP (roadmap C.2) ═══════════════════════════════════════════════════
-   The counter to a tackle. Time it right and the challenge passes underneath:
-   you keep the ball and NO duel opens. Mistime it and the tackle lands as
-   normal. That is the whole skill expression in the moment, and it is why the
-   tackle needed a readable wind-up first — you cannot react to what you
-   cannot see.
+/* ══ TACKLES + JUMP · GAMEPLAY PART 1 (2026-09-11) ══════════════════════════
+   Duels start ONLY from a landed tackle (TACKLE_ONLY_DUELS). Before this, a
+   duel opened automatically whenever any defender got within ENGAGE() of the
+   carrier, plus a 600ms "grace" timer - and the tackle's own hit range was
+   SMALLER than that, so walking up always beat pressing the button. Landing a
+   tackle also gave nothing (G._lungeKind was written and never read), and the
+   AI never tackled, so the carrier's jump never had anything to dodge.
 
-   Height is a sine arc so the player decelerates into the peak and accelerates
-   out of it, which reads as weight. The invulnerable window is deliberately
-   NARROWER than the airborne time: leaving the ground early or landing late
-   still gets you tackled, so the timing has to be genuine. */
+   Two tackles. The code keys keep the ANIMATION row names:
+      shoulder = STANDING tackle  (X / square, E)   orange telegraph
+      tackle   = SLIDE tackle     (B / circle, R)   red telegraph
+
+   Each is three phases, locked to the 6-frame animation so what you SEE is
+   what counts:
+      wind    frames 0-1   plant and load. Still closing, at a fraction of pace.
+                           This is the tell - long enough to react to with a
+                           jump (reaction ~220ms + the jump's 140ms to clear).
+      strike  hit frames   the dash. Contact is ONLY tested here.
+      tail    rest         recovery pose. A whiffed slide leaves him getting up.
+   `frames` are the six per-frame durations handed to the renderer, so the
+   impact frame plays exactly when the hit window opens.
+      standing  165+165 | 100+100      | 90+90   = 710ms
+      slide     150+150 | 110+110+110  | 150     = 780ms
+
+   Spirit: standing 50, slide 80, paid on commit (nothing is spent if the
+   target is out of range). A clean tackle opens the duel with the tackler
+   ahead: `edge` multiplies his duel power for that one duel (G.D is rebuilt
+   for every duel, so it can never leak into the next). The slide's bigger edge
+   is paid for with more spirit, a longer recovery, and more fouls. */
+const TACKLE_ONLY_DUELS=true;
+const LUNGE={
+  /* standing wind was 280: measured with a fixed-step harness, the jump
+     window then closed 140ms after the telegraph appeared - before anyone can
+     react (~200-250ms). At 330 it closes at ~190ms: reactable for a sharp
+     player, while the slide (closes ~280ms) stays the readable one. */
+  shoulder:{ wind:330, strike:200, frames:[165,165,100,100,90,90],
+             reach:1.5, windSpeed:0.55, speed:1.9, track:0.26,
+             recover:480, stall:180, foul:0.07, cost:50, edge:1.10 },
+  tackle  :{ wind:300, strike:330, frames:[150,150,110,110,110,150],
+             reach:1.9, windSpeed:0.50, speed:2.6, track:0.16,
+             recover:850, stall:420, foul:0.22, cost:80, edge:1.20 }
+};
+
+function spiritMax(pl){ return pl&&pl.pos==='GK'?2000:1500; }
+function spiritOf(pl){ return (pl&&pl.spirit!=null)?pl.spirit:spiritMax(pl); }
+function spendSpirit(pl,n){
+  if(!pl) return false;
+  const s=spiritOf(pl); if(s<n) return false;
+  pl.spirit=s-n; return true;
+}
+let _sayThT=0;
+function sayThrottled(m){ const n=Date.now(); if(n-_sayThT<1200) return; _sayThT=n; say(m); }
+
+/* ══ JUMP ═══════════════════════════════════════════════════════════════════
+   The counter to a tackle. Time it right and the challenge passes underneath:
+   you keep the ball and no duel opens. The invulnerable window is NARROWER
+   than the airborne time, so leaving early or landing late still gets you
+   caught. Costs 80 spirit; clearing a tackle hands 40 back, so a successful
+   hurdle nets 40 - the reward for reading it. */
 const JUMP={
   dur:700,          // matches the 6-frame jump animation
   invulnFrom:0.20,  // fraction of the arc where the legs are actually clear
   invulnTo:0.68,
-  landLock:220      // recovery after landing, so it cannot be spammed
+  landLock:220,     // recovery after landing, so it cannot be spammed
+  cost:80,
+  refund:40
 };
 function _jumpPh(side,k){ const ph=_phys[side+':'+k]; return (ph&&ph._jumpT0)?ph:null; }
 function jumpProgress(side,k){
@@ -4448,24 +4491,31 @@ function jumpProgress(side,k){
 }
 function jumpHeight(side,k){
   const t=jumpProgress(side,k);
-  return t<0 ? 0 : Math.sin(Math.PI*t);      // 0 → 1 → 0
+  return t<0 ? 0 : Math.sin(Math.PI*t);      // 0 -> 1 -> 0
 }
 function isAirborne(side,k){
   const t=jumpProgress(side,k);
   return t>=JUMP.invulnFrom && t<=JUMP.invulnTo;
 }
 function playerJump(side){
-  if(!G||G.phase!=='moving'||G.paused||G._cineHold) return;
+  if(!G||G.phase!=='moving'||G.paused||G._cineHold) return false;
   // whoever this side is currently steering: the carrier, or the engager
   const k=(G.poss===side) ? G.ck : (G.chk||(typeof ROLES!=='undefined'&&ROLES?ROLES.engager:null));
-  if(!k||!PP[side]||!PP[side][k]) return;
-  const ph=physOf(side,k,sq(side)[k]);
-  if(ph._jumpT0 && Date.now()-ph._jumpT0 < JUMP.dur) return;   // already up
-  if(ph._jumpLock && Date.now() < ph._jumpLock) return;        // still landing
+  if(!k||!PP[side]||!PP[side][k]) return false;
+  const pl=sq(side)[k];
+  const ph=physOf(side,k,pl);
+  if(ph._jumpT0 && Date.now()-ph._jumpT0 < JUMP.dur) return false;   // already up
+  if(ph._jumpLock && Date.now() < ph._jumpLock) return false;        // still landing
+  if(!spendSpirit(pl,JUMP.cost)){
+    if(!isCpuSide(side)) sayThrottled('Not enough spirit to jump ('+JUMP.cost+')');
+    return false;
+  }
   ph._jumpT0=Date.now();
   ph._jumpLock=Date.now()+JUMP.dur+JUMP.landLock;
+  ph._jumpRefund=true;                        // one refund per jump, on a hurdle
   try{ if(window.P3D&&P3D.action) P3D.action(side,k,'jump'); }catch(e){}
   try{ if(window.SFX&&SFX.whoosh) SFX.whoosh(0.35); }catch(e){}
+  return true;
 }
 /* Push every live jump height to the renderer once per tick. */
 function stepJumps(){
@@ -4476,45 +4526,118 @@ function stepJumps(){
   });
 }
 
-let _lunge=null;   // {side,k,kind,t0,phase,dx,dy,gen}
+let _lunge=null;   // {side,k,kind,t0,phase,dx,dy,gen,aiJumpAt}
 function lungeActive(side,k){ return !!(_lunge&&_lunge.side===side&&_lunge.k===k); }
-function isLunging(side,k){ return lungeActive(side,k)&&_lunge.phase==='go'; }
-function startLunge(side,kind){
-  if(_lunge)return;
-  if(!G||G.phase!=='moving'||G.paused||G._cineHold)return;
-  if(G.poss===side)return;                       // only the defending side
-  const dk=G.chk||ROLES.engager; if(!dk||!PP[side]||!PP[side][dk])return;
-  const pl=sq(side)[dk]; if(!pl||ocd(side,dk))return;
+function isLunging(side,k){ return lungeActive(side,k)&&_lunge.phase==='strike'; }
+/* A whiffed challenge leaves the tackler on his way back up: no movement, no
+   new tackle, until the stall runs out. */
+function isStalled(side,k){
+  const ph=_phys[side+':'+k];
+  return !!(ph&&ph._stallUntil&&Date.now()<ph._stallUntil);
+}
+function startLunge(side,kind,dkOpt){
+  if(_lunge)return false;
+  if(!G||G.phase!=='moving'||G.paused||G._cineHold)return false;
+  if(G.poss===side)return false;                       // only the defending side
+  const dk=dkOpt||G.chk||ROLES.engager; if(!dk||!PP[side]||!PP[side][dk])return false;
+  const pl=sq(side)[dk]; if(!pl||ocd(side,dk))return false;
   const ph=physOf(side,dk,pl);
-  if(ph._lungeLock&&Date.now()<ph._lungeLock)return;   // still recovering
+  const now=Date.now();
+  if(ph._lungeLock&&now<ph._lungeLock)return false;   // still recovering
+  if(ph._stallUntil&&now<ph._stallUntil)return false; // still on the floor
   const dp=PP[side][dk], cp=PP[G.poss]&&PP[G.poss][G.ck];
-  if(!cp)return;
+  if(!cp)return false;
   const dx=cp.x-dp.x, dy=cp.y-dp.y, d=Math.hypot(dx,dy)||1;
-  const L=LUNGE[kind]||LUNGE.tackle;
-  if(d>CONTACT()*L.reach*6)return;               // too far to be worth it
-  _lunge={side,k:dk,kind,t0:Date.now(),phase:'wind',dx:dx/d,dy:dy/d,gen:G.goalGen};
+  const L=LUNGE[kind]||LUNGE.shoulder;
+  if(d>CONTACT()*L.reach*3.5)return false;            // hopelessly far: nothing happens, nothing spent
+  if(!spendSpirit(pl,L.cost)){
+    if(!isCpuSide(side)) sayThrottled('Not enough spirit to '+(kind==='tackle'?'slide':'tackle')+' ('+L.cost+')');
+    return false;
+  }
+  _lunge={side,k:dk,kind,t0:now,phase:'wind',dx:dx/d,dy:dy/d,gen:G.goalGen,aiJumpAt:0};
   try{ if(window.SFX&&SFX.whoosh)SFX.whoosh(0.6); }catch(e){}
-  // play the real 3-frame tackle/shoulder animation (falls back to a run frame
-  // on sheets that don't have the dedicated rows yet)
-  try{ if(window.P3D&&P3D.action)P3D.action(side,dk, kind==='shoulder'?'shoulder':'tackle'); }catch(e){}
+  try{ if(window.P3D&&P3D.action)P3D.action(side,dk,kind,{frames:L.frames}); }catch(e){}
+  try{ if(window.P3D&&P3D.telegraph)P3D.telegraph(side+':'+dk,{wind:L.wind,kind:kind}); }catch(e){}
+  if(isCpuSide(G.poss)) planAiJump();
+  return true;
+}
+/* The AI carrier sometimes tries to hurdle a tackle. Good dribblers try more
+   often. The take-off aims for the safe window to open as the strike begins,
+   with human-sized error either side - so it can mistime it too. */
+function planAiJump(){
+  if(!_lunge) return;
+  const pl=sq(G.poss)&&sq(G.poss)[G.ck]; if(!pl) return;
+  if(spiritOf(pl)<JUMP.cost) return;
+  const dri=gs(pl,'dri')||60;
+  const p=clamp(0.12+(dri-55)*0.009,0.08,0.45);
+  if(Math.random()>p) return;
+  const L=LUNGE[_lunge.kind]||LUNGE.shoulder;
+  const ideal=L.wind - JUMP.dur*JUMP.invulnFrom + 40;
+  _lunge.aiJumpAt=_lunge.t0 + ideal + (Math.random()*260-110);
+}
+/* AI defender: once the carrier is inside a tackle's range, read the play for
+   a beat (shorter for better defenders), then commit. Standing tackle close
+   in, slide from further out; if he cannot afford the slide he stands. */
+function aiConsiderTackle(ds,dk,dp,cp){
+  if(_lunge||!dp||!cp) return;
+  if(Date.now()<(G.kickoffUntil||0)) return;
+  const pl=sq(ds)[dk]; if(!pl||ocd(ds,dk)) return;
+  const ph=physOf(ds,dk,pl);
+  const now=Date.now();
+  if(ph._lungeLock&&now<ph._lungeLock) return;
+  const d=dist(dp,cp), C=CONTACT();
+  const inStand = d>=C*0.6 && d<=C*2.2;
+  const inSlide = d>=C*1.6 && d<=C*3.6;
+  if(!inStand&&!inSlide){ ph._aiTkAt=0; return; }
+  if(!ph._aiTkAt){
+    const defS=gs(pl,'def')||60;
+    ph._aiTkAt=now+(520-clamp((defS-50)*6,0,300))*(0.7+Math.random()*0.6);
+    return;
+  }
+  if(now<ph._aiTkAt) return;
+  ph._aiTkAt=0;
+  let kind=(inStand&&inSlide)?(Math.random()<0.35?'tackle':'shoulder'):(inSlide?'tackle':'shoulder');
+  if(spiritOf(pl)<LUNGE[kind].cost) kind='shoulder';
+  startLunge(ds,kind,dk);
+}
+function endLunge(keepAnim){
+  if(!_lunge) return;
+  const side=_lunge.side, dk=_lunge.k;
+  _lunge=null;
+  try{ if(window.P3D){ if(P3D.lunge)P3D.lunge(side+':'+dk,0,false);
+       if(!keepAnim&&P3D.clearAction)P3D.clearAction(side,dk);
+       if(P3D.telegraph&&!keepAnim)P3D.telegraph(side+':'+dk,null); } }catch(e){}
 }
 function stepLunge(dt){
   if(!_lunge)return;
   dt=dt||1;
-  const L=LUNGE[_lunge.kind]||LUNGE.tackle;
-  const el=Date.now()-_lunge.t0;
-  if(!G||!G.mt||G.goalGen!==_lunge.gen||G.phase!=='moving'){ _lunge=null; return; }
+  const L=LUNGE[_lunge.kind]||LUNGE.shoulder;
+  const now=Date.now();
+  const el=now-_lunge.t0;
+  if(!G||!G.mt||G.goalGen!==_lunge.gen||G.phase!=='moving'){ endLunge(false); return; }
   const dp=PP[_lunge.side]&&PP[_lunge.side][_lunge.k];
-  if(!dp){ _lunge=null; return; }
+  if(!dp){ endLunge(false); return; }
+  const cp=PP[G.poss]&&PP[G.poss][G.ck];
+  if(_lunge.aiJumpAt && now>=_lunge.aiJumpAt){ _lunge.aiJumpAt=0; try{ playerJump(G.poss); }catch(e){} }
+
   if(_lunge.phase==='wind'){
-    if(el>=L.wind) _lunge.phase='go';
+    /* Planting, not frozen: a defender who stood still for 300ms would simply
+       be run past. Still steering, at a fraction of chase pace. */
+    if(cp){
+      const ax=cp.x-dp.x, ay=cp.y-dp.y, ad=Math.hypot(ax,ay)||1;
+      _lunge.dx=ax/ad; _lunge.dy=ay/ad;
+      const st=MAX_DEF_STEP()*L.windSpeed*dt;
+      dp.x=clamp(dp.x+_lunge.dx*st, W*0.02, W*0.98);
+      dp.y=clamp(dp.y+_lunge.dy*st, H*0.02, H*0.98);
+    }
+    if(el>=L.wind) _lunge.phase='strike';
     return;
   }
-  // travelling — mostly committed, with a little tracking early on
-  const cp0=PP[G.poss]&&PP[G.poss][G.ck];
-  const prog=(el-L.wind)/Math.max(1,L.dur);
-  if(cp0 && prog<0.45 && L.track){
-    const ax=cp0.x-dp.x, ay=cp0.y-dp.y, ad=Math.hypot(ax,ay)||1;
+
+  // STRIKE - committed dash, a little tracking early on
+  const prog=(el-L.wind)/Math.max(1,L.strike);
+  if(cp && prog<0.45 && L.track){
+    const ax=cp.x-dp.x, ay=cp.y-dp.y, ad=Math.hypot(ax,ay)||1;
     _lunge.dx += (ax/ad-_lunge.dx)*L.track;
     _lunge.dy += (ay/ad-_lunge.dy)*L.track;
     const n=Math.hypot(_lunge.dx,_lunge.dy)||1;
@@ -4523,42 +4646,44 @@ function stepLunge(dt){
   const step=MAX_DEF_STEP()*L.speed*dt;
   dp.x=clamp(dp.x+_lunge.dx*step, W*0.02, W*0.98);
   dp.y=clamp(dp.y+_lunge.dy*step, H*0.02, H*0.98);
-  // real frames convey the pose now — no sprite tilt, just kick up turf dust
-  try{ if(window.P3D&&P3D.lunge)
-    P3D.lunge(_lunge.side+':'+_lunge.k, 0, true); }catch(e){}
-  const cp=PP[G.poss]&&PP[G.poss][G.ck];
+  try{ if(window.P3D&&P3D.lunge) P3D.lunge(_lunge.side+':'+_lunge.k, 0, true); }catch(e){}
+
   const hit=cp && dist(dp,cp)<CONTACT()*L.reach;
-  /* HURDLED — the carrier left the ground in time, so the challenge goes under
-     him. Treated exactly like a whiff: the tackler still pays the full recovery
-     for committing, and no duel opens. */
+  const side=_lunge.side, dk=_lunge.k, kind=_lunge.kind;
+  const ph=physOf(side,dk,sq(side)[dk]);
+
+  /* HURDLED - the carrier is in his safe window, so the challenge goes under
+     him. The jumper gets 40 of his 80 back; the tackler pays the full
+     recovery and ends up on the floor like any whiff. No duel. */
   if(hit && isAirborne(G.poss, G.ck)){
-    const side=_lunge.side, dk=_lunge.k;
-    _lunge=null;
-    try{ if(window.P3D&&P3D.lunge)P3D.lunge(side+':'+dk,0,false); if(P3D.clearAction)P3D.clearAction(side,dk); }catch(e){}
-    const ph=physOf(side,dk,sq(side)[dk]);
-    ph._lungeLock=Date.now()+L.recover;
-    try{ say('Hurdled! '+(playerSurname(sq(G.poss)[G.ck].name)||'')+' rides the challenge.'); }catch(e){}
+    const jph=_jumpPh(G.poss,G.ck), jpl=sq(G.poss)[G.ck];
+    if(jph && jph._jumpRefund && jpl){
+      jph._jumpRefund=false;
+      jpl.spirit=Math.min(spiritMax(jpl), spiritOf(jpl)+JUMP.refund);
+    }
+    endLunge(true);
+    ph._lungeLock=now+L.recover; ph._stallUntil=now+L.stall;
+    try{ if(window.P3D&&P3D.telegraph)P3D.telegraph(side+':'+dk,null); }catch(e){}
+    try{ say('Hurdled! '+(playerSurname(jpl.name)||'')+' rides the challenge.'); }catch(e){}
     return;
   }
   if(hit){
-    const side=_lunge.side, dk=_lunge.k, kind=_lunge.kind;
-    _lunge=null;
-    try{ if(window.P3D&&P3D.lunge)P3D.lunge(side+':'+dk,0,false); if(P3D.clearAction)P3D.clearAction(side,dk); }catch(e){}
-    const ph=physOf(side,dk,sq(side)[dk]);
-    ph._lungeLock=Date.now()+L.recover*0.4;      // short lock on a clean hit
+    endLunge(false);
+    ph._lungeLock=now+L.recover*0.4;             // short lock on a clean hit
     if(rollFoul(side,dk,G.poss,L.foul))return;   // mistimed = free kick
-    G.chk=dk; G._lungeKind=kind;
+    G.chk=dk;
     try{ if(window.SFX&&SFX.tackle)SFX.tackle(); }catch(e){}
     opDuel(false);
+    if(G.phase==='duel' && G.D){                 // the duel really opened: the tackler has the edge
+      G.D.tackleEdge=L.edge; G.D.tackleKind=kind;
+    }
     return;
   }
-  if(el>=L.wind+L.dur){                          // whiffed
-    const side=_lunge.side, dk=_lunge.k;
-    _lunge=null;
-    try{ if(window.P3D&&P3D.lunge)P3D.lunge(side+':'+dk,0,false); if(P3D.clearAction)P3D.clearAction(side,dk); }catch(e){}
-    const ph=physOf(side,dk,sq(side)[dk]);
-    ph._lungeLock=Date.now()+L.recover;
-    say('Missed the tackle!');
+  if(el>=L.wind+L.strike){                       // whiffed
+    endLunge(true);                              // let the recovery frames play out
+    ph._lungeLock=now+L.recover; ph._stallUntil=now+L.stall;
+    try{ if(window.P3D&&P3D.telegraph)P3D.telegraph(side+':'+dk,null); }catch(e){}
+    if(!isCpuSide(side)) say(kind==='tackle'?'Missed the slide!':'Missed the tackle!');
   }
 }
 function switchDefender(){ _switchEngager('h'); }                 // touch/keyboard path (P1 / home)
@@ -4966,6 +5091,7 @@ function hideLoomingAlert(){
 }
 
 function checkDuelGrace(){
+  if(TACKLE_ONLY_DUELS)return;                    // the 600ms auto-duel timer is part of what tackles replaced
   if(G.phase!=='moving'||!ROLES.engager)return;
   const ds=G.poss==='h'?'a':'h';
   if(ocd(ds,ROLES.engager))return;
@@ -6510,6 +6636,10 @@ function calcDefencePower(def,defA,attackAction){
     const inBoxY = dp.y>H*0.30 && dp.y<H*0.70;
     if(inBoxX&&inBoxY) mult*=1.22;
   }
+  /* TACKLE EDGE - this duel was opened by a clean tackle, so the tackler is
+     ahead: x1.10 standing, x1.20 slide. G.D is rebuilt per duel, so it cannot
+     carry over. Keepers are specialists and never get it. */
+  if(!isGKAction && G.D && G.D.tackleEdge) mult*=G.D.tackleEdge;
   return (sBase+sPhys/2)*mult*spiritMult(def)*rng;
 }
 
