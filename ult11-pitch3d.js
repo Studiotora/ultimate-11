@@ -723,6 +723,91 @@
        with the same PNG chains used for the HUD emblems. */
     let flagGroup=new T.Group(); scene.add(flagGroup);
     let flagData=null;
+    /* -- ANIMATED SUPPORTER FLAGS --------------------------------
+       assets/flags/<teamkey>.png = 4 cols x 2 rows = 8 frames of one wave
+       loop, drawn on a pole. When a sheet exists for a team its flags wave;
+       otherwise we fall back to the old static crest/emoji banner below.
+
+       Hand-drawn cells drift: in the first two sheets the pole wandered 16px
+       sideways and the WHOLE bottom row sat 32px higher in its cell, which
+       would make every flag hop halfway through the loop. So each frame is
+       measured at load and re-anchored on its POLE (shaft centre + foot), then
+       drawn into its own small canvas - the flag waves while the pole stays
+       nailed in place. Redraw a sheet however you like; it re-measures. */
+    const FLAG_COLS=4, FLAG_ROWS=2, FLAG_FRAMES=FLAG_COLS*FLAG_ROWS;
+    const FLAG_TEX=160;            // per-frame texture size (banners are small on screen)
+    P3D.flagFps=7;                 // wave speed
+    const _flagCache={};           // teamkey -> {mats:[...]} | 'miss'
+    const animFlags=[];            // live meshes to step each frame
+
+    function sliceFlagSheet(im){
+      const W=im.naturalWidth||im.width, H=im.naturalHeight||im.height;
+      const cw=W/FLAG_COLS, chh=H/FLAG_ROWS;
+      const mc=document.createElement('canvas');
+      mc.width=Math.round(cw); mc.height=Math.round(chh);
+      const mx=mc.getContext('2d');
+      const F=[];
+      for(let f=0;f<FLAG_FRAMES;f++){
+        const c=f%FLAG_COLS, r=(f/FLAG_COLS)|0;
+        mx.clearRect(0,0,mc.width,mc.height);
+        mx.drawImage(im, Math.round(c*cw),Math.round(r*chh),Math.round(cw),Math.round(chh),
+                         0,0,mc.width,mc.height);
+        const d=mx.getImageData(0,0,mc.width,mc.height).data;
+        let mnx=mc.width,mxx=-1,mny=mc.height,mxy=-1;
+        for(let y=0;y<mc.height;y++)for(let x=0;x<mc.width;x++){
+          if(d[(y*mc.width+x)*4+3]>40){
+            if(x<mnx)mnx=x; if(x>mxx)mxx=x; if(y<mny)mny=y; if(y>mxy)mxy=y; } }
+        if(mxx<0) return null;                       // empty cell -> not a flag sheet
+        // the pole is whatever is left in the bottom sliver of this frame
+        const band=Math.max(1,Math.round((mxy-mny)*0.08));
+        let pnx=mc.width,pxx=-1;
+        for(let y=Math.max(0,mxy-band);y<=mxy;y++)for(let x=0;x<mc.width;x++){
+          if(d[(y*mc.width+x)*4+3]>40){ if(x<pnx)pnx=x; if(x>pxx)pxx=x; } }
+        if(pxx<0){ pnx=mnx; pxx=mxx; }
+        F.push({c:c,r:r,cx:(pnx+pxx)/2,foot:mxy,mnx:mnx,mxx:mxx,mny:mny});
+      }
+      // one scale + anchor for ALL frames, so every wave fits and the pole never moves
+      let left=0,right=0,up=0;
+      F.forEach(function(f){ left=Math.max(left,f.cx-f.mnx); right=Math.max(right,f.mxx-f.cx);
+                             up=Math.max(up,f.foot-f.mny); });
+      const sc=Math.min(FLAG_TEX*0.96/Math.max(1,left+right), FLAG_TEX*0.96/Math.max(1,up));
+      const ax=FLAG_TEX*0.02+left*sc, ay=FLAG_TEX*0.99;
+      const mats=F.map(function(f){
+        const oc=document.createElement('canvas'); oc.width=oc.height=FLAG_TEX;
+        const ox=oc.getContext('2d'); ox.imageSmoothingEnabled=true;
+        ox.drawImage(im, Math.round(f.c*cw),Math.round(f.r*chh),Math.round(cw),Math.round(chh),
+                         ax-f.cx*sc, ay-f.foot*sc, cw*sc, chh*sc);
+        const t=new T.CanvasTexture(oc); t.needsUpdate=true;
+        return new T.MeshBasicMaterial({map:t,side:T.DoubleSide,transparent:true,alphaTest:0.12});
+      });
+      return {mats:mats};
+    }
+
+    function loadFlagSheet(key,cb){
+      if(!key) return cb(null);
+      key=String(key).toLowerCase();
+      const hit=_flagCache[key];
+      if(hit) return cb(hit==='miss'?null:hit);
+      const im=new Image();
+      im.onload=function(){ let r=null;
+        try{ r=sliceFlagSheet(im); }catch(e){ console.warn('[P3D] flag sheet '+key+' not measurable',e); }
+        _flagCache[key]=r||'miss';
+        if(r) console.log('[P3D] animated flag: '+key+' ('+FLAG_FRAMES+' frames)');
+        cb(r); };
+      im.onerror=function(){ _flagCache[key]='miss'; cb(null); };
+      im.src='assets/flags/'+key+'.png';
+    }
+
+    function tickFlags(now){
+      if(!animFlags.length) return;
+      const fps=P3D.flagFps||7;
+      for(let i=0;i<animFlags.length;i++){
+        const a=animFlags[i];
+        const f=(Math.floor(now/1000*fps*a.spd+a.phase)%FLAG_FRAMES+FLAG_FRAMES)%FLAG_FRAMES;
+        if(f!==a.f){ a.f=f; a.m.material=a.mats[f]; }
+      }
+    }
+
     function bannerTex(img,color,emoji){
       const c=document.createElement('canvas'); c.width=192; c.height=128;
       const x=c.getContext('2d');
@@ -747,6 +832,7 @@
     function _rng(seed){ return ()=>{ seed=(seed*9301+49297)%233280; return seed/233280; }; }
     function placeFlags(){
       scene.remove(flagGroup); flagGroup=new T.Group(); scene.add(flagGroup);
+      animFlags.length=0;
       const OV=(P3D.stadium==='oval'&&window.U11_OVAL&&window.U11_OVAL._last)
                ? window.U11_OVAL._last : null;
       if(P3D.stadium==='oval'&&!OV) return;   // oval selected but not built yet
@@ -761,46 +847,60 @@
       const lean=Math.atan2(out,th);
       const y0=(S.yOff||0)*U+th*0.12;
       const bh=th*0.34, bw=bh*1.5;              // small — reads as a fan flag
-      function addFlag(tex,wall,frac,tier,hJit,rng){
+      /* art = {mats:[8]} animated pole flag, or {tex} legacy banner */
+      function flagMesh(art,rng){
+        const anim=!!(art&&art.mats);
+        const j=0.85+rng()*0.4;
+        const g=anim ? new T.PlaneGeometry(bh*1.45*j,bh*1.45*j)      // pole art is square
+                     : new T.PlaneGeometry(bw*j,bh*j);
+        const mat=anim ? art.mats[0]
+                       : new T.MeshBasicMaterial({map:art.tex,side:T.DoubleSide,transparent:true});
+        const m=new T.Mesh(g,mat);
+        if(anim) animFlags.push({m:m,mats:art.mats,f:0,
+                                 phase:rng()*FLAG_FRAMES, spd:0.85+rng()*0.35});
+        return m;
+      }
+      function addFlag(art,wall,frac,tier,hJit,rng){
         const yBase=y0+(tier===1?th*1.08:0);
         const yC=yBase+th*(0.2+hJit*0.55);      // random height on the tier face
         const off=out*((yC-y0-(tier===1?th*1.08:0))/th)-0.4;  // hug the rake, slightly proud
-        const m=new T.Mesh(new T.PlaneGeometry(bw*(0.85+rng()*0.4),bh*(0.85+rng()*0.4)),
-          new T.MeshBasicMaterial({map:tex,side:T.DoubleSide,transparent:true}));
+        const m=flagMesh(art,rng);
         const tilt=(rng()-0.5)*0.25;            // slight random waving tilt
+        // a flag held up on a pole stands far more upright than a draped banner
+        const ln=lean*(art&&art.mats?0.3:1);
         if(wall==='back'){  m.position.set(frac*baseHL, yC, -(baseHW+off));
-                            m.rotation.x=lean; m.rotation.z=tilt; }
+                            m.rotation.x=ln; m.rotation.z=tilt; }
         if(wall==='left'){  m.position.set(-(baseHL+off), yC, frac*baseHW);
-                            m.rotation.y=Math.PI/2; m.rotation.z=-lean; m.rotation.x=tilt; }
+                            m.rotation.y=Math.PI/2; m.rotation.z=-ln; m.rotation.x=tilt; }
         if(wall==='right'){ m.position.set( (baseHL+off), yC, frac*baseHW);
-                            m.rotation.y=-Math.PI/2; m.rotation.z=lean; m.rotation.x=tilt; }
+                            m.rotation.y=-Math.PI/2; m.rotation.z=ln; m.rotation.x=tilt; }
         m.rotation.order='YXZ';
         flagGroup.add(m);
       }
-      function addFlagOval(tex,theta,tierIdx,hJit,rng){
+      function addFlagOval(art,theta,tierIdx,hJit,rng){
         const t=OV.TIERS[Math.min(tierIdx,OV.TIERS.length-1)];
         const fr=0.2+hJit*0.55;
         const yC=t.y+fr*(t.yTop-t.y);
         const rX=t.rx+fr*t.rows*t.dr-0.5, rZ=t.rz+fr*t.rows*t.dr-0.5;
         const x=rX*Math.cos(theta), z=rZ*Math.sin(theta);
         const leanT=Math.atan2(t.dr,t.dy);
-        const m=new T.Mesh(new T.PlaneGeometry(bw*(0.85+rng()*0.4),bh*(0.85+rng()*0.4)),
-          new T.MeshBasicMaterial({map:tex,side:T.DoubleSide,transparent:true}));
+        const m=flagMesh(art,rng);
         m.rotation.order='YXZ';
         m.position.set(x,yC,z);
         m.rotation.y=Math.atan2(-x,-z);
-        m.rotation.x=leanT;
+        m.rotation.x=leanT*(art&&art.mats?0.3:1);
         m.rotation.z=(rng()-0.5)*0.25;
         flagGroup.add(m);
       }
-      function scatter(tex,homeSide,rng){
+      function scatter(art,homeSide,rng){
+        if(!art) return;
         if(OV){
           // home end ≈ θ=π (−x), away end ≈ θ=0 (+x); ranges dodge the open-front cut
           for(let i=0;i<10;i++){
             const tier=rng()<0.55?0:1;
             const th=homeSide ? Math.PI+(-0.30+rng()*1.60)
                               : -1.25+rng()*1.55;
-            addFlagOval(tex,th,tier,rng(),rng);
+            addFlagOval(art,th,tier,rng(),rng);
           }
           return;
         }
@@ -811,22 +911,23 @@
           const hJit=rng();
           if(rng()<0.6){ // back straight, own half
             const f=(0.08+rng()*0.72)*(homeSide?-1:1);
-            addFlag(tex,'back',f,tier,hJit,rng);
+            addFlag(art,'back',f,tier,hJit,rng);
           } else {       // own end stand
             const f=(rng()*1.6-0.8);
-            addFlag(tex,homeSide?'left':'right',f,tier,hJit,rng);
+            addFlag(art,homeSide?'left':'right',f,tier,hJit,rng);
           }
         }
       }
       const seed=(Date.now()%100000)|1;
-      loadFirst(flagData.homeFlag?null:flagData.home,img=>{
-        const t=bannerTex(img,flagData.homeCol,flagData.homeFlag);
-        scatter(t,true,_rng(seed));
-      });
-      loadFirst(flagData.awayFlag?null:flagData.away,img=>{
-        const t=bannerTex(img,flagData.awayCol,flagData.awayFlag);
-        scatter(t,false,_rng(seed*7));
-      });
+      function sideFlags(key,srcs,col,emoji,homeSide,sd){
+        loadFlagSheet(key,function(art){
+          if(art) return scatter(art,homeSide,_rng(sd));
+          loadFirst(emoji?null:srcs,function(img){            // legacy banner
+            scatter({tex:bannerTex(img,col,emoji)},homeSide,_rng(sd)); });
+        });
+      }
+      sideFlags(flagData.homeKey,flagData.home,flagData.homeCol,flagData.homeFlag,true ,seed);
+      sideFlags(flagData.awayKey,flagData.away,flagData.awayCol,flagData.awayFlag,false,seed*7);
     }
     // console test: P3D.debugFlags() — colored boards, no PNGs needed
     P3D.debugFlags=function(){
@@ -1803,6 +1904,7 @@
     // (~1.07) or a "12x8" in the filename. Sheet MUST be a clean 8×408px grid.
     /* Rows 6 and 7 each carry TWO 6-frame animations across the 12 columns, so
        everything — including the super-shot cine — stays on one sheet:
+         row 5 · cols 0-5  run north            · cols 6-11  BLOCK
          row 6 · cols 0-5  standing tackle      · cols 6-11  SUPER SHOT
          row 7 · cols 0-5  slide tackle         · cols 6-11  JUMP
        Ranges are [startColumn, frameCount] — see cellOf(). Upgraded from 3 to 6
@@ -1811,12 +1913,17 @@
     const L12x8={cols:12, rows:8, idle:[0,12], run:[0,12], pass:[0,8], shoot:[0,12],
       shoulder:[0,6], super:[6,6],
       tackle:[0,6],   jump:[6,6],
-      block:[0,6],    // BLOCK: idle frames 0-5 until the block row is drawn - then point this (and rowFor.block) at it
+      block:[6,6],    // BLOCK: row 5, cols 6-11 (front-facing art, so every facing uses it)
       idleFps:4, fpsScale:0.9,
+      /* Run north owns only the FRONT half of its row - the block art shares
+         cols 6-11 to keep the sheet small, and 6 frames is plenty for a cycle
+         seen from behind. rangeFor overrides an animation's range for ONE
+         facing; everything else still reads L[anim]. */
+      rangeFor:{ run:{up:[0,6]} },
       rowFor:{ idle:{down:0, up:1, side:0}, run:{side:3, down:4, up:5}, act:{down:2, up:2, side:2},
                shoulder:{side:6, down:6, up:6}, super:{side:6, down:6, up:6},
                tackle:{side:7, down:7, up:7},   jump:{side:7, down:7, up:7},
-               block:{side:0, down:0, up:1} }};
+               block:{side:5, down:5, up:5} }};
     // Dedicated 4x4 keeper sheet (assets/ps1/gk_cine.png):
     //   row 0 = idle · row 1 = run · rows 2-3 = cinematic dives/saves (see GK_POSE).
     // Front-facing art, so every facing maps to the same in-play row.
@@ -1908,10 +2015,16 @@
       }
       return bestErr<=1.5?best:GRID;
     }
+    /* A facing can own a narrower slice of its row than the animation's default
+       range - run north is 6 frames because BLOCK shares the back half of row 5. */
+    function rangeOf(L,anim,face){
+      const ov=L&&L.rangeFor&&L.rangeFor[anim];
+      return (ov&&ov[face])||(L&&L[anim])||(L&&L.run)||[0,1];
+    }
     // resolve (facing, animation, frame index) → sheet cell for any layout
     function cellOf(L,face,anim,idx){
       L=L||GRID;
-      const rng=L[anim]||L.run;
+      const rng=rangeOf(L,anim,face);
       const col=rng[0]+Math.min(rng[1]-1,Math.max(0,idx|0));
       let row;
       if(L.rowFor){ const grp=(anim==='pass'||anim==='shoot')?'act':anim; const r=L.rowFor[grp]||L.rowFor.run;
@@ -2077,7 +2190,7 @@
         const t=Math.max(0,Math.min(1,(prev.spd||0)/ref));
         const A=P3D.anim||ANIM;
         const fps=(A.runFpsMin+(A.runFpsMax-A.runFpsMin)*t)*(L.fpsScale||1);
-        const R=L.run;
+        const R=rangeOf(L,'run',face);   // north is a 6-frame cycle, not 12
         // accumulate phase by fps*dt so a changing fps never warps the cycle
         const adt=Math.max(0,Math.min(0.1,(now-(prev.apt||now))/1000));
         stt[id].aph=(prev.aph||0)+fps*adt; stt[id].apt=now;
@@ -2427,18 +2540,57 @@
        P3D.pixelBall=false falls back to the shaded 3D sphere. */
     let ballSprite=null, ballSpriteTex=null, _bSpin=0;
     P3D.pixelBall=true;
+    const BALL_COLS=4, BALL_ROWS=4, BALL_FRAMES=BALL_COLS*BALL_ROWS;
+    /* The ball is small, so it turns over roughly once every 17 engine units -
+       past ~64 u/s the true spin outruns the 16-frame sheet and the roll aliases
+       into noise instead of reading as spin. Cap how far the sheet may advance in
+       one rendered frame: a fast ball then reads as a fast, steady spin rather
+       than a strobe. Slow rolls stay fully proportional to the distance covered. */
+    P3D.ballSpinMax=0.75;
+    let _bUV=null, _bFill=0.82;
+    /* Hand-drawn cells are never perfectly aligned: measure where the ball
+       actually sits in each cell and bake the correction into the UV offset, so
+       it spins on the spot instead of bobbing. Also measures how much of the
+       cell the ball fills, so the on-screen size comes from the art. */
+    function measureBallSheet(im){
+      const S=Math.min(512,im.naturalWidth||im.width);
+      const cv=document.createElement('canvas'); cv.width=cv.height=S;
+      const cx2=cv.getContext('2d'); cx2.drawImage(im,0,0,S,S);
+      const px=cx2.getImageData(0,0,S,S).data;
+      const cw=S/BALL_COLS, chh=S/BALL_ROWS, uv=[]; let fill=0, n=0;
+      for(let f=0;f<BALL_FRAMES;f++){
+        const c=f%BALL_COLS, r=Math.floor(f/BALL_COLS);
+        const x0=Math.round(c*cw), x1=Math.round((c+1)*cw);
+        const y0=Math.round(r*chh), y1=Math.round((r+1)*chh);
+        let mnx=x1, mxx=x0, mny=y1, mxy=y0;
+        for(let y=y0;y<y1;y++) for(let x=x0;x<x1;x++){
+          if(px[(y*S+x)*4+3]>40){ if(x<mnx)mnx=x; if(x>mxx)mxx=x; if(y<mny)mny=y; if(y>mxy)mxy=y; } }
+        // empty cell -> no correction, plain grid offset
+        if(mxx<mnx){ uv.push([c/BALL_COLS,(BALL_ROWS-1-r)/BALL_ROWS]); continue; }
+        const fx=((mnx+mxx+1)/2-x0)/cw, fy=((mny+mxy+1)/2-y0)/chh;
+        fill+=Math.max((mxx-mnx+1)/cw,(mxy-mny+1)/chh); n++;
+        uv.push([ c/BALL_COLS+(fx-0.5)/BALL_COLS,
+                  (BALL_ROWS-1-r)/BALL_ROWS+(0.5-fy)/BALL_ROWS ]);
+      }
+      if(n) _bFill=fill/n;
+      _bUV=uv;
+    }
     (function loadBallSprite(){
       const im=new Image();
       im.onload=()=>{
+        try{ measureBallSheet(im); }
+        catch(e){ console.warn('[P3D] ball sheet not measurable ('+e.message+') - using the plain grid'); }
         const t=new T.Texture(im);
         t.magFilter=T.NearestFilter; t.minFilter=T.NearestFilter; t.generateMipmaps=false;
         t.wrapS=t.wrapT=T.ClampToEdgeWrapping;
-        t.repeat.set(1/4,1/4); t.offset.set(0,0.75); t.needsUpdate=true;
+        t.repeat.set(1/BALL_COLS,1/BALL_ROWS);
+        t.offset.set(0,(BALL_ROWS-1)/BALL_ROWS); t.needsUpdate=true;
         ballSpriteTex=t;
         ballSprite=new T.Sprite(new T.SpriteMaterial({map:t,transparent:true,depthWrite:false,
           alphaTest:0.3,fog:false}));
         ballSprite.renderOrder=5; ballSprite.visible=false; scene.add(ballSprite);
-        console.log('[P3D] pixel ball sheet loaded (4x4)');
+        console.log('[P3D] pixel ball sheet loaded ('+BALL_COLS+'x'+BALL_ROWS+
+                    ', fills '+_bFill.toFixed(3)+' of a cell)');
       };
       im.onerror=()=>{ console.warn('[P3D] assets/ball-sprite.png missing - keeping the 3D ball'); };
       im.src='assets/ball-sprite.png';
@@ -2495,11 +2647,15 @@
       if(ballSprite&&ballSpriteTex&&P3D.pixelBall!==false){
         if(_bPrevX!==null&&r>1e-6){
           const trav2=Math.hypot(wx-_bPrevX,wz-_bPrevZ);
-          _bSpin+=trav2/(2*Math.PI*r)*16;                 // 16 frames = one rotation
+          const inc=trav2/(2*Math.PI*r)*BALL_FRAMES;       // the sheet = one rotation
+          const cap=(P3D.ballSpinMax>0?P3D.ballSpinMax:Infinity);
+          _bSpin+=Math.min(inc,cap);
         }
-        const f=((Math.floor(_bSpin)%16)+16)%16;
-        ballSpriteTex.offset.set((f%4)/4, 0.75-Math.floor(f/4)/4);
-        const sc=d*1.28;                                   // the art has a little padding
+        const f=((Math.floor(_bSpin)%BALL_FRAMES)+BALL_FRAMES)%BALL_FRAMES;
+        if(_bUV) ballSpriteTex.offset.set(_bUV[f][0],_bUV[f][1]);
+        else ballSpriteTex.offset.set((f%BALL_COLS)/BALL_COLS,
+                                      (BALL_ROWS-1-Math.floor(f/BALL_COLS))/BALL_ROWS);
+        const sc=d/_bFill;                                 // the art has padding round the ball
         ballSprite.position.set(wx,bwy,wz);
         ballSprite.scale.set(sc,sc,1);
         ballSprite.visible=true;
@@ -3033,7 +3189,7 @@
     }
     function forceAnimT(id,face,anim,t,flip){
       const o=sprites[id]; if(!o)return;
-      const rng=((o._L||GRID)[anim])||[0,1];
+      const rng=rangeOf(o._L||GRID,anim,face);
       forceAnim(id,face,anim,Math.round(Math.max(0,Math.min(1,t))*(rng[1]-1)),flip);
     }
     function forceCell(id,row,col,flip){
@@ -3114,9 +3270,16 @@
     /* read-only: is the pixel ball on screen, which frame, how big (for tests) */
     P3D.ballState=function(){
       if(!ballSprite) return {pixel:false,reason:'sheet not loaded'};
-      return {pixel:!!ballSprite.visible, frame:((Math.floor(_bSpin)%16)+16)%16,
+      return {pixel:!!ballSprite.visible,
+              frame:((Math.floor(_bSpin)%BALL_FRAMES)+BALL_FRAMES)%BALL_FRAMES,
               spin:+_bSpin.toFixed(2), size:+ballSprite.scale.x.toFixed(3),
+              fill:+_bFill.toFixed(3), measured:!!_bUV, spinCap:P3D.ballSpinMax,
               sphereVisible:!!(ballMesh&&ballMesh.visible)};
+    };
+    P3D.flagState=function(){
+      const t=Object.keys(_flagCache).map(k=>k+':'+(_flagCache[k]==='miss'?'no sheet':'animated'));
+      return {sheets:t, liveFlags:animFlags.length, fps:P3D.flagFps,
+              framesShowing:[...new Set(animFlags.map(a=>a.f))].sort((x,y)=>x-y)};
     };
     P3D.grayOf=function(id){ const o=sprites[id]; return (o&&o._gray&&o._gray.u)?+o._gray.u.value.toFixed(3):null; };
     P3D.teleState=function(slot){ const t=TELES[slot||'tackle']; if(!t) return {built:false};
@@ -3782,6 +3945,7 @@
       try{ scorchUpdate(dt,now); }catch(e){}
       try{ tickTele(); }catch(e){}
       try{ tickGfx(dt,now); }catch(e){}
+      try{ tickFlags(now); }catch(e){}
       syncRef(dt);
       // anchor god rays at the sun's projected screen position
       if(rayPass){

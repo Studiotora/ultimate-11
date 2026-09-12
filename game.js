@@ -5298,7 +5298,7 @@ const BLOCK={
   slow:0.30,                  // pace while braced
   wrongFoot:400,              // dribbled past while braced
   nearBH:1.6,                 // "went past him" = the carrier came within this
-  frames:[75,75,75,75,75,75], // idle frames 0-5 for now
+  frames:[75,75,75,75,75,75], // the drawn block: sheet row 5, cols 6-11
   aiRead:[0.10,0.70],         // CPU defenders: chance to read a kick (DEF 50 .. 90)
   aiReactMs:[260,110],        // ...and how fast they brace (poor .. elite awareness)
   superLane:3.0,              // a super-shot blocker must be within 3 BH of the line
@@ -9208,7 +9208,7 @@ function initMatch(){
   // supporter flags in the 2.5D stands — same emblem PNG chains as the HUD
   try{ if(window.P3D&&P3D.setTeamFlags){
     const chain=k=>emblemSrcs(String(k).toLowerCase(),true);   // brand-safe (0.3)
-    P3D.setTeamFlags({home:chain(selHome),away:chain(selAway),homeCol:'#1e72dc',awayCol:'#c22020',homeFlag:(HT&&HT.flag)||'',awayFlag:(AT&&AT.flag)||''});
+    P3D.setTeamFlags({home:chain(selHome),away:chain(selAway),homeCol:'#1e72dc',awayCol:'#c22020',homeFlag:(HT&&HT.flag)||'',awayFlag:(AT&&AT.flag)||'',homeKey:selHome,awayKey:selAway});
   }}catch(e){}
   $id('passhint').style.display='none';
   say('Kick off! '+HT.name+' vs '+AT.name+' — build from midfield.');
