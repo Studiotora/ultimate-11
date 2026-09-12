@@ -20,7 +20,7 @@
 <meta name="description" content="Ultimate Eleven - A Captain Tsubasa inspired football strategy game with 11 vs 11 gameplay">
 <link href="https://fonts.googleapis.com/css2?family=Permanent+Marker&family=Rajdhani:wght@600;700&family=Orbitron:wght@400;700&family=Cinzel:wght@500;700;900&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="tokens.css?v=6">
-<link rel="stylesheet" href="style.css?v=92">
+<link rel="stylesheet" href="style.css?v=93">
 <script>
 /* BUILD STAMP — prints which ?v= of each asset actually loaded. A stale
    index.html keeps requesting old versions and every edit looks like nothing
@@ -493,11 +493,29 @@ addEventListener('DOMContentLoaded',function(){
             <li>Watch the ring that appears under a defender as he winds up: <b>orange</b> is a tackle,
               <b>red</b> is a slide. That is your cue to <b>Jump</b> (<kbd>Space</kbd> / A&nbsp;✕).</li>
             <li>A jump costs 80 spirit — but clear a tackle with it and you get 40 back, keep the ball,
-              and no duel happens. Jump too early or too late and you are caught.</li>
+              and no duel happens. If you are clearly in the air when the tackle arrives, it goes under you;
+              jump too early or too late and you are caught.</li>
+            <li>A tackle only counts if it actually touches the dribbler — dive in from too far and you miss.</li>
             <li>The slide is the easiest to read. The tackle comes in faster, so you need sharp timing.</li>
             <li>Miss a tackle, get jumped, or lose a duel and that player is <b>stunned</b>: he turns
               <b>grey</b>, freezes for a moment, then jogs slowly and cannot tackle until the grey fades.
               A teammate takes over the chase.</li>
+          </ul>
+
+          <h3>BLOCKING</h3>
+          <ul>
+            <li>Before every shot and pass the player on the ball <b>winds up</b>, with a ring under him:
+              <b>white</b> means he is about to shoot, <b>blue</b> means a pass.</li>
+            <li>Press <b>Block</b> (<kbd>Space</kbd> / A&nbsp;✕ while defending) while the ring is showing: your
+              defender plants and braces. If the ball comes through him it is blocked or cut out, and you get
+              20 of the 40 spirit back.</li>
+            <li>Tackle beats the dribble, Block beats the kick. Brace and he runs at you instead, and he is
+              past you — you are wrong-footed for a moment.</li>
+            <li>A tackle that lands during the wind-up still wins the ball.</li>
+            <li><b>Super shots:</b> the game hands you the defender in the shot's path. Press Block during the
+              charge and he throws himself in front: he is <b>blown away</b> (stunned), but the shot loses
+              power. A strong defender far down the shot's path, where it has already slowed, can stop it
+              dead.</li>
           </ul>
 
           <h3>SPIRIT</h3>
@@ -517,7 +535,10 @@ addEventListener('DOMContentLoaded',function(){
           <ul>
             <li>You have to <b>Tackle</b> or <b>Slide</b> to win the ball — the other team's player will
               not stop just because you are next to him.</li>
-            <li><b>Switch</b> to take control of the defender nearest the ball.</li>
+            <li>The game hands you the defender who can <b>get to the ball first</b> — including the moment
+              the other team passes, so you can start running while the ball is still in the air.</li>
+            <li><b>Switch</b> to take control of the defender nearest the ball; your pick sticks for a moment.</li>
+            <li>Hold <b>Sprint</b> to close down faster (it costs spirit). No team-mate outruns the man you control.</li>
           </ul>
 
           <h3>TIPS</h3>
@@ -1359,12 +1380,6 @@ addEventListener('DOMContentLoaded',function(){
   <div class="ref-msg" id="ref-msg">KICK OFF</div>
 </div>
 
-<!-- SPECIAL MOVE CUTSCENE — viewport level, z-index 150 -->
-<div id="special-cutscene">
-  <div class="sc-bg"></div>
-  <div class="sc-lines"></div>
-  <div class="sc-face" id="sc-face"></div>
-</div>
 
 <!-- MATCH MUSIC — 3 tracks, one plays randomly per match -->
 <audio id="matchMusic1" loop><source src="assets/audio/match1.mp3" type="audio/mpeg"></audio>
@@ -1615,7 +1630,7 @@ addEventListener('DOMContentLoaded',function(){
 </div>
 
 <script src="ult11-input.js?v=7" defer></script>
-<script src="game.js?v=144" defer></script>
+<script src="game.js?v=153" defer></script>
 <!-- ps1-mod.js removed: P3D is the only renderer, its post-FX drew into the hidden 2D canvas.
      Re-add this line to restore it: <script src="ps1-mod.js?v=1" defer></script> -->
 <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js" defer></script>
@@ -1633,7 +1648,7 @@ addEventListener('DOMContentLoaded',function(){
 <script src="ult11-bowl2.js?v=5" defer></script>
 <script src="ult11-ribbon.js?v=2" defer></script>
 <script src="ult11-fx-flame.js?v=7" defer></script>
-<script src="ult11-pitch3d.js?v=85" defer></script>
+<script src="ult11-pitch3d.js?v=90" defer></script>
 <script src="ult11-sfx.js?v=5" defer></script>
 <script src="ult11-camlab.js?v=6" defer></script>
 <script src="ult11-team.js?v=5" defer></script>

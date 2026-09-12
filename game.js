@@ -854,17 +854,16 @@ function toggleMusic(){
 }
 function updateMusicBtn(){}
 function say(t){const e=document.getElementById('comm');if(e)e.textContent=t;}
+/* A special in a duel (or a keeper's super save). This used to cover the
+   pitch with the player's PNG face (assets/cutscene/{name}.png) for 2.2s -
+   removed 2026-09-11 with the super-shot videos, by the author: full-screen
+   cutscenes broke the pacing and the HD-2D feel. What is left is the call,
+   the shake and the name, and a short beat before the duel resolves. */
 function showSpecialCutscene(pl,special,callback){
-  const sc=document.getElementById('special-cutscene');
-  if(!sc){if(callback)callback();return;}
-  const faceEl=document.getElementById('sc-face');
-  const lastName=pl?(pl.origName||pl.name).split('.').pop().toLowerCase().trim():null;
-  faceEl.innerHTML=lastName?`<img src="assets/cutscene/${lastName}.png" alt="" draggable="false">`:'';
-  sc.classList.remove('show');void sc.offsetWidth;sc.classList.add('show');
   say((pl?pl.name.split('.').pop():'')+'— '+(special.l||'Special')+'!');
   shakeScreen(7,100);
   impactText('⚡ '+(special.l||'SPECIAL SHOT')+'!','#f0c040','clamp(18px,38.4px,26px)');
-  setTimeout(()=>{sc.classList.remove('show');if(callback)callback();},2200);
+  setTimeout(()=>{if(callback)callback();},450);
 }
 let _refTimer=null;
 function showReferee(msg,duration=1200){
@@ -1101,7 +1100,6 @@ function exitToMenu(){
   G._cineHold=false;
   try{if(window.P3D&&P3D.superCine2)P3D.superCine2.abort();}catch(e){}
   try{const sb=document.getElementById('save-banner');if(sb){clearTimeout(sb._t);sb.style.display='none';}}catch(e){}
-  try{const sc=document.getElementById('special-cutscene');if(sc){sc.classList.remove('show');const f=document.getElementById('sc-face');if(f){const v=f.querySelector('video');if(v)v.pause();f.innerHTML='';}}}catch(e){}
   if(typeof closeDuel==='function')closeDuel();
   if(typeof hideBusts==='function')hideBusts();
   hSq={};aSq={};PP={h:{},a:{}};PT={h:{},a:{}};
@@ -1355,7 +1353,7 @@ function recoveryMult(ds,k,cur){
    Instead of jumping straight at the target, we steer a velocity vector
    toward the desired direction, so there is acceleration, deceleration and
    a real cost to changing direction. */
-function moveMomentum(cur,ph,tx,ty,maxStep,pl,dt=1){
+function moveMomentum(cur,ph,tx,ty,maxStep,pl,dt=1,accel,turnPen){
   const dx=tx-cur.x, dy=ty-cur.y;
   const d=Math.hypot(dx,dy);
   if(d<0.5){ // arrived — bleed off speed rather than stopping dead
@@ -1367,8 +1365,8 @@ function moveMomentum(cur,ph,tx,ty,maxStep,pl,dt=1){
   // reversing direction costs extra — you cannot cut 180° at full pace
   const dot=(ph.vx*desiredX+ph.vy*desiredY);
   const spd=Math.hypot(ph.vx,ph.vy);
-  const turning=(spd>0.01&&dot<0)?AI_REAL.turnPenalty:1;
-  const rate=(Math.hypot(desiredX,desiredY)>spd?AI_REAL.accel:AI_REAL.decel)*turning;
+  const turning=(spd>0.01&&dot<0)?(turnPen||AI_REAL.turnPenalty):1;
+  const rate=(Math.hypot(desiredX,desiredY)>spd?(accel||AI_REAL.accel):AI_REAL.decel)*turning;
   ph.vx+=(desiredX-ph.vx)*rate*dt;
   ph.vy+=(desiredY-ph.vy)*rate*dt;
   // never overshoot the target in one frame
@@ -1415,9 +1413,50 @@ function iPos(){
   });ball={x:W/2,y:H/2,tx:W/2,ty:H/2};trail=[];
   resetPhysics();   // clear momentum/reaction state so nothing carries over
 }
+/* KICK-OFF SHAPE. iPos() only pushes everyone into their own half, so the
+   formation left three or four players standing in the centre circle with the
+   taker (author, 2026-09-12: "any kick off starts with players inside the
+   circle"). The laws: only the kicking side may be inside it. Everyone else is
+   pushed out along the nearest radius, still in their own half. */
+/* the PAINTED circle is r=0.085*W (ult11-pitch3d draws it there). 0.075 put
+   players just inside the line - correct by the numbers, wrong on screen. */
+const KICKOFF_R=()=>W*0.085;
+function kickoffShape(side,taker){
+  const R=KICKOFF_R(), cx=W/2, cy=H/2, allow=R+12;   // clearly outside the paint
+  ['h','a'].forEach(s=>{
+    const dir=dirFor(s), margin=W*0.02;
+    Object.keys(sq(s)).forEach(k=>{
+      const p=PP[s]&&PP[s][k]; if(!p||k==='GK') return;
+      if(s===side&&k===taker) return;              // he stands over the ball
+      let dx=p.x-cx, dy=p.y-cy, d=Math.hypot(dx,dy);
+      if(d<allow){
+        if(d<1){ dx=(dir>0?-1:1); dy=(Math.random()<0.5?-1:1)*0.4; d=Math.hypot(dx,dy); }
+        p.x=cx+dx/d*allow; p.y=clamp(cy+dy/d*allow,H*0.06,H*0.94);
+      }
+      if(dir>0) p.x=Math.min(p.x,cx-margin); else p.x=Math.max(p.x,cx+margin);
+      // that clamp can push him back inside the circle - slide him off it in y
+      const ddx=p.x-cx, dd=Math.hypot(ddx,p.y-cy);
+      if(dd<allow){
+        const need=Math.sqrt(Math.max(1,allow*allow-ddx*ddx));
+        p.y=clamp(cy+((p.y>=cy)?1:-1)*need,H*0.06,H*0.94);
+      }
+      if(PT[s]) PT[s][k]={x:p.x,y:p.y};
+    });
+  });
+  /* the kicking side keeps one man alongside the ball - legal, and it gives the
+     taker someone to play it to */
+  const q=sq(side), mate=Object.keys(q).find(k=>q[k]&&k!==taker&&k!=='GK'&&PP[side][k]);
+  if(mate){
+    const dir=dirFor(side);
+    PP[side][mate].x=cx-dir*R*0.45; PP[side][mate].y=clamp(cy+H*0.035,H*0.06,H*0.94);
+    if(PT[side]) PT[side][mate]={x:PP[side][mate].x,y:PP[side][mate].y};
+  }
+}
 function makeG(){return {half:1,tL:2400,hG:0,aG:0,poss:'h',ck:null,chk:null,mom:50,duels:0,shots:0,hP:0,tP:0,phase:'idle',mt:null,di:null,D:{},pm:false,kickoffUntil:0,_resT:0,_fkGen:0,pressing:false,goalGen:0,paused:false,subsUsed:0,reds:{h:0,a:0},hShots:0,aShots:0,hDuels:0,aDuels:0,hFouls:0,aFouls:0,hOff:0,aOff:0};}
 let G=makeG();
-function setC(k,s){G.poss=s;G.ck=k;G.tP++;if(s==='h')G.hP++;updP();updH();}
+function setC(k,s){G.poss=s;G.ck=k;G.tP++;if(s==='h')G.hP++;
+  if(typeof AI2!=='undefined'&&AI2.on&&isCpuSide(s)) G._cpuHoldUntil=Date.now()+cpuTouchMs(sq(s)[k]);   // first touch
+  updP();updH();}
 // ═══════════════════════════════════════════════════════════════
 // MOVEMENT ENGINE v2 — Possession State Machine
 // Based on CT Dream Team reverse spec:
@@ -1508,7 +1547,7 @@ function openPassLaneScore(side,fromKey,toKey){
     if(t<=0||t>=1)return;
     const cx=from.x+dx*t,cy=from.y+dy*t;
     const d=Math.hypot(op.x-cx,op.y-cy);
-    pressure+=clamp(1-d/(W*.09),0,1);
+    pressure+=clamp(1-d/(W*.09),0,1)*(isBlocking(other,k)?2.5:1);   // a braced blocker shuts a lane
   });
   const progBoost=(progressFor(side,to)-progressFor(side,from))*2.2;
   const spacing=clamp(nearestDefenderDistance(side,to)/(W*.18),0,2);
@@ -1613,7 +1652,14 @@ function assignRoles(){
     if(best)used.add(best);
     return best;
   };
-  ROLES.engager=pickDef('engager');
+  if(typeof AI2!=='undefined'&&AI2.on){
+    const cur=ROLES.engager;
+    if(!isCpuSide(ds)&&cur&&defKeys.includes(cur)&&Date.now()<(G._switchLockUntil||0)) ROLES.engager=cur;
+    else{
+      const v=carrierVel(cp), b=bestEngager(ds,cp.x,cp.y,v.vx,v.vy,null);
+      ROLES.engager=b.k||pickDef('engager');
+    }
+  } else ROLES.engager=pickDef('engager');
   used.add(ROLES.engager);
 
   // ── Only reassign cover/blocker/runners if possession changed ─
@@ -1715,6 +1761,9 @@ function tick(dt=1){
   const s=G.poss,ds=s==='h'?'a':'h';
   const cp=PP[s][G.ck];if(!cp)return;
   const dir=dirFor(s);
+  if(AI2.on) paceSnapshot();                                       // for enforcePace at the tail
+  if(G._kick){ stepKick(); if(G.phase!=='moving') return; }      // a pass / shot is being wound up
+  const _kicking=!!G._kick;                                        // ...the carrier is planted for it
 
   // ★ CAMERA LAB — freeze opponent: no chase, no duels, no shots. The lab is a
   //   pure camera/sprite test, so the away team must stay put and the human
@@ -1755,11 +1804,11 @@ function tick(dt=1){
   const carrierPl=sq(s)[G.ck];
   const carrMult=fieldSpdMult(carrierPl);
   const mvMag=Math.hypot(mv.x,mv.y);
-  if(mvMag>0.0001){
+  if(mvMag>0.0001&&!_kicking){
     // was 2.25 (human) — combined with the 1.2 sprint and up to 1.35 pace it
     // made the carrier ~2x faster than ANY defender, so nobody could ever be
     // caught. Now pace difference decides the footrace, not a blanket boost.
-    let capMult=(s==='h')?1.82:1.58;
+    let capMult=(s==='h')?1.82:(AI2.on?1.50:1.58);   // v2: a chasing defender can actually run him down
     if(_sprintForSide(s))capMult*=1.20; // sprint held (per side in PvP)
     const cap=MAX_CARRIER_STEP()*capMult*carrMult*dt;
     const step=Math.min(mvMag*dt,cap);
@@ -1768,6 +1817,7 @@ function tick(dt=1){
   }
   if(G_moveTarget&&Math.hypot(cp.x-G_moveTarget.x,cp.y-G_moveTarget.y)<W*.03)G_moveTarget=null;
   ball.tx=cp.x;ball.ty=cp.y;
+  if(AI2.on) carrierVel(cp);                          // AI reads where the carrier is going
 
   // Passive stamina drain while carrying + regen for everyone else
   if(G.phase==='moving'){
@@ -1806,6 +1856,11 @@ function tick(dt=1){
   // duels). Here it can choose to pass while dribbling: when pressured AND a
   // clearly better-open teammate exists. Gated to CPU; cooldown stops spam.
   if(isCpuSide(s) && G.phase==='moving' && Date.now()>=(G.kickoffUntil||0)
+     && Date.now()>=(G._cpuPassAt||0) && !G._scoringGoal && !(progress>.88 && centrality>.35)
+     && AI2.on && !_kicking){
+    if(cpuCarrierPassV2(s,ds,cp)) return;
+  }
+  else if(isCpuSide(s) && G.phase==='moving' && Date.now()>=(G.kickoffUntil||0)
      && Date.now()>=(G._cpuPassAt||0) && !G._scoringGoal && !(progress>.88 && centrality>.35)){
     const defDist=nearestDefenderDistance(s,cp);
     const pressure=clamp(1-defDist/(W*ENGINE_CONFIG.ai.pressureRadius),0,1);
@@ -1839,20 +1894,25 @@ function tick(dt=1){
   // manualShot), so they can keep dribbling, cross, or pass instead of being
   // force-fired the moment they cross the box edge. This also lets the human
   // run all the way to the goal line instead of stopping at the .88 gate.
-  if(shotGate&&isCpuSide(s)&&G.phase==='moving'&&Date.now()>=(G.kickoffUntil||0)&&!G._scoringGoal){
+  if(shotGate&&isCpuSide(s)&&G.phase==='moving'&&Date.now()>=(G.kickoffUntil||0)&&!G._scoringGoal&&!_kicking){
     clearInterval(G.di);
     // CPU super shot → exactly the same v2 cinematic the human gets on □
     if(cpuWantsSuperCine(s)&&superShotCine())return;
-    if(rollShotMiss(s)){shotMissed(s);return;}
-    G.phase='pass_anim';
-    const _gkPos2=PP[ds]&&PP[ds]['GK']?PP[ds]['GK']:{x:goalXFor(s),y:H*.5};
-    launchShot(cp.x,cp.y,_gkPos2.x,_gkPos2.y,s,undefined,45);
+    // a normal shot is wound up first - that is the moment a defender can block
+    kickOr(s,'shot',()=>{
+      const cp2=PP[s][G.ck]; if(!cp2) return;
+      if(rollShotMiss(s)){shotMissed(s);return;}
+      G.phase='pass_anim';
+      const _gkPos2=PP[ds]&&PP[ds]['GK']?PP[ds]['GK']:{x:goalXFor(s),y:H*.5};
+      launchShot(cp2.x,cp2.y,_gkPos2.x,_gkPos2.y,s,undefined,45);
+    });
     return;
   }
 
   if(ROLES.engager&&!ocd(ds,ROLES.engager)){
     const dp=PP[ds][ROLES.engager];
-    if(dp){
+    if(AI2.on){ aiAutoSwitch(ds,cp); if(ROLES.cover===ROLES.engager||ROLES.blocker===ROLES.engager) fixRoleOverlap(ds); }
+    else if(dp){
       // Reassign engager if current one is too far and a closer defender is available
       const currentDist=Math.hypot(dp.x-cp.x,dp.y-cp.y);
       if(currentDist>W*0.18){
@@ -1903,11 +1963,21 @@ function tick(dt=1){
       // A committed lunge → skip normal chase steering, but DON'T return: flow
       // must reach stepLunge() at the tail (it owns the dash + hit detection).
       if(!lungeActive(ds,ROLES.engager) && !isStalled(ds,ROLES.engager)){
-        const step=MAX_DEF_STEP()*pressMult*sprintMult*manualMult*fieldSpdMult(engPl)*recoveryMult(ds,ROLES.engager,dp2)*dt;
+        let step=MAX_DEF_STEP()*pressMult*sprintMult*manualMult*fieldSpdMult(engPl)*recoveryMult(ds,ROLES.engager,dp2)*dt;
+        if(AI2.on){
+          /* The man on the stick runs at the defenders' top pace, the sprint
+             button adds a real 12%, and no multiplier stack (press x recovery)
+             can push an AI chaser past that top. */
+          const _top=DEF_TOP()*fieldSpdMult(engPl);
+          step=(manualDef ? _top*(_sprintForSide(ds)?AI2.humanSprint:1)
+                          : Math.min(MAX_DEF_STEP()*1.30*pressMult*fieldSpdMult(engPl)*recoveryMult(ds,ROLES.engager,dp2), _top))*dt;
+        }
+        if(isBlocking(ds,ROLES.engager)) step*=BLOCK.slow;        // braced: planted
         // momentum: steer velocity toward the chase direction rather than
         // teleporting along it, so acceleration and turning both cost time
         const _ephy=physOf(ds,ROLES.engager,engPl);
-        moveMomentum(dp2,_ephy,dp2.x+ux*step*8,dp2.y+uy*step*8,step,engPl,dt);
+        moveMomentum(dp2,_ephy,dp2.x+ux*step*8,dp2.y+uy*step*8,step,engPl,dt,
+                     (AI2.on&&manualDef)?AI2.accelManual:0,(AI2.on&&manualDef)?AI2.turnManual:0);
         dp2.x=clamp(dp2.x,W*.01,W*.99);
         dp2.y=clamp(dp2.y,H*.03,H*.97);
         /* Tackles only: getting close no longer opens a duel by itself. The AI
@@ -1926,7 +1996,8 @@ function tick(dt=1){
       const dx=cp.x-dp2.x,dy=cp.y-dp2.y;
       const dd=Math.hypot(dx,dy)||1;
       const _cvPl=sq(ds)[ROLES.cover];
-      const step=MAX_DEF_STEP()*0.92*fieldSpdMult(_cvPl)*recoveryMult(ds,ROLES.cover,dp2)*dt;
+      let step=MAX_DEF_STEP()*0.92*fieldSpdMult(_cvPl)*recoveryMult(ds,ROLES.cover,dp2)*dt;
+      if(AI2.on) step=Math.min(step,aiTop(_cvPl,ds)*dt);
       const _cphy=physOf(ds,ROLES.cover,_cvPl);
       moveMomentum(dp2,_cphy,dp2.x+(dx/dd)*step*8,dp2.y+(dy/dd)*step*8,step,_cvPl,dt);
       dp2.x=clamp(dp2.x,W*.01,W*.99);
@@ -1955,14 +2026,706 @@ function tick(dt=1){
     }
   }
 
+  stepBlocks();
   moveOffBall(s,ds,dt);
   stepLunge(dt);
   stepJumps();
   applyRepulsion();
   clampAllToPitch();
+  enforcePace(dt);
+}
+/* THE speed limit, enforced after every mover, push and clamp. aiMoveTo caps a
+   player's own step, but applyRepulsion then shoved him on top of it: measured
+   1.46 a tick against a 1.12 cap, i.e. team-mates genuinely outrunning the man
+   you steer (author: "the non-selected defenders feel way faster"). The man on
+   the stick, a committed tackle and the carrier set their own pace and are left
+   alone. */
+function enforcePace(dt){
+  if(!AI2.on||!_paceSnap) return;
+  const ds=G.poss==='h'?'a':'h';
+  ['h','a'].forEach(side=>{
+    validOutfieldKeys(side).forEach(k=>{
+      if(side===G.poss&&k===G.ck) return;                 // the carrier
+      if(side===ds&&k===ROLES.engager) return;            // the man you steer / the chaser
+      if(lungeActive(side,k)) return;                     // a committed tackle dashes
+      const p=PP[side][k], a=_paceSnap[side+':'+k];
+      if(!p||!a) return;
+      const dx=p.x-a.x, dy=p.y-a.y, d=Math.hypot(dx,dy);
+      const cap=aiTop(sq(side)[k],side)*Math.max(0.5,dt);
+      if(d>cap*1.02){ const sc=cap/d; p.x=a.x+dx*sc; p.y=a.y+dy*sc; }
+    });
+  });
+}
+let _paceSnap=null;
+function paceSnapshot(){
+  _paceSnap=_paceSnap||{};
+  ['h','a'].forEach(side=>{ const q=PP[side]; if(!q) return;
+    for(const k in q){ const p=q[k]; if(!p) continue; const id=side+':'+k;
+      const a=_paceSnap[id]||(_paceSnap[id]={x:0,y:0}); a.x=p.x; a.y=p.y; } });
 }
 
-function moveOffBall(s,ds,dt=1){
+function moveOffBall(s,ds,dt=1){ return AI2.on ? moveOffBallV2(s,ds,dt) : moveOffBallV1(s,ds,dt); }
+/* ══ AI v2 · selection, pace, CPU passing, off-ball (author 2026-09-11) ═══════
+   "My player selected is never the closest to the CPU carrier and rarely gets
+   there in time before they pass. The non-selected defenders felt way faster
+   than the selected. The AI of the non-carrier players is not that great -
+   stiff, sometimes just hanging there waiting. The whole AI needs an upgrade."
+
+   Measured first (fixed-step match sim, 180s, a scripted human steering
+   straight at the carrier): the selected man was the closest defender 60% of
+   the time, a team-mate was faster than the sprinting selected man in 33% of
+   frames, and the selected man got within 2 body heights of the CPU carrier
+   before it passed in only 52% of possessions. The causes:
+     - the engager was picked by a score with +0.6 for a midfielder and +0.6
+       for being goal-side, so a man ~90 units further away could win;
+     - RECOVER_MAX (x1.85) multiplied team-mates' tracking speed to ~2.1 a
+       tick against the human's 1.25, and the sprint button added 3%;
+     - the selected man FROZE during every pass flight: tick() does not run in
+       pass_anim and moveOffBall skips the engager, while everyone else moved;
+     - the CPU carrier counted anyone within ~113 units (5 body heights) as
+       pressure and passed; a receiver could pass again the moment it arrived;
+     - off-ball players crept at a flat 0.26-0.33 a tick towards spots that
+       slid with the ball (the carrier runs 0.77), lagged, then settled - no
+       gait and no individual decisions.
+   AI2.on=false in the console restores every v1 path, for A/B. */
+const AI2={
+  on:true,
+  mateCap:0.95,               // AI players top out at 95% of a sprinting defender (same pace stat)
+  humanSprint:1.20,           // sprint button on the man you steer (v1: 1.34 vs 1.30 = +3%)
+  accelManual:0.26, turnManual:0.80,   // the man on the stick answers faster than the AI's 0.16 / 0.55
+  /* gait: [fraction of top pace ON the spot, fraction once farK*W or more away].
+     Far from where he should be he runs, close to it he eases in. */
+  gait:{ shape:[0.18,0.62], jog:[0.22,0.60], support:[0.30,0.80], run:[0.55,1.0], track:[0.40,0.88], press:[0.55,1.0] },
+  farK:0.12,                  // ~154 units out of position to reach the gait's upper speed
+  easeIn:0.035,               // ease into the spot over the last ~45 units
+  feedForward:1.0,            // follow a spot that slides with the ball instead of chasing it
+  ff:{ shape:1.0, jog:1.0, support:1.0, run:0.9, track:0.6, press:0.8 },   // markers follow, they do not mirror
+  ring:[0.10,0.17],           // support ring around the carrier, fraction of W (~128-218 units)
+  claimSep:0.06,              // two supporters stay ~77 units apart
+  tightMark:0.035,            // a forward with a defender within ~45 units is "tightly marked"
+  overlapChance:0.40, runChance:0.55,
+  containBH:3.0,              // your team-mates shepherd at ~3 body heights - the tackle is yours
+  switchRatio:0.80,           // auto-switch when another man gets there in <80% of the time...
+  switchMinTicks:12,          // ...and at least ~0.2s sooner
+  switchLockManual:1500, switchLockAuto:650,
+  touchMs:[450,900],          // CPU first touch after receiving (elite .. poor technique)
+  decideCarrierMs:[250,420],  // CPU carrier looks up this often, not every frame
+  closeBH:2.6, midBH:5.0,     // "under pressure" = a defender within 2.6 body heights
+  escapePass:[0.12,0.45],     // chance to pass out of a telegraphed tackle (poor .. elite passer)
+  repelDist:0.075, repelForce:0.8, repelCap:0.35,  // team-mate spacing guard (v1: 0.085 / 1.4 / uncapped)
+  defReactExtra:90,           // defenders re-read the play ~90ms later than attackers
+  passMid:0.14, passFree:0.045   // per "head-up" beat (every 250-420ms): chance to look for a pass
+};
+function DEF_TOP(){ return MAX_DEF_STEP()*1.69; }            // the human's manual chase (1.30 x 1.3)
+function aiTop(pl,side){
+  let t=DEF_TOP()*AI2.mateCap*fieldSpdMult(pl);
+  /* On the side you are defending with, nobody outruns the man you steer -
+     not even a quicker team-mate. Capped against HIS pace, not their own. */
+  if(side&&side!==G.poss&&!isCpuSide(side)){
+    const sel=G.chk&&sq(side)&&sq(side)[G.chk];
+    if(sel) t=Math.min(t,DEF_TOP()*AI2.mateCap*fieldSpdMult(sel));
+  }
+  return t;
+}
+function _passQ(pl){ return clamp((((gs(pl,'pas')||60)+(gs(pl,'tec')||60))/2-50)/45,0,1); }
+function cpuTouchMs(pl){ const q=_passQ(pl); return AI2.touchMs[1]-(AI2.touchMs[1]-AI2.touchMs[0])*q; }
+
+/* Ticks for defender k to reach a target moving at (vx,vy) units/ms. */
+function defenderETA(ds,k,tx,ty,vx,vy){
+  const p=PP[ds]&&PP[ds][k], pl=sq(ds)&&sq(ds)[k]; if(!p||!pl) return 1e9;
+  const sp=Math.max(0.05,DEF_TOP()*fieldSpdMult(pl));
+  let t=Math.hypot(tx-p.x,ty-p.y)/sp;
+  for(let i=0;i<3;i++){ const ms=t*16.667; t=Math.hypot(tx+vx*ms-p.x,ty+vy*ms-p.y)/sp; }
+  const dgx=ownGoalXFor(ds);
+  const goalside=(dgx<W/2)?(p.x<=tx):(p.x>=tx);
+  if(!goalside) t*=1.12;                                        // coming from behind costs a detour
+  if(isStalled(ds,k)) t+=60;
+  return t;
+}
+function bestEngager(ds,tx,ty,vx,vy,exclude){
+  let best=null,bestT=1e9;
+  validOutfieldKeys(ds).forEach(k=>{
+    if(k===exclude||ocd(ds,k)) return;
+    let t=defenderETA(ds,k,tx,ty,vx,vy);
+    if(isCpuSide(ds)&&zo(k)==='att') t*=1.25;                   // CPU forwards stay up unless clearly nearest
+    if(t<bestT){ bestT=t; best=k; }
+  });
+  return {k:best,t:bestT};
+}
+/* Mid-dribble: hand the chase (and a human's control) to a man who gets
+   there clearly sooner. Never mid-tackle, never right after a switch. */
+/* The chase can be handed to ANY defender (auto-switch, a pass, your own switch
+   button) - including the man who was the cover. Nothing re-picked the roles
+   until possession changed, so cover === engager and you pressed with nobody
+   behind you: measured 0-2% of frames with a real second man. Re-pick whenever
+   they collide. */
+function fixRoleOverlap(ds){
+  if(!ROLES.engager) return;
+  const cp=PP[G.poss]&&PP[G.poss][G.ck]; if(!cp) return;
+  const pick=(type,avoid)=>{
+    let best=null,bs=-Infinity;
+    validOutfieldKeys(ds).forEach(k=>{
+      if(k===ROLES.engager||ocd(ds,k)||avoid.indexOf(k)>=0) return;
+      const sc=roleScoreDefender(ds,k,cp,type);
+      if(sc>bs){ bs=sc; best=k; }
+    });
+    return best;
+  };
+  if(!ROLES.cover||ROLES.cover===ROLES.engager) ROLES.cover=pick('cover',[ROLES.blocker]);
+  if(!ROLES.blocker||ROLES.blocker===ROLES.engager||ROLES.blocker===ROLES.cover) ROLES.blocker=pick('blocker',[ROLES.cover]);
+}
+function aiAutoSwitch(ds,cp){
+  const now=Date.now();
+  if(now<(G._engChkAt||0)) return;
+  G._engChkAt=now+220;
+  const cur=ROLES.engager;
+  if(!cur||ocd(ds,cur)||lungeActive(ds,cur)) return;
+  const human=!isCpuSide(ds);
+  if(human&&now<(G._switchLockUntil||0)) return;
+  const v=(_cvel.k===G.ck)?_cvel:{vx:0,vy:0};
+  const tc=defenderETA(ds,cur,cp.x,cp.y,v.vx,v.vy);
+  const b=bestEngager(ds,cp.x,cp.y,v.vx,v.vy,cur);
+  if(b.k && b.t<tc*AI2.switchRatio && tc-b.t>AI2.switchMinTicks){
+    ROLES.engager=b.k; G.chk=b.k;
+    fixRoleOverlap(ds);
+    if(human) G._switchLockUntil=now+AI2.switchLockAuto;
+  }
+}
+
+/* ── CPU carrier: when to pass ─────────────────────────────────────────── */
+function cpuCarrierPassV2(s,ds,cp){
+  const now=Date.now();
+  if(now<(G._cpuHoldUntil||0)) return false;                    // still taking the first touch
+  if(now<(G._cpuDecideAt||0)) return false;                     // head down, dribbling
+  const pl=sq(s)[G.ck]; if(!pl) return false;
+  const bh=getBehaviorProfile(pl), q=_passQ(pl);
+  G._cpuDecideAt=now+AI2.decideCarrierMs[0]+Math.random()*(AI2.decideCarrierMs[1]-AI2.decideCarrierMs[0]);
+  const B=BODY(), d=nearestDefenderDistance(s,cp);
+  const close=d<AI2.closeBH*B, mid=!close&&d<AI2.midBH*B;
+  let want;
+  if(close) want=0.50+0.25*q;                                   // pressed: usually moves it on
+  else if(mid) want=AI2.passMid*(bh.passBias||1);               // pressure coming: look for it
+  else want=AI2.passFree*(bh.passBias||1);                      // free: keep the ball moving now and then
+  if(Math.random()>=want) return false;
+  /* Every team-mate by his lane, not only bestTeammateFor's pick - that pick
+     often had a closed lane, so the free carrier "wanted" to pass and never
+     did (measured CPU-vs-CPU: 0.8 passes a minute against v1's 5.6). */
+  const thr=close?-0.2:(mid?0.35:0.7);
+  const mustGoForward=(G._cpuBackChain||0)>=2 && !close;      // no more square balls
+  const here=progressFor(s,cp);
+  let tk=null, best=-1e9;
+  validOutfieldKeys(s).forEach(k=>{
+    if(k===G.ck||ocd(s,k)||isOffside(s,k)) return;
+    const ln=openPassLaneScore(s,G.ck,k);
+    if(ln<=thr) return;
+    const gain=progressFor(s,PP[s][k])-here;
+    if(mustGoForward&&gain<=0.02) return;
+    const sc=ln+progressFor(s,PP[s][k])*1.2+(mustGoForward?gain*3:0)+(Math.random()-0.5)*0.3;
+    if(sc>best){ best=sc; tk=k; }
+  });
+  if(!tk) return false;
+  cpuDoPass(s,tk,pl);
+  return true;
+}
+function cpuDoPass(s,tk,pl,quick){
+  clearInterval(G.di);
+  /* the "melina": the CPU knocked it sideways and backwards between its
+     defenders for a minute (author, 2026-09-12). Count passes that make no
+     ground - cpuCarrierPassV2 then demands a forward one. */
+  try{
+    const from=PP[s][G.ck], to=PP[s][tk];
+    const gain=(from&&to)?(progressFor(s,to)-progressFor(s,from)):0;
+    G._cpuBackChain=(gain>0.02)?0:((G._cpuBackChain||0)+1);
+  }catch(e){}
+  G._cpuPassAt=Date.now()+(1900-1050*_passQ(pl));               // same cadence as v1
+  const to=PP[s][tk];
+  kickOr(s,'pass',()=>afPass(s,tk),{wind:quick?KICK.quickWind:KICK.passWind,tx:to&&to.x,ty:to&&to.y});
+}
+
+/* ── Pass flight ───────────────────────────────────────────────────────── */
+function passFlightBegin(s,ds){
+  const b=ballTravel;
+  if(!b||!b.active||b.loose||G._shotTrail||G._cineHold) return;
+  if(G._pfRef===b) return;
+  G._pfRef=b;
+  // the attacker nearest the landing spot is the one coming to meet it
+  let rk=null,rd=1e9;
+  validOutfieldKeys(s).forEach(k=>{ if(k===G.ck)return; const d=Math.hypot(PP[s][k].x-b.tx,PP[s][k].y-b.ty); if(d<rd){rd=d;rk=k;} });
+  G._pfRecv=rk;
+  // and the defender who gets to it first takes the chase - and the stick
+  const human=!isCpuSide(ds);
+  if(human&&Date.now()<(G._switchLockUntil||0)) return;
+  const e=bestEngager(ds,b.tx,b.ty,0,0,null);
+  if(!e.k) return;
+  /* Keep the man you are already running with unless the new one is clearly
+     better placed. Swapping on EVERY pass meant that during the CPU's passing
+     about at the back, control jumped from man to man and none of them ever
+     arrived (author, 2026-09-12: "my man didn't advance and stayed in the
+     middle... I was too distant"). */
+  if(human&&ROLES.engager&&ROLES.engager!==e.k&&!ocd(ds,ROLES.engager)&&!isStalled(ds,ROLES.engager)){
+    const cur=defenderETA(ds,ROLES.engager,b.tx,b.ty,0,0);
+    if(e.t>cur*0.70) return;                                  // not clearly better: keep him
+  }
+  ROLES.engager=e.k; G.chk=e.k; fixRoleOverlap(ds);
+}
+function passFlightChaser(s,ds,dt){
+  const b=ballTravel;
+  if(!b||!b.active||b.loose||G._shotTrail||G._cineHold) return;
+  const k=ROLES.engager, dp=k&&PP[ds]&&PP[ds][k], pl=k&&sq(ds)[k];
+  if(!dp||!pl||ocd(ds,k)||isStalled(ds,k)||lungeActive(ds,k)) return;
+  const iv=_manualInputForSide(ds);
+  const manual=!!iv&&(Math.abs(iv.x)>0.12||Math.abs(iv.y)>0.12);
+  const top=DEF_TOP()*fieldSpdMult(pl);
+  let ux,uy,step;
+  if(manual){ ux=iv.x; uy=iv.y; step=top*(_sprintForSide(ds)?AI2.humanSprint:1)*dt; }
+  else{
+    const dx=b.tx-dp.x, dy=b.ty-dp.y, d=Math.hypot(dx,dy)||1;
+    ux=dx/d; uy=dy/d;
+    step=Math.min(MAX_DEF_STEP()*1.30*fieldSpdMult(pl)*recoveryMult(ds,k,dp), top)*dt;
+    if(d<step*3) step=d/3;
+  }
+  moveMomentum(dp,physOf(ds,k,pl),dp.x+ux*step*8,dp.y+uy*step*8,step,pl,1,
+               manual?AI2.accelManual:0,manual?AI2.turnManual:0);
+}
+
+/* ── Movement with a gait ──────────────────────────────────────────────── */
+/* Replaces glide() for v2. Reaction lag and noise as before, but the speed is
+   a gait: far from the spot he runs, near it he eases in, and a spot that is
+   sliding with the ball is FOLLOWED (feed-forward of the spot's own motion)
+   instead of chased from behind. Nobody exceeds aiTop(). */
+function aiMoveTo(cur,tx,ty,gait,pl,side,key,dt){
+  const ph=physOf(side,key,pl), now=Date.now();
+  const top=aiTop(pl,side);
+  /* Re-read the play only when reaction allows. The spot's own motion is
+     measured at those re-reads too (over the last interval), so following a
+     sliding spot keeps the reaction lag - measured from the raw target it was
+     instant, and markers mirrored their man like magnets. */
+  if(canReact(side,key,pl)||!ph.tx){
+    if(side!==G.poss) ph.nextReact+=AI2.defReactExtra;          // the attack moves first, the defence answers
+    const nx=tx+aiNoise(ph,0), ny=ty+aiNoise(ph,1);
+    if(ph.tx&&ph._tT){
+      const ticks=Math.max(1,(now-ph._tT)/16.667);
+      let fx=(nx-ph.tx)/ticks, fy=(ny-ph.ty)/ticks; const m=Math.hypot(fx,fy);
+      if(m>top){ fx*=top/m; fy*=top/m; }
+      ph._fvx=fx; ph._fvy=fy;
+    } else { ph._fvx=0; ph._fvy=0; }
+    ph.tx=nx; ph.ty=ny; ph._tT=now;
+  }
+  const dx=ph.tx-cur.x, dy=ph.ty-cur.y, d=Math.hypot(dx,dy);
+  /* A long way from where he should be, he RUNS. The block slid across for a
+     wide ball at jogging pace and took 4-6s to get over - by which time the
+     winger was past it (author, 2026-09-12). */
+  let gname=gait;
+  if(d>W*0.085&&(gait==='shape'||gait==='jog'||gait==='track'||gait==='support')) gname='run';
+  const g=AI2.gait[gname]||AI2.gait.shape;
+  const f=clamp(g[0]+(d/(W*AI2.farK))*(g[1]-g[0]),g[0],g[1]);
+  const ease=clamp(d/(W*AI2.easeIn),0,1);
+  const corr=top*f*ease;
+  const ffk=AI2.feedForward*((AI2.ff&&AI2.ff[gname]!=null)?AI2.ff[gname]:1);
+  let vx=(d>0.01?dx/d*corr:0)+(ph._fvx||0)*ffk;
+  let vy=(d>0.01?dy/d*corr:0)+(ph._fvy||0)*ffk;
+  let sp=Math.hypot(vx,vy);
+  if(sp>top){ vx*=top/sp; vy*=top/sp; sp=top; }
+  if(sp<0.02){ ph.vx*=(1-AI_REAL.decel); ph.vy*=(1-AI_REAL.decel); cur.x+=ph.vx*dt; cur.y+=ph.vy*dt; return; }
+  moveMomentum(cur,ph,cur.x+vx*8,cur.y+vy*8,sp*dt,pl,1);
+}
+
+/* x the attacking side must stay behind: the second-last outfield defender
+   (same rule as isOffside), never inside their own half, never behind the ball. */
+function offsideLineX(s,cp){
+  const ds=s==='h'?'a':'h', dir=dirFor(s);
+  const xs=validOutfieldKeys(ds).map(k=>PP[ds][k].x).sort((a,b)=>a-b);
+  if(xs.length<2) return dir>0?W*0.93:W*0.07;
+  const second=dir>0?xs[xs.length-2]:xs[1];
+  return dir>0?Math.max(second,cp.x,W*0.5):Math.min(second,cp.x,W*0.5);
+}
+
+/* ── Attacking jobs ────────────────────────────────────────────────────────
+   Every attacker off the ball holds a JOB for a second or two, then thinks
+   again: support (offer an angle into space), run (hold the line, then go in
+   behind), check (tightly marked: come short), width, overlap, hold, shape.
+   That per-player rhythm is what the v1 shape never had. */
+const _aiJob={}; let _aiJobKey=null;
+function _aiJobsReset(s){
+  const key=s+':'+G.goalGen+':'+G.half;
+  if(_aiJobKey!==key){ for(const id in _aiJob) delete _aiJob[id]; _aiJobKey=key; G._supp=null; }
+}
+/* The two players offering the short options: nearest non-forwards, one each
+   side of the ball where possible. Kept ~0.9s so the jobs do not flicker. */
+function supportersFor(s,cp,keys,prog){
+  const now=Date.now(), S=G._supp;
+  if(S&&S.ck===G.ck&&now<S.until&&S.keys.every(k=>keys.includes(k)&&!ocd(s,k))) return S.set;
+  const cand=keys.filter(k=>{ const z=zo(k); if(ocd(s,k)) return false;
+    if(k==='ST'||k==='LW'||k==='RW') return false;
+    if(z==='def'&&(k.indexOf('CB')===0)&&prog>0.45) return false;   // centre-backs stay home past halfway
+    return true; });
+  cand.sort((a,b)=>dist(PP[s][a],cp)-dist(PP[s][b],cp));
+  const pick=[]; let above=null, below=null;
+  for(const k of cand){ const up=PP[s][k].y<cp.y; if(up&&!above) above=k; if(!up&&!below) below=k; if(above&&below) break; }
+  if(above) pick.push(above); if(below) pick.push(below);
+  for(const k of cand){ if(pick.length>=2) break; if(!pick.includes(k)) pick.push(k); }
+  const set=new Set(pick);
+  G._supp={ck:G.ck,keys:pick,set,until:now+900};
+  return set;
+}
+/* Nobody open ahead for ~0.4s -> pick two men to go and get open. Re-picked
+   on a beat so it does not thrash, and dropped as soon as a forward option
+   exists again. */
+function outletsFor(s,cp,keys,ctx){
+  const now=Date.now(), dir=ctx.dir;
+  let fwdOpen=0;
+  keys.forEach(k=>{ const p=PP[s][k]; if(!p) return;
+    if((p.x-cp.x)*dir>20 && openPassLaneScore(s,G.ck,k)>0.4) fwdOpen++; });
+  if(fwdOpen>0){ G._noOutlet=0; G._outlet=null; return new Set(); }
+  if(!G._noOutlet) G._noOutlet=now;
+  if(now-G._noOutlet<400) return G._outlet?G._outlet.set:new Set();
+  if(G._outlet&&G._outlet.ck===G.ck&&now<G._outlet.until) return G._outlet.set;
+  /* MIDFIELD shows for the ball - the forwards stay high. Sending the two most
+     advanced men (i.e. the strikers) to fetch it emptied the space ahead:
+     measured forward options 0.45 against the old AI's 0.84. */
+  const cand=keys.filter(k=>!ocd(s,k)&&k!=='ST'&&k!=='LW'&&k!=='RW')
+    .sort((a,b)=>dist(PP[s][a],cp)-dist(PP[s][b],cp))
+    .slice(0,2);
+  const set=new Set(cand);
+  G._outlet={ck:G.ck,set,until:now+900};
+  return set;
+}
+/* Like _laneClear but ignoring the first 15% of the pass: the man pressing the
+   carrier stands on top of every lane out of him, which made every candidate
+   spot score the same (and equally "blocked"). The engine's own interception
+   test ignores that stretch too. */
+function _laneClearFrom(ctx,x0,y0,x1,y1){
+  const dx=x1-x0, dy=y1-y0, L2=dx*dx+dy*dy||1; let m=1e9;
+  for(const q of ctx.defs){ const t=((q.x-x0)*dx+(q.y-y0)*dy)/L2;
+    if(t<0.15||t>0.98) continue;
+    const d=Math.hypot(x0+dx*t-q.x,y0+dy*t-q.y); if(d<m) m=d; }
+  return m===1e9?W:m;
+}
+function _laneClear(ctx,x0,y0,x1,y1){
+  const dx=x1-x0, dy=y1-y0, L2=dx*dx+dy*dy||1; let m=1e9;
+  for(const q of ctx.defs){ const t=clamp(((q.x-x0)*dx+(q.y-y0)*dy)/L2,0,1); const d=Math.hypot(x0+dx*t-q.x,y0+dy*t-q.y); if(d<m) m=d; }
+  return m;
+}
+function _nearDef(ctx,x,y){ let m=1e9; for(const q of ctx.defs){ const d=Math.hypot(q.x-x,q.y-y); if(d<m) m=d; } return m; }
+function pickSupportSpot(s,k,cp,ctx){
+  const dir=ctx.dir, cur=PP[s][k], p=ctx.fpos(k);
+  const side=(cur.y>=cp.y)?1:-1;
+  const R0=W*AI2.ring[0], R1=W*AI2.ring[1];
+  /* Measured with the author playing: open options 0.65, open options AHEAD of
+     the ball 0.02 - there was never a forward pass on. A supporter who is
+     already up the pitch now offers a forward-diagonal angle; the deeper one
+     stays as the safe ball. */
+  const aheadSup=(cur.x-cp.x)*dir>0;
+  const angs=zo(k)==='def'?[95,120,145]:(aheadSup?[25,45,70,95]:[70,95,120,145]);
+  let best=null,bs=-1e9;
+  for(const aDeg of angs) for(const R of [R0,(R0+R1)/2,R1]){
+    const a=aDeg*Math.PI/180;
+    let ox=Math.cos(a)*dir*R, oy=Math.sin(a)*side*R;
+    let x=cp.x+ox, y=cp.y+oy;
+    if(y<H*0.06||y>H*0.94){ oy=-oy; y=cp.y+oy; }
+    x=clamp(x,W*0.08,W*0.92); y=clamp(y,H*0.06,H*0.94);
+    if(dir>0?x>ctx.line:x<ctx.line) x=ctx.line-dir*W*0.008;
+    const space=Math.min(_nearDef(ctx,x,y),W*0.12);
+    const lane=Math.min(_laneClearFrom(ctx,cp.x,cp.y,x,y),W*0.05);
+    const prog=(x-cp.x)*dir;
+    const home=Math.hypot(x-p.x*W,y-p.y*H);
+    const travel=Math.hypot(x-cur.x,y-cur.y);
+    let claim=1e9;
+    for(const o of ctx.claims){ if(o.k===k) continue; claim=Math.min(claim,Math.hypot(o.x-x,o.y-y)); }
+    let sc=space*1.0+lane*2.0+prog*0.25-home*0.22-travel*0.18-(claim<W*AI2.claimSep?200:0);
+    sc+=(Math.random()-0.5)*20;
+    if(sc>bs){ bs=sc; best={x:x-cp.x,y:y-cp.y}; }
+  }
+  return best||{x:-dir*W*0.08,y:side*W*0.06};
+}
+/* The carrier has nobody to play forward to: the two best-placed attackers go
+   and MAKE an option instead of holding shape. Sampled ahead of the ball,
+   onside, scored on how clear the lane is and how much space the spot has. */
+function pickOpenSpot(s,k,cp,ctx){
+  const dir=ctx.dir, cur=PP[s][k];
+  let best=null,bs=-1e9;
+  for(let a=-75;a<=75;a+=15) for(const R of [W*0.09,W*0.13,W*0.17,W*0.22]){
+    const rad=a*Math.PI/180;
+    let x=cp.x+Math.cos(rad)*dir*R, y=cp.y+Math.sin(rad)*R;
+    x=clamp(x,W*0.08,W*0.92); y=clamp(y,H*0.07,H*0.93);
+    if(dir>0?x>ctx.line:x<ctx.line) x=ctx.line-dir*W*0.01;        // stay onside
+    const lane=Math.min(_laneClearFrom(ctx,cp.x,cp.y,x,y),W*0.06);
+    const space=Math.min(_nearDef(ctx,x,y),W*0.11);
+    const fwd=(x-cp.x)*dir;
+    const travel=Math.hypot(x-cur.x,y-cur.y);
+    const sc=lane*3.0+space*1.1+fwd*0.30-travel*0.22;   // a clear LANE is the whole point of showing
+    if(sc>bs){ bs=sc; best={x,y}; }
+  }
+  return best||{x:cp.x+dir*W*0.12,y:cp.y};
+}
+function decideAttackJob(s,k,cp,ctx){
+  const now=Date.now(), dur=(a,b)=>now+a+Math.random()*(b-a);
+  const cur=PP[s][k], p=ctx.fpos(k);
+  const isFwd=(k==='ST'||k==='LW'||k==='RW'), isFB=(k==='LB'||k==='RB');
+  if(ctx.outlet&&ctx.outlet.has(k)) return {kind:'getopen',until:dur(450,800),spot:pickOpenSpot(s,k,cp,ctx)};
+  if(ctx.supp.has(k)) return {kind:'support',until:dur(700,1200),ck:G.ck,off:pickSupportSpot(s,k,cp,ctx)};
+  if(isFwd){
+    const tight=_nearDef(ctx,cur.x,cur.y)<W*AI2.tightMark;
+    if(tight&&Math.random()<0.6) return {kind:'check',until:dur(650,1000)};
+    if(ctx.prog>0.30&&Math.random()<(ctx.prog>0.45?AI2.runChance+0.15:AI2.runChance)){
+      const laneY=k==='ST' ? lerp(p.y*H,H*0.5,0.5)+(Math.random()-0.5)*H*0.16
+                           : lerp(p.y*H,H*0.5,0.15);            // wingers attack the channel, not the middle
+      return {kind:'run',until:dur(1700,2600),hold:dur(350,900),lane:laneY,lead:W*(0.03+Math.random()*0.04)};
+    }
+    return {kind:k==='ST'?'hold':'width',until:dur(900,1500)};
+  }
+  if(isFB&&ctx.prog>0.45){
+    const sameSide=(p.y<0.5)?(cp.y<H*0.45):(cp.y>H*0.55);   // ball on his flank
+    if(sameSide&&Math.random()<AI2.overlapChance) return {kind:'overlap',until:dur(1500,2300)};
+  }
+  return {kind:'shape',until:dur(900,1600)};
+}
+function attackTarget(s,k,cp,j,ctx){
+  const dir=ctx.dir, p=ctx.fpos(k), cur=PP[s][k], now=Date.now();
+  let tx,ty,gait='shape',free=false;
+  switch(j.kind){
+    case 'support': tx=cp.x+j.off.x; ty=cp.y+j.off.y; gait='support'; break;
+    case 'getopen': tx=j.spot.x; ty=j.spot.y; gait='run'; break;
+    case 'check': { const dx=cur.x-cp.x, dy=cur.y-cp.y, d=Math.hypot(dx,dy)||1, R=W*0.075;
+      tx=cp.x+dx/d*R; ty=cp.y+dy/d*R; gait='run'; break; }
+    case 'run': { const holding=now<j.hold; ty=j.lane;
+      tx=holding?ctx.line-dir*W*0.03:ctx.line+dir*j.lead;
+      gait=holding?'jog':'run'; free=!holding; break; }
+    case 'hold': {
+      /* In the POCKET between their midfield and their back line, in the widest
+         channel - not on the last defender's shoulder, where every lane into him
+         is shut. */
+      tx=ctx.line-dir*W*0.075;
+      let bestY=lerp(p.y*H,cp.y,0.2), bestGap=-1;
+      for(let i=0;i<5;i++){
+        const yy=clamp(lerp(p.y*H,cp.y,0.2)+(i-2)*H*0.10,H*0.10,H*0.90);
+        const gap=Math.min(_nearDef(ctx,tx,yy),W*0.10)+Math.min(_laneClear(ctx,cp.x,cp.y,tx,yy),W*0.05)*1.5;
+        if(gap>bestGap){ bestGap=gap; bestY=yy; }
+      }
+      ty=bestY; gait='jog'; break;
+    }
+    case 'width': tx=cp.x+dir*W*(ctx.prog<0.4?0.05:0.12); ty=(p.y<0.5)?H*0.07:H*0.93; gait='support'; break;
+    case 'overlap': tx=cp.x+dir*W*0.10; ty=(cp.y<H/2)?H*0.08:H*0.92; gait='run'; break;
+    default: {
+      const z=zo(k);
+      if(z==='def'){
+        const lineProg=clamp(ctx.prog-0.26+ctx.stA*0.06,0.165,0.50)+(ctx.atkDefOff[k]||0);
+        tx=(dir>0?lineProg:1-lineProg)*W;
+        const cap=dir>0?W*(0.48+ctx.stA*0.07):W*(0.52-ctx.stA*0.07);
+        tx=dir>0?Math.min(tx,cap):Math.max(tx,cap);
+        ty=lerp(p.y*H,cp.y,0.06);                          // in possession the back line stays wide
+        if(k==='LB'||k==='RB') ty=(p.y<0.5)?Math.min(ty,H*0.14):Math.max(ty,H*0.86);
+      } else if(k==='CM1'){
+        tx=cp.x-dir*W*0.10; ty=lerp(p.y*H,H*0.5,0.15); gait='jog';
+      } else if(z==='mid'){
+        const bp=clamp(ctx.prog-0.08,0.30,0.70);
+        tx=(dir>0?bp:1-bp)*W;
+        ty=lerp(H*0.5+(p.y*H-H*0.5)*1.15,cp.y,0.10);      // mids spread across their lanes
+      } else { tx=p.x*W; ty=p.y*H; }
+    }
+  }
+  if(!free) tx=dir>0?Math.min(tx,ctx.line-W*0.006):Math.max(tx,ctx.line+W*0.006);
+  return {tx:clamp(tx,W*0.08,W*0.92),ty:clamp(ty,H*0.05,H*0.95),gait};
+}
+
+function moveOffBallV2(s,ds,dt=1){
+  const cp=PP[s][G.ck]; if(!cp) return;
+  const dir=dirFor(s), ddir=dirFor(ds);
+  const stA=teamStance(s), stD=teamStance(ds);
+  const bunker=Math.max(0,-stD), dchase=Math.max(0,stD);
+  const carrierProg=progressFor(s,cp);
+  const threatLevel=clamp((carrierProg-.30)/.45,0,1);
+  const B=BODY();
+  _aiJobsReset(s);
+  const fpos=(side)=>(k)=>fp(k,side==='h'?'home':'away',G.half);
+  const stagger=(side,dsign)=>{ const out={}; try{
+      const ks=validOutfieldKeys(side).filter(k=>zo(k)==='def'); if(!ks.length) return out;
+      let sum=0; const raw={}; ks.forEach(k=>{ const q=fp(k,side==='h'?'home':'away',G.half); raw[k]=q.x; sum+=q.x; });
+      const mean=sum/ks.length; ks.forEach(k=>{ out[k]=clamp((raw[k]-mean)*(dsign>0?1:-1),-0.075,0.075); });
+    }catch(e){} return out; };
+
+  // ── ATTACKING TEAM ──
+  const atkKeys=validOutfieldKeys(s).filter(k=>k!==G.ck);
+  const ctx={ dir, prog:carrierProg, stA, line:offsideLineX(s,cp), fpos:fpos(s),
+              defs:validOutfieldKeys(ds).map(k=>PP[ds][k]), atkDefOff:stagger(s,dir), claims:[] };
+  ctx.supp=supportersFor(s,cp,atkKeys,carrierProg);
+  ctx.outlet=outletsFor(s,cp,atkKeys,ctx);
+  atkKeys.forEach(k=>{ const j=_aiJob[s+':'+k]; if(j&&j.kind==='support'&&j.off) ctx.claims.push({k,x:cp.x+j.off.x,y:cp.y+j.off.y}); });
+  const flying=G.phase==='pass_anim'&&ballTravel&&ballTravel.active&&!ballTravel.loose&&!G._shotTrail;
+  Object.keys(sq(s)).forEach(k=>{
+    if(!sq(s)[k]||k===G.ck||!PP[s][k]) return;
+    const cur=PP[s][k], pl=sq(s)[k], p=ctx.fpos(k);
+    if(k==='GK'){
+      const gkPinX=dir>0?Math.min(p.x*W,W*.072):Math.max(p.x*W,W*.928);
+      const gkPinY=clamp(p.y*H+(cp.y-H*.5)*0.04,H*.15,H*.85);
+      cur.x=lerp(cur.x,gkPinX,0.08); cur.y=lerp(cur.y,gkPinY,0.06);
+      if(dir>0&&cur.x>W*.09)cur.x=W*.072;
+      if(dir<0&&cur.x<W*.91)cur.x=W*.928;
+      return;
+    }
+    if(isStalled(s,k)) return;
+    if(ocd(s,k)){ aiMoveTo(cur,p.x*W,p.y*H,'jog',pl,s,k,dt); return; }
+    if(flying&&k===G._pfRecv){ aiMoveTo(cur,ballTravel.tx,ballTravel.ty,'support',pl,s,k,dt); return; }  // meet the ball
+    const id=s+':'+k, now=Date.now();
+    let j=_aiJob[id];
+    const wantsOutlet=!!(ctx.outlet&&ctx.outlet.has(k));
+    if(!j||now>=j.until||(j.kind==='support'&&j.ck!==G.ck)||(j.kind==='support')!==ctx.supp.has(k)
+       ||(j.kind==='getopen')!==wantsOutlet){                    // being asked to show for the ball re-thinks at once
+      j=_aiJob[id]=decideAttackJob(s,k,cp,ctx);
+      if(j.kind==='support') ctx.claims.push({k,x:cp.x+j.off.x,y:cp.y+j.off.y});
+    }
+    const t=attackTarget(s,k,cp,j,ctx);
+    aiMoveTo(cur,t.tx,t.ty,t.gait,pl,s,k,dt);
+  });
+
+  // ── DEFENDING TEAM ── (v1's roles, v2 movement; your team-mates leave you the tackle)
+  const humanDef=!isCpuSide(ds);
+  const attPosOwnFrame=1-carrierProg;
+  const lineGap=0.13*(1-carrierProg*0.55);
+  const defLineProg=clamp(attPosOwnFrame+lineGap-bunker*0.05+dchase*0.05,0.155,0.62);
+  const _defOff=stagger(ds,ddir);
+  const dfp=fpos(ds);
+  const assignedDefs=new Set([ROLES.engager,ROLES.cover,ROLES.blocker]);
+  const freeAtk=validOutfieldKeys(s).filter(k=>k!==G.ck);
+  const dgx=ownGoalXFor(ds);
+  // is the man you steer close enough to take it on himself?
+  let engEta=1e9;
+  if(humanDef&&ROLES.engager){ const v=(_cvel.k===G.ck)?_cvel:{vx:0,vy:0}; engEta=defenderETA(ds,ROLES.engager,cp.x,cp.y,v.vx,v.vy); }
+  const _pressers=new Set();
+  {
+    const pressCount=carrierProg>0.62?2:1;
+    const cands=[];
+    Object.keys(sq(ds)).forEach(k=>{
+      if(!sq(ds)[k]||k==='GK'||assignedDefs.has(k)||ocd(ds,k)||!PP[ds][k]) return;
+      if(zo(k)==='att') return;
+      cands.push({k,d:dist(PP[ds][k],cp)});
+    });
+    cands.sort((a,b)=>a.d-b.d);
+    cands.slice(0,pressCount).forEach(c=>{ if(c.d<W*0.30) _pressers.add(c.k); });
+  }
+  const markerMap={};
+  {
+    const usedAtk=new Set(), usedDef=new Set(), pairs=[];
+    const MARK_RANGE=W*0.34;
+    Object.keys(sq(ds)).forEach(k=>{
+      if(!sq(ds)[k]||assignedDefs.has(k)||k==='GK'||!PP[ds][k]) return;
+      if(zo(k)==='att') return;
+      freeAtk.forEach(ak=>{ if(PP[s][ak]) pairs.push({k,ak,d:dist(PP[ds][k],PP[s][ak])}); });
+    });
+    /* MOST DANGEROUS MAN FIRST, nearest free defender to him. Closest-pair-first
+       left the runner in behind unmarked while two defenders sorted out a man on
+       the touchline; ranking the PAIRS by danger was worse still (a defender 400
+       units away claimed the striker and the man next to him marked nobody -
+       measured: top threat marked 0%). */
+    /* FAR SIDE IS LEFT ALONE. Marking every attacker wherever he stood kept the
+       block spread across the full width, so a carrier on the touchline met a
+       block still centred (measured 184-262u infield of the ball). A man on the
+       far side is only tracked if he is a real threat; the rest of the defenders
+       drop into the shape and slide with the ball. */
+    const farBand=H*0.42;
+    const threats=freeAtk.filter(ak=>{
+      const p2=PP[s][ak]; if(!p2) return false;
+      return Math.abs(p2.y-cp.y)<farBand || progressFor(s,p2)>0.70;
+    }).sort((a,b)=>progressFor(s,PP[s][b])-progressFor(s,PP[s][a]));
+    threats.forEach(ak=>{
+      let best=null,bd=Infinity;
+      pairs.forEach(pr=>{ if(pr.ak!==ak||usedDef.has(pr.k)) return; if(pr.d<bd){ bd=pr.d; best=pr.k; } });
+      if(best&&bd<=MARK_RANGE){ markerMap[best]=ak; usedDef.add(best); usedAtk.add(ak); }
+    });
+  }
+  Object.keys(sq(ds)).forEach(k=>{
+    if(!sq(ds)[k]||!PP[ds][k]) return;
+    if(k===ROLES.engager) return;                       // tick() / passFlightChaser
+    if(isStalled(ds,k)) return;
+    if(isBlocking(ds,k)) return;                        // braced for a block: planted
+    const cur=PP[ds][k], p=dfp(k), pl=sq(ds)[k];
+    if(k==='GK'){
+      const gkBase=ddir>0?Math.min(p.x*W,W*.072):Math.max(p.x*W,W*.928);
+      const gkY=clamp(p.y*H+(cp.y-H*.5)*0.06,H*.12,H*.88);
+      cur.x=lerp(cur.x,gkBase,0.08); cur.y=lerp(cur.y,gkY,0.06);
+      if(ddir>0&&cur.x>W*.09)cur.x=W*.072;
+      if(ddir<0&&cur.x<W*.91)cur.x=W*.928;
+      return;
+    }
+    if(ocd(ds,k)){ aiMoveTo(cur,p.x*W,p.y*H,'jog',pl,ds,k,dt); return; }
+    const beaten=recoveryMult(ds,k,cur)>1.2;           // ball got goal-side of him: sprint back
+    if(k===ROLES.cover){
+      /* Measured 0% of frames with a cover behind the presser: lerp(ball,goal,0.35)
+         is 100+ units away, so the second man was never actually there. Now he
+         sits a fixed ~2.4 body heights goal-side of the ball, tucked inside. */
+      const gx2=dgx-cp.x, gy2=(H*0.5)-cp.y, gl2=Math.hypot(gx2,gy2)||1, R2=2.4*B;
+      aiMoveTo(cur,clamp(cp.x+gx2/gl2*R2,W*.04,W*.96),clamp(cp.y+gy2/gl2*R2,H*.05,H*.95),
+               beaten?'run':'track',pl,ds,k,dt);
+      return;
+    }
+    if(k===ROLES.blocker){
+      let threat=null,bestProg=-1;
+      freeAtk.forEach(ak=>{ if(!PP[s][ak]) return; const pr=progressFor(s,PP[s][ak]); if(pr>bestProg){bestProg=pr;threat=ak;} });
+      if(threat&&PP[s][threat]){ const tp=PP[s][threat];
+        aiMoveTo(cur,lerp(cp.x,tp.x,0.55),lerp(cp.y,tp.y,0.55),beaten?'run':'track',pl,ds,k,dt);
+      } else aiMoveTo(cur,clamp(lerp(cp.x,dgx,0.55),W*.04,W*.96),lerp(H*.5,cp.y,0.25),'track',pl,ds,k,dt);
+      return;
+    }
+    if(markerMap[k]){
+      const tgt=PP[s][markerMap[k]];
+      if(tgt){
+        const distToCarrier=Math.hypot(cur.x-cp.x,cur.y-cp.y), distToMarker=Math.hypot(cur.x-tgt.x,cur.y-tgt.y);
+        if(carrierProg>0.55&&distToCarrier<distToMarker*1.15){
+          let tx=lerp(cp.x+dir*W*0.03,dgx,0.15);
+          const fX=(ddir>0?0.135:1-0.135)*W; tx=ddir>0?Math.max(tx,fX):Math.min(tx,fX);
+          aiMoveTo(cur,tx,lerp(cp.y,H*0.5,0.10),'press',pl,ds,k,dt);
+          return;
+        }
+        // goal-side of his man and a little ball-side, so the pass into him is contested
+        const gsb=0.18+threatLevel*0.12+bunker*0.15;
+        let tx=lerp(tgt.x,dgx,gsb);
+        const floorX=(ddir>0?0.135:1-0.135)*W; tx=ddir>0?Math.max(tx,floorX):Math.min(tx,floorX);
+        /* Tight on his man near the ball, TUCKED IN towards it the further his
+           man is from it. Marking everyone where he stood kept the block spread
+           across the width while the ball sat on a touchline. */
+        const dy=Math.abs(tgt.y-cp.y);
+        const tuck=clamp(dy/(H*0.42),0,1)*DEF_SHIFT.tuck;
+        const ty=lerp(tgt.y,cp.y,0.05+tuck);
+        aiMoveTo(cur,tx,ty,beaten?'run':'track',pl,ds,k,dt);
+        return;
+      }
+    }
+    if(_pressers.has(k)){
+      if(humanDef&&engEta<90){
+        // shepherd goal-side at ~3 body heights; the tackle belongs to the man you steer
+        const gx=dgx-cp.x, gy=H*0.5-cp.y, gl=Math.hypot(gx,gy)||1, R=AI2.containBH*B;
+        aiMoveTo(cur,cp.x+gx/gl*R,cp.y+gy/gl*R,beaten?'run':'track',pl,ds,k,dt);
+      } else aiMoveTo(cur,lerp(cp.x,dgx,0.10),lerp(cp.y,H*0.5,0.05),'press',pl,ds,k,dt);
+      return;
+    }
+    const zone=zo(k);
+    let tx=p.x*W, ty=p.y*H;
+    /* 3.6 of 9 outfielders were goal-side of the ball while defending - the
+       rest were stranded upfield. A man the ball has gone past now runs back
+       into the block instead of holding his line. */
+    if(beaten&&zone!=='att'){
+      const backProg=clamp(defLineProg+0.02,0.15,0.62);
+      aiMoveTo(cur,clamp((ddir>0?backProg:1-backProg)*W,W*.06,W*.94),
+               defShiftY(p.y*H,cp.y,DEF_SHIFT.line),'run',pl,ds,k,dt);
+      return;
+    }
+    if(zone==='def'){
+      const myProg=defLineProg+(_defOff[k]||0);
+      tx=(ddir>0?myProg:1-myProg)*W;
+      ty=defShiftY(p.y*H,cp.y,DEF_SHIFT.line);            // the back line slides across with the ball
+      if(ROLES.engager&&zo(ROLES.engager)==='def'){ const ep=dfp(ROLES.engager); ty=lerp(ty,ep.y*H,0.25); }
+      const cap=ddir>0?W*0.48:W*0.52; tx=ddir>0?Math.min(tx,cap):Math.max(tx,cap);
+    } else if(zone==='mid'){
+      const lp=clamp(carrierProg-0.05-bunker*0.08,defLineProg+0.06,defLineProg+0.26);
+      tx=(ddir>0?lp:1-lp)*W; ty=defShiftY(p.y*H,cp.y,DEF_SHIFT.mid);
+    } else {
+      tx=(carrierProg<0.35)?(ddir>0?0.35:0.65)*W:p.x*W;
+      ty=defShiftY(p.y*H,cp.y,DEF_SHIFT.fwd);
+    }
+    aiMoveTo(cur,clamp(tx,W*.06,W*.94),clamp(ty,H*.05,H*.95),beaten?'run':'shape',pl,ds,k,dt);
+  });
+}
+function moveOffBallV1(s,ds,dt=1){
   const cp=PP[s][G.ck]; if(!cp)return;
   const dir=dirFor(s);
   const stA=teamStance(s); // attacking side stance: + push line up, − sit deeper
@@ -2374,6 +3137,29 @@ function applyRepulsion(){
     // a STUNNED player is pinned too: teammates within REPEL_DIST (~109 units)
     // were shoving him up to 1.4/tick, so a "frozen" player slid ~130 units.
     const _pinned=(k)=>k===G.ck||k==='GK'||(side===_ds&&k===ROLES.engager)||isStunned(sq(side)[k]);
+    /* AI v2: the sum of shoves a player takes in one tick is capped. Two
+       team-mates 50 units apart were each pushed ~0.76/tick, and a man next to
+       your runner ~1.4 - sprint pace - so team-mates "outran" the man you steer
+       with nobody deciding to run (measured: 60% of frames over the pace cap,
+       worst x1.97). v2 spaces supporters on purpose, so this is only a guard. */
+    if(typeof AI2!=='undefined'&&AI2.on){
+      const acc={}, RD=W*AI2.repelDist;
+      for(let i=0;i<keys.length;i++) for(let j=i+1;j<keys.length;j++){
+        if(isLunging(side,keys[i])||isLunging(side,keys[j]))continue;
+        const a=PP[side][keys[i]],b=PP[side][keys[j]];
+        const dx=b.x-a.x,dy=b.y-a.y,d=Math.hypot(dx,dy)||0.1;
+        if(d>=RD)continue;
+        const f=(RD-d)/RD*AI2.repelForce, nx=dx/d, ny=dy/d;
+        const A=acc[keys[i]]||(acc[keys[i]]={x:0,y:0}), Bq=acc[keys[j]]||(acc[keys[j]]={x:0,y:0});
+        A.x-=nx*f; A.y-=ny*f; Bq.x+=nx*f; Bq.y+=ny*f;
+      }
+      for(const k in acc){
+        if(_pinned(k))continue;
+        const v=acc[k], m=Math.hypot(v.x,v.y), sc=m>AI2.repelCap?AI2.repelCap/m:1;
+        PP[side][k].x+=v.x*sc; PP[side][k].y+=v.y*sc;
+      }
+      return;
+    }
     for(let i=0;i<keys.length;i++){
       for(let j=i+1;j<keys.length;j++){
         if(isLunging(side,keys[i])||isLunging(side,keys[j]))continue;  // let the lunge connect
@@ -3621,9 +4407,10 @@ function actSuper(){        // RT+X · V   — special / super
   if(G.awaitKickoff==='h'){doKickoff();return;}
   if(G.poss==='h' && G.phase==='moving') manualShot('special');
 }
-function actJump(){         // A/✕ · Space — jump / block
-  // Phase C builds the jump; bound now so the layer is complete and the
-  // binding never has to move once it exists.
+function actJump(){         // A/✕ · Space — jump (attacking) / block (defending)
+  // a super shot is being charged at our goal: throw the man in the line in front of it
+  if(G._ssBlk&&G._ssBlk.ds==='h'&&!G._ssBlk.committed&&window.P3D&&P3D.superCine2&&P3D.superCine2.active()){ superBlockCommit(); return; }
+  if(G.poss!=='h'&&G.phase==='moving'){ const k=G.chk||ROLES.engager; if(k) startBlock('h',k); return; }
   if(typeof playerJump==='function') playerJump('h');
 }
 function actPause(){ if(typeof togglePause==='function') togglePause(); }
@@ -4054,98 +4841,11 @@ window.U11DBG=function(msg){
 };
 if(U11_DBG)setTimeout(()=>U11DBG('game.js loaded · sc2='+!!(window.P3D&&P3D.superCine2)),1500);
 
-/* ── SUPER-SHOT CINE v2 — media banners ───────────────────────────
-   Same visual shell as showSpecialCutscene, but tries a video first
-   (assets/cutscene/{name}.webm → .mp4) and falls back to the PNG face.
-   Hard-capped by holdMs so a stalled video can never soft-lock. */
-function showCineMedia(pl,special,callback,holdMs,baseNames){
-  const sc=document.getElementById('special-cutscene');
-  if(!sc){if(callback)callback();return;}
-  const faceEl=document.getElementById('sc-face');
-  const lastName=pl?(pl.origName||pl.name).split('.').pop().toLowerCase().trim():null;
-  const bases=baseNames||(lastName?[lastName]:[]);
-  let done=false,shown=false,tmr=null,guard=null;
-  const finish=()=>{
-    if(done)return;done=true;clearTimeout(tmr);clearTimeout(guard);
-    const v=faceEl.querySelector('video');if(v){try{v.pause();}catch(e){}}
-    try{if(window.SFX&&SFX.unduck)SFX.unduck();}catch(e){}
-    sc.classList.remove('show');faceEl.innerHTML='';
-    if(callback)callback();
-  };
-  const reveal=()=>{                              // show ONLY once media is ready
-    if(shown||done)return;shown=true;
-    try{if(window.SFX&&SFX.duck)SFX.duck(0.18,0.2);}catch(e){}
-    sc.classList.remove('show');void sc.offsetWidth;sc.classList.add('show');
-    if(special){
-      say((pl?pl.name.split('.').pop():'')+'— '+(special.l||'Special')+'!');
-      shakeScreen(7,100);
-      impactText('⚡ '+(special.l||'SUPER SHOT')+'!','#f0c040','clamp(18px,38.4px,26px)');
-    }
-    tmr=setTimeout(finish,holdMs||5000);
-  };
-  faceEl.innerHTML='';
-  (function tryBase(i){
-    if(i>=bases.length){                          // no video found → try the PNG face
-      if(!lastName){finish();return;}
-      const probe=new Image();
-      probe.onload=()=>{
-        if(done)return;
-        faceEl.innerHTML=`<img src="assets/cutscene/${lastName}.png" alt="" draggable="false">`;
-        reveal();
-      };
-      probe.onerror=()=>finish();                 // nothing to show → skip banner entirely
-      probe.src='assets/cutscene/'+lastName+'.png';
-      return;
-    }
-    const v=document.createElement('video');
-    v.muted=false;v.volume=1;v.autoplay=true;v.playsInline=true;v.setAttribute('playsinline','');
-    v.setAttribute('autoplay','');v.setAttribute('webkit-playsinline','');
-    v.preload='auto';                        // 'metadata' never reaches canplay on some phones
-    v.style.cssText='max-width:100%;max-height:100%;display:block;margin:0 auto;';
-    let dead=false;
-    const fail=(why)=>{if(dead||done)return;dead=true;U11DBG('CINE: '+bases[i]+' '+(why||'error'));try{v.remove();}catch(e){}tryBase(i+1);};
-    const s1=document.createElement('source');s1.src='assets/cutscene/'+bases[i]+'.webm';s1.type='video/webm';
-    const s2=document.createElement('source');s2.src='assets/cutscene/'+bases[i]+'.mp4';s2.type='video/mp4';
-    s2.addEventListener('error',()=>fail('mp4 missing'));
-    v.addEventListener('error',()=>fail('media error'));
-    v.appendChild(s1);v.appendChild(s2);
-    // reveal on the FIRST usable signal — canplay alone is unreliable on mobile
-    const kick=()=>{ if(dead||done)return; cineVidPlay(v); reveal(); };
-    ['loadedmetadata','loadeddata','canplay','playing'].forEach(function(ev){
-      v.addEventListener(ev,kick,{once:true}); });
-    v.addEventListener('ended',finish);
-    faceEl.appendChild(v);
-    try{v.load();}catch(e){}                 // sources were appended after creation
-    cineVidPlay(v);
-    // if it is clearly downloading, give it room instead of killing the banner
-    guard=setTimeout(()=>{
-      if(shown||done)return;
-      if(v.readyState>=1||v.networkState===2){
-        U11DBG('CINE: slow load, extending');
-        guard=setTimeout(()=>{if(!shown&&!done){U11DBG('CINE: gave up (12s)');finish();}},7000);
-        return;
-      }
-      U11DBG('CINE: no signal in 5s');finish();
-    },5000);
-  })(0);
-}
-// unmuted first (the clip keeps its own audio); if the browser blocks it, retry muted
-function cineVidPlay(v){
-  if(!v||!v.play)return;
-  const p=v.play();
-  if(p&&p.catch)p.catch(()=>{
-    U11DBG('CINE: unmuted autoplay blocked -> muted');
-    v.muted=true;
-    const p2=v.play();
-    if(p2&&p2.catch)p2.catch(()=>U11DBG('CINE: play refused'));
-  });
-}
-function showGkCineMedia(gk,callback){
-  if(!gk){if(callback)callback();return;}
-  const spec=(typeof getGKSuper==='function')?getGKSuper(gk):null;
-  const ln=(gk.origName||gk.name).split('.').pop().toLowerCase().trim();
-  showCineMedia(gk,spec||{l:'SAVE ATTEMPT',i:'🧤'},callback,2200,[ln,'gk']);
-}
+/* (The SUPER-SHOT CINE v2 media banners - showCineMedia / showGkCineMedia,
+   a video from assets/cutscene/{name}.webm|.mp4 with a PNG-face fallback,
+   ~5s before the flight and ~2s before the keeper's result - were removed
+   2026-09-11 at the author's request: they broke the pacing and the HD-2D
+   feel. The in-engine 3D charge, flight and finish are the cinematic now.) */
 function showSaveBanner(gk,callback){
   let el=document.getElementById('save-banner');
   if(!el){
@@ -4172,9 +4872,9 @@ function showSaveBanner(gk,callback){
   el._t=setTimeout(()=>{el.style.display='none';if(callback)callback();},1500);
 }
 /* ── SUPER-SHOT CINE v2 — entry (□ in open play) ──────────────────
-   Flow: camera behind shooter → skill banner (video, ~5s) → kick anim
-   + ball flight, camera chasing → GK duel menu at arrival → GK banner
-   video → result (goal banner / save banner). Returns false to let
+   Flow: camera behind shooter, charge → kick anim + ball flight, camera
+   chasing → GK duel menu at arrival → 3D finish → result (goal / save
+   banner). No video or PNG cutscene anywhere in it since 2026-09-11. Returns false to let
    manualShot fall back to the legacy path. */
 function superShotCine(){
   if(G.phase!=='moving'||!G.ck||G._scoringGoal)return true;
@@ -4189,6 +4889,7 @@ function superShotCine(){
   const SSC_HOLD=2250;
   if(!(window.P3D&&P3D.on&&P3D.superCine2&&P3D.superCine2.start({as:s,sk:G.ck,ds,dir:dirFor(s),gx:goalXFor(s),holdMs:SSC_HOLD,asKey:(s==='h'?selHome:selAway),dsKey:(ds==='h'?selHome:selAway)}))){U11DBG('SSC: start() failed → legacy');return false;}
   U11DBG('SSC: start ok, hold cam');
+  try{ superBlockPrepare(s,ds); }catch(e){ U11DBG('SSC: block prep '+e); }
   clearInterval(G.di);G_moveTarget=null;
   G.phase='pass_anim';
   G._cineHold=true;                                  // freeze the whole engine
@@ -4199,40 +4900,25 @@ function superShotCine(){
     if(G.goalGen===_gen&&G._cineHold&&G.phase==='pass_anim'){_bail('watchdog');G.phase='moving';}
   },22000);
   const spec=getSpecial(carrier)||{l:'SUPER SHOT',i:'⚡'};
-  const _ln=(carrier.origName||carrier.name).split('.').pop().toLowerCase().trim();
-  const _tk=String((s==='h'?selHome:selAway)||'').toLowerCase();
-  const _bases=_tk?[_ln,_tk+'-shoot']:[_ln];       // player video → team video → PNG
-  /* PREFETCH the clip during the hold so the video is already buffered when
-     the banner opens — the perceived wait drops much further than the 2.25s
-     the shortened timer alone saves. */
-  try{
-    _bases.forEach(b=>{
-      ['webm','mp4'].forEach(ext=>{
-        const l=document.createElement('link');
-        l.rel='prefetch'; l.as='video';
-        l.href='assets/cutscene/'+b+'.'+ext;
-        l.onerror=()=>l.remove();
-        document.head.appendChild(l);
-        setTimeout(()=>{try{l.remove();}catch(e){}},15000);
-      });
-    });
-  }catch(e){}
   try{if(window.SFX&&SFX.windup)SFX.windupStop&&SFX.windupStop();}catch(e){}
   try{if(window.SFX&&SFX.windup)SFX.windup(SSC_HOLD/1000+0.1);}catch(e){}
   U11DBG('SSC: wind-up hold '+SSC_HOLD+'ms');
+  /* The charge peaks on release and the ball goes straight away - no banner
+     in between any more (the ~5s video/PNG cutscene was removed 2026-09-11).
+     The move's name goes to the commentary line. */
   setTimeout(()=>{
     if(G.goalGen!==_gen||G.phase!=='pass_anim'){_bail('stale after hold');return;}
-    U11DBG('SSC: banner…');
-    showCineMedia(carrier,spec,()=>{
-      if(G.goalGen!==_gen||G.phase!=='pass_anim'){_bail('stale after banner');return;}
-      U11DBG('SSC: fly');
-      try{if(window.SFX){SFX.windupStop&&SFX.windupStop();SFX.ballKick(1);SFX.whoosh&&SFX.whoosh(1.0);}}catch(e){}
-      P3D.superCine2.fly(()=>{
-        if(G.goalGen!==_gen){_bail('stale at arrival');return;}
-        U11DBG('SSC: arrived → GK duel');
-        G.phase='idle';opDuel(true,'special');   // menu shows (CPU picks on-screen), then banner
-      });
-    },5200,_bases);
+    U11DBG('SSC: fly');
+    say((carrier.name||'').split('.').pop()+' — '+(spec.l||'Super Shot')+'!');
+    try{if(window.SFX){SFX.windupStop&&SFX.windupStop();SFX.ballKick(1);SFX.whoosh&&SFX.whoosh(1.0);}}catch(e){}
+    let _blk=null; try{ _blk=superBlockResolve(s); }catch(e){ U11DBG('SSC: block resolve '+e); }
+    P3D.superCine2.fly((how)=>{
+      if(G.goalGen!==_gen){_bail('stale at arrival');return;}
+      if(how==='blocked'){ U11DBG('SSC: blocked in flight'); superBlockStopped(); return; }
+      G._ssBlk=null;
+      U11DBG('SSC: arrived → GK duel');
+      G.phase='idle';opDuel(true,'special');   // menu shows (CPU picks on-screen)
+    },_blk?{block:_blk}:undefined);
   },SSC_HOLD);
   return true;
 }
@@ -4314,7 +5000,12 @@ function launchShot(fx,fy,gx,gy,side,ak,dur){
   const isSuper=(ak==='special'||ak==='super'||ak==='super-shot'||ak==='super-pass');
   const shooter=sq(side)[G.ck];
   const pw=shooter?(gs(shooter,'sho')||75):75;
-  const b=isSuper?{outcome:'through'}:shotOutfieldBlock(fx,fy,gx,gy,side,pw);
+  let b=null;
+  if(!isSuper){                                    // a braced defender in the way comes first
+    const ab=activeBlock({x:fx,y:fy},{x:gx,y:gy},side,pw,(dur||45)*16.667);
+    if(ab) b={outcome:Math.random()<0.45?'block':'deflect', key:ab.k, x:ab.x, y:ab.y};
+  }
+  if(!b) b=isSuper?{outcome:'through'}:shotOutfieldBlock(fx,fy,gx,gy,side,pw);
   if(b.outcome==='through'){
     G._shotTrail=true;
     animateBallTo(fx,fy,gx,gy,()=>{G._shotTrail=false;G.phase='idle';opDuel(true,ak);},dur,true);
@@ -4349,12 +5040,16 @@ function manualShot(kind){
   const s=G.poss, ds=s==='h'?'a':'h';
   G_moveTarget=null;
   const _cpM=PP[s][G.ck]; if(!_cpM)return;
-  clearInterval(G.di);
-  if(rollShotMiss(s,ak)){shotMissed(s);return;}
-  const _gkPosM=PP[ds]&&PP[ds]['GK']?PP[ds]['GK']:{x:goalXFor(s),y:H*.5};
-  G.phase='pass_anim';
-  shakeScreen(4,60);
-  launchShot(_cpM.x,_cpM.y,_gkPosM.x,_gkPosM.y,s,ak,45);
+  if(G._kick) return;
+  kickOr(s,'shot',()=>{                            // wound up first: a defender can read it
+    const cp2=PP[s][G.ck]; if(!cp2) return;
+    clearInterval(G.di);
+    if(rollShotMiss(s,ak)){shotMissed(s);return;}
+    const _gkPosM=PP[ds]&&PP[ds]['GK']?PP[ds]['GK']:{x:goalXFor(s),y:H*.5};
+    G.phase='pass_anim';
+    shakeScreen(4,60);
+    launchShot(cp2.x,cp2.y,_gkPosM.x,_gkPosM.y,s,ak,45);
+  });
 }
 function togglePress(){
   if(G.poss==='h'){say('Win the ball first to press!');return;}
@@ -4394,9 +5089,11 @@ function directionalPass(){
   }
   if(!best) best=bestTeammateFor(s,G.ck,'pass'); // nobody in the cone → engine's best option
   if(!best){say('No passing option!');return;}
+  if(G._kick) return;                              // already winding one up
   if(isOffside(s,best)){callOffside(s,best);return;}
   G_moveTarget=null;
-  iPas(best);
+  const _to=PP[s][best];
+  kickOr(s,'pass',()=>iPas(best),{tx:_to&&_to.x,ty:_to&&_to.y});
 }
 
 // ── DEFENSIVE PLAYER SWITCH (✕ while defending) ───────────────────
@@ -4417,6 +5114,8 @@ function _switchEngager(ds){
   }
   if(!best)return;
   ROLES.engager=best;G.chk=best;
+  try{ if(typeof AI2!=='undefined'&&AI2.on) fixRoleOverlap(ds); }catch(e){}
+  if(typeof AI2!=='undefined') G._switchLockUntil=Date.now()+AI2.switchLockManual;   // auto-switch keeps its hands off
   const pl=sq(ds)[best];
   say('Switched to '+(pl?pl.name:'defender'));
 }
@@ -4456,12 +5155,58 @@ const LUNGE={
      react (~200-250ms). At 330 it closes at ~190ms: reactable for a sharp
      player, while the slide (closes ~280ms) stays the readable one. */
   shoulder:{ wind:330, strike:200, frames:[165,165,100,100,90,90],
-             reach:1.5, windSpeed:0.55, speed:1.9, track:0.26,
+             tip:[0.41,0.44,0.56,0.44,0.44,0.35],
+             windSpeed:0.55, speed:1.9, track:0.26,
              recover:480, stall:180, foul:0.07, cost:50, edge:1.10 },
   tackle  :{ wind:300, strike:330, frames:[150,150,110,110,110,150],
-             reach:1.9, windSpeed:0.50, speed:2.6, track:0.16,
-             recover:850, stall:420, foul:0.22, cost:80, edge:1.20 }
+             tip:[0.39,0.47,0.52,0.72,0.66,0.34],
+             windSpeed:0.50, speed:2.6, track:0.16,
+             recover:850, stall:420, foul:0.10, cost:80, edge:1.20 }
 };
+
+/* CONTACT IS WHAT YOU SEE (author 2026-09-11: "sometimes the duel gets
+   initiated even if the tackle doesn't really connect").
+   The hit used to be a plain centre-to-centre radius, 1.5 / 1.9 x CONTACT =
+   27 / 34 units. The dash crosses that radius on its first tick inside it, so
+   the duel opened at the very EDGE of it, every time - and with the sprites
+   at spriteFrac 0.02 a body is only ~22 units tall, so that edge was 1.2
+   (standing) / 1.55 (slide) body heights apart, with grass between them.
+   Now the tackle is a capsule: from the tackler's anchor to the tip of the art
+   in the frame ON SCREEN right now (`tip`, in body heights - the forward
+   extent of the opaque pixels from the median column the renderer plants him
+   on, measured off home.png and away.png), with the carrier's half-width as
+   its radius. The body height comes from the renderer, so contact follows the
+   sprite size. Longest reach, centre to centre: standing 0.89 BH (frame 2),
+   slide 1.05 BH (frame 3, leg fully out). */
+const TACKLE_HIT={ carrierHalf:0.33 };        // carrier's own half-width, body heights
+function BODY(){
+  try{ if(window.P3D&&P3D.bodyUnits){ const b=P3D.bodyUnits(); if(b>0) return clamp(b,12,60); } }catch(e){}
+  return W*0.0172;                             // ~22 units: the 3D body at spriteFrac 0.02
+}
+function lungeFrame(L,el){
+  let acc=0;
+  for(let i=0;i<L.frames.length;i++){ acc+=L.frames[i]; if(el<acc) return i; }
+  return L.frames.length-1;
+}
+/* the frames that play during the strike - the only ones that can connect */
+function strikeFrames(L){
+  const out=[]; let acc=0;
+  for(let i=0;i<L.frames.length;i++){ if(acc>=L.wind && acc<L.wind+L.strike) out.push(i); acc+=L.frames[i]; }
+  return out;
+}
+/* longest centre-to-centre distance at which this tackle can ever connect */
+function lungeReachMax(L){
+  let m=0; strikeFrames(L).forEach(i=>{ m=Math.max(m,L.tip[i]||0); });
+  return (m+TACKLE_HIT.carrierHalf)*BODY();
+}
+/* Does the tackle touch the carrier on this frame? Closest point on the
+   leg/shoulder (anchor -> tip along the dash) to the carrier's centre. */
+function tackleContact(dp,cp,dx,dy,L,el){
+  const B=BODY(), tip=(L.tip[lungeFrame(L,el)]||0)*B, R=TACKLE_HIT.carrierHalf*B;
+  const vx=cp.x-dp.x, vy=cp.y-dp.y;
+  const along=clamp(vx*dx+vy*dy,0,tip);
+  return Math.hypot(dp.x+dx*along-cp.x, dp.y+dy*along-cp.y)<=R;
+}
 
 function spiritMax(pl){ return pl&&pl.pos==='GK'?2000:1500; }
 function spiritOf(pl){ return (pl&&pl.spirit!=null)?pl.spirit:spiritMax(pl); }
@@ -4531,6 +5276,237 @@ function firePendingStun(){
   G._pendingStun=null;
   stunPlayer(q.side,q.k,'duel');
 }
+/* ══ BLOCK + KICK WIND-UP · GAMEPLAY PART 2b (author 2026-09-11) ═══════════
+   The defender's third move, completing the triangle:
+       tackle  beats the dribble        (and loses to the jump)
+       block   beats the kick           (shot or pass - and loses to the dribble)
+   A block only works if it can be READ, so every normal shot and pass now has
+   a short wind-up with a ring under the kicker - warm white = shot, blue =
+   pass - exactly like the tackle telegraph. A tackle that lands during the
+   wind-up still wins the ball ("caught in the act").
+   Block (A / ✕ / Space while defending): 40 spirit, a 450ms brace at 30% pace.
+   A shot or pass that passes within his reach while he is braced is blocked or
+   cut out (+20 spirit back). If the carrier dribbles past him instead he is
+   wrong-footed for 0.4s. Super shots: see superBlock* - he throws himself into
+   the line, is blown away (stunned) and the shot loses power, or - a strong
+   defender far down the line, where the shot has already lost pace - stops it.
+   Animation: 6 IDLE frames until the block row is drawn (pitch3d L12x8.block). */
+const KICK={ passWind:250, shotWind:300, quickWind:150 };
+const BLOCK={
+  brace:450, lock:350, cost:40, refund:20,
+  reach:1.15,                 // body heights either side of him that he covers
+  slow:0.30,                  // pace while braced
+  wrongFoot:400,              // dribbled past while braced
+  nearBH:1.6,                 // "went past him" = the carrier came within this
+  frames:[75,75,75,75,75,75], // idle frames 0-5 for now
+  aiRead:[0.10,0.70],         // CPU defenders: chance to read a kick (DEF 50 .. 90)
+  aiReactMs:[260,110],        // ...and how fast they brace (poor .. elite awareness)
+  superLane:3.0,              // a super-shot blocker must be within 3 BH of the line
+  superDecay:0.55,            // a super shot has lost 55% of its power after ~0.55 W of flight
+  superStop:{ base:0.15, k:25, max:0.85 }
+};
+function _blockStr(pl){ return (gs(pl,'def')||60)*0.75+(gs(pl,'pwr')||60)*0.25; }
+function _segT(a,b,p){
+  const dx=b.x-a.x, dy=b.y-a.y, L2=dx*dx+dy*dy||1;
+  const t=((p.x-a.x)*dx+(p.y-a.y)*dy)/L2, tc=clamp(t,0,1);
+  return {t, d:Math.hypot(a.x+dx*tc-p.x,a.y+dy*tc-p.y), x:a.x+dx*tc, y:a.y+dy*tc};
+}
+function isBlocking(side,k,atMs){
+  const ph=_phys[side+':'+k]; if(!ph||!ph._blockT0) return false;
+  const t=(atMs!=null)?atMs:Date.now();
+  return t>=ph._blockT0 && t<ph._blockUntil;
+}
+function startBlock(side,k){
+  const pl=sq(side)&&sq(side)[k]; if(!pl||!PP[side][k]) return false;
+  if(G.poss===side||pl.pos==='GK') return false;
+  if(isStunned(pl)||lungeActive(side,k)) return false;
+  const ph=physOf(side,k,pl), now=Date.now();
+  if(ph._blockLock&&now<ph._blockLock) return false;
+  if(ph._stallUntil&&now<ph._stallUntil) return false;
+  if(!spendSpirit(pl,BLOCK.cost)){
+    if(!isCpuSide(side)) sayThrottled('Not enough spirit to block ('+BLOCK.cost+')');
+    return false;
+  }
+  ph._blockT0=now; ph._blockUntil=now+BLOCK.brace; ph._blockLock=ph._blockUntil+BLOCK.lock;
+  ph._blockHit=false; ph._blockNear=false; ph._blockDone=false;
+  try{ if(window.P3D&&P3D.action) P3D.action(side,k,'block',{frames:BLOCK.frames}); }catch(e){}
+  return true;
+}
+function _blockSucceeded(side,k){
+  const pl=sq(side)[k], ph=_phys[side+':'+k];
+  if(ph) ph._blockHit=true;
+  if(pl) pl.spirit=Math.min(spiritMax(pl),spiritOf(pl)+BLOCK.refund);
+}
+/* Per tick: a brace that ran out with the carrier going past him leaves him
+   wrong-footed (a short stumble, not the grey stun - he guessed, he did not
+   lose a duel). */
+function stepBlocks(){
+  const now=Date.now(), s=G.poss, ds=s==='h'?'a':'h', cp=PP[s]&&PP[s][G.ck];
+  const B=BODY();
+  validOutfieldKeys(ds).forEach(k=>{
+    const ph=_phys[ds+':'+k]; if(!ph||!ph._blockT0||ph._blockDone) return;
+    if(now<ph._blockUntil){
+      if(cp&&dist(PP[ds][k],cp)<BLOCK.nearBH*B) ph._blockNear=true;
+      return;
+    }
+    ph._blockDone=true;
+    if(!ph._blockHit&&ph._blockNear) ph._stallUntil=Math.max(ph._stallUntil||0,now+BLOCK.wrongFoot);
+  });
+}
+/* A kick passing a braced defender. `msPerT` = ms for the ball to go the whole
+   way, so each defender is judged braced (or not) at the moment it reaches him. */
+function activeBlock(from,to,side,kickPow,msPerT){
+  const ds=side==='h'?'a':'h', B=BODY(), R=BLOCK.reach*B, now=Date.now();
+  let best=null;
+  validOutfieldKeys(ds).forEach(k=>{
+    const p=PP[ds][k], pl=sq(ds)[k];
+    const f=_segT(from,to,p);
+    if(f.t<0.02||f.t>0.95||f.d>R) return;
+    /* braced at any point between the kick and the ball reaching him: a read
+       of the wind-up counts, and so does a late reaction by a man further
+       down the line (shots take a fixed ~750ms whatever the distance) */
+    const ph=_phys[ds+':'+k];
+    if(!ph||!ph._blockT0||ph._blockUntil<now||ph._blockT0>now+f.t*msPerT) return;
+    if(!best||f.t<best.t) best={k,t:f.t,d:f.d,x:f.x,y:f.y,pl};    // the first man in the way
+  });
+  if(!best) return null;
+  const p=clamp(0.55+(_blockStr(best.pl)-kickPow)*0.012+(1-best.d/R)*0.25,0.25,0.92);
+  if(Math.random()>=p) return null;
+  _blockSucceeded(ds,best.k);
+  return best;
+}
+/* ── the kick wind-up ────────────────────────────────────────────────── */
+function startKick(side,kind,fire,opts){
+  if(G._kick||G.phase!=='moving'||!G.ck) return false;
+  const k=G.ck, now=Date.now();
+  const wind=(opts&&opts.wind)||(kind==='shot'?KICK.shotWind:KICK.passWind);
+  const q={side,k,kind,t0:now,at:now+wind,fire,gen:G.goalGen,tx:opts&&opts.tx,ty:opts&&opts.ty};
+  G._kick=q;
+  try{ if(window.P3D&&P3D.telegraph) P3D.telegraph(side+':'+k,{wind,kind}); }catch(e){}
+  try{ if(window.P3D&&P3D.action) P3D.action(side,k,kind==='shot'?'shoot':'pass'); }catch(e){}
+  aiPlanBlocks(side,k,kind,q);
+  return true;
+}
+function kickOr(side,kind,fn,opts){ if(G._kick) return; if(!startKick(side,kind,fn,opts)) fn(); }
+function clearKick(){
+  const q=G._kick; if(!q) return;
+  G._kick=null;
+  try{ if(window.P3D&&P3D.telegraph) P3D.telegraph(q.side+':'+q.k,null); }catch(e){}
+}
+/* From tick(). Returns true while the carrier is planted for a kick. */
+function stepKick(){
+  const q=G._kick; if(!q) return false;
+  if(q.gen!==G.goalGen||G.poss!==q.side||G.ck!==q.k||G.phase!=='moving'){ clearKick(); return false; }
+  if(Date.now()<q.at) return true;
+  G._kick=null;
+  try{ q.fire(); }catch(e){ console.warn('[kick] fire failed',e); }
+  return true;
+}
+/* CPU defenders read a kick: the ones near its line may brace, with a chance
+   and a reaction time from their DEF / awareness. */
+function aiPlanBlocks(side,k,kind,q){
+  const ds=side==='h'?'a':'h'; if(!isCpuSide(ds)) return;
+  const from=PP[side][k]; if(!from) return;
+  let to;
+  if(kind==='shot'){ const gk=PP[ds]&&PP[ds].GK; to=gk?{x:gk.x,y:gk.y}:{x:goalXFor(side),y:H*0.5}; }
+  else to={x:(q.tx!=null)?q.tx:from.x+dirFor(side)*W*0.15, y:(q.ty!=null)?q.ty:from.y};
+  const R=BLOCK.reach*BODY()*1.6;
+  validOutfieldKeys(ds).forEach(dk=>{
+    const p=PP[ds][dk], pl=sq(ds)[dk];
+    const f=_segT(from,to,p); if(f.t<0.02||f.t>0.95||f.d>R) return;
+    const read=clamp(BLOCK.aiRead[0]+((gs(pl,'def')||60)-50)*0.015,BLOCK.aiRead[0],BLOCK.aiRead[1]);
+    if(Math.random()>=read) return;
+    const react=BLOCK.aiReactMs[0]-(BLOCK.aiReactMs[0]-BLOCK.aiReactMs[1])*awarenessOf(pl);
+    setTimeout(()=>{ if(G._kick===q||Date.now()-q.at<400) startBlock(ds,dk); },react*(0.8+Math.random()*0.4));
+  });
+}
+
+/* ── super-shot block ────────────────────────────────────────────────── */
+function _ssPoint(path,fe){
+  return { x:path.fx+(path.tx-path.fx)*fe+path.perpX*Math.sin(Math.PI*fe)*path.curve,
+           y:path.fy+(path.ty-path.fy)*fe+path.perpY*Math.sin(Math.PI*fe)*path.curve };
+}
+function _ssNearest(path,p){
+  let best={fe:0,d:1e9,x:0,y:0};
+  for(let i=0;i<=100;i++){ const fe=i/100, q=_ssPoint(path,fe), d=Math.hypot(q.x-p.x,q.y-p.y);
+    if(d<best.d) best={fe,d,x:q.x,y:q.y}; }
+  return best;
+}
+/* At the start of the charge: who could get in the way? The human gets that
+   man on the stick and a prompt; a CPU defender decides from his DEF. */
+function superBlockPrepare(s,ds){
+  G._ssBlk=null; G._ssWeaken=null;
+  const path=(window.P3D&&P3D.superCine2&&P3D.superCine2.path)?P3D.superCine2.path():null; if(!path) return;
+  const B=BODY(); let best=null;
+  validOutfieldKeys(ds).forEach(k=>{
+    const pl=sq(ds)[k], p=PP[ds][k]; if(!pl||!p||isStunned(pl)) return;
+    const f=_ssNearest(path,p);
+    if(f.fe<0.12||f.fe>0.97||f.d>BLOCK.superLane*B) return;
+    if(!best||f.d<best.d) best={k,fe:f.fe,d:f.d,x:f.x,y:f.y};
+  });
+  if(!best) return;
+  G._ssBlk={s,ds,k:best.k,fe:best.fe,lx:best.x,ly:best.y,committed:false};
+  const pl=sq(ds)[best.k], nm=pl?pl.name.split('.').pop():'';
+  if(!isCpuSide(ds)){
+    ROLES.engager=best.k; G.chk=best.k; fixRoleOverlap(ds); G._switchLockUntil=Date.now()+4000;
+    try{ flashControlSwitch(ds,best.k); }catch(e){}
+    say('⚠ '+nm+' is in the line — press BLOCK!');
+  } else {
+    const read=clamp(0.20+((gs(pl,'def')||60)-60)*0.02,0.10,0.80);
+    if(Math.random()<read) setTimeout(()=>{ if(G._ssBlk&&G._ssBlk.k===best.k) superBlockCommit(); },350+Math.random()*1200);
+  }
+}
+function superBlockCommit(){
+  const b=G._ssBlk; if(!b||b.committed) return false;
+  const pl=sq(b.ds)[b.k], p=PP[b.ds][b.k]; if(!pl||!p) return false;
+  if(!spendSpirit(pl,BLOCK.cost)){ if(!isCpuSide(b.ds)) sayThrottled('Not enough spirit to block ('+BLOCK.cost+')'); return false; }
+  b.committed=true;
+  const x0=p.x, y0=p.y, t0=Date.now();
+  (function step(){ const k=Math.min(1,(Date.now()-t0)/320); p.x=x0+(b.lx-x0)*k; p.y=y0+(b.ly-y0)*k; if(k<1) setTimeout(step,16); })();
+  try{ if(window.P3D&&P3D.action) P3D.action(b.ds,b.k,'block',{frames:BLOCK.frames.map(f=>f*3)}); }catch(e){}
+  say('🧱 '+pl.name.split('.').pop()+' throws himself into the line!');
+  return true;
+}
+/* At the kick: decide it, and hand the renderer the moment of impact. */
+function superBlockResolve(s){
+  const b=G._ssBlk; if(!b||!b.committed) return null;
+  const shooter=sq(s)[G.ck], blk=sq(b.ds)[b.k]; if(!shooter||!blk) return null;
+  const path=P3D.superCine2.path(); if(!path) return null;
+  const travel=Math.hypot(b.lx-path.fx,b.ly-path.fy);
+  const power=((gs(shooter,'sho')||70)*0.6+(gs(shooter,'pwr')||70)*0.4)*1.3
+             *(1-BLOCK.superDecay*clamp(travel/(W*0.55),0,1));
+  const str=_blockStr(blk);
+  const pStop=clamp(BLOCK.superStop.base+(str-power)/BLOCK.superStop.k,0,BLOCK.superStop.max);
+  b.power=power; b.str=str; b.pStop=pStop; b.stop=Math.random()<pStop;
+  G._ssBlockLast={k:b.k,fe:+b.fe.toFixed(2),travel:Math.round(travel),power:+power.toFixed(1),str:+str.toFixed(1),pStop:+pStop.toFixed(2),stop:b.stop};
+  return { fe:b.fe, stop:b.stop, onHit:()=>superBlockHit(b) };
+}
+function superBlockHit(b){
+  const pl=sq(b.ds)[b.k], p=PP[b.ds][b.k], nm=pl?pl.name.split('.').pop():'Defender';
+  if(b.stop){ say('🧱 '+nm+' STOPS THE SUPER SHOT!'); return; }
+  const path=P3D.superCine2.path()||{fx:p.x,fy:p.y,tx:p.x+1,ty:p.y};
+  const dx=path.tx-path.fx, dy=path.ty-path.fy, L=Math.hypot(dx,dy)||1, R=BODY()*2.2;
+  const x0=p.x, y0=p.y, t0=Date.now();
+  (function step(){ const k=Math.min(1,(Date.now()-t0)/360), e=1-(1-k)*(1-k);
+    p.x=clamp(x0+dx/L*R*e,W*.02,W*.98); p.y=clamp(y0+dy/L*R*e,H*.02,H*.98); if(k<1) setTimeout(step,16); })();
+  stunPlayer(b.ds,b.k,'duel');
+  G._ssWeaken=clamp(1-(0.15+0.25*clamp(b.str/b.power,0,1)),0.55,0.85);
+  say('💥 '+nm+' is blown away — the shot loses power!');
+}
+function superBlockStopped(){
+  const b=G._ssBlk; G._ssBlk=null;
+  G._cineHold=false;
+  try{ if(window.P3D&&P3D.superCine2) P3D.superCine2.abort(); }catch(e){}
+  try{ if(window.SFX&&SFX.windupStop) SFX.windupStop(); }catch(e){}
+  if(!b) { resume(G.poss); return; }
+  const pl=sq(b.ds)[b.k];
+  if(pl) pl.spirit=Math.min(spiritMax(pl),spiritOf(pl)+BLOCK.refund);
+  const ph=physOf(b.ds,b.k,pl); ph._stallUntil=Date.now()+600;       // knocked down, not beaten
+  try{ if(typeof shakeScreen==='function') shakeScreen(8,160); }catch(e){}
+  const a=Math.random()*Math.PI*2;
+  goLoose(b.lx,b.ly,Math.cos(a)*2.5,Math.sin(a)*2.5,b.ds);
+}
+
 
 /* ══ JUMP ═══════════════════════════════════════════════════════════════════
    The counter to a tackle. Time it right and the challenge passes underneath:
@@ -4539,13 +5515,27 @@ function firePendingStun(){
    caught. Costs 80 spirit; clearing a tackle hands 40 back, so a successful
    hurdle nets 40 - the reward for reading it. */
 const JUMP={
-  dur:700,          // matches the 6-frame jump animation
-  invulnFrom:0.20,  // fraction of the arc where the legs are actually clear
-  invulnTo:0.68,
+  dur:700,
+  /* per-frame timeline handed to the renderer, matched to the art:
+     crouch | take-off | rise | peak (tucked) | fall | land (dust) */
+  frames:[80,110,120,120,120,150],
+  /* SAFE = OFF THE GROUND. First it was a slice of time (20-68% of the jump)
+     on a sine that already rose during the crouch; then "at least half-way up".
+     Both still caught him in frames where the art has him clearly airborne
+     (author, 2026-09-12: "got caught a few times mid air"). The art leaves the
+     ground on the take-off frame and lands on the land frame, so that is the
+     rule now: any lift at all beats the tackle. Window = the four air frames,
+     80-550ms after the press (470ms); the crouch and the landing still lose,
+     and landLock still stops spamming. */
+  safeH:0.02,
   landLock:220,     // recovery after landing, so it cannot be spammed
   cost:80,
   refund:40
 };
+function _jumpAir(){ const f=JUMP.frames; return [f[0]/JUMP.dur, (JUMP.dur-f[f.length-1])/JUMP.dur]; }
+/* fraction of the jump at which he becomes / stops being safe */
+function jumpSafeFrom(){ const a=_jumpAir(); return a[0]+(a[1]-a[0])*Math.asin(JUMP.safeH)/Math.PI; }
+function jumpSafeTo(){ const a=_jumpAir(); return a[1]-(a[1]-a[0])*Math.asin(JUMP.safeH)/Math.PI; }
 function _jumpPh(side,k){ const ph=_phys[side+':'+k]; return (ph&&ph._jumpT0)?ph:null; }
 function jumpProgress(side,k){
   const ph=_jumpPh(side,k); if(!ph) return -1;
@@ -4554,13 +5544,12 @@ function jumpProgress(side,k){
   return t;
 }
 function jumpHeight(side,k){
-  const t=jumpProgress(side,k);
-  return t<0 ? 0 : Math.sin(Math.PI*t);      // 0 -> 1 -> 0
+  const t=jumpProgress(side,k); if(t<0) return 0;
+  const a=_jumpAir(); if(t<=a[0]||t>=a[1]) return 0;   // crouch / landing: feet on the grass
+  return Math.sin(Math.PI*(t-a[0])/(a[1]-a[0]));       // 0 -> 1 -> 0 across the air frames
 }
-function isAirborne(side,k){
-  const t=jumpProgress(side,k);
-  return t>=JUMP.invulnFrom && t<=JUMP.invulnTo;
-}
+/* safe from a tackle = visibly high, the same height the renderer lifts him */
+function isAirborne(side,k){ return jumpHeight(side,k)>=JUMP.safeH; }
 function playerJump(side){
   if(!G||G.phase!=='moving'||G.paused||G._cineHold) return false;
   // whoever this side is currently steering: the carrier, or the engager
@@ -4578,7 +5567,7 @@ function playerJump(side){
   ph._jumpT0=Date.now();
   ph._jumpLock=Date.now()+JUMP.dur+JUMP.landLock;
   ph._jumpRefund=true;                        // one refund per jump, on a hurdle
-  try{ if(window.P3D&&P3D.action) P3D.action(side,k,'jump'); }catch(e){}
+  try{ if(window.P3D&&P3D.action) P3D.action(side,k,'jump',{frames:JUMP.frames}); }catch(e){}
   try{ if(window.SFX&&SFX.whoosh) SFX.whoosh(0.35); }catch(e){}
   return true;
 }
@@ -4611,6 +5600,7 @@ function startLunge(side,kind,dkOpt){
   const now=Date.now();
   if(ph._lungeLock&&now<ph._lungeLock)return false;   // still recovering
   if(ph._stallUntil&&now<ph._stallUntil)return false; // still on the floor
+  if(isBlocking(side,dk))return false;                // braced for a block
   if(isStunned(pl)||isSlowed(pl)){                   // cannot come straight back at you
     if(!isCpuSide(side)) sayThrottled('Still recovering...');
     return false;
@@ -4619,7 +5609,7 @@ function startLunge(side,kind,dkOpt){
   if(!cp)return false;
   const dx=cp.x-dp.x, dy=cp.y-dp.y, d=Math.hypot(dx,dy)||1;
   const L=LUNGE[kind]||LUNGE.shoulder;
-  if(d>CONTACT()*L.reach*3.5)return false;            // hopelessly far: nothing happens, nothing spent
+  if(d>lungeReachMax(L)*3.5)return false;             // hopelessly far: nothing happens, nothing spent
   if(!spendSpirit(pl,L.cost)){
     if(!isCpuSide(side)) sayThrottled('Not enough spirit to '+(kind==='tackle'?'slide':'tackle')+' ('+L.cost+')');
     return false;
@@ -4637,37 +5627,104 @@ function startLunge(side,kind,dkOpt){
 function planAiJump(){
   if(!_lunge) return;
   const pl=sq(G.poss)&&sq(G.poss)[G.ck]; if(!pl) return;
+  /* v2: a carrier who sees the tackle coming can also move the ball on -
+     better passers more often. Not during the first touch. */
+  if(AI2.on && Date.now()>=(G._cpuHoldUntil||0)){
+    const q=clamp((((gs(pl,'pas')||60)+(gs(pl,'tec')||60))/2-50)/45,0,1);
+    const pe=AI2.escapePass[0]+(AI2.escapePass[1]-AI2.escapePass[0])*q;
+    if(Math.random()<pe){
+      const L0=LUNGE[_lunge.kind]||LUNGE.shoulder;
+      _lunge.aiPassAt=_lunge.t0+L0.wind*(0.10+Math.random()*0.40);   // a quick release (150ms wind-up)
+      return;
+    }
+  }
   if(spiritOf(pl)<JUMP.cost) return;
   const dri=gs(pl,'dri')||60;
   const p=clamp(0.12+(dri-55)*0.009,0.08,0.45);
   if(Math.random()>p) return;
   const L=LUNGE[_lunge.kind]||LUNGE.shoulder;
-  const ideal=L.wind - JUMP.dur*JUMP.invulnFrom + 40;
+  const ideal=L.wind - JUMP.dur*jumpSafeFrom() + 40;
   _lunge.aiJumpAt=_lunge.t0 + ideal + (Math.random()*260-110);
 }
-/* AI defender: once the carrier is inside a tackle's range, read the play for
-   a beat (shorter for better defenders), then commit. Standing tackle close
-   in, slide from further out; if he cannot afford the slide he stands. */
+/* Carrier velocity (units per ms), smoothed from his position every tick, so
+   the AI reads where he is GOING and not only where he is. Taken from the
+   position rather than the physics state because a human carrier's movement
+   is input-driven. */
+const _cvel={k:null,side:null,x:0,y:0,t:0,vx:0,vy:0};
+function carrierVel(cp){
+  const now=Date.now(), c=_cvel;
+  if(c.k!==G.ck||c.side!==G.poss||now-c.t>250){
+    c.k=G.ck; c.side=G.poss; c.vx=0; c.vy=0; c.x=cp.x; c.y=cp.y; c.t=now; return c;
+  }
+  const dt=now-c.t; if(dt<=0) return c;
+  const a=Math.min(1,dt/90);
+  c.vx+=((cp.x-c.x)/dt-c.vx)*a; c.vy+=((cp.y-c.y)/dt-c.vy)*a;
+  c.x=cp.x; c.y=cp.y; c.t=now; return c;
+}
+/* Would this tackle, started now, touch him? The carrier is projected along
+   his velocity; the tackler covers the wind-up close-in plus the dash, and
+   must then be within the art's reach. Checked at four points of the strike. */
+function tackleCanLand(L,dp,cp,v,judge){
+  const step=MAX_DEF_STEP()/16.667;                // units per ms at chase pace 1.0
+  const reach=lungeReachMax(L)*TACKLE_AI.reachMargin;
+  const windGo=step*L.windSpeed*L.wind;
+  for(let i=1;i<=4;i++){
+    const ts=L.strike*i/4, t=L.wind+ts;
+    const px=cp.x+v.vx*t, py=cp.y+v.vy*t;
+    if(Math.hypot(px-dp.x,py-dp.y) <= ((windGo+step*L.speed*ts)*TACKLE_AI.travelMargin+reach)*(judge||1)) return true;
+  }
+  return false;
+}
+/* reachMargin/travelMargin  how safe a read has to be before he commits
+   slideShare                when both would land, how often he slides
+   slideFar                  when ONLY the slide would land, the chance he
+                             goes for it now instead of closing in to stand
+   errAmp/errBias            misjudgment, scaled by (1 - DEF quality): a weak
+                             defender over-reads his reach and dives in from
+                             too far; a great one is nearly exact */
+const TACKLE_AI={ reachMargin:0.92, travelMargin:0.9, slideShare:0.35, slideFar:0.45, errAmp:0.30, errBias:0.06 };
+/* BALL-SIDE SLIDE. The block only moved 26% of the way towards the ball's lane,
+   so a carrier down the touchline was defended by a block still sitting in the
+   middle: measured block centre 191u (left wing) and 303u (right wing) infield
+   of the ball, against 3u when he came through the middle (author, 2026-09-12:
+   "analyse how my defence works when a player runs on the side"). A real block
+   slides across and narrows - the far-side full-back tucks in. */
+const DEF_SHIFT={ line:0.75, mid:0.62, fwd:0.30, compress:0.72, tuck:0.55 };
+function defShiftY(formY,ballY,shift){
+  const mid=H/2;
+  return clamp(mid+(formY-mid)*DEF_SHIFT.compress+(ballY-mid)*shift,H*0.05,H*0.95);
+}
+/* AI defender: once a tackle WOULD land (tackleCanLand), read the play for a
+   beat (shorter for better defenders), then commit - if it still would.
+   Before the contact fix the AI committed on plain distance bands, which only
+   worked because the old hit radius was 1.5 body heights wide; with contact
+   that has to be real it slid in from too far and whiffed 71% of the time. */
 function aiConsiderTackle(ds,dk,dp,cp){
   if(_lunge||!dp||!cp) return;
   if(Date.now()<(G.kickoffUntil||0)) return;
   const pl=sq(ds)[dk]; if(!pl||ocd(ds,dk)) return;
   const ph=physOf(ds,dk,pl);
   const now=Date.now();
+  const v=carrierVel(cp);
   if(ph._lungeLock&&now<ph._lungeLock) return;
-  const d=dist(dp,cp), C=CONTACT();
-  const inStand = d>=C*0.6 && d<=C*2.2;
-  const inSlide = d>=C*1.6 && d<=C*3.6;
-  if(!inStand&&!inSlide){ ph._aiTkAt=0; return; }
+  const sp=spiritOf(pl), defS=gs(pl,'def')||60;
+  if(ph._aiJudge==null){                           // one read = one judgment, re-rolled per read
+    const e=1-clamp((defS-50)/45,0,1);
+    ph._aiJudge=1+((Math.random()*2-1)*TACKLE_AI.errAmp+TACKLE_AI.errBias)*e;
+  }
+  const canS=sp>=LUNGE.shoulder.cost && tackleCanLand(LUNGE.shoulder,dp,cp,v,ph._aiJudge);
+  const canT=sp>=LUNGE.tackle.cost   && tackleCanLand(LUNGE.tackle,dp,cp,v,ph._aiJudge);
+  if(!canS&&!canT){ ph._aiTkAt=0; ph._aiJudge=null; return; }
   if(!ph._aiTkAt){
-    const defS=gs(pl,'def')||60;
     ph._aiTkAt=now+(520-clamp((defS-50)*6,0,300))*(0.7+Math.random()*0.6);
     return;
   }
   if(now<ph._aiTkAt) return;
-  ph._aiTkAt=0;
-  let kind=(inStand&&inSlide)?(Math.random()<0.35?'tackle':'shoulder'):(inSlide?'tackle':'shoulder');
-  if(spiritOf(pl)<LUNGE[kind].cost) kind='shoulder';
+  ph._aiTkAt=0; ph._aiJudge=null;
+  let kind;
+  if(canS) kind=(canT&&Math.random()<TACKLE_AI.slideShare)?'tackle':'shoulder';
+  else if(Math.random()<TACKLE_AI.slideFar) kind='tackle';
+  else return;                                     // keep closing in; the next read starts a new beat
   startLunge(ds,kind,dk);
 }
 function endLunge(keepAnim){
@@ -4689,6 +5746,21 @@ function stepLunge(dt){
   if(!dp){ endLunge(false); return; }
   const cp=PP[G.poss]&&PP[G.poss][G.ck];
   if(_lunge.aiJumpAt && now>=_lunge.aiJumpAt){ _lunge.aiJumpAt=0; try{ playerJump(G.poss); }catch(e){} }
+  if(_lunge.aiPassAt && now>=_lunge.aiPassAt && _lunge.phase==='wind' && G.phase==='moving'){
+    _lunge.aiPassAt=0;
+    const _ps=G.poss, _tk=bestTeammateFor(_ps,G.ck,'pass');
+    if(_tk && _tk!==G.ck){
+      const side=_lunge.side, dk=_lunge.k, kind=_lunge.kind, L0=LUNGE[kind]||LUNGE.shoulder;
+      const ph0=physOf(side,dk,sq(side)[dk]);
+      endLunge(true);                              // committed to a man who has let it go
+      ph0._lungeLock=now+L0.recover; ph0._stallUntil=now+L0.stall;
+      try{ if(window.P3D&&P3D.telegraph)P3D.telegraph(side+':'+dk,null); }catch(e){}
+      stunPlayer(side,dk,kind==='tackle'?'slide':'whiff');
+      const _pl=sq(_ps)[G.ck];
+      cpuDoPass(_ps,_tk,_pl,true);
+      return;
+    }
+  }
 
   if(_lunge.phase==='wind'){
     /* Planting, not frozen: a defender who stood still for 300ms would simply
@@ -4718,7 +5790,8 @@ function stepLunge(dt){
   dp.y=clamp(dp.y+_lunge.dy*step, H*0.02, H*0.98);
   try{ if(window.P3D&&P3D.lunge) P3D.lunge(_lunge.side+':'+_lunge.k, 0, true); }catch(e){}
 
-  const hit=cp && dist(dp,cp)<CONTACT()*L.reach;
+  const hit=!!cp && tackleContact(dp,cp,_lunge.dx,_lunge.dy,L,el);
+  if(hit) G._lastTackle={kind:_lunge.kind, centre:dist(dp,cp), body:BODY(), frame:lungeFrame(L,el), el};
   const side=_lunge.side, dk=_lunge.k, kind=_lunge.kind;
   const ph=physOf(side,dk,sq(side)[dk]);
 
@@ -4808,7 +5881,7 @@ function handleCanvasInput(clientX, clientY){
     }
     if(_hit2){
       if(isOffside('h',k)){callOffside('h',k);return;} // flag goes up after the ball is played — real turnover
-      iPas(k);return;
+      kickOr('h','pass',()=>iPas(k),{tx:p.x,ty:p.y});return;
     }
   }
 
@@ -4907,7 +5980,9 @@ function animateBallVel(fromX,fromY,vx,vy,onArrive){
 function tickPassMotion(dt=1){
   if(!G.poss)return;
   const s=G.poss,ds=s==='h'?'a':'h';
-  if(PP[s]&&PP[s][G.ck]) moveOffBall(s,ds,dt*0.55);
+  if(AI2.on) passFlightBegin(s,ds);
+  if(PP[s]&&PP[s][G.ck]) moveOffBall(s,ds,AI2.on?dt:dt*0.55);
+  if(AI2.on) passFlightChaser(s,ds,dt);
   clampAllToPitch();
 }
 
@@ -5208,6 +6283,12 @@ function chkIntOutcome(fp2,tp,side){
   const defSide=side==='h'?'a':'h';
   const dx=tp.x-fp2.x,dy=tp.y-fp2.y,len=Math.hypot(dx,dy);
   if(len<W*0.07)return {interceptor:null,outcome:'through'};
+  { // a braced blocker in the lane (any direction of pass)
+    const _pp=sq(side)[G.ck];
+    const _ms=Math.max(14,Math.round(passDuration(fp2.x,fp2.y,tp.x,tp.y,28)*1.45+(len/W)*55))*16.667;
+    const _ab=activeBlock(fp2,tp,side,(gs(_pp,'pas')||60),_ms);
+    if(_ab) return {interceptor:_ab.k,outcome:Math.random()<0.45?'steal':'deflect',blocked:true};
+  }
   const nx=dx/len,ny=dy/len;
   const dir=dirFor(side);
   const isBackward=dir>0?(dx<-W*0.04):(dx>W*0.04);
@@ -5487,6 +6568,9 @@ function _gkDuelCSS(){
     '#duel-ov.gk-mode .dp-ball{display:none!important}'+
     '#gkduel-bg{position:absolute;inset:0;z-index:-1;background:#05070e center/cover no-repeat;pointer-events:none;}'+
     '#gkduel-bg::after{content:"";position:absolute;inset:0;background:radial-gradient(ellipse at 50% 28%,rgba(0,0,0,0) 28%,rgba(3,5,12,.8) 100%);}'+
+    /* full-window copy on the world layer (see gkShotLayout) */
+    '#gkduel-world{position:absolute;inset:0;z-index:6;background:#05070e center/cover no-repeat;pointer-events:none;}'+
+    '#gkduel-world::after{content:"";position:absolute;inset:0;background:radial-gradient(ellipse at 50% 28%,rgba(0,0,0,0) 28%,rgba(3,5,12,.8) 100%);}'+
     '#gkduel-art{position:absolute;left:50%;transform:translateX(-50%);top:4%;bottom:0;width:min(58%,760px);'+
       'background:center top/auto 165% no-repeat;pointer-events:none;'+
       'filter:drop-shadow(0 10px 34px rgba(0,0,0,.8));}';
@@ -5502,6 +6586,13 @@ function gkShotLayout(on,def,ds){
   ov.classList.add('gk-mode');
   if(!bg){bg=document.createElement('div');bg.id='gkduel-bg';ov.insertBefore(bg,ov.firstChild);}
   if(!art){art=document.createElement('div');art.id='gkduel-art';ov.insertBefore(art,bg.nextSibling);}
+  /* The goal-net backdrop is opaque, and the 16:9 stage clips it - on a wide
+     phone the live pitch showed in the strips either side of it. With the
+     world layer live the backdrop is drawn full-window on #worldwrap instead
+     (#gkduel-world, owned by _syncWorldDim) and this stage copy is hidden;
+     the keeper art stays in the stage. */
+  const _vp=document.getElementById('viewport');
+  bg.style.visibility=(_vp&&_vp.classList.contains('world-live'))?'hidden':'';
   const b=new Image();b.onload=()=>{bg.style.backgroundImage=`url(${GK_DUEL_BG})`;};b.src=GK_DUEL_BG;
   art.style.backgroundImage='';
   const chain=_portraitChainFor(def,ds);
@@ -5515,6 +6606,7 @@ function opDuel(isShot, committedAk){
   if(G._cineHold&&committedAk!=='special')return;   // cinematic owns the game — no stray duels
   if(!isShot&&(G.phase==='duel'||G.phase==='duel_result'||G.phase==='pass_anim'))return;
   if(isShot){clearInterval(G.di);closeDuel();}
+  clearKick();
   G.phase='duel';G.pm=false;G._duelT=Date.now();$id('passhint').style.display='none';$id('pass-banner').style.display='none';
   const as=G.poss,ds=as==='h'?'a':'h';
   const carrier=sq(as)[G.ck];const dk=isShot?'GK':(G.chk||Object.keys(sq(ds)).find(k=>sq(ds)[k]));
@@ -6497,19 +7589,41 @@ function confirmDuel(){
   }
 }
 
+/* Every countdown ever started, so a stray one can always be killed. A missing
+   #dta/#dtn used to throw INSIDE the tick - after the number was written but
+   before the "time is up" branch - so that interval never cleared, ran on past
+   zero (the reported "-150"), survived into the next match and resolved duels
+   the moment they opened. Now: the DOM work cannot throw the loop away, the
+   tick is bound to ONE duel by token, and closeDuel/startCD kill every timer. */
+let _cdTimers=[], _cdToken=0;
+function stopAllCountdowns(){
+  _cdTimers.forEach(id=>{ try{ clearInterval(id); }catch(e){} });
+  _cdTimers=[]; G.di=null;
+}
 function startCD(){
-  clearInterval(G.di);
+  stopAllCountdowns();
   // HARD RULE: a duel resolves ONLY when (a) the timer hits zero or
   // (b) the player confirms with GO. No quick-resolve special cases.
   const isGKDuel = false;
   let s = 30;
-  const arc=document.getElementById('dta'),ne=document.getElementById('dtn'),c2=100.53;
-  arc.style.strokeDashoffset='0';ne.textContent=isGKDuel?'':String(s);ne.classList.remove('urg');
-  G.di=setInterval(()=>{
-    s--;
-    if(!isGKDuel){ne.textContent=s;arc.style.strokeDashoffset=String(c2*(1-s/30));if(s<=8)ne.classList.add('urg');}
+  const c2=100.53;
+  const token=++_cdToken;
+  if(G.D) G.D._cdToken=token;
+  const paint=(v)=>{
+    try{
+      const arc=document.getElementById('dta'), ne=document.getElementById('dtn');
+      if(ne){ ne.textContent=isGKDuel?'':String(v); if(v<=8) ne.classList.add('urg'); else ne.classList.remove('urg'); }
+      if(arc) arc.style.strokeDashoffset=String(v>=30?0:c2*(1-v/30));
+    }catch(e){}
+  };
+  paint(s);
+  const id=setInterval(()=>{
+    /* the duel this timer belongs to is gone (resolved, closed, new match) */
+    if(G.phase!=='duel'||!G.D||G.D._cdToken!==token){ clearInterval(id); _cdTimers=_cdTimers.filter(x=>x!==id); return; }
+    s=Math.max(0,s-1);
+    paint(s);
     if(s<=0){
-      clearInterval(G.di);
+      clearInterval(id); _cdTimers=_cdTimers.filter(x=>x!==id);
       if(!G.D.ak){
         if(!PVP.on && G.D.as==='a') aiAtk();
         else if(PVP.on && G.D.isShot) { G.D.ak='shoot'; }
@@ -6523,6 +7637,7 @@ function startCD(){
       resDuel();
     }
   },1000);
+  _cdTimers.push(id); G.di=id;
 }
 
 
@@ -6677,6 +7792,7 @@ function calcAttackPower(carrier,ak,side){
     else if(_prog3<_Z3.midRange) mAction=Math.min(mAction,1.18);
   }
   const rng=ENGINE_CONFIG.duel.rngMin+Math.random()*(ENGINE_CONFIG.duel.rngMax-ENGINE_CONFIG.duel.rngMin);
+  if(ak==='special'&&G._ssWeaken) mAction*=G._ssWeaken;     // a defender threw himself in front of it
   return (sBase+sPhys/2)*mAction*spiritMult(carrier)*rng;
 }
 
@@ -6715,6 +7831,40 @@ function calcDefencePower(def,defA,attackAction){
   return (sBase+sPhys/2)*mult*spiritMult(def)*rng;
 }
 
+/* A SPECIAL resolved in a keeper duel that did NOT come from the open-play
+   cinematic - the CPU picking SUPER SHOT inside a duel, or a duel won with one.
+   It used to fall back to the v1 cine plus the old portrait cut-in, which is
+   the "old pre duel match" the author saw on a CPU super shot (2026-09-12).
+   Same v2 cinematic as open play: charge -> flight (blockable) -> finish. */
+function superCineFromDuel(as,ds,isGoal,onDone){
+  if(!(window.P3D&&P3D.on&&P3D.superCine2)) return false;
+  if(P3D.cineActive&&P3D.cineActive()) return false;
+  const hold=2250;
+  if(!P3D.superCine2.start({as,sk:G.ck,ds,dir:dirFor(as),gx:goalXFor(as),holdMs:hold,
+      asKey:(as==='h'?selHome:selAway),dsKey:(ds==='h'?selHome:selAway)})) return false;
+  const gen=G.goalGen, shooter=sq(as)[G.ck];
+  G._cineHold=true;
+  try{ superBlockPrepare(as,ds); }catch(e){}
+  try{ if(window.SFX&&SFX.windup){ SFX.windupStop&&SFX.windupStop(); SFX.windup(hold/1000+0.1); } }catch(e){}
+  setTimeout(()=>{
+    if(G.goalGen!==gen){ try{P3D.superCine2.abort();}catch(e){} G._cineHold=false; return; }
+    const spec=getSpecial(shooter)||{l:'SUPER SHOT'};
+    say((shooter?shooter.name.split('.').pop():'')+' — '+(spec.l||'Super Shot')+'!');
+    try{ if(window.SFX){SFX.windupStop&&SFX.windupStop();SFX.ballKick(1);SFX.whoosh&&SFX.whoosh(1.0);} }catch(e){}
+    let blk=null; try{ blk=superBlockResolve(as); }catch(e){}
+    P3D.superCine2.fly((how)=>{
+      if(G.goalGen!==gen){ G._cineHold=false; return; }
+      if(how==='blocked'){ superBlockStopped(); return; }      // thrown in front of it: no goal, no save
+      G._ssBlk=null;
+      P3D.superCine2.finish({isGoal:!!isGoal,onDone:()=>{
+        G._cineHold=false;
+        if(G.goalGen!==gen) return;
+        try{ onDone&&onDone(); }catch(e){ console.warn('[superCineFromDuel]',e); }
+      }});
+    }, blk?{block:blk}:undefined);
+  },hold);
+  return true;
+}
 function resDuel(){
   if(G.phase!=='duel')return;
   // stat-gate safety net — no unearned supers regardless of input path
@@ -6872,23 +8022,17 @@ function resDuel(){
     // BUG2 FIX: fouls primarily happen when the defender LUNGES AND MISSES.
     // Attacker wins vs tackle → 14% foul (free kick / PK to attacker).
     // Shots are exempt (advantage — the strike proceeds).
-    if(win&&!['shoot','special'].includes(ak)&&G.D.defA==='tackle'&&rollFoul(ds,G.D.dk,as,0.14))return;
+    if(win&&!['shoot','special'].includes(ak)&&G.D.defA==='tackle'&&rollFoul(ds,G.D.dk,as,0.08))return;
     if(['shoot','special'].includes(ak)&&win){
       if(G.D.isShot){
         // Was already a shot duel (vs GK) — score directly
         if(ak==='special'&&window.P3D&&P3D.on&&P3D.superCine2&&P3D.superCine2.active()){
           closeDuel();
-          showGkCineMedia(sq(ds)['GK'],()=>{
-            if(G.goalGen!==_gen){try{P3D.superCine2.abort();}catch(e){}return;}
-            P3D.superCine2.finish({isGoal:true,onDone:()=>{
-              if(G.goalGen!==_gen)return; flushDuelSay(); afGoal(carrier,as,_gen); }});
-          });
+          P3D.superCine2.finish({isGoal:true,onDone:()=>{
+            if(G.goalGen!==_gen)return; flushDuelSay(); afGoal(carrier,as,_gen); }});
         }
-        else if(ak==='special'&&window.P3D&&P3D.on&&P3D.superCine){
-          try{playDuelCutIn({atk:carrier,def:sq(ds)['GK'],as,ds,isShot:true},()=>{});}catch(e){}
-          showSuperCineBanner(getSpecial(carrier),as);
-          P3D.superCine({as, sk:G.ck, ds, dir:dirFor(as), gx:goalXFor(as), isGoal:true,
-            onDone:()=>{ if(G.goalGen!==_gen)return; flushDuelSay(); afGoal(carrier,as,_gen); }});
+        else if(ak==='special'&&superCineFromDuel(as,ds,true,()=>{ flushDuelSay(); afGoal(carrier,as,_gen); })){
+          closeDuel();                                          // the v2 cinematic owns it now
         } else afGoal(carrier,as,_gen);
       } else {
         // Won a field duel with a shot — animate to GK then open shot duel
@@ -6916,29 +8060,20 @@ function resDuel(){
       if(G.D.isShot){
         if(ak==='special'&&window.P3D&&P3D.on&&P3D.superCine2&&P3D.superCine2.active()){
           closeDuel();
-          showGkCineMedia(sq(ds)['GK'],()=>{
-            if(G.goalGen!==_gen){try{P3D.superCine2.abort();}catch(e){}return;}
-            P3D.superCine2.finish({isGoal:false,onDone:()=>{
+          P3D.superCine2.finish({isGoal:false,onDone:()=>{
+            if(G.goalGen!==_gen)return;
+            showSaveBanner(sq(ds)['GK'],()=>{
               if(G.goalGen!==_gen)return;
-              showSaveBanner(sq(ds)['GK'],()=>{
-                if(G.goalGen!==_gen)return;
-                flushDuelSay();
-                G._cineSaveLock=true;
-                afSave(ds);
-              });
-            }});
-          });
+              flushDuelSay();
+              G._cineSaveLock=true;
+              afSave(ds);
+            });
+          }});
         }
-        else if(ak==='special'&&window.P3D&&P3D.on&&P3D.superCine){
-          try{playDuelCutIn({atk:carrier,def:sq(ds)['GK'],as,ds,isShot:true},()=>{});}catch(e){}
-          showSuperCineBanner(getSpecial(carrier),as);
-          P3D.superCine({as, sk:G.ck, ds, dir:dirFor(as), gx:goalXFor(as), isGoal:false,
-            onDone:()=>{
-              if(G.goalGen!==_gen)return;
-              // the keeper gets his cut-in here too, same as the cine2 route
-              showSaveBanner(sq(ds)['GK'],()=>{
-                if(G.goalGen!==_gen)return; flushDuelSay(); afSave(ds); });
-            }});
+        else if(ak==='special'&&superCineFromDuel(as,ds,false,()=>{
+                  showSaveBanner(sq(ds)['GK'],()=>{ if(G.goalGen!==_gen)return; flushDuelSay(); afSave(ds); });
+                })){
+          closeDuel();                                          // the v2 cinematic owns it now
         } else afSave(ds);
       }
       else afTurn(ds);
@@ -6962,7 +8097,7 @@ function resDuel(){
 function flushDuelSay(){
   try{ if(G&&G.D&&G.D._deferSay){ const t=G.D._deferSay; G.D._deferSay=null; say(t); } }catch(e){}
 }
-function closeDuel(){killCutIn();G._duelT=0;G._resT=0;try{gkShotLayout(false);}catch(e){}try{document.getElementById('s-match').classList.remove('duel-live');}catch(e){}document.getElementById('duel-ov').classList.remove('show');document.getElementById('duel-res').classList.remove('show');G.pm=false;$id('pass-banner').style.display='none';}
+function closeDuel(){killCutIn();stopAllCountdowns();G._duelT=0;G._resT=0;try{gkShotLayout(false);}catch(e){}try{document.getElementById('s-match').classList.remove('duel-live');}catch(e){}document.getElementById('duel-ov').classList.remove('show');document.getElementById('duel-res').classList.remove('show');G.pm=false;$id('pass-banner').style.display='none';}
 /* SAFE DELAYED RESTART — several restarts fire on a 120-950ms setTimeout.
    Without a guard they can land after the whistle, after exitToMenu(), or
    while paused/in a cinematic, waking a dead match. Route them all here. */
@@ -6982,6 +8117,7 @@ function resume(s,msg){
     try{if(window.P3D&&P3D.superCine2)P3D.superCine2.abort();}catch(e){}
     U11DBG('SSC: cleared cine hold via resume()');
   }
+  clearKick(); G._ssWeaken=null; G._ssBlk=null;
   closeDuel(); if(msg)say(msg); G.phase='idle'; $id('passhint').style.display='none';
   // Grace period after duel — no new duel or shot gate can fire for 2.5s
   G.kickoffUntil=Date.now()+2500;
@@ -7012,6 +8148,7 @@ function afGoal(scorer,s,gen){
     Object.values(hSq).forEach(p=>{if(p)p.cooldownUntil=0;}); Object.values(aSq).forEach(p=>{if(p)p.cooldownUntil=0;});
     iPos(); const ns=s==='h'?'a':'h',q=sq(ns),kk=['CM2','CM1','ST'].find(k=>q[k])||Object.keys(q).find(k=>q[k]);
     G.poss=ns; G.ck=kk; G.tP++; if(ns==='h')G.hP++; if(PP[ns][kk]){PP[ns][kk].x=W/2;PP[ns][kk].y=H/2;PT[ns][kk]={x:W/2,y:H/2};}
+    try{ kickoffShape(ns,kk); }catch(e){}
     ball.x=W/2;ball.y=H/2;ball.tx=W/2;ball.ty=H/2; updP(); say(((ns==='h'?HT:AT)?.name||'Team')+' to kick off.');
     showReferee('KICK OFF');
     setTimeout(()=>{ G._scoringGoal=false; armKickoff(ns); },1000);
@@ -7130,8 +8267,8 @@ function afSave(ds){
     },26);
   }; // end doResolve
 
-  // Supersave: show GK cutscene first, then resolve.
-  // Cine v2 flow already played the GK banner video — go straight to resolve.
+  // Supersave: the keeper's call + shake first, then resolve.
+  // (The cine v2 flow skips it - its 3D finish is the keeper's moment.)
   if(isSuper&&gk&&!_cineFlow){
     showSpecialCutscene(gk,getGKSuper(gk),doResolve);
   } else {
@@ -7252,7 +8389,7 @@ function afTurn(ns){
   if(ns==='h')G.mom=Math.min(100,G.mom+6); else G.mom=Math.max(0,G.mom-6);
   // Foul check — defender won via tackle/block (not intercept)
   const defA=G.D.defA,attSide=G.D.as,dk=G.D.dk;
-  if((defA==='tackle'||defA==='block')&&rollFoul(ns===attSide?G.D.ds:attSide, dk, attSide, 0.05))return;
+  if((defA==='tackle'||defA==='block')&&rollFoul(ns===attSide?G.D.ds:attSide, dk, attSide, 0.03))return;
   G_moveTarget=null;G_laneTarget=null; const winnerKey=G.D.dk||null, pk=pickCarrierAfterWin(ns,winnerKey); G.poss=ns; G.ck=pk; G.tP++; if(ns==='h')G.hP++; if(PP[ns][pk]){ball.tx=PP[ns][pk].x;ball.ty=PP[ns][pk].y;} updP();
   const q=sq(ns); resume(ns,(q[pk]?q[pk].name:'Player')+' wins the ball!');
 }
@@ -7646,9 +8783,9 @@ function rollFoul(defSide,defSlot,attSide,prob){
   G.phase='idle';
   const ph=$id('passhint');if(ph)ph.style.display='none';
   // Freeze everyone visually during the foul pause — no movement at all
-  G.kickoffUntil=Date.now()+(isPK?4000:3700);
+  G.kickoffUntil=Date.now()+(isPK?3000:2300);
   // Show a visible "FREE KICK" overlay banner for the full pause duration
-  showFreeKickPause(isPK?'PENALTY!':'FREE KICK',foulName, isPK?3500:3200);
+  showFreeKickPause(isPK?'PENALTY!':'FREE KICK',foulName, isPK?2800:1900);
   // Award possession to attacking team at foul position after the pause
   setTimeout(()=>{
     if(G._fkGen!==_fk||!G.mt)return; // state safety — match may have been torn down
@@ -7670,6 +8807,30 @@ function rollFoul(defSide,defSlot,attSide,prob){
     const fkx=clamp(defPos.x,W*0.08,W*0.92), fky=clamp(defPos.y,H*0.06,H*0.94);
     if(PP[attSide]&&PP[attSide][ak]){PP[attSide][ak].x=fkx;PP[attSide][ak].y=fky;}
     ball.x=fkx;ball.y=fky;ball.tx=fkx;ball.ty=fky;
+    /* CLEAR THE BALL. Play restarted with the fouler and the fouled man on the
+       same blade of grass, so the free kick was unplayable (author 2026-09-12).
+       The wall stands off ~9.15m; team-mates give him room too. */
+    if(!isPK){
+      const wall=W*0.085;
+      Object.keys(sq(defSide)).forEach(k2=>{
+        const dp2=PP[defSide]&&PP[defSide][k2]; if(!dp2||k2==='GK') return;
+        let dx=dp2.x-fkx, dy=dp2.y-fky, d=Math.hypot(dx,dy);
+        if(d>=wall) return;
+        if(d<1){ dx=dirFor(defSide); dy=0.3; d=Math.hypot(dx,dy); }
+        dp2.x=clamp(fkx+dx/d*wall,W*.03,W*.97); dp2.y=clamp(fky+dy/d*wall,H*.05,H*.95);
+        if(PT[defSide]) PT[defSide][k2]={x:dp2.x,y:dp2.y};
+      });
+      const near=W*0.05;
+      Object.keys(sq(attSide)).forEach(k2=>{
+        if(k2===ak||k2==='GK') return;
+        const ap2=PP[attSide]&&PP[attSide][k2]; if(!ap2) return;
+        let dx=ap2.x-fkx, dy=ap2.y-fky, d=Math.hypot(dx,dy);
+        if(d>=near) return;
+        if(d<1){ dx=-dirFor(attSide); dy=-0.4; d=Math.hypot(dx,dy); }
+        ap2.x=clamp(fkx+dx/d*near,W*.03,W*.97); ap2.y=clamp(fky+dy/d*near,H*.05,H*.95);
+        if(PT[attSide]) PT[attSide][k2]={x:ap2.x,y:ap2.y};
+      });
+    }
     // PENALTY (#2): spot sits in front of the goal on the X axis (was Y —
     // the old spot was on the sideline), then a REAL shot duel vs the GK.
     if(isPK){
@@ -8030,7 +9191,7 @@ function goFull(){
   document.getElementById('wtag').textContent=wt;showSc('s-end');
   returnToMenuMusic();
 }
-function secondHalf(){G._pendingStun=null;G.half=2;G.tL=2400;iPos();const q=sq('a');const kk=['CM2','CM1','ST'].find(k=>q[k])||Object.keys(q).find(k=>q[k]);G.poss='a';G.ck=kk;G.tP++;if(PP.a[kk]){PP.a[kk].x=W/2;PP.a[kk].y=H/2;}ball.x=W/2;ball.y=H/2;ball.tx=W/2;ball.ty=H/2;showSc('s-match');updH();updP();startMT();startAnim();startMatchMusic();say((AT?.name||'Away')+' kick off — 2nd half!');showReferee('2ND HALF');G.kickoffUntil=Date.now()+3000;G.phase='idle';setTimeout(()=>{armKickoff('a');},900);}
+function secondHalf(){G._pendingStun=null;G.half=2;G.tL=2400;iPos();const q=sq('a');const kk=['CM2','CM1','ST'].find(k=>q[k])||Object.keys(q).find(k=>q[k]);G.poss='a';G.ck=kk;G.tP++;if(PP.a[kk]){PP.a[kk].x=W/2;PP.a[kk].y=H/2;}try{ kickoffShape('a',kk); }catch(e){}ball.x=W/2;ball.y=H/2;ball.tx=W/2;ball.ty=H/2;showSc('s-match');updH();updP();startMT();startAnim();startMatchMusic();say((AT?.name||'Away')+' kick off — 2nd half!');showReferee('2ND HALF');G.kickoffUntil=Date.now()+3000;G.phase='idle';setTimeout(()=>{armKickoff('a');},900);}
 
 function initMatch(){
   Object.values(hSq).forEach(p=>{if(p){p.spirit=(p.pos==="GK"?2000:1500);p.cooldownUntil=0;}});Object.values(aSq).forEach(p=>{if(p){p.spirit=(p.pos==="GK"?2000:1500);p.cooldownUntil=0;}});
@@ -8042,6 +9203,7 @@ function initMatch(){
   startMatchMusic();
   const sk=hSq['CM2']?'CM2':(hSq['CM1']?'CM1':'ST');G.poss='h';G.ck=sk;G.tP++;G.hP++;
   if(PP.h[sk]){PP.h[sk].x=W/2;PP.h[sk].y=H/2;}ball.x=W/2;ball.y=H/2;ball.tx=W/2;ball.ty=H/2;
+  try{ kickoffShape('h',sk); }catch(e){}
   asnC();updP();updH();startMT();startAnim();
   // supporter flags in the 2.5D stands — same emblem PNG chains as the HUD
   try{ if(window.P3D&&P3D.setTeamFlags){
@@ -8604,7 +9766,35 @@ function _setWorldLive(on){
   if(on) requestAnimationFrame(()=>dispatchEvent(new Event('resize')));
 }
 
+/* The duel veil is drawn on the full-window world layer (style.css,
+   #worldwrap::after) so it reaches past the 16:9 stage; this mirrors
+   #duel-ov's open state onto it. */
+function _syncWorldDim(){
+  const d=document.getElementById('duel-ov'), w=document.getElementById('worldwrap'), vp=document.getElementById('viewport');
+  if(!d||!w) return;
+  const open=d.classList.contains('show');
+  w.classList.toggle('dim', open);
+  // keeper duel: its goal-net backdrop, full-window (see gkShotLayout)
+  const gkOn=open&&d.classList.contains('gk-mode')&&!!(vp&&vp.classList.contains('world-live'));
+  let g=document.getElementById('gkduel-world');
+  if(gkOn&&!g){
+    g=document.createElement('div'); g.id='gkduel-world';
+    g.style.backgroundImage='url('+GK_DUEL_BG+')';   // missing file = the plain dark fill
+    w.appendChild(g);
+  }
+  if(!gkOn&&g) g.remove();
+}
+function _watchDuelDim(){
+  const d=document.getElementById('duel-ov');
+  if(!d||d._dimObs||!window.MutationObserver) return;
+  d._dimObs=new MutationObserver(_syncWorldDim);
+  d._dimObs.observe(d,{attributes:true,attributeFilter:['class']});
+  _syncWorldDim();
+}
+
 _mountWorldLayer();
+_watchDuelDim();
+document.addEventListener('DOMContentLoaded',_watchDuelDim);
 fitViewport();
 document.addEventListener('DOMContentLoaded',()=>{_mountWorldLayer();fitViewport();});
 window.addEventListener('load',fitViewport);

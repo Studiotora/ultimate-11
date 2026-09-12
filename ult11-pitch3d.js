@@ -1698,6 +1698,23 @@
                   Math.random()<0.4?'#ffffff':c.col, hh*(0.06+Math.random()*0.08), 0.4+Math.random()*0.4, 12); }
       try{ if(typeof shakeScreen==='function') shakeScreen(9,160); }catch(e){}
     }
+    /* A defender meets the super shot (gameplay part 2b). */
+    function blockImpact(c,bx,by){
+      const B=c.blk; B.done=true;
+      const x=ex2wx(bx), z=ey2wz(by), hh=PLEN*(P3D.spriteFrac||0.045), y=hh*0.5;
+      spawnRing(x,z,'#ffffff',hh*0.3,hh*(B.stop?5:3.5),0.45); spawnRing(x,z,c.col,hh*0.4,hh*(B.stop?7:5),0.6);
+      spawnFlash(x,y,z,hh*(B.stop?1.6:1.1),'#ffffff');
+      for(let i=0;i<(B.stop?40:24);i++){ const a=Math.random()*Math.PI*2, sp=3+Math.random()*8;
+        spawnPart(x,y,z,Math.cos(a)*sp,2+Math.random()*5,Math.sin(a)*sp,
+                  Math.random()<0.5?'#ffffff':c.col,hh*(0.05+Math.random()*0.07),0.35+Math.random()*0.35,12); }
+      try{ shakeCam(B.stop?0.30:0.20,B.stop?420:300); }catch(e){}
+      c._hitStop=Math.max(c._hitStop||0,B.stop?0.18:0.12);
+      try{ if(B.onHit) B.onHit(); }catch(e){}
+      if(B.stop){
+        c.mode='wait';
+        if(c.onArrive&&!c.arrived){ c.arrived=true; const cb=c.onArrive; c.onArrive=null; setTimeout(()=>cb('blocked'),0); }
+      }
+    }
     function impactBurst(c,x,y,z,d){
       const hh=PLEN*(P3D.spriteFrac||0.045);
       if(c.isGoal){
@@ -1794,10 +1811,12 @@
     const L12x8={cols:12, rows:8, idle:[0,12], run:[0,12], pass:[0,8], shoot:[0,12],
       shoulder:[0,6], super:[6,6],
       tackle:[0,6],   jump:[6,6],
+      block:[0,6],    // BLOCK: idle frames 0-5 until the block row is drawn - then point this (and rowFor.block) at it
       idleFps:4, fpsScale:0.9,
       rowFor:{ idle:{down:0, up:1, side:0}, run:{side:3, down:4, up:5}, act:{down:2, up:2, side:2},
                shoulder:{side:6, down:6, up:6}, super:{side:6, down:6, up:6},
-               tackle:{side:7, down:7, up:7},   jump:{side:7, down:7, up:7} }};
+               tackle:{side:7, down:7, up:7},   jump:{side:7, down:7, up:7},
+               block:{side:0, down:0, up:1} }};
     // Dedicated 4x4 keeper sheet (assets/ps1/gk_cine.png):
     //   row 0 = idle · row 1 = run · rows 2-3 = cinematic dives/saves (see GK_POSE).
     // Front-facing art, so every facing maps to the same in-play row.
@@ -2074,7 +2093,7 @@
     }
     /* one-shot action triggers — auto-detected from engine phase transitions */
     const ACT={};
-    const ONE_SHOT={tackle:1, shoulder:1, jump:1, super:1};
+    const ONE_SHOT={tackle:1, shoulder:1, jump:1, super:1, block:1};
     /* opts.frames: explicit per-frame durations (ms). game.js passes these for
        the tackles so the impact frame plays exactly when its hit window opens,
        instead of frames being spread evenly across the whole animation. */
@@ -2328,6 +2347,23 @@
         ctx.beginPath(); ctx.arc(rpx(cp.x),rpy(cp.y),3.6,0,7); ctx.fillStyle='#fff'; ctx.fill();
         ctx.beginPath(); ctx.arc(rpx(cp.x),rpy(cp.y),5+t*1.6,0,7); ctx.strokeStyle=ccol; ctx.lineWidth=1.4; ctx.stroke();
         ctx.restore(); }
+      /* THE MAN YOU ARE STEERING - a blue ring on the radar. Off camera he was
+         impossible to pick out (author, 2026-09-12). Same man the 3D marker and
+         the bust HUD use: the carrier when attacking, the chaser when defending. */
+      try{
+        const selK=(poss==='h')?ck:((typeof ROLES!=='undefined'&&ROLES)?ROLES.engager:null);
+        const sp2=(selK&&PP.h)?PP.h[selK]:null;
+        if(sp2){
+          const t2=(Math.sin(Date.now()/240)+1)/2;
+          ctx.save();
+          ctx.shadowColor='#4ea0ff'; ctx.shadowBlur=5+t2*6;
+          ctx.beginPath(); ctx.arc(rpx(sp2.x),rpy(sp2.y),4.4+t2*1.3,0,7);
+          ctx.strokeStyle='#4ea0ff'; ctx.lineWidth=1.6; ctx.stroke();
+          ctx.beginPath(); ctx.arc(rpx(sp2.x),rpy(sp2.y),2.1,0,7);
+          ctx.fillStyle='#dff0ff'; ctx.fill();
+          ctx.restore();
+        }
+      }catch(e){}
       if(typeof ball!=='undefined'&&ball){ ctx.beginPath(); ctx.arc(rpx(ball.x),rpy(ball.y),2.6,0,7);
         ctx.fillStyle='#fff'; ctx.fill(); ctx.strokeStyle='#ffd24a'; ctx.lineWidth=1; ctx.stroke(); }
       ctx.restore();
@@ -2383,10 +2419,34 @@
     const ballShadow=new T.Sprite(new T.SpriteMaterial({map:new T.CanvasTexture(bShCv),
       transparent:true,depthWrite:false,opacity:0.45}));
     scene.add(ballShadow);
+    /* PIXEL BALL (author's sheet: assets/ball-sprite.png, 4x4 = 16 frames of one
+       full rotation, transparent). The ball stays 3D - position, height, arc,
+       shadow and physics are untouched - and this billboard is glued on top, so
+       it reads as pixel art from every camera angle. The frame advances with the
+       distance actually rolled, so the spin matches the travel.
+       P3D.pixelBall=false falls back to the shaded 3D sphere. */
+    let ballSprite=null, ballSpriteTex=null, _bSpin=0;
+    P3D.pixelBall=true;
+    (function loadBallSprite(){
+      const im=new Image();
+      im.onload=()=>{
+        const t=new T.Texture(im);
+        t.magFilter=T.NearestFilter; t.minFilter=T.NearestFilter; t.generateMipmaps=false;
+        t.wrapS=t.wrapT=T.ClampToEdgeWrapping;
+        t.repeat.set(1/4,1/4); t.offset.set(0,0.75); t.needsUpdate=true;
+        ballSpriteTex=t;
+        ballSprite=new T.Sprite(new T.SpriteMaterial({map:t,transparent:true,depthWrite:false,
+          alphaTest:0.3,fog:false}));
+        ballSprite.renderOrder=5; ballSprite.visible=false; scene.add(ballSprite);
+        console.log('[P3D] pixel ball sheet loaded (4x4)');
+      };
+      im.onerror=()=>{ console.warn('[P3D] assets/ball-sprite.png missing - keeping the 3D ball'); };
+      im.src='assets/ball-sprite.png';
+    })();
     let _bPrevX=null,_bPrevZ=null;
     const _bAxis=new T.Vector3();
     function syncBall(){
-      if(cine) return;   // cinematic drives the ball directly
+      if(cine){ if(ballSprite) ballSprite.visible=false; return; }   // cinematic drives the ball directly
       if(typeof ball==='undefined'||!ball) return;
       const frac=(P3D.spriteFrac!=null?P3D.spriteFrac:0.045);
       const d=PLEN*frac*0.21;                // ball ~0.21 of player sprite height
@@ -2431,6 +2491,20 @@
           ballMesh.rotateOnWorldAxis(_bAxis,trav/r);
         }
       }
+      /* the pixel skin: same spot, same size, frame from the roll */
+      if(ballSprite&&ballSpriteTex&&P3D.pixelBall!==false){
+        if(_bPrevX!==null&&r>1e-6){
+          const trav2=Math.hypot(wx-_bPrevX,wz-_bPrevZ);
+          _bSpin+=trav2/(2*Math.PI*r)*16;                 // 16 frames = one rotation
+        }
+        const f=((Math.floor(_bSpin)%16)+16)%16;
+        ballSpriteTex.offset.set((f%4)/4, 0.75-Math.floor(f/4)/4);
+        const sc=d*1.28;                                   // the art has a little padding
+        ballSprite.position.set(wx,bwy,wz);
+        ballSprite.scale.set(sc,sc,1);
+        ballSprite.visible=true;
+        ballMesh.visible=false;
+      } else if(ballMesh){ ballMesh.visible=true; if(ballSprite) ballSprite.visible=false; }
       _bPrevX=wx; _bPrevZ=wz;
       // shadow shrinks + fades as the ball climbs
       const shs=d*1.35/(1+hgt*0.55);
@@ -2656,13 +2730,25 @@
       const t=new T.Texture(c);t.needsUpdate=true;return t;
     }
     function ensureHoldFx(){
+      /* FULL WINDOW, next to the GL canvas - like the HUD. It used to sit in
+         the 16:9 UI stage, so on a wide phone the charge's focus vignette
+         (57% dark at the stage edge) stopped dead at the edge of the stage: a
+         hard dark band with the lit strips either side of it (author,
+         2026-09-11). And everything here is projected with the full-window
+         camera, which drawn into the narrower stage canvas put the bolts and
+         the vignette centre off the shooter. Height stays 720 drawing units
+         so every px size below keeps its look; width follows the window. */
       if(!fxCv){
-        fxCv=document.createElement('canvas');fxCv.width=CV.width||1280;fxCv.height=CV.height||720;
+        fxCv=document.createElement('canvas');
         fxCv.id='cine-fx';
-        fxCv.style.cssText='position:absolute;inset:0;width:100%;height:100%;pointer-events:none;z-index:40;';
-        (CV.parentNode||document.body).appendChild(fxCv);
+        fxCv.style.cssText='position:absolute;inset:0;width:100%;height:100%;pointer-events:none;z-index:3;';
+        if(gl.parentNode) gl.parentNode.insertBefore(fxCv, gl.nextSibling);
+        else (CV.parentNode||document.body).appendChild(fxCv);
         fxCtx=fxCv.getContext('2d');
       }
+      const _fw=gl.clientWidth||CV.width||1280, _fh=gl.clientHeight||CV.height||720;
+      const _fH=720, _fW=Math.max(1,Math.round(_fH*_fw/_fh));
+      if(fxCv.width!==_fW||fxCv.height!==_fH){ fxCv.width=_fW; fxCv.height=_fH; }
       if(!auraCore){
         const spr=(tex,col,op)=>{ const s=new T.Sprite(new T.SpriteMaterial({map:tex,color:col,transparent:true,opacity:op,blending:T.AdditiveBlending,depthWrite:false,fog:false})); s.visible=false; scene.add(s); return s; };
         auraCore=spr(fxGradTex('#ffffff'),'#fff6d5',0.4);
@@ -2864,9 +2950,8 @@
        The striker slot uses the ATTACKING team's key, both GK slots use the
        DEFENDING team's key. Missing files simply fall through — nothing to
        wire up, drop a PNG in and it is picked up on the next cinematic.
-       Cutscene video for the skill banner is unchanged:
-         assets/cutscene/{lastname}.webm | .mp4 | .png
-         assets/cutscene/{teamkey}-shoot.webm | .mp4 | .png   (team fallback) */
+       (The video/PNG skill banner from assets/cutscene/ was removed from the
+       game 2026-09-11 - nothing loads from that folder any more.) */
     const DIVE={cols:5,rows:3};
     let cineWindupTex=null,cineWindupAR=0.65,cineWindupIsTeam=false,cineGkTex=null,diveSheet=null;
     const _cineTexCache={}, _cineSheetCache={};
@@ -2996,9 +3081,15 @@
        strike. At spriteFrac 0.02 the wind-up frames alone are a few pixels
        tall - and the jump is only a skill if the challenge can be SEEN coming.
        Orange = standing tackle, red = slide, so the carrier can read which. */
-    let TELE=null;
-    function ensureTele(){
-      if(TELE) return TELE;
+    /* Two rings: 'tackle' (the tackle wind-up) and 'kick' (a pass / shot being
+       wound up - gameplay part 2b), so a tackle coming in on a man who is
+       shaping to shoot shows both. */
+    const TELES={};
+    const TELE_COL={tackle:0xff2a1a, shoulder:0xffa020, shot:0xfff2c4, pass:0x6cc4ff};
+    function _teleSlot(kind){ return (kind==='shot'||kind==='pass')?'kick':'tackle'; }
+    function ensureTele(slot){
+      slot=slot||'tackle';
+      if(TELES[slot]) return TELES[slot];
       /* NORMAL blending, not additive: additive red on a bright green pitch
          washes to olive-yellow (the same trap as the fire trail) and at low
          opacity it vanished under the possession ring. Drawn after the other
@@ -3006,30 +3097,42 @@
       const m=new T.Mesh(new T.PlaneGeometry(1,1), new T.MeshBasicMaterial({map:ringTex(), color:0xffa020,
         transparent:true, opacity:0, depthWrite:false, blending:T.NormalBlending, fog:false}));
       m.rotation.x=-Math.PI/2; m.renderOrder=6; m.visible=false; scene.add(m);
-      TELE={mesh:m,id:null,t0:0,wind:300,kind:'shoulder'};
-      return TELE;
+      return (TELES[slot]={mesh:m,id:null,t0:0,wind:300,kind:'shoulder'});
     }
     P3D.telegraph=function(id,o){
-      const t=ensureTele();
-      if(!o){ if(!id||t.id===id){ t.id=null; t.mesh.visible=false; } return; }
+      if(!o){ for(const s in TELES){ const t=TELES[s]; if(!id||t.id===id){ t.id=null; t.mesh.visible=false; } } return; }
+      const t=ensureTele(_teleSlot(o.kind));
       t.id=id; t.t0=performance.now(); t.wind=o.wind||300; t.kind=o.kind||'shoulder';
     };
     /* read-only: is the tackle warning showing, for whom, and how far into
        the wind-up. For tests - the Browser pane cannot always capture it. */
+    /* One player's body height in ENGINE units (the sim's x axis). game.js
+       measures tackle reach in it, so contact follows the sprite size: the
+       body is PLEN*spriteFrac world units tall (hWorld*hRef in syncPlayers)
+       and one engine x unit is PLEN/(CV.width*fbSx) world units. */
+    P3D.bodyUnits=function(){ const f=(P3D.spriteFrac!=null?P3D.spriteFrac:0.045); return f*(CV.width||1280)*fbSx; };
+    /* read-only: is the pixel ball on screen, which frame, how big (for tests) */
+    P3D.ballState=function(){
+      if(!ballSprite) return {pixel:false,reason:'sheet not loaded'};
+      return {pixel:!!ballSprite.visible, frame:((Math.floor(_bSpin)%16)+16)%16,
+              spin:+_bSpin.toFixed(2), size:+ballSprite.scale.x.toFixed(3),
+              sphereVisible:!!(ballMesh&&ballMesh.visible)};
+    };
     P3D.grayOf=function(id){ const o=sprites[id]; return (o&&o._gray&&o._gray.u)?+o._gray.u.value.toFixed(3):null; };
-    P3D.teleState=function(){ const t=TELE; if(!t) return {built:false};
+    P3D.teleState=function(slot){ const t=TELES[slot||'tackle']; if(!t) return {built:false};
       return {built:true, id:t.id, visible:t.mesh.visible, kind:t.kind,
               opacity:+t.mesh.material.opacity.toFixed(2), scale:+t.mesh.scale.x.toFixed(2),
               color:'#'+t.mesh.material.color.getHexString()}; };
-    function tickTele(){
-      const t=TELE; if(!t||!t.id) return;
+    function tickTele(){ for(const s in TELES) tickTele1(TELES[s]); }
+    function tickTele1(t){
+      if(!t||!t.id) return;
       const g=sprites[t.id]; if(!g||!g.sprite){ t.mesh.visible=false; return; }
       const el=performance.now()-t.t0, k=Math.min(1,el/t.wind);
       const hh=PLEN*(P3D.spriteFrac!=null?P3D.spriteFrac:0.045);
       t.mesh.position.set(g.sprite.position.x, 0.06, g.sprite.position.z);
       if(k<1){
         const sc=hh*(2.2-1.2*k); t.mesh.scale.set(sc,sc,1);
-        t.mesh.material.color.set(t.kind==='tackle'?0xff2a1a:0xffa020);
+        t.mesh.material.color.set(TELE_COL[t.kind]!=null?TELE_COL[t.kind]:0xffa020);
         t.mesh.material.opacity=0.75+0.25*k;
       }else{
         const f=Math.max(0,1-(el-t.wind)/220);
@@ -3190,8 +3293,14 @@
         try{ cineCamera2(); }catch(e){}   // place the frontal camera before frame 1
         return true;
       },
-      fly(onArrive){
+      /* opts.block = {fe, stop, onHit} from game.js superBlockResolve: when the
+         ball reaches fraction fe of the flight, burst + hit-stop + onHit(); if
+         stop, the flight ends there and onArrive('blocked') fires. */
+      path(){ if(!cine) return null;
+        return {fx:cine.fx,fy:cine.fy,tx:cine.tx,ty:cine.ty,perpX:cine.perpX||0,perpY:cine.perpY||0,curve:cine.curveAmt||0}; },
+      fly(onArrive,opts){
         if(!(cine&&cine.v2&&cine.mode==='hold'))return;
+        cine.blk=(opts&&opts.block)?Object.assign({done:false},opts.block):null;
         /* Hand the chase the camera we already have. Without this the chase
            branch snaps to its own position on the first frame and the
            frontal-to-behind move reads as a hard cut; seeded, the existing
@@ -3374,6 +3483,7 @@
         bx=c.fx+(c.tx-c.fx)*fe; by=c.fy+(c.ty-c.fy)*fe;
         if(c.curveAmt){ const off=Math.sin(Math.PI*fe)*c.curveAmt; bx+=c.perpX*off; by+=c.perpY*off; }  // banana
         bz=shotArc(c.arc,fe,stl);
+        if(c.mode==='fly'&&c.blk&&!c.blk.done&&fe>=c.blk.fe) blockImpact(c,bx,by);
         if(c.mode==='wait')bz=4+Math.sin(c.t*6)*0.8;  // hover short of the keeper
       }else if(c.mode==='out'){
         c.ot+=dt;
