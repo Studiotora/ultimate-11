@@ -1443,6 +1443,261 @@ going to be a massive part of the gameplay". Proposed order; the author sets it.
      longest sideways run 2 passes (was unbounded), 45% of passes forward,
      control switches 15.9/min, your man's average distance to the carrier 66u.
 
+- **PART 2f · WING DEFENCE + PIXEL BALL - ✅ DONE 2026-09-12** (js v153 / pitch3d v92).
+
+  1. **The defence ignored the wings** (from the screenshot: a CPU man running the
+     touchline had the whole flank to himself). The back four held a flat, almost
+     static line near the middle of the pitch, so the ball could be 300 units wide
+     of the nearest defender and nobody slid across. Measured before: with the ball
+     on the left wing the defensive block's centre sat **191u infield** of it; on
+     the right wing **303u**. New `DEF_SHIFT` {line .75, mid .62, fwd .30,
+     compress .72, tuck .55} + `defShiftY(formY,ballY,shift)` slides the whole
+     block toward the ball's lane and squeezes it (each line shifts less the
+     further forward it plays, so the shape stays a shape). Markers tuck goal-side
+     the wider the ball goes; the far-side defender stops man-chasing and holds a
+     zone (`farBand = H*0.42`), only picking up a threat past 70% progress. And
+     `aiMoveTo` now breaks into a run instead of a jog whenever the target is more
+     than 0.085·W away, so the slide actually happens. After: left wing **87u**,
+     right wing **82u**, half-space 59u, middle 12u; the ball carrier is pressured
+     100% of the time in every lane. **Caveat:** from a cold start the slide still
+     takes ~5.7-7.4s to arrive, so a fast switch of play will still find space -
+     that is the next thing to tune, not a bug.
+  2. **Kick-off circle, again.** 2e's fix used W*0.075 (96u) but the *painted*
+     circle is 0.085 of the pitch width (109u), so players were pushed to a ring
+     just inside the line and still looked like they were in it. `KICKOFF_R` is
+     now `W*0.085` with allow = R+12, read off the same constant the pitch is
+     drawn with.
+  3. **Pixel ball** (author's `assets/ball-sprite.png`, 4x4 = 16 frames of one
+     rotation). The ball stays 3D - position, arc, height, shadow and physics are
+     untouched - and the sheet is billboarded on top, so it reads as pixel art
+     from every camera angle. The frame advances with the distance actually
+     rolled, so the spin matches the travel instead of ticking on a timer.
+     `P3D.pixelBall=false` falls back to the shaded sphere.
+
+     Hand-drawn cells are never perfectly aligned, and this sheet's four rows each
+     sit a little higher in their cell than the last (0.517 → 0.419 of a cell),
+     which would have made the ball **bob by 0.098 of its own diameter** once per
+     rotation - a roll that looks like a bounce. So `measureBallSheet()` reads the
+     sheet's alpha once at load, finds where the ball actually sits in each cell,
+     and bakes the correction into that frame's UV offset. Verified frame by
+     frame: worst off-centre **0.098 → 0.000** ball diameters. The same pass
+     measures how much of a cell the ball fills (0.834) and sizes the sprite from
+     it, `d / 0.834` - the hand-guessed 1.28 would have drawn it 6% too big.
+     Redraw the sheet however you like: it re-measures itself.
+
+     One more thing the maths caught: the ball is small, so it turns over once
+     every ~17 engine units - past ~64 u/s the real spin outruns a 16-frame sheet.
+     Measured uncapped during a fast move: the sheet advanced up to **493 frames
+     between two rendered frames** (~30 rotations), i.e. the roll would have
+     aliased into noise on every pass. `P3D.ballSpinMax` (0.75) caps how far the
+     sheet may advance per rendered frame, so a fast ball reads as a fast, steady
+     spin; slow rolls stay fully proportional (measured average 0.637, under the
+     cap). Verified on screen: with the ball parked on the centre spot, 87% of the
+     pixels that consistently change when the sprite is toggled on and off fall in
+     one ~32x32 blob at the ball's position.
+
+- **PART 2g · BLOCK ROW + ANIMATED FLAGS - ✅ DONE 2026-09-12** (js v154 / pitch3d v95).
+  Two art drops from the author, both wired in.
+
+  1. **The drawn BLOCK animation.** The author packed it into the back half of the
+     run-north row to keep the sheet small: `home.png` row 5, cols 0-5 = run north,
+     cols 6-11 = block (front-facing, impact sparks on the last three). `block` now
+     points at `[6,6]` on row 5 for every facing. The catch was the run cycle:
+     it steps `floor(phase) % R[1]` with `R = L.run` = 12, so capping only the
+     lookup would have played frames 0-5 then **frozen on frame 5 for half the
+     cycle**. New `rangeOf(L,anim,face)` lets one facing own a narrower slice of
+     its row (`rangeFor:{run:{up:[0,6]}}`), and the cycle, `cellOf` and
+     `forceAnimT` all read through it. Verified off the real table: block
+     resolves `5,6 .. 5,11` for all facings, north cycles exactly `5,0 .. 5,5`
+     and wraps, south/side keep all 12 frames, tackle/jump/super untouched.
+     **Still to do: away.png and homcce.png have no block art** - those teams
+     block with the back-view run until the same 6 cells are drawn.
+     Row 4 (run south) is the next cheapest 6 cells if more space is ever needed.
+
+  2. **Animated supporter flags.** `assets/flags/<teamkey>.png`, 4x2 = 8 frames of
+     one wave on a pole; italy + germany shipped. Replaces the old banner, which
+     drew the **country emoji at 120px into a canvas** - the single most un-HD-2D
+     thing left in the stands. Falls back to that banner for any team without a
+     sheet (probed once, then cached), so the rest of the roster keeps working.
+
+     Same authoring drift as the ball sheet, and worse: the pole wandered 16px
+     sideways between frames and the **whole bottom row sat 32px higher in its
+     cell**, so a flag would have hopped halfway through every loop.
+     `sliceFlagSheet()` measures each frame's POLE (shaft centre + foot) from the
+     alpha, then re-anchors every frame on it into its own small canvas - one
+     shared scale so no wave clips. Verified: pole drift **3.7% x / 7.4% y of a
+     cell → 0.0000px**, all 8 frames fit, 0.82 MB of texture per team.
+     Each of the 20 flags gets its own phase and a 0.85-1.2x speed so they never
+     wave in lockstep (measured: all 8 frames on screen at once). Pole flags also
+     stand up straight - they take 30% of the stand's rake lean, where a draped
+     banner took all of it. `P3D.flagFps` (7) is the speed knob,
+     `P3D.flagState()` the probe.
+
+- **PART 2h · BLENDER STADIUM MERGED (Astra) - ✅ DONE 2026-09-12** (pitch3d v96
+  + new `ult11-stadium-classic.js`). Delivered from a parallel workstream, built
+  in Blender and handed over as a bowl-only GLB.
+
+  **It met the brief.** Checked against the GLB itself, not the docs: no pitch,
+  marking, goal or net geometry anywhere in it; `seats_home` / `seats_away` /
+  `seats_neutral` materials so team colours still drive the stands; zero
+  textures and no Principled BSDF, so it converts cleanly to Lambert under r128's
+  pre-colour-management lighting; stock r128 `GLTFLoader` off the CDN we already
+  pin, no build step; and 12 separable `front_NN` sectors for the camera-side
+  problem `bowl2` solves with OPEN_FRONT. It is authored around **70 x 44.87**,
+  which is exactly what `buildPitch` sets PWID to - so it lands at scale 1.0.
+
+  **MERGED, NOT COPIED - this matters.** The delivery was built from a checkout
+  at game.js v149 / pitch3d v89; live was v154 / v95. Dropping the folder in
+  would have reverted the duel-timer fix, the selected-player pace fix, the
+  kickoff circle, foul rates, the melina fix, the wing-defence slide, the pixel
+  ball, the block row and the animated flags. The delivery is also **CRLF**
+  where this project is LF. Astra's own handoff says to merge the hooks, and
+  diffing its delivery against its own pre-integration backup isolated them to
+  **37 lines in 8 hunks** - all ported by hand onto v95, JS re-normalised to LF.
+
+  **The one real conflict was the flags.** Astra's hook calls
+  `U11_CLASSIC.placeFlags(T,group,tex,...)`, which builds six planes off a single
+  static texture - that would have frozen the animated pole flags added hours
+  earlier (and passed `art` where a `tex` was expected, so they would have
+  rendered untextured). Ported the **placement maths only**; the meshes are still
+  built through `flagMesh()` so each flag keeps its own frame material and phase.
+  `U11_CLASSIC.placeFlags` is left in the module unused, so the file stays
+  byte-identical to Astra's and future drops re-sync cleanly.
+
+  **Default deliberately NOT changed, and it is a SETTING, not a picker.**
+  Astra set `classic-upgraded` as the default for everyone; the default here is
+  still `classic`. Astra's picker was not re-added - it wraps `startGame` with a
+  full-screen SELECT STADIUM interstitial before EVERY kickoff, which is the kind
+  of pacing tax this roadmap keeps removing. Instead the choice lives in
+  **main menu -> SETTINGS -> STADIUM** (CLASSIC / UPGRADED / OVAL), on the
+  existing `.ae-uisize` segmented control so it needed no new CSS. Set once,
+  change whenever. `window.setStadium(v)` writes `ue_stadium` - the same key
+  `ult11-pitch3d.js` reads at boot, deliberately NOT mirrored into
+  `ue_settings_v1`, so there is one source of truth - then calls
+  `P3D._rebuildBowl()`, so it also applies live from the pause menu's OPTIONS.
+
+  Verified by clicking the real buttons mid-match: classic -> `builtBowl=classic`
+  (20 flags), oval -> `oval` (20), upgraded -> `classic-upgraded` (12, the GLB
+  placement), each persisting to `ue_stadium` and re-highlighting correctly; then
+  set to OVAL, reloaded with NO url flag, and it booted into OVAL with OVAL shown
+  selected in Settings.
+
+  **Measured A/B at the kickoff view** (composer off so `renderer.info` is
+  meaningful): original CLASSIC **54 draw calls / 1,244 triangles**, upgraded
+  **25 calls / 132,706 triangles**. Draw calls roughly halve because the GLB is
+  merged by material; triangles go up ~107x. Calls are usually what bites first
+  on mobile, so the trade leans the right way - but this was a desktop measure
+  and **no phone GPU has seen it**. That is the open item before it becomes the
+  default. The bowl also has physical empty seats; no animated crowd.
+
+  Verified live: asset `ready`, bowl `classic-upgraded`, pitch [70, 44.87],
+  `seats_home` #1e72dc / `seats_away` #c22020, 12 sectors registered and 12/12
+  visible at kickoff (camera sits inside the bowl, so nothing needs opening),
+  and 12 animated flags still waving across 7 distinct frames. Switching to
+  `classic` and back rebuilds cleanly. A slow or missing GLB keeps the old
+  procedural bowl on screen rather than showing an empty stadium.
+  Probe: `P3D.stadiumState()`.
+
+- **PART 2i · FORMATION-AWARE AI ROLES (Astra) - ✅ DONE 2026-09-12**
+  (js v155 / pitch3d v97). Second delivery from the parallel workstream, merged
+  hunk by hunk - 22 of 23 taken, **1 deliberately refused**.
+
+  **What it fixes.** The AI decided a player's job from his ENGINE SLOT KEY
+  (`zo(k)`, `k==='ST'||k==='LW'||k==='RW'`, `k==='LB'||k==='RB'`), but slot keys
+  are fixed while formations relabel them. New `aiRole/aiZone/aiForward/
+  aiWideBack` read the active formation's own labels instead. Measured against
+  the real `FORMATIONS` table - **3 mis-zoned slots**:
+
+  | Formation | slot | labelled | was zoned | truth |
+  |---|---|---|---|---|
+  | 4-3-3 | - | - | - | clean, 0 mismatches |
+  | 4-4-2 | LW | RM | att | mid |
+  | 4-1-3-2 | LW | RAM | att | mid |
+  | **3-5-2** | **LW** | **RWB** | **att** | **def** |
+
+  The 3-5-2 case is the bad one: a **wing-back was treated as a forward** -
+  skipped by marking, skipped by outlet duty, and dropped entirely by the
+  `zone==='att'` early-returns in the defensive assignment. A whole defender not
+  defending. It never surfaced in playtests because the author plays 4-3-3,
+  which the table shows is a **provable no-op** - so nothing about today's
+  matches changes, and the win lands the moment another formation is used.
+  Verified live: in 3-5-2 `LW=RWB->def` and `RB=LWB->def`; 4-4-2 `LW=RM->mid`.
+
+  Also taken: `pl.spirit||maxSp` -> `pl.spirit!=null?pl.spirit:maxSp` (a spirit
+  of **0** fell back to FULL stamina, so a totally drained player ran at top
+  pace); the role cache key now includes both formations, so switching shape
+  re-picks roles instead of serving a stale set; a `_pressers` guard so only an
+  assigned presser abandons his marker; and a `wantsOutlet` guard on job
+  refresh. Striker `hold` was retuned too (lane lerp .5->.15, stays available
+  until the pass is released) - that one is FEEL tuning on top of measured work
+  and has **not** been A/B'd; it is a three-line revert if it reads worse.
+
+  `ult11-pitch3d.js`: chase-camera lag is now frame-rate independent
+  (`k=1-(1-lag)^(rdt*60)`). The flat per-frame lerp made the camera trail about
+  twice as far at 30fps as at 60.
+
+  **REFUSED - `aiTop`.** Astra removed the side-cap with the comment *"a
+  teammate's pace belongs to that player, not to the current selection"*.
+  Principled in isolation, and wrong here: it is exactly the regression the
+  author reported TWICE - *"the selected player still run way slower then any
+  non selected teamate, its literally impossible to chase and catch a cpu
+  carrier"*. It was measured at the time (team-mates over cap on 60% of frames,
+  worst 1.97x) and fixed with the side-cap plus `enforcePace`, which reads its
+  limit FROM `aiTop` - so taking that hunk would have silently un-fixed the
+  limiter as well. Kept ours. Astra could not have known; it works from a base
+  without that playtest history.
+
+  **Process, again:** the delivery was CRLF (project is LF) and its base had no
+  stadium merge, yet its `ult11-pitch3d.js` was ALSO labelled **v96** - a
+  straight version collision with a different file. Merged by opcode diff with
+  the one hunk filtered out, never by copying files. Verified after merge: side
+  cap present, stadium merge intact (9 `U11_CLASSIC` refs), all four role
+  helpers live, everything LF, and 12s of real CPU play (carry, CM2->CB1->LW
+  passes) with **zero console errors**.
+
+- **PART 2j · STAMINA ON THE MATCH CHIP - ✅ DONE 2026-09-13** (js v156).
+  Author: *"when you have player and you jump few time you dont see how much
+  stamina you consume, and you might end up not having any stamina cause you
+  didnt noticed."*
+
+  The carrier/chaser chips (`#bust-h` / `#bust-a`) now carry a **stamina bar
+  under the name plate - bar only, no number**, on the duel's exact colour ramp.
+  Jumping, blocking, tackling and sprinting all spend stamina and, until now,
+  NONE of them showed it anywhere in open play: the only readout was the duel
+  card, i.e. after the moment it mattered.
+
+  The ramp is defined once, in `staminaFill(pct)`, and both the duel card and
+  the match chip read it - so a colour cannot come to mean two different things
+  on two screens. 0% red -> 50% green -> 100% cyan. Chip layout is 230px =
+  200 portrait + 24 name plate + 6 bar; the 6px is ADDED to the wrapper, never
+  taken out of the portrait, because the image area has to stay a full 200px or
+  the chin clips. The bar fills from the same edge its name plate reads from, so
+  the away chip mirrors.
+
+  It is driven from `updBusts()` **before** the `_bustKey` early-return - that
+  guard only moves when the PLAYER on the chip changes, and stamina changes
+  constantly, so anything after it would have updated roughly never.
+
+  **Two real bugs found while wiring it, both the falsy-zero pattern:**
+  1. `if((pl.spirit||maxSp)<maxSp)` in the regen loop read a stamina of EXACTLY
+     0 as FULL, so the gate was false and **a player who bottomed out never
+     regenerated again for the rest of the match**. Now `spiritOf(pl)<maxSp`.
+  2. The duel card's `Math.round(pl.spirit||maxSp2)` did the same, so a man on
+     empty showed a **full cyan bar** - the display lying precisely when the
+     warning matters. Now `spiritOf(pl)`.
+  Same class as the `fat` fix taken from Astra in 2i; `spiritOf`/`spiritMax`
+  already existed and handled it correctly, they just were not used here.
+
+  Verified live with the sim held still: bar width tracked 100/75/50/30/15/0%
+  exactly, colours `rgb(15,194,230)` cyan -> `(15,230,97)` green ->
+  `(104,230,15)` -> `(230,219,15)` -> `(230,119,15)` -> `(230,15,15)` red,
+  matching the duel hue ramp (190/143/95/57/29/0) at every step. Zero-stamina
+  checks: old read 1500, new reads 0; old regen gate false, new true.
+
+  Note for testing: the chip only updates during `moving`/`pass_anim`, so it
+  freezes during a duel - that is existing behaviour, and it briefly looked like
+  a broken bar until the phase was checked.
+
 - **C.3 · Short pass** — distinct from the through pass: fast, low risk, low reward.
   Gives the player a real decision instead of one pass verb.
 - **C.4 · Cross → header** — needs ball height (z) in the 2.5D sim, an aerial contest,

@@ -1738,11 +1738,7 @@ function carrierAdvanceVector(side,cp){
   const carrier=sq(side)[G.ck];
   const bh=getBehaviorProfile(carrier);
   const stage=possessionStage(side,cp);
-  if(false){
-    // Manual target: go exactly where player clicked, no lane correction
-    tx=clamp(G_moveTarget.x,W*.01,W*.99);
-    ty=clamp(G_moveTarget.y,H*.03,H*.97);
-  }else{
+  {
     const defDist=nearestDefenderDistance(side,cp);
     const pressure=clamp(1-defDist/(W*(ENGINE_CONFIG.ai.pressureRadius)),0,1);
     const lanY=(side==='h'&&G_laneTarget!==null)?G_laneTarget:cp.y;
@@ -3233,7 +3229,7 @@ function startAnim(){
     if(G.phase==='duel' && typeof pvpDuelInput==='function') pvpDuelInput();
     if(G.phase==='moving')tick(dt);
     if(G.phase==='loose'&&!G._cineHold)tickLoose(dt);
-    if(G.phase==='pass_anim'&&!G._cineHold){tickBallTravel(dt);tickPassMotion(dt);}
+    if(G.phase==='pass_anim'&&!G._cineHold){tickBallTravel(dt);if(G.phase==='pass_anim')tickPassMotion(dt);}
     /* WATCHDOG — 50s was far too long to sit staring at a stuck overlay, and
        it only covered phase==='duel'. The reported symptom (menu stays open
        after LOSING a duel until the opponent shoots) is a resolution path
@@ -6123,7 +6119,8 @@ function tickBallTravel(dt=1){
    Triggered from deflections/rebounds (more triggers to follow).        */
 let looseBall=null;   // {vx,vy,t,bvz}
 function goLoose(x,y,vx,vy,touch){
-  ball.x=clamp(x,W*0.03,W*0.97); ball.y=clamp(y,H*0.03,H*0.97);
+  ball.x=x; ball.y=y; // preserve crossings so the next loose tick awards the restart
+  ballTravel.active=false;
   ball.tx=ball.x; ball.ty=ball.y; ball.bz=Math.max(ball.bz||0,4);
   // `touch` = side that last played it — decides throw-in / corner / goal kick.
   looseBall={vx:vx||0, vy:vy||0, t:0, bvz:BALLPHYS.loosePop*1.4, touch:touch||null};
@@ -6156,7 +6153,8 @@ function looseRestart(side,x,y,label,isGoalKick){
     Object.keys(sq(side)).forEach(kk=>{ if(!sq(side)[kk]||kk==='GK'||!PP[side][kk]||ocd(side,kk))return;
       const d=Math.hypot(PP[side][kk].x-x,PP[side][kk].y-y); if(d<bd){bd=d;best=kk;} });
     k=best||validOutfieldKeys(side).find(z=>!ocd(side,z))||'CM2';
-    px=x; py=y; if(PP[side][k]){PP[side][k].x=x;PP[side][k].y=y;}
+    px=clamp(x,W*FB.x0,W*FB.x1); py=clamp(y,H*FB.y0,H*FB.y1);
+    if(PP[side][k]){PP[side][k].x=px;PP[side][k].y=py;}
   }
   G.poss=side; G.ck=k; G.tP++; if(side==='h')G.hP++;
   ball.x=px; ball.y=py; ball.tx=px; ball.ty=py; ball.bz=0;
@@ -6170,10 +6168,10 @@ function tickLoose(dt){
   const lb=looseBall; if(!lb){ G.phase='moving'; return; }
   lb.t+=dt;
   // roll ball with friction
-  const fr=0.94, steps=Math.max(1,Math.round(dt));
-  for(let i=0;i<steps;i++){ ball.x+=lb.vx; ball.y+=lb.vy; lb.vx*=fr; lb.vy*=fr; }
+  const fr=Math.pow(.94,dt),travel=(1-fr)/(1-.94);
+  ball.x+=lb.vx*travel;ball.y+=lb.vy*travel;lb.vx*=fr;lb.vy*=fr;
   // ── out of play → throw-in / corner / goal kick ──
-  const outSide=(ball.y<=H*0.018||ball.y>=H*0.982), outByline=(ball.x<=W*0.012||ball.x>=W*0.988);
+  const outSide=(ball.y<=H*FB.y0||ball.y>=H*FB.y1), outByline=(ball.x<=W*FB.x0||ball.x>=W*FB.x1);
   if(outByline){
     const bx=(ball.x<=W*0.5)?0:W;
     const defOwner=(Math.abs(ownGoalXFor('h')-bx)<Math.abs(ownGoalXFor('a')-bx))?'h':'a';
@@ -6192,29 +6190,30 @@ function tickLoose(dt){
   }
   ball.tx=ball.x; ball.ty=ball.y;
   // vertical settle (little hop)
-  lb.bvz-=BALLPHYS.g; ball.bz=(ball.bz||0)+lb.bvz;
-  if(ball.bz<0){ ball.bz=0; lb.bvz=(-lb.bvz>BALLPHYS.minBounce)?-lb.bvz*BALLPHYS.rest:0; }
+  let verticalLeft=Math.max(0,dt);
+  while(verticalLeft>0){const h=Math.min(.25,verticalLeft);verticalLeft-=h;
+    ball.bz=(ball.bz||0)+lb.bvz*h-.5*BALLPHYS.g*h*h;lb.bvz-=BALLPHYS.g*h;
+    if(ball.bz<0){ball.bz=0;lb.bvz=(-lb.bvz>BALLPHYS.minBounce)?-lb.bvz*BALLPHYS.rest:0;}
+  }
   // nearest 2 outfielders per side chase the ball in real time
   const speed=MAX_DEF_STEP()*1.3*dt;
   const nearest={h:null,a:null}, nd={h:Infinity,a:Infinity};
   ['h','a'].forEach(side=>{
     const q=sq(side);
-    const cands=Object.keys(q).filter(k=>q[k]&&PP[side][k]&&k!=='GK'&&!ocd(side,k))
+    const cands=Object.keys(q).filter(k=>q[k]&&PP[side][k]&&k!=='GK'&&!ocd(side,k)&&!isStalled(side,k))
       .map(k=>({k,d:Math.hypot(PP[side][k].x-ball.x,PP[side][k].y-ball.y)}))
       .sort((a,b)=>a.d-b.d);
     cands.slice(0,2).forEach((c,idx)=>{
-      const p=PP[side][c.k], dx=ball.x-p.x, dy=ball.y-p.y, d=Math.hypot(dx,dy)||1, sp=speed*(idx?0.9:1);
-      p.x=clamp(p.x+(dx/d)*Math.min(sp,d),W*0.02,W*0.98);
-      p.y=clamp(p.y+(dy/d)*Math.min(sp,d),H*0.03,H*0.97);
+      const p=PP[side][c.k], dx=ball.x-p.x, dy=ball.y-p.y, d=Math.hypot(dx,dy)||1, sp=speed*(idx?0.9:1)*fieldSpdMult(q[c.k]);
+      p.x=clamp(p.x+(dx/d)*Math.min(sp,d),W*FB.x0,W*FB.x1);
+      p.y=clamp(p.y+(dy/d)*Math.min(sp,d),H*FB.y0,H*FB.y1);
     });
     if(cands[0]){ nearest[side]=cands[0].k; nd[side]=Math.hypot(PP[side][cands[0].k].x-ball.x,PP[side][cands[0].k].y-ball.y); }
   });
   // pickup
-  const PICK=CONTACT()*1.5;
-  if(nd.h<PICK||nd.a<PICK){ _assignLoose(nd.h<=nd.a?'h':'a', nd.h<=nd.a?nearest.h:nearest.a); return; }
-  // failsafe: ball stopped and nobody arrived, or been loose too long → nearest gets it
-  const stalled=(lb.vx*lb.vx+lb.vy*lb.vy)<0.03;
-  if((stalled&&lb.t>12)||lb.t>260){ _assignLoose(nd.h<=nd.a?'h':'a', nd.h<=nd.a?nearest.h:nearest.a); }
+  const PICK=W*.010;
+  if((ball.bz||0)<3&&(nd.h<PICK||nd.a<PICK)){ _assignLoose(nd.h<=nd.a?'h':'a', nd.h<=nd.a?nearest.h:nearest.a); return; }
+  // A stopped ball stays free until someone physically reaches it.
 }
 function iPas(tk){afPass(G.poss,tk);}
 
