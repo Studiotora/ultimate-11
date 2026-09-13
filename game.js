@@ -562,6 +562,26 @@ function formationCoordsFor(side,key){
 }
 function fp(k,s,h){let p={...(formationCoordsFor(s==='home'?'h':'a',k)||BF[k])};if(s==='away'){p.x=1-p.x;p.y=1-p.y;}if(h===2){p.x=1-p.x;}return{x:Math.max(.03,Math.min(.97,p.x)),y:Math.max(.04,Math.min(.96,p.y))};}
 function zo(k){return(POS.find(p=>p.k===k)||{z:'mid'}).z;}
+// Engine slots stay fixed across formations; tactical roles follow their labels.
+function aiRole(side,k){
+  const name=side==='h'?activeHomeFormation:activeAwayFormation;
+  const fm=FORMATIONS[name]||FORMATIONS['4-3-3'];
+  const label=(fm.labels&&fm.labels[k])||k;
+  if(k==='GK') return 'keeper';
+  if(/^(L?CB|RCB)$/.test(label)) return 'centreback';
+  if(/^[LR]WB$/.test(label)) return 'wingback';
+  if(/^[LR]B$/.test(label)) return 'fullback';
+  if(/^ST/.test(label)) return 'striker';
+  if(/^[LR]W$/.test(label)) return 'winger';
+  if(label==='DM') return 'holding';
+  return 'midfield';
+}
+function aiZone(side,k){
+  const r=aiRole(side,k);
+  return r==='keeper'?'gk':r==='centreback'||r==='fullback'||r==='wingback'?'def':r==='striker'||r==='winger'?'att':'mid';
+}
+function aiForward(side,k){const r=aiRole(side,k);return r==='striker'||r==='winger';}
+function aiWideBack(side,k){const r=aiRole(side,k);return r==='fullback'||r==='wingback';}
 function pf(n){return n.split('.')[0]||n.slice(0,2);}
 function rl(r){return['R','SR','SSR'][r||0];}
 function rc(r){return['#5a9898','#c8a018','#e03818'][r||0];}
@@ -1244,18 +1264,18 @@ const CONTACT=()=>W*.014;
    (~38px, between the old ~51px and CONTACT). The DELIBERATE human tackle still
    uses CONTACT() (see startLunge/stepLunge), so committing early is unchanged. */
 const ENGAGE=()=>W*.030;
-const MAX_CARRIER_STEP=()=>Math.max(0.22,W*.00038); // carrier — bigger-pitch pacing
-const MAX_DEF_STEP=()=>Math.max(0.30,W*.00058);     // engager — slightly faster than carrier
+const MAX_CARRIER_STEP=()=>Math.max(0.275,W*.000475); // carrier — bigger-pitch pacing
+const MAX_DEF_STEP=()=>Math.max(0.39,W*.000754);     // engager — slightly faster than carrier
 const MAX_OFFBALL_STEP=()=>Math.max(0.26,W*.00058);  // off-ball
 // Stat-aware field speed: SPD stat scales pace, low stamina slows everyone
 function fieldSpdMult(pl){
   if(!pl)return 1.0;
   // Centred so an average 72-SPD player sits at ~1.0; a 94 flyer reaches
-  // ~1.32 and a 55 centre-back ~0.75 — a ~75% spread, wide enough that pace
-  // is a genuine weapon without making the base game feel slow.
-  const base=clamp(1.0+(gs(pl,'spd')-72)*0.0145,0.75,1.35);
+  // ~1.20 and a 55 centre-back ~0.85: pace still matters, while
+  // a sprinting defender can recover against a quicker carrier.
+  const base=clamp(1.0+(gs(pl,'spd')-72)*0.009,0.84,1.22);
   const maxSp=pl.pos==='GK'?2000:1500;
-  const fat=clamp(0.88+((pl.spirit||maxSp)/maxSp)*0.12,0.88,1.0);
+  const fat=clamp(0.88+((pl.spirit!=null?pl.spirit:maxSp)/maxSp)*0.12,0.88,1.0);
   const stunM=(pl._slowUntil&&Date.now()<pl._slowUntil)?(pl._slowMult||0.6):1;   // stunned/slowed
   return base*fat*stunM;
 }
@@ -1367,11 +1387,12 @@ function moveMomentum(cur,ph,tx,ty,maxStep,pl,dt=1,accel,turnPen){
   const spd=Math.hypot(ph.vx,ph.vy);
   const turning=(spd>0.01&&dot<0)?(turnPen||AI_REAL.turnPenalty):1;
   const rate=(Math.hypot(desiredX,desiredY)>spd?(accel||AI_REAL.accel):AI_REAL.decel)*turning;
-  ph.vx+=(desiredX-ph.vx)*rate*dt;
-  ph.vy+=(desiredY-ph.vy)*rate*dt;
+  const blend=1-Math.pow(1-clamp(rate,0,1),dt);
+  ph.vx+=(desiredX-ph.vx)*blend;
+  ph.vy+=(desiredY-ph.vy)*blend;
   // never overshoot the target in one frame
   const vlen=Math.hypot(ph.vx,ph.vy);
-  if(vlen>d){ const sc=d/vlen; ph.vx*=sc; ph.vy*=sc; }
+  if(vlen*dt>d){ const sc=d/(vlen*dt); ph.vx*=sc; ph.vy*=sc; }
   cur.x+=ph.vx*dt; cur.y+=ph.vy*dt;
 }
 
@@ -1595,7 +1616,7 @@ function roleScoreDefender(side,key,cp,type){
   const d=dist(p,cp);
   const centralBias=1-Math.abs(p.y/H-.5);
   const shotDanger=1-Math.abs(cp.y/H-.5);
-  const z=zo(key);
+  const z=aiZone(side,key);
   // ENGAGER: the player who actually goes for the duel. Distance dominates
   // (closest player engages). Forwards are heavily penalized so they don't
   // get dragged back into our own box. Mids and defenders preferred.
@@ -1709,7 +1730,7 @@ function carrierAdvanceVector(side,cp){
       // slow CPU AI step. Boost ~3.2× so full joystick = brisk run.
       const max=MAX_CARRIER_STEP()*3.2;
       const nx=ix/Math.max(mag,1), ny=iy/Math.max(mag,1);
-      return {x:nx*max*Math.min(mag,1), y:ny*max*Math.min(mag,1)};
+      return {x:nx*max, y:ny*max};
     }
     return {x:0, y:0};
   }
@@ -1808,8 +1829,8 @@ function tick(dt=1){
     // was 2.25 (human) — combined with the 1.2 sprint and up to 1.35 pace it
     // made the carrier ~2x faster than ANY defender, so nobody could ever be
     // caught. Now pace difference decides the footrace, not a blanket boost.
-    let capMult=(s==='h')?1.82:(AI2.on?1.50:1.58);   // v2: a chasing defender can actually run him down
-    if(_sprintForSide(s))capMult*=1.20; // sprint held (per side in PvP)
+    let capMult=!isCpuSide(s)?1.82:(AI2.on?1.75:1.58);   // v2: a chasing defender can actually run him down
+    if(_sprintForSide(s))capMult*=1.32; // sprint held (per side in PvP)
     const cap=MAX_CARRIER_STEP()*capMult*carrMult*dt;
     const step=Math.min(mvMag*dt,cap);
     cp.x=clamp(cp.x+(mv.x/mvMag)*step,W*.07,W*.93);
@@ -1824,7 +1845,7 @@ function tick(dt=1){
     const carrier2=sq(s)[G.ck];
     if(carrier2&&carrier2.pos!=='GK'){
       const engClose=ROLES.engager&&PP[ds][ROLES.engager]&&dist(cp,PP[ds][ROLES.engager])<IR()*2.2;
-      carrier2.spirit=Math.max(0,(carrier2.spirit||1500)-((engClose?0.55:0.18)+((_sprintForSide(G.poss))?0.4:0))*dt);
+      carrier2.spirit=Math.max(0,spiritOf(carrier2)-((engClose?0.55:0.18)+((_sprintForSide(G.poss))?0.4:0))*dt);
     }
     ['h','a'].forEach(side=>{
       Object.entries(sq(side)).forEach(([k,pl])=>{
@@ -1834,7 +1855,9 @@ function tick(dt=1){
         const maxSp=isGK?2000:1500;
         // GKs regen slightly slower than outfield players (heavier kit, less running)
         const regen=isGK?0.10:0.12;
-        if((pl.spirit||maxSp)<maxSp) pl.spirit=Math.min(maxSp,(pl.spirit||0)+regen*dt);
+        // (pl.spirit||maxSp) read a spirit of EXACTLY 0 as full, so a player
+        // who bottomed out was frozen at 0 for the rest of the match.
+        if(spiritOf(pl)<maxSp) pl.spirit=Math.min(maxSp,spiritOf(pl)+regen*dt);
       });
     });
   }
@@ -1942,7 +1965,7 @@ function tick(dt=1){
            of direction actually beat him. */
         const _engPl0=sq(ds)[ROLES.engager];
         const _ph=physOf(ds,ROLES.engager,_engPl0);
-        const lead=anticipationFor(_engPl0);
+        const lead=Math.min(anticipationFor(_engPl0),Math.hypot(cp.x-dp2.x,cp.y-dp2.y)*0.35);
         const _carV=_manualInputForSide(G.poss);
         const _lx=_carV?_carV.x:dirFor(G.poss);
         const _ly=_carV?_carV.y:0;
@@ -1957,7 +1980,7 @@ function tick(dt=1){
       const cpuPress=ds==='a'&&teamStance('a')>0.55; // trailing CPU presses on its own
       const pressMult=((G.pressing&&ds==='h')||cpuPress)?1.5:1.0;
       const engPl=sq(ds)[ROLES.engager];
-      if(engPl && _sprintForSide(ds)) engPl.spirit=Math.max(0,(engPl.spirit||1500)-0.5*dt); // sprint costs stamina on defense too
+      if(engPl && _sprintForSide(ds)) engPl.spirit=Math.max(0,spiritOf(engPl)-0.5*dt); // sprint costs stamina on defense too
       const sprintMult=(_sprintForSide(ds))?1.34:1.30; // AI commits to the chase
       const manualMult=manualDef?1.3:1.0;
       // A committed lunge → skip normal chase steering, but DON'T return: flow
@@ -1966,7 +1989,7 @@ function tick(dt=1){
         let step=MAX_DEF_STEP()*pressMult*sprintMult*manualMult*fieldSpdMult(engPl)*recoveryMult(ds,ROLES.engager,dp2)*dt;
         if(AI2.on){
           /* The man on the stick runs at the defenders' top pace, the sprint
-             button adds a real 12%, and no multiplier stack (press x recovery)
+             button adds a real 38%, and no multiplier stack (press x recovery)
              can push an AI chaser past that top. */
           const _top=DEF_TOP()*fieldSpdMult(engPl);
           step=(manualDef ? _top*(_sprintForSide(ds)?AI2.humanSprint:1)
@@ -1976,7 +1999,7 @@ function tick(dt=1){
         // momentum: steer velocity toward the chase direction rather than
         // teleporting along it, so acceleration and turning both cost time
         const _ephy=physOf(ds,ROLES.engager,engPl);
-        moveMomentum(dp2,_ephy,dp2.x+ux*step*8,dp2.y+uy*step*8,step,engPl,dt,
+        moveMomentum(dp2,_ephy,dp2.x+ux*step*8,dp2.y+uy*step*8,step/Math.max(dt,0.001),engPl,dt,
                      (AI2.on&&manualDef)?AI2.accelManual:0,(AI2.on&&manualDef)?AI2.turnManual:0);
         dp2.x=clamp(dp2.x,W*.01,W*.99);
         dp2.y=clamp(dp2.y,H*.03,H*.97);
@@ -2091,13 +2114,13 @@ function moveOffBall(s,ds,dt=1){ return AI2.on ? moveOffBallV2(s,ds,dt) : moveOf
 const AI2={
   on:true,
   mateCap:0.95,               // AI players top out at 95% of a sprinting defender (same pace stat)
-  humanSprint:1.20,           // sprint button on the man you steer (v1: 1.34 vs 1.30 = +3%)
-  accelManual:0.26, turnManual:0.80,   // the man on the stick answers faster than the AI's 0.16 / 0.55
+  humanSprint:1.38,           // 38% burst on the man you steer
+  accelManual:0.38, turnManual:0.90,   // the man on the stick answers faster than the AI's 0.16 / 0.55
   /* gait: [fraction of top pace ON the spot, fraction once farK*W or more away].
      Far from where he should be he runs, close to it he eases in. */
   gait:{ shape:[0.18,0.62], jog:[0.22,0.60], support:[0.30,0.80], run:[0.55,1.0], track:[0.40,0.88], press:[0.55,1.0] },
-  farK:0.12,                  // ~154 units out of position to reach the gait's upper speed
-  easeIn:0.035,               // ease into the spot over the last ~45 units
+  farK:0.09,                  // ~154 units out of position to reach the gait's upper speed
+  easeIn:0.025,               // ease into the spot over the last ~45 units
   feedForward:1.0,            // follow a spot that slides with the ball instead of chasing it
   ff:{ shape:1.0, jog:1.0, support:1.0, run:0.9, track:0.6, press:0.8 },   // markers follow, they do not mirror
   ring:[0.10,0.17],           // support ring around the carrier, fraction of W (~128-218 units)
@@ -2113,19 +2136,13 @@ const AI2={
   closeBH:2.6, midBH:5.0,     // "under pressure" = a defender within 2.6 body heights
   escapePass:[0.12,0.45],     // chance to pass out of a telegraphed tackle (poor .. elite passer)
   repelDist:0.075, repelForce:0.8, repelCap:0.35,  // team-mate spacing guard (v1: 0.085 / 1.4 / uncapped)
-  defReactExtra:90,           // defenders re-read the play ~90ms later than attackers
+  defReactExtra:25,           // defenders re-read the play ~90ms later than attackers
   passMid:0.14, passFree:0.045   // per "head-up" beat (every 250-420ms): chance to look for a pass
 };
 function DEF_TOP(){ return MAX_DEF_STEP()*1.69; }            // the human's manual chase (1.30 x 1.3)
 function aiTop(pl,side){
-  let t=DEF_TOP()*AI2.mateCap*fieldSpdMult(pl);
-  /* On the side you are defending with, nobody outruns the man you steer -
-     not even a quicker team-mate. Capped against HIS pace, not their own. */
-  if(side&&side!==G.poss&&!isCpuSide(side)){
-    const sel=G.chk&&sq(side)&&sq(side)[G.chk];
-    if(sel) t=Math.min(t,DEF_TOP()*AI2.mateCap*fieldSpdMult(sel));
-  }
-  return t;
+  // A teammate's pace belongs to that player, not to the current selection.
+  return DEF_TOP()*AI2.mateCap*fieldSpdMult(pl);
 }
 function _passQ(pl){ return clamp((((gs(pl,'pas')||60)+(gs(pl,'tec')||60))/2-50)/45,0,1); }
 function cpuTouchMs(pl){ const q=_passQ(pl); return AI2.touchMs[1]-(AI2.touchMs[1]-AI2.touchMs[0])*q; }
@@ -2147,7 +2164,7 @@ function bestEngager(ds,tx,ty,vx,vy,exclude){
   validOutfieldKeys(ds).forEach(k=>{
     if(k===exclude||ocd(ds,k)) return;
     let t=defenderETA(ds,k,tx,ty,vx,vy);
-    if(isCpuSide(ds)&&zo(k)==='att') t*=1.25;                   // CPU forwards stay up unless clearly nearest
+    if(isCpuSide(ds)&&aiZone(ds,k)==='att') t*=1.25;                   // CPU forwards stay up unless clearly nearest
     if(t<bestT){ bestT=t; best=k; }
   });
   return {k:best,t:bestT};
@@ -2251,7 +2268,7 @@ function passFlightBegin(s,ds){
   // the attacker nearest the landing spot is the one coming to meet it
   let rk=null,rd=1e9;
   validOutfieldKeys(s).forEach(k=>{ if(k===G.ck)return; const d=Math.hypot(PP[s][k].x-b.tx,PP[s][k].y-b.ty); if(d<rd){rd=d;rk=k;} });
-  G._pfRecv=rk;
+  G._pfRecv=b.physicalPass?b.receiver:rk;
   // and the defender who gets to it first takes the chase - and the stick
   const human=!isCpuSide(ds);
   if(human&&Date.now()<(G._switchLockUntil||0)) return;
@@ -2284,7 +2301,7 @@ function passFlightChaser(s,ds,dt){
     step=Math.min(MAX_DEF_STEP()*1.30*fieldSpdMult(pl)*recoveryMult(ds,k,dp), top)*dt;
     if(d<step*3) step=d/3;
   }
-  moveMomentum(dp,physOf(ds,k,pl),dp.x+ux*step*8,dp.y+uy*step*8,step,pl,1,
+  moveMomentum(dp,physOf(ds,k,pl),dp.x+ux*step*8,dp.y+uy*step*8,step/Math.max(dt,0.001),pl,dt,
                manual?AI2.accelManual:0,manual?AI2.turnManual:0);
 }
 
@@ -2327,7 +2344,7 @@ function aiMoveTo(cur,tx,ty,gait,pl,side,key,dt){
   let sp=Math.hypot(vx,vy);
   if(sp>top){ vx*=top/sp; vy*=top/sp; sp=top; }
   if(sp<0.02){ ph.vx*=(1-AI_REAL.decel); ph.vy*=(1-AI_REAL.decel); cur.x+=ph.vx*dt; cur.y+=ph.vy*dt; return; }
-  moveMomentum(cur,ph,cur.x+vx*8,cur.y+vy*8,sp*dt,pl,1);
+  moveMomentum(cur,ph,cur.x+vx*8,cur.y+vy*8,sp,pl,dt);
 }
 
 /* x the attacking side must stay behind: the second-last outfield defender
@@ -2347,17 +2364,17 @@ function offsideLineX(s,cp){
    That per-player rhythm is what the v1 shape never had. */
 const _aiJob={}; let _aiJobKey=null;
 function _aiJobsReset(s){
-  const key=s+':'+G.goalGen+':'+G.half;
-  if(_aiJobKey!==key){ for(const id in _aiJob) delete _aiJob[id]; _aiJobKey=key; G._supp=null; }
+  const key=s+':'+G.goalGen+':'+G.half+':'+activeHomeFormation+':'+activeAwayFormation;
+  if(_aiJobKey!==key){ for(const id in _aiJob) delete _aiJob[id]; _aiJobKey=key; G._supp=null; G._outlet=null; G._noOutlet=0; }
 }
 /* The two players offering the short options: nearest non-forwards, one each
    side of the ball where possible. Kept ~0.9s so the jobs do not flicker. */
 function supportersFor(s,cp,keys,prog){
   const now=Date.now(), S=G._supp;
   if(S&&S.ck===G.ck&&now<S.until&&S.keys.every(k=>keys.includes(k)&&!ocd(s,k))) return S.set;
-  const cand=keys.filter(k=>{ const z=zo(k); if(ocd(s,k)) return false;
-    if(k==='ST'||k==='LW'||k==='RW') return false;
-    if(z==='def'&&(k.indexOf('CB')===0)&&prog>0.45) return false;   // centre-backs stay home past halfway
+  const cand=keys.filter(k=>{ const z=aiZone(s,k); if(ocd(s,k)) return false;
+    if(aiForward(s,k)) return false;
+    if(aiRole(s,k)==='centreback'&&prog>0.45) return false;   // centre-backs stay home past halfway
     return true; });
   cand.sort((a,b)=>dist(PP[s][a],cp)-dist(PP[s][b],cp));
   const pick=[]; let above=null, below=null;
@@ -2383,7 +2400,7 @@ function outletsFor(s,cp,keys,ctx){
   /* MIDFIELD shows for the ball - the forwards stay high. Sending the two most
      advanced men (i.e. the strikers) to fetch it emptied the space ahead:
      measured forward options 0.45 against the old AI's 0.84. */
-  const cand=keys.filter(k=>!ocd(s,k)&&k!=='ST'&&k!=='LW'&&k!=='RW')
+  const cand=keys.filter(k=>!ocd(s,k)&&!aiForward(s,k)&&aiRole(s,k)!=='centreback')
     .sort((a,b)=>dist(PP[s][a],cp)-dist(PP[s][b],cp))
     .slice(0,2);
   const set=new Set(cand);
@@ -2416,7 +2433,7 @@ function pickSupportSpot(s,k,cp,ctx){
      already up the pitch now offers a forward-diagonal angle; the deeper one
      stays as the safe ball. */
   const aheadSup=(cur.x-cp.x)*dir>0;
-  const angs=zo(k)==='def'?[95,120,145]:(aheadSup?[25,45,70,95]:[70,95,120,145]);
+  const angs=aiZone(s,k)==='def'?[95,120,145]:(aheadSup?[25,45,70,95]:[70,95,120,145]);
   let best=null,bs=-1e9;
   for(const aDeg of angs) for(const R of [R0,(R0+R1)/2,R1]){
     const a=aDeg*Math.PI/180;
@@ -2461,18 +2478,18 @@ function pickOpenSpot(s,k,cp,ctx){
 function decideAttackJob(s,k,cp,ctx){
   const now=Date.now(), dur=(a,b)=>now+a+Math.random()*(b-a);
   const cur=PP[s][k], p=ctx.fpos(k);
-  const isFwd=(k==='ST'||k==='LW'||k==='RW'), isFB=(k==='LB'||k==='RB');
+  const isFwd=aiForward(s,k), isFB=aiWideBack(s,k), striker=aiRole(s,k)==='striker';
   if(ctx.outlet&&ctx.outlet.has(k)) return {kind:'getopen',until:dur(450,800),spot:pickOpenSpot(s,k,cp,ctx)};
   if(ctx.supp.has(k)) return {kind:'support',until:dur(700,1200),ck:G.ck,off:pickSupportSpot(s,k,cp,ctx)};
   if(isFwd){
     const tight=_nearDef(ctx,cur.x,cur.y)<W*AI2.tightMark;
     if(tight&&Math.random()<0.6) return {kind:'check',until:dur(650,1000)};
     if(ctx.prog>0.30&&Math.random()<(ctx.prog>0.45?AI2.runChance+0.15:AI2.runChance)){
-      const laneY=k==='ST' ? lerp(p.y*H,H*0.5,0.5)+(Math.random()-0.5)*H*0.16
+      const laneY=striker ? lerp(p.y*H,H*0.5,0.15)+(Math.random()-0.5)*H*0.16
                            : lerp(p.y*H,H*0.5,0.15);            // wingers attack the channel, not the middle
       return {kind:'run',until:dur(1700,2600),hold:dur(350,900),lane:laneY,lead:W*(0.03+Math.random()*0.04)};
     }
-    return {kind:k==='ST'?'hold':'width',until:dur(900,1500)};
+    return {kind:striker?'hold':'width',until:dur(900,1500)};
   }
   if(isFB&&ctx.prog>0.45){
     const sameSide=(p.y<0.5)?(cp.y<H*0.45):(cp.y>H*0.55);   // ball on his flank
@@ -2489,8 +2506,8 @@ function attackTarget(s,k,cp,j,ctx){
     case 'check': { const dx=cur.x-cp.x, dy=cur.y-cp.y, d=Math.hypot(dx,dy)||1, R=W*0.075;
       tx=cp.x+dx/d*R; ty=cp.y+dy/d*R; gait='run'; break; }
     case 'run': { const holding=now<j.hold; ty=j.lane;
-      tx=holding?ctx.line-dir*W*0.03:ctx.line+dir*j.lead;
-      gait=holding?'jog':'run'; free=!holding; break; }
+      tx=ctx.line-dir*W*(holding?0.03:0.008);
+      gait=holding?'jog':'run'; free=false; /* stay available until the pass is released */ break; }
     case 'hold': {
       /* In the POCKET between their midfield and their back line, in the widest
          channel - not on the last defender's shoulder, where every lane into him
@@ -2507,15 +2524,15 @@ function attackTarget(s,k,cp,j,ctx){
     case 'width': tx=cp.x+dir*W*(ctx.prog<0.4?0.05:0.12); ty=(p.y<0.5)?H*0.07:H*0.93; gait='support'; break;
     case 'overlap': tx=cp.x+dir*W*0.10; ty=(cp.y<H/2)?H*0.08:H*0.92; gait='run'; break;
     default: {
-      const z=zo(k);
+      const z=aiZone(s,k);
       if(z==='def'){
         const lineProg=clamp(ctx.prog-0.26+ctx.stA*0.06,0.165,0.50)+(ctx.atkDefOff[k]||0);
         tx=(dir>0?lineProg:1-lineProg)*W;
         const cap=dir>0?W*(0.48+ctx.stA*0.07):W*(0.52-ctx.stA*0.07);
         tx=dir>0?Math.min(tx,cap):Math.max(tx,cap);
         ty=lerp(p.y*H,cp.y,0.06);                          // in possession the back line stays wide
-        if(k==='LB'||k==='RB') ty=(p.y<0.5)?Math.min(ty,H*0.14):Math.max(ty,H*0.86);
-      } else if(k==='CM1'){
+        if(aiWideBack(s,k)) ty=(p.y<0.5)?Math.min(ty,H*0.14):Math.max(ty,H*0.86);
+      } else if(aiRole(s,k)==='holding'){
         tx=cp.x-dir*W*0.10; ty=lerp(p.y*H,H*0.5,0.15); gait='jog';
       } else if(z==='mid'){
         const bp=clamp(ctx.prog-0.08,0.30,0.70);
@@ -2539,7 +2556,7 @@ function moveOffBallV2(s,ds,dt=1){
   _aiJobsReset(s);
   const fpos=(side)=>(k)=>fp(k,side==='h'?'home':'away',G.half);
   const stagger=(side,dsign)=>{ const out={}; try{
-      const ks=validOutfieldKeys(side).filter(k=>zo(k)==='def'); if(!ks.length) return out;
+      const ks=validOutfieldKeys(side).filter(k=>aiZone(side,k)==='def'); if(!ks.length) return out;
       let sum=0; const raw={}; ks.forEach(k=>{ const q=fp(k,side==='h'?'home':'away',G.half); raw[k]=q.x; sum+=q.x; });
       const mean=sum/ks.length; ks.forEach(k=>{ out[k]=clamp((raw[k]-mean)*(dsign>0?1:-1),-0.075,0.075); });
     }catch(e){} return out; };
@@ -2569,7 +2586,7 @@ function moveOffBallV2(s,ds,dt=1){
     const id=s+':'+k, now=Date.now();
     let j=_aiJob[id];
     const wantsOutlet=!!(ctx.outlet&&ctx.outlet.has(k));
-    if(!j||now>=j.until||(j.kind==='support'&&j.ck!==G.ck)||(j.kind==='support')!==ctx.supp.has(k)
+    if(!j||now>=j.until||(j.kind==='support'&&j.ck!==G.ck)||(!wantsOutlet&&(j.kind==='support')!==ctx.supp.has(k))
        ||(j.kind==='getopen')!==wantsOutlet){                    // being asked to show for the ball re-thinks at once
       j=_aiJob[id]=decideAttackJob(s,k,cp,ctx);
       if(j.kind==='support') ctx.claims.push({k,x:cp.x+j.off.x,y:cp.y+j.off.y});
@@ -2582,7 +2599,7 @@ function moveOffBallV2(s,ds,dt=1){
   const humanDef=!isCpuSide(ds);
   const attPosOwnFrame=1-carrierProg;
   const lineGap=0.13*(1-carrierProg*0.55);
-  const defLineProg=clamp(attPosOwnFrame+lineGap-bunker*0.05+dchase*0.05,0.155,0.62);
+  const defLineProg=clamp(attPosOwnFrame-lineGap-bunker*0.05+dchase*0.05,0.155,0.62);
   const _defOff=stagger(ds,ddir);
   const dfp=fpos(ds);
   const assignedDefs=new Set([ROLES.engager,ROLES.cover,ROLES.blocker]);
@@ -2597,7 +2614,7 @@ function moveOffBallV2(s,ds,dt=1){
     const cands=[];
     Object.keys(sq(ds)).forEach(k=>{
       if(!sq(ds)[k]||k==='GK'||assignedDefs.has(k)||ocd(ds,k)||!PP[ds][k]) return;
-      if(zo(k)==='att') return;
+      if(aiZone(ds,k)==='att') return;
       cands.push({k,d:dist(PP[ds][k],cp)});
     });
     cands.sort((a,b)=>a.d-b.d);
@@ -2609,7 +2626,7 @@ function moveOffBallV2(s,ds,dt=1){
     const MARK_RANGE=W*0.34;
     Object.keys(sq(ds)).forEach(k=>{
       if(!sq(ds)[k]||assignedDefs.has(k)||k==='GK'||!PP[ds][k]) return;
-      if(zo(k)==='att') return;
+      if(aiZone(ds,k)==='att') return;
       freeAtk.forEach(ak=>{ if(PP[s][ak]) pairs.push({k,ak,d:dist(PP[ds][k],PP[s][ak])}); });
     });
     /* MOST DANGEROUS MAN FIRST, nearest free defender to him. Closest-pair-first
@@ -2670,7 +2687,7 @@ function moveOffBallV2(s,ds,dt=1){
       const tgt=PP[s][markerMap[k]];
       if(tgt){
         const distToCarrier=Math.hypot(cur.x-cp.x,cur.y-cp.y), distToMarker=Math.hypot(cur.x-tgt.x,cur.y-tgt.y);
-        if(carrierProg>0.55&&distToCarrier<distToMarker*1.15){
+        if(_pressers.has(k)&&carrierProg>0.55&&distToCarrier<distToMarker*1.15){
           let tx=lerp(cp.x+dir*W*0.03,dgx,0.15);
           const fX=(ddir>0?0.135:1-0.135)*W; tx=ddir>0?Math.max(tx,fX):Math.min(tx,fX);
           aiMoveTo(cur,tx,lerp(cp.y,H*0.5,0.10),'press',pl,ds,k,dt);
@@ -2698,7 +2715,7 @@ function moveOffBallV2(s,ds,dt=1){
       } else aiMoveTo(cur,lerp(cp.x,dgx,0.10),lerp(cp.y,H*0.5,0.05),'press',pl,ds,k,dt);
       return;
     }
-    const zone=zo(k);
+    const zone=aiZone(ds,k);
     let tx=p.x*W, ty=p.y*H;
     /* 3.6 of 9 outfielders were goal-side of the ball while defending - the
        rest were stranded upfield. A man the ball has gone past now runs back
@@ -2713,10 +2730,10 @@ function moveOffBallV2(s,ds,dt=1){
       const myProg=defLineProg+(_defOff[k]||0);
       tx=(ddir>0?myProg:1-myProg)*W;
       ty=defShiftY(p.y*H,cp.y,DEF_SHIFT.line);            // the back line slides across with the ball
-      if(ROLES.engager&&zo(ROLES.engager)==='def'){ const ep=dfp(ROLES.engager); ty=lerp(ty,ep.y*H,0.25); }
+      if(ROLES.engager&&aiZone(ds,ROLES.engager)==='def'){ const ep=dfp(ROLES.engager); ty=lerp(ty,ep.y*H,0.25); }
       const cap=ddir>0?W*0.48:W*0.52; tx=ddir>0?Math.min(tx,cap):Math.max(tx,cap);
     } else if(zone==='mid'){
-      const lp=clamp(carrierProg-0.05-bunker*0.08,defLineProg+0.06,defLineProg+0.26);
+      const lp=clamp(attPosOwnFrame-0.03-bunker*0.08,defLineProg+0.06,defLineProg+0.23);
       tx=(ddir>0?lp:1-lp)*W; ty=defShiftY(p.y*H,cp.y,DEF_SHIFT.mid);
     } else {
       tx=(carrierProg<0.35)?(ddir>0?0.35:0.65)*W:p.x*W;
@@ -4391,12 +4408,12 @@ function actShoot(){        // X/□ · E    — shoot / tackle
 }
 function actCross(){        // B/○ · R    — cross / slide tackle
   if(G.awaitKickoff==='h'){doKickoff();return;}
-  if(G.poss==='h'){ if(G.phase==='moving') directionalPass(); else togglePassMode(); }
+  if(G.poss==='h'){ if(G.phase==='moving') directionalPass('cross'); }
   else startLunge('h','tackle');
 }
 function actPass(){         // Y/△ · Q    — short pass / contain
   if(G.awaitKickoff==='h'){doKickoff();return;}
-  if(G.poss==='h') togglePassMode();
+  if(G.poss==='h') directionalPass('ground');
   // defending: contain is Phase C work — no-op rather than a wrong action
 }
 function actSwitch(){       // LB/L1 · F  — switch player (defence only)
@@ -5064,7 +5081,7 @@ function togglePassMode(){ if(G.poss!=='h'||G.phase!=='moving'||!G.ck) return; G
 // □ in open play: pass to the teammate that best lines up with the way
 // you're aiming the stick/d-pad (G_inputVec) — true angle, not just L/R.
 // Neutral stick → pass forward (toward the attacking goal).
-function directionalPass(){
+function directionalPass(kind='ground'){
   if(G.phase!=='moving'||!G.ck)return;
   const s=G.poss, sq2=sq(s);
   const cp=PP[s][G.ck];if(!cp)return;
@@ -5082,18 +5099,20 @@ function directionalPass(){
     dx/=d; dy/=d;
     const align=dx*ax+dy*ay;                    // -1..1: how well they sit in the aim direction
     if(align<0.25)continue;                      // outside ~75° cone — not "that way"
-    const distPen=Math.abs(d-W*0.20)/(W*0.22);   // favour sensible pass range
+    const distPen=Math.abs(d-W*(kind==='cross'?.34:.13))/(W*.18);   // favour sensible pass range
     let score=align*3.0 - distPen*0.5;
     if(isOffside(s,k))score-=5;
     if(score>bestScore){bestScore=score;best=k;}
   }
-  if(!best) best=bestTeammateFor(s,G.ck,'pass'); // nobody in the cone → engine's best option
-  if(!best){say('No passing option!');return;}
+  if(!best){
+    const point={x:cp.x+ax*W*(kind==='cross'?.36:.20),y:cp.y+ay*W*(kind==='cross'?.36:.20)};
+    kickOr(s,'pass',()=>launchPass(s,null,kind,point),{tx:point.x,ty:point.y,wind:kind==='cross'?280:150});return;
+  }
   if(G._kick) return;                              // already winding one up
   if(isOffside(s,best)){callOffside(s,best);return;}
   G_moveTarget=null;
   const _to=PP[s][best];
-  kickOr(s,'pass',()=>iPas(best),{tx:_to&&_to.x,ty:_to&&_to.y});
+  kickOr(s,'pass',()=>launchPass(s,best,kind),{tx:_to&&_to.x,ty:_to&&_to.y,wind:kind==='cross'?280:150});
 }
 
 // ── DEFENSIVE PLAYER SWITCH (✕ while defending) ───────────────────
@@ -5210,6 +5229,17 @@ function tackleContact(dp,cp,dx,dy,L,el){
 
 function spiritMax(pl){ return pl&&pl.pos==='GK'?2000:1500; }
 function spiritOf(pl){ return (pl&&pl.spirit!=null)?pl.spirit:spiritMax(pl); }
+function spiritPct(pl){ return Math.max(0,Math.min(100,Math.round(spiritOf(pl)/spiritMax(pl)*100))); }
+/* The stamina colour ramp, defined ONCE: 0% red -> 50% green -> 100% cyan.
+   The duel card and the in-match bust both read it, so what a colour means
+   never depends on which screen you are looking at. */
+function staminaFill(pct){
+  const hue=Math.max(0,Math.min(190,Math.round(pct*1.9))), sat=88, lig=54;
+  return {hue:hue,
+    bg:'linear-gradient(90deg, hsl('+hue+','+sat+'%,'+(lig-6)+'%), hsl('+Math.min(hue+14,200)+','+sat+'%,'+(lig+8)+'%))',
+    glow:'0 0 9px hsl('+hue+','+sat+'%,55%), inset 0 0 4px rgba(255,255,255,.25)',
+    ink:'hsl('+hue+',90%,68%)'};
+}
 function spendSpirit(pl,n){
   if(!pl) return false;
   const s=spiritOf(pl); if(s<n) return false;
@@ -5291,7 +5321,7 @@ function firePendingStun(){
    the line, is blown away (stunned) and the shot loses power, or - a strong
    defender far down the line, where the shot has already lost pace - stops it.
    Animation: 6 IDLE frames until the block row is drawn (pitch3d L12x8.block). */
-const KICK={ passWind:250, shotWind:300, quickWind:150 };
+const KICK={ passWind:150, shotWind:300, quickWind:150 };
 const BLOCK={
   brace:450, lock:350, cost:40, refund:20,
   reach:1.15,                 // body heights either side of him that he covers
@@ -5383,7 +5413,7 @@ function startKick(side,kind,fire,opts){
   const q={side,k,kind,t0:now,at:now+wind,fire,gen:G.goalGen,tx:opts&&opts.tx,ty:opts&&opts.ty};
   G._kick=q;
   try{ if(window.P3D&&P3D.telegraph) P3D.telegraph(side+':'+k,{wind,kind}); }catch(e){}
-  try{ if(window.P3D&&P3D.action) P3D.action(side,k,kind==='shot'?'shoot':'pass'); }catch(e){}
+  try{ if(window.P3D&&P3D.action) P3D.action(side,k,kind==='shot'?'shoot':'pass',{dx:q.tx!=null?q.tx-PP[side][k].x:dirFor(side),dy:q.ty!=null?q.ty-PP[side][k].y:0}); }catch(e){}
   aiPlanBlocks(side,k,kind,q);
   return true;
 }
@@ -5950,6 +5980,64 @@ const BALLPHYS={
   shotLift:1.05,    // launch speed of a shot (x distance factor)
   loosePop:0.55     // deflections / loose balls hop a little
 };
+// Shared by human and CPU: fixed launch point, swept contact, no receiver snap.
+function launchPass(s,tk,kind='ground',point){
+  const sk=G.ck,from=PP[s]&&PP[s][sk],to=point||(PP[s]&&PP[s][tk]);
+  if(!from||!to)return;
+  if(tk&&checkOffside(s,tk)){callOffside(s,tk);return;}
+  const quality=_passQ(sq(s)[sk]),cross=kind==='cross';
+  const ph=tk&&_phys[s+':'+tk], lead=cross?8:5;
+  let tx=to.x+(ph?clamp(ph.vx||0,-2,2)*lead:0),ty=to.y+(ph?clamp(ph.vy||0,-2,2)*lead:0);
+  const dx=tx-from.x,dy=ty-from.y,d=Math.hypot(dx,dy)||1;
+  const error=(Math.random()-.5)*W*(cross?.018:.006)*(1-quality*.7);
+  tx-=dy/d*error;ty+=dx/d*error;
+  const distp=Math.hypot(tx-from.x,ty-from.y),speed=W*(cross?.007:.012);
+  const dur=Math.max(8,distp/speed),fr=cross?.997:.988;
+  const v=distp*(1-fr)/(1-Math.pow(fr,dur));
+  ballTravel={active:true,physicalPass:true,side:s,kicker:sk,receiver:tk,kind,
+    x:from.x,y:from.y,fx:from.x,fy:from.y,tx,ty,vx:(tx-from.x)/Math.max(distp,1)*v,vy:(ty-from.y)/Math.max(distp,1)*v,
+    fr,dur,progress:0,arc:cross?Math.min(40,12+distp/W*55):0,
+    offside:validOutfieldKeys(s).filter(k=>k!==sk&&isOffside(s,k))};
+  ball.x=ball.tx=from.x;ball.y=ball.ty=from.y;ball.bz=0;
+  G.phase='pass_anim';G.pm=false;G_moveTarget=null;G_laneTarget=null;
+  const banner=$id('pass-banner');if(banner)banner.style.display='none';
+  try{if(window.P3D&&P3D.action)P3D.action(s,sk,'pass',{dx:tx-from.x,dy:ty-from.y});}catch(e){}
+}
+function tickPhysicalPass(b,dt){
+  let remaining=Math.max(0,dt);
+  while(remaining>0&&b.active){
+    const h=Math.min(.5,remaining,b.dur-b.progress);remaining-=h;
+    const old={x:b.x,y:b.y},decay=Math.pow(b.fr,h),scale=(1-decay)/(1-b.fr);
+    b.x+=b.vx*scale;b.y+=b.vy*scale;b.vx*=decay;b.vy*=decay;b.progress+=h;
+    const t=clamp(b.progress/b.dur,0,1);ball.bz=b.arc*4*t*(1-t);
+    ball.x=ball.tx=b.x;ball.y=ball.ty=b.y;
+    if(b.x<W*.07||b.x>W*.93||b.y<H*.01||b.y>H*.99){b.active=false;goLoose(b.x,b.y,b.vx,b.vy,b.side);return;}
+    if(ball.bz<3){
+      let hit=null;
+      for(const side of ['h','a'])for(const k of Object.keys(sq(side))){
+        const p=PP[side][k],pl=sq(side)[k];if(!p||!pl||ocd(side,k)||isStalled(side,k))continue;
+        if(side===b.side&&k===b.kicker&&b.progress<8)continue;
+        const f=_segT(old,{x:b.x,y:b.y},p);
+        if(f.d>W*.010)continue;
+        if(!hit||f.t<hit.t)hit={side,k,t:f.t};
+      }
+      if(hit){
+        b.active=false;
+        if(hit.side===b.side&&b.offside.includes(hit.k)){callOffside(hit.side,hit.k);return;}
+        // An awkward first touch spills; a clean one requires physical proximity.
+        const q=_passQ(sq(hit.side)[hit.k]);
+        if(Math.random()<(b.kind==='cross'?.22:.07)*(1-q*.7)){
+          goLoose(b.x,b.y,b.vx*.4,b.vy*.4,hit.side);
+        }else{_assignLoose(hit.side,hit.k);G._cpuHoldUntil=Date.now()+cpuTouchMs(sq(hit.side)[hit.k]);}
+        return;
+      }
+    }
+    if(b.progress>=b.dur){b.active=false;goLoose(b.x,b.y,b.vx,b.vy,b.side);return;}
+  }
+}
+
+
+
 let ballTravel={active:false,fx:0,fy:0,tx:0,ty:0,progress:0,duration:60,onArrive:null};
 function animateBallTo(fromX,fromY,toX,toY,onArrive,duration,flat){
   // Physical roll: launch the ball with a velocity sized so it COASTS to the
@@ -5988,6 +6076,7 @@ function tickPassMotion(dt=1){
 
 function tickBallTravel(dt=1){
   const b=ballTravel;
+  if(b.physicalPass){tickPhysicalPass(b,dt);return;}
   if(b.arc){
     // PASS: drive ground + loft from one linear clock so they stay in sync (no wobble)
     b.progress=Math.min(b.dur, b.progress+Math.max(1,Math.round(dt)));
@@ -6127,40 +6216,7 @@ function tickLoose(dt){
   const stalled=(lb.vx*lb.vx+lb.vy*lb.vy)<0.03;
   if((stalled&&lb.t>12)||lb.t>260){ _assignLoose(nd.h<=nd.a?'h':'a', nd.h<=nd.a?nearest.h:nearest.a); }
 }
-function iPas(tk){
-  const s=G.poss, ds=s==='h'?'a':'h';
-  const fr=sq(s)[G.ck],fp2=PP[s][G.ck],tp=PP[s][tk];if(!fp2||!tp)return;
-  const intResult=chkIntOutcome(fp2,tp,s);
-  const ic=intResult.interceptor;
-  if(ic){
-    const outcome=intResult.outcome;
-    const iPos=PP[ds][ic]||tp;
-    if(outcome==='deflect'){
-      // Deflection — ball ricochets off the interceptor and rolls FREE; both
-      // sides scramble for it (real loose ball, no instant closest-assign).
-      say((fr?fr.name:'—')+' pass deflected by '+sq(ds)[ic].name+'!');
-      const bx=lerp(fp2.x,iPos.x,0.7), by=lerp(fp2.y,iPos.y,0.7);
-      const ang=Math.atan2(by-fp2.y,bx-fp2.x)+(Math.random()-.5)*1.8;
-      const spd=7+Math.random()*5;
-      animateBallTo(fp2.x,fp2.y,bx,by,()=>{ goLoose(bx,by,Math.cos(ang)*spd,Math.sin(ang)*spd,ds); },passDuration(fp2.x,fp2.y,bx,by,20));
-    }else{
-      // Clean steal
-      say((fr?fr.name:'—')+' pass cut by '+sq(ds)[ic].name+'!');
-      animateBallTo(fp2.x,fp2.y,iPos.x,iPos.y,()=>{
-        G.poss=ds;G.ck=ic;G.tP++;if(PP[ds][ic]){ball.x=PP[ds][ic].x;ball.y=PP[ds][ic].y;ball.tx=ball.x;ball.ty=ball.y;}
-        updP();G.phase='idle';
-        setTimeout(()=>liveResume(null),200);
-      },passDuration(fp2.x,fp2.y,iPos.x,iPos.y,26));
-    }
-  } else {
-    say((fr?fr.name:'—')+' → '+(sq(s)[tk]?sq(s)[tk].name:'—'));
-    animateBallTo(fp2.x,fp2.y,tp.x,tp.y,()=>{
-      setC(tk,s); ball.x=tp.x;ball.y=tp.y;ball.tx=tp.x;ball.ty=tp.y;
-      G.phase='idle';
-      setTimeout(()=>liveResume(G.poss),120);
-    },passDuration(fp2.x,fp2.y,tp.x,tp.y,28));
-  }
-}
+function iPas(tk){afPass(G.poss,tk);}
 
 // ── PASSIVE HELPERS ───────────────────────────────────────────
 
@@ -6393,18 +6449,21 @@ function _ensureBusts(){
     // image renders 200x200. The plate eats 24px off the bottom, which means the
     // image area must be a full 200px tall or the chin gets clipped by the name
     // bar (it was 164px — losing the bottom 18%). 200 + 24 = 224.
+    // 230 = 200 image + 24 name plate + 6 stamina bar. The image area must stay
+    // a full 200px or the chin clips (see the note above), so the bar's 6px is
+    // added to the wrapper rather than taken out of the portrait.
     w.style.cssText='position:fixed;bottom:22px;'+(right?'right:16px;':'left:16px;')+
-      'width:200px;height:224px;z-index:2;pointer-events:none;display:none;overflow:hidden;'+
+      'width:200px;height:230px;z-index:2;pointer-events:none;display:none;overflow:hidden;'+
       'transform:scale(var(--vp-scale,1));transform-origin:'+(right?'right bottom;':'left bottom;');
     const img=document.createElement('div');
     img.className='bust-img';
-    img.style.cssText='position:absolute;left:0;right:0;top:0;bottom:24px;'+
+    img.style.cssText='position:absolute;left:0;right:0;top:0;bottom:30px;'+
       'background:no-repeat center top/100% auto;'+
       'filter:drop-shadow(0 4px 10px rgba(0,0,0,.65));';
     const col=side==='h'?'#1e72dc':'#c22020';
     const plate=document.createElement('div');
     plate.className='bust-plate';
-    plate.style.cssText='position:absolute;left:0;right:0;bottom:0;height:24px;display:flex;align-items:center;'+
+    plate.style.cssText='position:absolute;left:0;right:0;bottom:6px;height:24px;display:flex;align-items:center;'+
       (right?'flex-direction:row-reverse;':'')+
       'background:linear-gradient('+(right?'270deg':'90deg')+','+col+'ee,rgba(10,14,24,.88));'+
       'border-radius:3px;font-family:Rajdhani,system-ui;color:#fff;';
@@ -6412,7 +6471,16 @@ function _ensureBusts(){
       '<span class="b-num" style="font-weight:700;font-size:14px;min-width:26px;align-self:stretch;display:flex;align-items:center;justify-content:center;background:rgba(0,0,0,.35)"></span>'+
       '<span class="b-name" style="font-weight:700;font-size:13px;letter-spacing:.06em;flex:1;padding:0 7px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;'+(right?'text-align:right;':'')+'"></span>'+
       '<span class="b-pos" style="font-weight:700;font-size:11px;opacity:.9;padding:0 8px"></span>';
-    w.appendChild(img);w.appendChild(plate);
+    /* STAMINA - bar only, no number. Jumping, blocking and sprinting all drain
+       it with no other tell, so you could arrive at a duel empty without ever
+       having seen it go. Fills from the same edge the name plate reads from. */
+    const stam=document.createElement('div');
+    stam.className='b-stam';
+    stam.style.cssText='position:absolute;left:0;right:0;bottom:0;height:6px;'+
+      'background:rgba(4,8,16,.78);border-radius:3px;overflow:hidden;';
+    stam.innerHTML='<i style="position:absolute;top:0;bottom:0;'+(right?'right:0;':'left:0;')+
+      'width:0;display:block;border-radius:3px;transition:width .12s linear"></i>';
+    w.appendChild(img);w.appendChild(plate);w.appendChild(stam);
     vp.appendChild(w);
     return w;
   };
@@ -6432,6 +6500,7 @@ function hideBusts(){
     const im=el.querySelector('.bust-img'); if(im) im.style.backgroundImage='';
     const n=el.querySelector('.b-num'), nm=el.querySelector('.b-name'), ps=el.querySelector('.b-pos');
     if(n)n.textContent=''; if(nm)nm.textContent=''; if(ps)ps.textContent='';
+    const sb=el.querySelector('.b-stam i'); if(sb) sb.style.width='0';
   });
   _bustKey={h:null,a:null};
 }
@@ -6445,6 +6514,12 @@ function updBusts(){
     const pl=k?sq(side)[k]:null;
     if(!pl){if(el.style.display!=='none'){el.style.display='none';_bustKey[side]=null;}return;}
     if(el.style.display!=='block')el.style.display='block';
+    /* Stamina changes constantly while the PLAYER does not, so this has to run
+       before the identity early-return below - _bustKey only moves when the man
+       on the chip changes. */
+    const sb=el.querySelector('.b-stam i');
+    if(sb){ const pct=spiritPct(pl), f=staminaFill(pct);
+      sb.style.width=pct+'%'; sb.style.background=f.bg; sb.style.boxShadow=f.glow; }
     const sig=side+':'+k+':'+(pl.name||'');
     if(_bustKey[side]===sig)return;
     _bustKey[side]=sig;
@@ -6821,8 +6896,8 @@ function fCard(role,pl,s,displayRole){
   document.getElementById(p+'nm').textContent=pl?pl.name.split('.').pop():'—';
   document.getElementById(p+'ps').textContent=pl?pl.pos:'—';document.getElementById(p+'ps').style.color=tl;
   document.getElementById(p+'r').textContent=rl(pl?.rar||1);document.getElementById(p+'r').style.color=rcol;
-  const maxSp2=pl&&pl.pos==='GK'?2000:1500;
-  const spRaw=pl?Math.round(pl.spirit||maxSp2):maxSp2;
+  const maxSp2=spiritMax(pl);
+  const spRaw=pl?Math.round(spiritOf(pl)):maxSp2;   // NOT (spirit||max): 0 is a real value
   const spPct=Math.round(spRaw/maxSp2*100);
   const efEl=document.getElementById(p+'ef'),evEl=document.getElementById(p+'ev');
   if(efEl){efEl.style.width=spPct+'%';efEl.style.background=spPct>50?'#44c8ff':spPct>25?'#f0c040':'#dc2020';}
@@ -6834,16 +6909,9 @@ function fCard(role,pl,s,displayRole){
 
   // ── AAA side panel extras (rarity card, skill list, special, smooth stamina) ──
   // Smooth stamina color: 0 = red → 50 = yellow/green → 100 = cyan
-  if(efEl){
-    const hue = Math.max(0, Math.min(190, Math.round(spPct * 1.9)));
-    const sat = 88, lig = 54;
-    efEl.style.background = `linear-gradient(90deg, hsl(${hue},${sat}%,${lig-6}%), hsl(${Math.min(hue+14,200)},${sat}%,${lig+8}%))`;
-    efEl.style.boxShadow = `0 0 9px hsl(${hue},${sat}%,55%), inset 0 0 4px rgba(255,255,255,.25)`;
-  }
-  if(evEl){
-    const hue = Math.max(0, Math.min(190, Math.round(spPct * 1.9)));
-    evEl.style.color = `hsl(${hue},90%,68%)`;
-  }
+  const _sf=staminaFill(spPct);                     // same ramp as the match bust
+  if(efEl){ efEl.style.background=_sf.bg; efEl.style.boxShadow=_sf.glow; }
+  if(evEl){ evEl.style.color=_sf.ink; }
   // Max stamina display (1500 outfield / 2000 GK)
   const emaxEl=document.getElementById(p+'emax'); if(emaxEl) emaxEl.textContent=maxSp2;
 
@@ -8275,59 +8343,7 @@ function afSave(ds){
     doResolve();
   }
 }
-function afPass(s,tk){
-  if(s==='h')G.mom=Math.min(100,G.mom+3); else G.mom=Math.max(0,G.mom-3);
-  const q=sq(s); if(!tk||!q[tk]){resume(s,(q[G.ck]?q[G.ck].name:'Player')+' keeps the ball!');return;}
-  // CPU passes also subject to three-outcome interception
-  if(s==='a'){
-    const fp2=PP[s][G.ck],tp=PP[s][tk];
-    if(fp2&&tp){
-      const ir=chkIntOutcome(fp2,tp,s);
-      if(ir.interceptor){
-        const ikey=ir.interceptor,ipos=PP.h[ikey]||tp,ipl=sq('h')[ikey];
-        say((q[G.ck]?q[G.ck].name:'—')+(ir.outcome==='deflect'?' pass deflected!':(ipl?' pass cut by '+ipl.name+'!':' intercepted!')));
-        animateBallTo(fp2.x,fp2.y,ipos.x,ipos.y,()=>{
-          if(ir.outcome==='deflect'){
-            const lx=lerp(fp2.x,ipos.x,0.5)+(Math.random()-.5)*W*.06;
-            const ly=lerp(fp2.y,ipos.y,0.5)+(Math.random()-.5)*H*.06;
-            ball.x=lx;ball.y=ly;ball.tx=lx;ball.ty=ly;
-            let bS='h',bK=ikey,bD=Infinity;
-            ['h','a'].forEach(side=>Object.keys(sq(side)).forEach(k=>{
-              if(!sq(side)[k]||!PP[side][k])return;
-              const d=Math.hypot(PP[side][k].x-lx,PP[side][k].y-ly);
-              if(d<bD){bD=d;bS=side;bK=k;}
-            }));
-            G.poss=bS;G.ck=bK;G.tP++;if(bS==='h')G.hP++;
-          }else{
-            G.poss='h';G.ck=ikey;G.tP++;G.hP++;
-            if(ipos){ball.x=ipos.x;ball.y=ipos.y;ball.tx=ipos.x;ball.ty=ipos.y;}
-          }
-          updP();G.phase='idle';
-          setTimeout(()=>liveResume('h'),950);
-        },passDuration(fp2.x,fp2.y,ipos.x,ipos.y,26));
-        return;
-      }
-    }
-  }
-  const receiverName=q[tk]?q[tk].name:'Teammate';
-  // Offside check before completing pass
-  if(checkOffside(s,tk)){callOffside(s,tk);return;}
-  // Animate the completed pass (lofted arc) instead of teleporting possession
-  const fpA=PP[s][G.ck], tpA=PP[s][tk];
-  if(fpA&&tpA){
-    say((q[G.ck]?q[G.ck].name:'—')+' → '+receiverName);
-    animateBallTo(fpA.x,fpA.y,tpA.x,tpA.y,()=>{
-      setC(tk,s);
-      const np=PP[s][tk];
-      if(np){ball.x=np.x;ball.y=np.y;ball.tx=np.x;ball.ty=np.y;}
-      G_moveTarget=null;G_laneTarget=null;
-      G.phase='idle';
-      setTimeout(()=>liveResume(G.poss),120);
-    },passDuration(fpA.x,fpA.y,tpA.x,tpA.y,28));
-    return;
-  }
-  setC(tk,s); if(PP[s][tk]){ball.tx=PP[s][tk].x;ball.ty=PP[s][tk].y;} G_moveTarget=null;G_laneTarget=null; resume(s,receiverName+' receives!');
-}
+function afPass(s,tk){launchPass(s,tk,'ground');}
 
 function afOneTwo(s,tk,oldCarrier){
   // 1-2 (wall pass) — teammate touches the ball back, original carrier receives

@@ -729,6 +729,14 @@ addEventListener('DOMContentLoaded',function(){
             <div class="ae-tog" id="togPS1" onclick="togglePS1()"></div>
           </div>
           <div class="ae-set-row">
+            <div class="ae-set-lbl"><div class="ae-set-name">STADIUM</div><div class="ae-set-desc">BOWL STYLE IN MATCHES · UPGRADED LOADS A 12MB MODEL ONCE</div></div>
+            <div class="ae-uisize" id="stadiumCtl">
+              <button data-st="classic" onclick="setStadium('classic')">CLASSIC</button>
+              <button data-st="classic-upgraded" onclick="setStadium('classic-upgraded')">UPGRADED</button>
+              <button data-st="oval" onclick="setStadium('oval')">OVAL</button>
+            </div>
+          </div>
+          <div class="ae-set-row">
             <div class="ae-set-lbl"><div class="ae-set-name">PERF OVERLAY</div><div class="ae-set-desc">SHOW SPRITE / FPS DEBUG IN MATCHES</div></div>
             <div class="ae-tog" id="togDebug" onclick="toggleDebug()"></div>
           </div>
@@ -773,7 +781,28 @@ addEventListener('DOMContentLoaded',function(){
       setTog('togMenuMusic',S.menuMusic);setTog('togMatchMusic',S.matchMusic);setTog('togPS1',S.ps1);setTog('togDebug',S.debug);
       var ctl=document.getElementById('uiSizeCtl');
       if(ctl)ctl.querySelectorAll('button').forEach(function(b){b.classList.toggle('on',b.dataset.sz===(S.uisize||'auto'));});
+      var sct=document.getElementById('stadiumCtl');
+      if(sct)sct.querySelectorAll('button').forEach(function(b){b.classList.toggle('on',b.dataset.st===curStadium());});
     }
+    /* The stadium lives in its own key ('ue_stadium') because ult11-pitch3d.js
+       reads it at boot, before this settings block exists. Single source of
+       truth - do not mirror it into ue_settings_v1. */
+    function curStadium(){
+      try{ var s=localStorage.getItem('ue_stadium');
+        if(s==='classic'||s==='oval'||s==='classic-upgraded') return s; }catch(e){}
+      return (window.P3D&&P3D.stadium)||'classic';
+    }
+    window.setStadium=function(v){
+      try{ localStorage.setItem('ue_stadium',v); }catch(e){}
+      if(window.P3D){
+        P3D.stadium=v;
+        // rebuilds live, so it applies mid-match from the pause menu too
+        if(typeof P3D._rebuildBowl==='function'){
+          try{ P3D._rebuildBowl(); }catch(e){ console.warn('[UE] stadium rebuild',e); }
+        }
+      }
+      syncUI();
+    };
     window.setUiSize=function(v){
       S.uisize=v; save();
       try{ if(v==='auto')localStorage.removeItem('ue_uisize'); else localStorage.setItem('ue_uisize',v); }catch(e){}
@@ -1630,7 +1659,7 @@ addEventListener('DOMContentLoaded',function(){
 </div>
 
 <script src="ult11-input.js?v=7" defer></script>
-<script src="game.js?v=154" defer></script>
+<script src="game.js?v=159" defer></script>
 <!-- ps1-mod.js removed: P3D is the only renderer, its post-FX drew into the hidden 2D canvas.
      Re-add this line to restore it: <script src="ps1-mod.js?v=1" defer></script> -->
 <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js" defer></script>
@@ -1648,7 +1677,9 @@ addEventListener('DOMContentLoaded',function(){
 <script src="ult11-bowl2.js?v=5" defer></script>
 <script src="ult11-ribbon.js?v=2" defer></script>
 <script src="ult11-fx-flame.js?v=7" defer></script>
-<script src="ult11-pitch3d.js?v=95" defer></script>
+<script src="assets/stadium/GLTFLoader-r128.js?v=1" defer></script>
+<script src="ult11-stadium-classic.js?v=1" defer></script>
+<script src="ult11-pitch3d.js?v=98" defer></script>
 <script src="ult11-sfx.js?v=5" defer></script>
 <script src="ult11-camlab.js?v=6" defer></script>
 <script src="ult11-team.js?v=5" defer></script>

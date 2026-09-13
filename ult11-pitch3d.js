@@ -53,14 +53,18 @@
     // ---- STADIUM VARIANT ----
     // 'classic' = segmented photo-textured bowl (default)
     // 'oval'    = elliptical lit bowl from ult11-bowl2.js (secondary stadium)
-    // Set via ?stadium=oval / ?stadium=classic (persists in localStorage),
-    // or at runtime: P3D.stadium='oval'; P3D._rebuildBowl();
+    // 'classic-upgraded' = Blender bowl GLB from ult11-stadium-classic.js.
+    // Set via ?stadium=oval / classic / classic-upgraded (persists in
+    // localStorage), or at runtime: P3D.stadium='oval'; P3D._rebuildBowl();
+    // DEFAULT IS DELIBERATELY 'classic': the GLB bowl is opt-in until it has
+    // been looked at on a real phone (it is ~133k triangles against 1.8k).
     stadium:(function(){
+      const OK=['oval','classic','classic-upgraded'];
       try{
         const q=new URLSearchParams(location.search).get('stadium');
-        if(q==='oval'||q==='classic'){ localStorage.setItem('ue_stadium',q); return q; }
+        if(OK.indexOf(q)>=0){ localStorage.setItem('ue_stadium',q); return q; }
         const s=localStorage.getItem('ue_stadium');
-        if(s==='oval'||s==='classic') return s;
+        if(OK.indexOf(s)>=0) return s;
       }catch(e){}
       return 'classic';
     })(),
@@ -651,6 +655,23 @@
     function placeAllStadium(){
       if(!pitchMesh) return;
       scene.remove(bowlGroup); bowlGroup=new T.Group(); scene.add(bowlGroup);
+      if(window.U11_CLASSIC) window.U11_CLASSIC.dispose();
+      /* ---- CLASSIC UPGRADE: Blender bowl GLB (ult11-stadium-classic.js) ----
+         Async: the procedural bowl below is built as usual and stays on screen
+         until the asset resolves, so a slow or missing GLB degrades to the old
+         stadium instead of an empty one. */
+      if(P3D.stadium==='classic-upgraded' && window.U11_CLASSIC){
+        const target=bowlGroup, model=new T.Group(); target.add(model);
+        window.U11_CLASSIC.build(T,model,PLEN,PWID).then(ready=>{
+          if(!ready || bowlGroup!==target || P3D.stadium!=='classic-upgraded') return;
+          target.children.slice().forEach(o=>{ if(o!==model){ target.remove(o);
+            o.traverse(n=>{ if(n.geometry)n.geometry.dispose();
+              if(n.material)(Array.isArray(n.material)?n.material:[n.material]).forEach(m=>m.dispose()); }); } });
+          _bowlInfo={type:'classic-upgraded'};
+          window.U11_CLASSIC.setTeamColors(flagData);
+          buildExtras(); placeFlags();
+        }).catch(e=>console.warn('[P3D] Classic upgrade unavailable; original bowl retained',e));
+      }
       // ---- OVAL secondary stadium (ult11-bowl2.js) ----
       if(P3D.stadium==='oval' && window.U11_OVAL){
         try{ window.U11_OVAL.build(T,bowlGroup,PLEN,PWID); }
@@ -827,7 +848,9 @@
       (function tryN(i){ if(!srcs||i>=srcs.length)return cb(null);
         const im=new Image(); im.onload=()=>cb(im); im.onerror=()=>tryN(i+1); im.src=srcs[i]; })(0);
     }
-    P3D.setTeamFlags=function(d){ flagData=d; placeFlags(); try{buildBoards();placeCornerFlags();}catch(e){} };
+    P3D.setTeamFlags=function(d){ flagData=d;
+      if(window.U11_CLASSIC) U11_CLASSIC.setTeamColors(d);   // seats_home / seats_away
+      placeFlags(); try{buildBoards();placeCornerFlags();}catch(e){} };
     // deterministic pseudo-random per match so flags scatter but don't jitter
     function _rng(seed){ return ()=>{ seed=(seed*9301+49297)%233280; return seed/233280; }; }
     function placeFlags(){
@@ -848,11 +871,12 @@
       const y0=(S.yOff||0)*U+th*0.12;
       const bh=th*0.34, bw=bh*1.5;              // small — reads as a fan flag
       /* art = {mats:[8]} animated pole flag, or {tex} legacy banner */
-      function flagMesh(art,rng){
+      function flagMesh(art,rng,ov){
         const anim=!!(art&&art.mats);
         const j=0.85+rng()*0.4;
-        const g=anim ? new T.PlaneGeometry(bh*1.45*j,bh*1.45*j)      // pole art is square
-                     : new T.PlaneGeometry(bw*j,bh*j);
+        const fw=ov?ov.w:bw, fh=ov?ov.h:bh;
+        const g=anim ? new T.PlaneGeometry(fh*1.45*j,fh*1.45*j)      // pole art is square
+                     : new T.PlaneGeometry(fw*j,fh*j);
         const mat=anim ? art.mats[0]
                        : new T.MeshBasicMaterial({map:art.tex,side:T.DoubleSide,transparent:true});
         const m=new T.Mesh(g,mat);
@@ -894,6 +918,25 @@
       }
       function scatter(art,homeSide,rng){
         if(!art) return;
+        /* CLASSIC UPGRADE: the GLB bowl's stands sit nowhere near the procedural
+           rake, so it needs its own spots. Placement maths from Astra's
+           U11_CLASSIC.placeFlags, but the meshes are built here so each flag
+           still gets its own frame material and phase (that module makes one
+           shared static material, which would freeze the wave). */
+        if(_bowlInfo && _bowlInfo.type==='classic-upgraded'){
+          const k=PLEN/70, w=PWID/44.87, ov={w:1.6*k,h:1.0*k};
+          for(let i=0;i<6;i++){
+            const upper=i>=3, row=upper?3:5;
+            const off=upper?11.7:0, base=upper?8.4:0.8, rise=upper?0.57:0.5;
+            const m=flagMesh(art,rng,ov);
+            m.position.set((homeSide?-1:1)*(8+(i%3)*9)*k,
+                           (base+row*rise+0.45)*2/3*k,
+                           -(40+off+row*0.83-0.1)*2/3*w);
+            m.rotation.x=-Math.atan2(0.83,rise);
+            flagGroup.add(m);
+          }
+          return;
+        }
         if(OV){
           // home end ≈ θ=π (−x), away end ≈ θ=0 (+x); ranges dodge the open-front cut
           for(let i=0;i<10;i++){
@@ -1282,7 +1325,8 @@
       if(boardGroup){ scene.remove(boardGroup); boardGroup=null; }
       if(!gfxOn('boards')||!_bowlInfo) return;
       let hl,hw,r,y0;
-      if(_bowlInfo.type==='classic'){ hl=_bowlInfo.baseHL-0.35; hw=_bowlInfo.baseHW-0.35; r=_bowlInfo.r; y0=(P3D.bowl.yOff||0)*_bowlInfo.U; }
+      if(_bowlInfo.type==='classic-upgraded'){ hl=PLEN/2+2.4; hw=PWID/2+1.5; r=2.8; y0=0; }
+      else if(_bowlInfo.type==='classic'){ hl=_bowlInfo.baseHL-0.35; hw=_bowlInfo.baseHW-0.35; r=_bowlInfo.r; y0=(P3D.bowl.yOff||0)*_bowlInfo.U; }
       else { const O=window.U11_OVAL&&window.U11_OVAL._last; if(!O) return; const t0=O.TIERS[0]; hl=t0.rx-2.2; hw=t0.rz-2.2; r=Math.min(hl,hw)*0.9; y0=0; }
       boardGroup=new T.Group(); scene.add(boardGroup);
       boardTex=makeBoardTex();
@@ -2153,6 +2197,15 @@
           } else face=sZ>0?'up':'down';
         }
       }
+      // A kick faces its launch vector, including backpasses, in camera space.
+      const kickFace=ACT[id];
+      if(kickFace&&kickFace.dx!=null&&Math.hypot(kickFace.dx,kickFace.dy||0)>0.001){
+        const dwx=kickFace.dx*_wpeX,dwz=(kickFace.dy||0)*_wpeZ;
+        const sx=dwx*_camRX+dwz*_camRZ,sz=dwx*_camFX+dwz*_camFZ;
+        if(Math.abs(sx)>=Math.abs(sz)){
+          face='side';_fp.set(wx,.05,wz).project(camera);_fp2.set(wx+dwx,.05,wz+dwz).project(camera);flip=_fp2.x<_fp.x;
+        }else{face=sz>0?'up':'down';flip=false;}
+      }
       stt[id]={rx,ry,face,flip,moveT,spd:prev.spd,lx:prev.lx,ly:prev.ly,lt:prev.lt,phase:prev.phase,aph:prev.aph,apt:prev.apt};
       if(L.rowFor&&face!=='side') flip=false;   // dedicated front/back rows are never mirrored
       const band=ROW[face]||ROW.side;
@@ -2211,7 +2264,7 @@
        the tackles so the impact frame plays exactly when its hit window opens,
        instead of frames being spread evenly across the whole animation. */
     P3D.action=function(s,k,name,opts){ if(COL[name]||ONE_SHOT[name])
-      ACT[s+':'+k]={name,t0:performance.now(),frames:(opts&&opts.frames)||null}; };
+      ACT[s+':'+k]={name,t0:performance.now(),frames:(opts&&opts.frames)||null,dx:opts&&opts.dx,dy:opts&&opts.dy}; };
     P3D.clearAction=function(s,k){ delete ACT[s+':'+k]; };   // snap back to run/idle (lunge end)
     let _lastCarrier=null,_prevKick=false;
     function watchActions(){
@@ -2220,7 +2273,7 @@
       const kicking=(G.phase==='pass_anim');
       if(kicking&&!_prevKick&&_lastCarrier){
         const shot=!!(G._shotTrail||G._shotZone);
-        P3D.action(_lastCarrier.s,_lastCarrier.k, shot?'shoot':'pass');
+        if(!ACT[_lastCarrier.s+':'+_lastCarrier.k]) P3D.action(_lastCarrier.s,_lastCarrier.k, shot?'shoot':'pass');
       }
       _prevKick=kicking;
     }
@@ -3276,6 +3329,12 @@
               fill:+_bFill.toFixed(3), measured:!!_bUV, spinCap:P3D.ballSpinMax,
               sphereVisible:!!(ballMesh&&ballMesh.visible)};
     };
+    P3D.stadiumState=function(){
+      return {stadium:P3D.stadium, builtBowl:_bowlInfo&&_bowlInfo.type,
+              asset:window.U11_CLASSIC?U11_CLASSIC.inspect():null,
+              pitch:[PLEN,+PWID.toFixed(2)],
+              calls:renderer.info.render.calls, triangles:renderer.info.render.triangles};
+    };
     P3D.flagState=function(){
       const t=Object.keys(_flagCache).map(k=>k+':'+(_flagCache[k]==='miss'?'no sheet':'animated'));
       return {sheets:t, liveFlags:animFlags.length, fps:P3D.flagFps,
@@ -3802,7 +3861,11 @@
               ty=Math.max(1.0,b.y)+ch,
               tz=b.z-dz*cd+dx*cs*side;
         if(!c._cam) c._cam={x:tx,y:ty,z:tz};
-        const k=(CC.chaseLag!=null?CC.chaseLag:0.10);   // lag → ball drifts ahead
+        /* Frame-rate independent chase lag. A flat per-frame lerp made the
+           camera trail twice as far at 30fps as at 60 - this keeps the authored
+           60 Hz feel at any rendering rate. */
+        const lag=Math.max(0,Math.min(1,CC.chaseLag!=null?CC.chaseLag:0.10));
+        const k=1-Math.pow(1-lag,Math.max(0,rdt==null?1/60:rdt)*60);   // lag → ball drifts ahead
         c._cam.x+=(tx-c._cam.x)*k; c._cam.y+=(ty-c._cam.y)*k; c._cam.z+=(tz-c._cam.z)*k;
         camera.position.set(c._cam.x,c._cam.y,c._cam.z);
         // aim just ahead of the BALL, never at the goal — that was what pushed
@@ -3941,6 +4004,10 @@
       updateSelGlow();
       if(cine){ try{ if(cine.v2){cineStep2(dt);cineCamera2(dt);} else {cineStep(dt);cineCamera();} }catch(e){console.error('[P3D] cine error',e); cineEnd();} }
       else    { syncBall(); updateCamera(dt); }
+      // near-side sectors hide only while they sit between camera and pitch
+      if(P3D.stadium==='classic-upgraded' && window.U11_CLASSIC){
+        try{ U11_CLASSIC.update(camera); }catch(e){}
+      }
       tickTrail(dt);
       try{ scorchUpdate(dt,now); }catch(e){}
       try{ tickTele(); }catch(e){}
