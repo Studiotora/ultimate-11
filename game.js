@@ -1775,6 +1775,7 @@ function tick(dt=1){
      kick-off prompt was up, so players walked across the halfway line before
      the whistle. Freeze the world until the ball is actually kicked. */
   if(G.awaitKickoff)return;
+  enforceRestartSpace();
   const s=G.poss,ds=s==='h'?'a':'h';
   const cp=PP[s][G.ck];if(!cp)return;
   const dir=dirFor(s);
@@ -1950,8 +1951,10 @@ function tick(dt=1){
       // drives the engager directly. AI chase resumes the moment input idles.
       const _defVec=_manualInputForSide(ds);
       const manualDef = !!_defVec && (Math.abs(_defVec.x)>0.12||Math.abs(_defVec.y)>0.12);
+      const containing=containHeld(ds), ct=containing?containTarget(ds,cp):null;
       let ux,uy;
-      if(manualDef){ux=_defVec.x;uy=_defVec.y;}
+      if(containing){const d=Math.hypot(ct.x-dp2.x,ct.y-dp2.y)||1;ux=(ct.x-dp2.x)/d;uy=(ct.y-dp2.y)/d;}
+      else if(manualDef){ux=_defVec.x;uy=_defVec.y;}
       else{
         /* Predictive chase. The lead is no longer a flat constant: a defender
            who reads the game well aims much further ahead of the carrier,
@@ -1995,7 +1998,12 @@ function tick(dt=1){
         // momentum: steer velocity toward the chase direction rather than
         // teleporting along it, so acceleration and turning both cost time
         const _ephy=physOf(ds,ROLES.engager,engPl);
-        moveMomentum(dp2,_ephy,dp2.x+ux*step*8,dp2.y+uy*step*8,step/Math.max(dt,0.001),engPl,dt,
+        if(containing){
+          const d=Math.hypot(ct.x-dp2.x,ct.y-dp2.y);
+          step=Math.min(step,d*.20*dt);
+          if(d<W*.002){step=0;_ephy.vx=0;_ephy.vy=0;}
+        }
+        moveMomentum(dp2,_ephy,containing?ct.x:dp2.x+ux*step*8,containing?ct.y:dp2.y+uy*step*8,step/Math.max(dt,0.001),engPl,dt,
                      (AI2.on&&manualDef)?AI2.accelManual:0,(AI2.on&&manualDef)?AI2.turnManual:0);
         dp2.x=clamp(dp2.x,W*.01,W*.99);
         dp2.y=clamp(dp2.y,H*.03,H*.97);
@@ -2052,6 +2060,7 @@ function tick(dt=1){
   applyRepulsion();
   clampAllToPitch();
   enforcePace(dt);
+  enforceRestartSpace();
 }
 /* THE speed limit, enforced after every mover, push and clamp. aiMoveTo caps a
    player's own step, but applyRepulsion then shoved him on top of it: measured
@@ -2187,7 +2196,17 @@ function fixRoleOverlap(ds){
   if(!ROLES.cover||ROLES.cover===ROLES.engager) ROLES.cover=pick('cover',[ROLES.blocker]);
   if(!ROLES.blocker||ROLES.blocker===ROLES.engager||ROLES.blocker===ROLES.cover) ROLES.blocker=pick('blocker',[ROLES.cover]);
 }
+function containHeld(side){
+  return side==='h' && !PVP.on && G.poss!=='h' && G.phase==='moving' &&
+    (G_touchContain || (typeof UEInput!=='undefined' && UEInput.held('PASS')));
+}
+function containTarget(side,cp){
+  // Jockey between the carrier and our goal, leaving room to time a tackle.
+  const dx=goalXFor(side==='h'?'a':'h')-cp.x,dy=H*.5-cp.y,d=Math.hypot(dx,dy)||1;
+  return {x:cp.x+dx/d*W*.025,y:cp.y+dy/d*W*.025};
+}
 function aiAutoSwitch(ds,cp){
+  if(containHeld(ds))return;
   const now=Date.now();
   if(now<(G._engChkAt||0)) return;
   G._engChkAt=now+220;
@@ -4396,6 +4415,8 @@ function openPvpSetup(onConfirm){
    Each is written as ATTACK / DEFEND because that is how the bindings are
    designed — the same button does a different job depending on possession.
    See ult11-input.js for the binding table. */
+let G_touchContain=false;
+window.addEventListener('blur',()=>{G_touchContain=false;});
 let G_touchSprint=false;   // held state from the on-screen button
 
 function actShoot(){        // X/□ · E    — shoot / tackle
@@ -4410,7 +4431,7 @@ function actCross(){        // B/○ · R    — cross / slide tackle
 function actPass(){         // Y/△ · Q    — short pass / contain
   if(G.awaitKickoff==='h'){doKickoff();return;}
   if(G.poss==='h') directionalPass('ground');
-  // defending: contain is Phase C work — no-op rather than a wrong action
+  // Defence reads the held PASS state each simulation frame.
 }
 function actSwitch(){       // LB/L1 · F  — switch player (defence only)
   if(G.awaitKickoff==='h'){doKickoff();return;}
@@ -4519,7 +4540,7 @@ function _padChip(){
     const d=UEInput.debug();
     // everSeen/axisPeak are sticky, so pressing everything once then reading
     // the chip tells us whether the browser gets ANY input from this pad.
-    c.textContent='PAD '+d.pad+' · polls '+d.polls+
+    c.textContent='PAD '+(d.index+1)+' '+d.pad+' · polls '+d.polls+
                   ' · everSeen ['+(d.everDown||[]).join(',')+']'+
                   ' · axisPeak '+d.axisPeak+
                   ' · last '+d.lastFired+' · items '+_navEls.length;
@@ -4528,12 +4549,15 @@ function _padChip(){
 setInterval(_padChip, 700);
 
 if(typeof UEInput!=='undefined'){
-  UEInput.on('SHOOT',  actShoot)
-         .on('CROSS',  actCross)
-         .on('PASS',   actPass)
-         .on('SWITCH', actSwitch)
-         .on('SUPER',  actSuper)
-         .on('JUMP',   actJump)
+  // PvP reads its assigned devices separately. Do not also route either
+  // player's pad into the single-player home-side actions.
+  const soloAction=fn=>()=>{if(!PVP.on && !_navScreenEl())fn();};
+  UEInput.on('SHOOT',  soloAction(actShoot))
+         .on('CROSS',  soloAction(actCross))
+         .on('PASS',   soloAction(actPass))
+         .on('SWITCH', soloAction(actSwitch))
+         .on('SUPER',  soloAction(actSuper))
+         .on('JUMP',   soloAction(actJump))
          .on('PAUSE',  actPause)
          // CONFIRM serves both worlds: a menu if one is up, else the duel.
          .on('CONFIRM',()=>{ if(!_navConfirm()) actConfirm(); })
@@ -4693,7 +4717,13 @@ function _buildDpad(){
      and pad fire, so a control can never grow two behaviours that drift.
      The touch layout still only has four face buttons for seven actions —
      redesigning it is B.4; these keep today's behaviour exactly. */
-  tap('[data-a="pass"]',   actPass);    // △ short pass / contain
+  const pb=w.querySelector('[data-a="pass"]');
+  pb.addEventListener('pointerdown',e=>{
+    e.preventDefault();e.stopPropagation();G_touchContain=true;
+    try{pb.setPointerCapture(e.pointerId);}catch(_){}
+    actPass();
+  },{passive:false});
+  for(const ev of ['pointerup','pointercancel','lostpointercapture'])pb.addEventListener(ev,()=>{G_touchContain=false;});
   tap('[data-a="shoot"]',  actShoot);   // □ shoot      / tackle
   tap('[data-a="cross"]',  actCross);   // ○ cross      / slide
   tap('[data-a="jump"]',   actJump);    // ✕ jump       / block
@@ -4710,7 +4740,7 @@ function _buildDpad(){
 function _updateDpad(show){
   if(!G_dpadEl){if(show)_buildDpad();if(!G_dpadEl)return;}
   G_dpadEl.style.display=show?'grid':'none';
-  if(!show){G_touchSprint=false;G_sprint=false;return;}
+  if(!show){G_touchContain=false;G_touchSprint=false;G_sprint=false;return;}
   const atk=G.poss==='h';
   /* One button, two jobs — the label has to say which one you are about to get,
      or the pad is a memory test. Mirrors the binding table in ult11-input.js. */
@@ -8765,6 +8795,53 @@ function callOffside(s,tk){
 }
 
 // ── FOUL SYSTEM ───────────────────────────────────────────────────
+// Restart clearance uses the painted centre-circle radius everywhere.
+function restartOutside(p,x,y,r,side){
+  if(Math.hypot(p.x-x,p.y-y)>=r)return;
+  let a=Math.atan2(p.y-y,p.x-x);
+  if(Math.hypot(p.x-x,p.y-y)<1)a=dirFor(side)>0?Math.PI:0;
+  // Find the closest legal direction without clamping back inside the radius.
+  for(let i=0;i<=128;i++){
+    const offset=Math.ceil(i/2)*Math.PI/64*(i%2?1:-1),b=a+offset;
+    const nx=x+Math.cos(b)*r,ny=y+Math.sin(b)*r;
+    if(nx>=W*FB.x0&&nx<=W*FB.x1&&ny>=H*FB.y0&&ny<=H*FB.y1){p.x=nx;p.y=ny;return;}
+  }
+}
+function setupFreeKick(side,taker,x,y){
+  const ds=side==='h'?'a':'h',r=KICKOFF_R()+W*.006,wall={};
+  const gx=goalXFor(side),dx=gx-x,dy=H*.5-y,d=Math.hypot(dx,dy)||1;
+  const keys=Object.keys(sq(ds)).filter(k=>k!=='GK'&&sq(ds)[k]&&PP[ds][k]&&!ocd(ds,k));
+  if(d<W*.34){
+    keys.sort((a,b)=>dist(PP[ds][a],{x,y})-dist(PP[ds][b],{x,y}));
+    const n=Math.min(4,keys.length),ux=dx/d,uy=dy/d;
+    for(let i=0;i<n;i++){
+      const offset=(i-(n-1)/2)*W*.015;
+      const p={x:clamp(x+ux*r-uy*offset,W*FB.x0,W*FB.x1),y:clamp(y+uy*r+ux*offset,H*FB.y0,H*FB.y1)};
+      restartOutside(p,x,y,r,ds);wall[keys[i]]=p;
+    }
+  }
+  G._restart={side,taker,x,y,wall,gen:G.goalGen};
+  enforceRestartSpace();
+}
+function enforceRestartSpace(){
+  const f=G._restart;if(!f)return;
+  const cp=PP[f.side]&&PP[f.side][f.taker];
+  if(G.goalGen!==f.gen||G.poss!==f.side||G.ck!==f.taker||!cp||
+     !['idle','moving'].includes(G.phase)||Math.hypot(cp.x-f.x,cp.y-f.y)>W*.012){G._restart=null;return;}
+  G.kickoffUntil=Math.max(G.kickoffUntil||0,Date.now()+150);
+  const ds=f.side==='h'?'a':'h';
+  for(const s of [f.side,ds])for(const k of Object.keys(sq(s))){
+    const p=PP[s]&&PP[s][k];if(!p||!sq(s)[k]||(s===f.side&&k===f.taker))continue;
+    const before={x:p.x,y:p.y};
+    if(s===ds&&f.wall[k])Object.assign(p,f.wall[k]);
+    restartOutside(p,f.x,f.y,s===ds?KICKOFF_R()+W*.006:W*.04,s);
+    if(p.x!==before.x||p.y!==before.y){
+      if(PT[s])PT[s][k]={x:p.x,y:p.y};
+      const ph=physOf(s,k,sq(s)[k]);ph.vx=ph.vy=0;
+    }
+  }
+}
+
 function rollFoul(defSide,defSlot,attSide,prob){
   // Foul chance — default 8%, callers can override (attacker-win lunges are higher)
   if(Math.random()>(prob||0.08))return false;
@@ -8826,25 +8903,7 @@ function rollFoul(defSide,defSlot,attSide,prob){
        same blade of grass, so the free kick was unplayable (author 2026-09-12).
        The wall stands off ~9.15m; team-mates give him room too. */
     if(!isPK){
-      const wall=W*0.085;
-      Object.keys(sq(defSide)).forEach(k2=>{
-        const dp2=PP[defSide]&&PP[defSide][k2]; if(!dp2||k2==='GK') return;
-        let dx=dp2.x-fkx, dy=dp2.y-fky, d=Math.hypot(dx,dy);
-        if(d>=wall) return;
-        if(d<1){ dx=dirFor(defSide); dy=0.3; d=Math.hypot(dx,dy); }
-        dp2.x=clamp(fkx+dx/d*wall,W*.03,W*.97); dp2.y=clamp(fky+dy/d*wall,H*.05,H*.95);
-        if(PT[defSide]) PT[defSide][k2]={x:dp2.x,y:dp2.y};
-      });
-      const near=W*0.05;
-      Object.keys(sq(attSide)).forEach(k2=>{
-        if(k2===ak||k2==='GK') return;
-        const ap2=PP[attSide]&&PP[attSide][k2]; if(!ap2) return;
-        let dx=ap2.x-fkx, dy=ap2.y-fky, d=Math.hypot(dx,dy);
-        if(d>=near) return;
-        if(d<1){ dx=-dirFor(attSide); dy=-0.4; d=Math.hypot(dx,dy); }
-        ap2.x=clamp(fkx+dx/d*near,W*.03,W*.97); ap2.y=clamp(fky+dy/d*near,H*.05,H*.95);
-        if(PT[attSide]) PT[attSide][k2]={x:ap2.x,y:ap2.y};
-      });
+      setupFreeKick(attSide,ak,fkx,fky);
     }
     // PENALTY (#2): spot sits in front of the goal on the X axis (was Y —
     // the old spot was on the sideline), then a REAL shot duel vs the GK.
@@ -9026,6 +9085,12 @@ function hideKickoffPrompt(){const el=document.getElementById('kickoff-prompt');
 // Freeze play and wait. Human kick-off → wait for PASS (or tap the button).
 // AI kick-off → short breather, then auto.
 function armKickoff(side){
+  G._restart=null;
+  G.poss=side;
+  const taker=PP[side]&&PP[side][G.ck];
+  if(taker){taker.x=W/2;taker.y=H/2;}
+  ball.x=ball.tx=W/2;ball.y=ball.ty=H/2;
+  kickoffShape(side,G.ck);resetPhysics();
   G.awaitKickoff=side; G.phase='idle';
   const ph=$id('passhint'); if(ph)ph.style.display='none';
   const teamN=((side==='h'?HT:AT)||{}).name||(side==='h'?'HOME':'AWAY');
@@ -9039,6 +9104,7 @@ function armKickoff(side){
 }
 function doKickoff(){
   if(!G.awaitKickoff)return;
+  kickoffShape(G.awaitKickoff,G.ck);resetPhysics();
   G.awaitKickoff=null; hideKickoffPrompt();
   G.chk=null; try{looseBall=null;}catch(e){}      // clear any stale duel/loose state
   G.kickoffUntil=Date.now()+1600;                 // clean first beat — no instant duel

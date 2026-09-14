@@ -155,6 +155,25 @@
     for (var i = 0; i < list.length; i++) if (list[i] && list[i].connected) out.push(list[i]);
     return out;
   }
+  var activePadIndex = null;
+  function activePad() {
+    var list=pads(), current=null, engaged=null;
+    for(var i=0;i<list.length;i++){
+      var gp=list[i];
+      if(gp.index===activePadIndex)current=gp;
+      if(gp.buttons.some(function(b){return b&&(b.pressed||b.value>0.5);}) ||
+         Math.hypot(gp.axes[0]||0,gp.axes[1]||0)>STICK_DEADZONE) engaged=gp;
+    }
+    var chosen=engaged||current||list[0]||null;
+    activePadIndex=chosen?chosen.index:null;
+    return chosen;
+  }
+  function padMove(gp){
+    var v=padStick(gp);if(v.x||v.y)return v;
+    var x=Number(padPressed(gp,'dright'))-Number(padPressed(gp,'dleft'));
+    var y=Number(padPressed(gp,'ddown'))-Number(padPressed(gp,'dup'));
+    var d=Math.hypot(x,y)||1;return {x:x/d,y:y/d};
+  }
   function padPressed(gp, name) {
     if (!gp) return false;
     if (name.indexOf('+') > -1) {                     // chord, e.g. "rt+x"
@@ -168,7 +187,7 @@
     if (!b) return false;
     // Triggers are analog on most pads and report a value rather than pressed.
     if (name === 'lt' || name === 'rt') return (b.value || 0) >= TRIGGER_ON || !!b.pressed;
-    return !!b.pressed;
+    return !!b.pressed || (b.value || 0) >= TRIGGER_ON;
   }
   function padStick(gp) {
     if (!gp || !gp.axes) return { x: 0, y: 0 };
@@ -176,7 +195,7 @@
     var m = Math.hypot(x, y);
     if (m < STICK_DEADZONE) return { x: 0, y: 0 };
     // Rescale past the deadzone so a small push is still a small push.
-    var s = (m - STICK_DEADZONE) / (1 - STICK_DEADZONE) / m;
+    var s = (Math.min(1,m) - STICK_DEADZONE) / (1 - STICK_DEADZONE) / m;
     return { x: x * s, y: y * s };
   }
 
@@ -189,6 +208,7 @@
     if (keys) for (var i = 0; i < keys.length; i++) if (kb[keys[i]]) return true;
     var t = bindings.touch[action];
     if (t && touchHeld[t]) return true;
+    if(action==='SHOOT' && gp && padPressed(gp,bindings.pad.SUPER))return false;
     var p = bindings.pad[action];
     if (p && gp && padPressed(gp, p)) return true;
     return false;
@@ -196,7 +216,7 @@
 
   function moveVector(gp) {
     if (gp) {
-      var s = padStick(gp);
+      var s = padMove(gp);
       if (s.x || s.y) return s;
     }
     var m = bindings.move, x = 0, y = 0, i;
@@ -254,7 +274,7 @@
     if (!force && frameToken === polledToken) return;
     polledToken = frameToken;
     pollCount++;
-    var gp = pads()[0] || null;
+    var gp = activePad();
     if (gp) {
       for (var bi = 0; bi < gp.buttons.length; bi++) {
         var bb = gp.buttons[bi];
@@ -317,7 +337,7 @@
     /** Which glyph set to show in prompts. */
     scheme: function () {
       if (pads().length) {
-        var id = (pads()[0].id || '').toLowerCase();
+        var id = (activePad().id || '').toLowerCase();
         return (id.indexOf('playstation') > -1 || id.indexOf('dualshock') > -1 || id.indexOf('dualsense') > -1)
           ? 'playstation' : 'xbox';
       }
@@ -334,12 +354,14 @@
         rAF driver has died; if it climbs but nothing fires, it is a binding or
         a handler problem, not the loop. */
     debug: function () {
-      var gp = pads()[0] || null;
+      var gp = activePad();
       var down = [];
       if (gp) for (var i = 0; i < gp.buttons.length; i++) if (gp.buttons[i] && gp.buttons[i].pressed) down.push(i);
       var ever = Object.keys(everDown).map(Number).sort(function (a, b) { return a - b; });
       return {
         polls: pollCount,
+        index: gp ? gp.index : null,
+        id: gp ? gp.id : null,
         pad: gp ? (gp.mapping || '?') : 'none',
         everDown: ever,
         axisPeak: axisPeak.toFixed(2),
@@ -378,5 +400,12 @@
     console.log('[input] pad disconnected');
   });
 
+  // Adapter for the existing controller assignment and two-player screens.
+  // Slots preserve browser indices, including holes after disconnection.
+  function slot(n){var list=navigator.getGamepads?navigator.getGamepads():[];var p=list[n-1];return p&&p.connected?p:null;}
+  var legacy={south:'a',east:'b',west:'x',north:'y',r1:'rb',l1:'lb',r2:'rt',l2:'lt'};
+  global.GP={connected:function(n){return !!slot(n);},info:slot,
+    stick:function(n){return padMove(slot(n));},
+    down:function(n,name){return padPressed(slot(n),legacy[name]||name);}};
   global.UEInput = API;
 })(window);
