@@ -38,6 +38,29 @@
     CROSS:  'CROSS',    // cross          · slide tackle
     SWITCH: 'SWITCH',   // (unused)       · switch player
     SUPER:  'SUPER',    // special/super  · —
+
+    /* ── DUEL (2026-09-15) ────────────────────────────────────────
+       The duel is a different CONTEXT, so the same four face buttons carry a
+       second action set. These are named for the MEANING rather than the move,
+       because one button keeps one meaning on both sides of the ball:
+
+          READ    △   pass      · intercept
+          BODY    ✕   dribble   · block / punch
+          COMMIT  □   shoot     · tackle / save
+          COMBO   ○   one-two   · —
+
+       and RT + the same button is that action's SUPER, exactly like the
+       in-match super shot (RT + □). Nothing new to learn in the duel: the
+       same finger does the same KIND of thing wherever you are. */
+    DUEL_READ:     'DUEL_READ',
+    DUEL_BODY:     'DUEL_BODY',
+    DUEL_COMMIT:   'DUEL_COMMIT',
+    DUEL_COMBO:    'DUEL_COMBO',
+    DUEL_S_READ:   'DUEL_S_READ',
+    DUEL_S_BODY:   'DUEL_S_BODY',
+    DUEL_S_COMMIT: 'DUEL_S_COMMIT',
+    DUEL_S_COMBO:  'DUEL_S_COMBO',
+
     CONFIRM:'CONFIRM',
     CANCEL: 'CANCEL',
     PAUSE:  'PAUSE',
@@ -65,6 +88,20 @@
       CROSS:   ['r'],
       SWITCH:  ['f'],
       SUPER:   ['v'],
+      /* Duel keys reuse the in-match letters for the same MEANING — q passes
+         in play and picks Pass/Intercept in a duel, e shoots and picks
+         Shoot/Tackle. Dribble/Block takes 'x' rather than the in-match jump
+         key: space is also CONFIRM, and one key must not both pick a move and
+         fire it. Shift is the duel's RT — it has no other job on this screen
+         (sprint is only read while the ball is in play). */
+      DUEL_READ:     ['q'],
+      DUEL_BODY:     ['x'],
+      DUEL_COMMIT:   ['e'],
+      DUEL_COMBO:    ['r'],
+      DUEL_S_READ:   ['shift+q'],
+      DUEL_S_BODY:   ['shift+x'],
+      DUEL_S_COMMIT: ['shift+e'],
+      DUEL_S_COMBO:  ['shift+r'],
       CONFIRM: ['enter', ' '],
       CANCEL:  ['backspace'],
       PAUSE:   ['escape', 'tab'],
@@ -82,6 +119,18 @@
       CROSS:  'b',
       SWITCH: 'lb',
       SUPER:  'rt+x',        // chord
+      /* Author's duel spec (2026-09-15): pass △, dribble ✕, shoot □,
+         one-two ○, and RT + the same button for the super of each. Defence
+         reuses the identical four (intercept △, block ✕, tackle □), so the
+         button you already press to shoot is the button you press to tackle. */
+      DUEL_READ:     'y',
+      DUEL_BODY:     'a',
+      DUEL_COMMIT:   'x',
+      DUEL_COMBO:    'b',
+      DUEL_S_READ:   'rt+y',
+      DUEL_S_BODY:   'rt+a',
+      DUEL_S_COMMIT: 'rt+x',
+      DUEL_S_COMBO:  'rt+b',
       CONFIRM:'a',           // the bottom face button — ✕ on a PlayStation pad
       CANCEL: 'b',
       PAUSE:  'start',
@@ -202,15 +251,63 @@
   /* ── touch — driven by the on-screen pad in game.js ────────────────────── */
   function setTouch(id, down) { touchHeld[id] = !!down; }
 
+  /* A keyboard binding may be a chord too ("shift+q"), same syntax as the pad.
+     The duel needs it: its four supers are one modifier over the same four
+     keys, and the alternative was four more unrelated letters to memorise. */
+  function kbHeld(spec) {
+    if (spec.indexOf('+') === -1) return !!kb[spec];
+    var parts = spec.split('+');
+    for (var i = 0; i < parts.length; i++) if (!kb[parts[i]]) return false;
+    return true;
+  }
+
+  /* ── chord suppression ──────────────────────────────────────────
+     A plain button must not fire while a CHORD built on it is held, or RT+□
+     fires SUPER *and* SHOOT. This used to be one hardcoded line for that one
+     pair; every chord added since (the duel adds four) would have brought the
+     double-fire back. Now it is derived from the bindings themselves: index
+     every chord by its last part, and suppress a plain binding whose chord is
+     currently satisfied. */
+  var _chordIdx = null;
+  function chordIndex() {
+    if (_chordIdx) return _chordIdx;
+    var idx = { keyboard: {}, pad: {} };
+    ['keyboard', 'pad'].forEach(function (dev) {
+      for (var a in bindings[dev]) {
+        var specs = bindings[dev][a];
+        if (typeof specs === 'string') specs = [specs];
+        if (!specs || !specs.length) continue;
+        for (var i = 0; i < specs.length; i++) {
+          var sp = String(specs[i]);
+          if (sp.indexOf('+') === -1) continue;
+          var base = sp.split('+').pop();
+          (idx[dev][base] || (idx[dev][base] = [])).push(sp);
+        }
+      }
+    });
+    _chordIdx = idx;
+    return idx;
+  }
+  function suppressedByChord(dev, spec, gp) {
+    if (spec.indexOf('+') > -1) return false;          // a chord suppresses nothing
+    var list = chordIndex()[dev][spec];
+    if (!list) return false;
+    for (var i = 0; i < list.length; i++) {
+      if (dev === 'pad' ? (gp && padPressed(gp, list[i])) : kbHeld(list[i])) return true;
+    }
+    return false;
+  }
+
   /* ── resolve one action across all three backends ──────────────────────── */
   function actionHeld(action, gp) {
-    var keys = bindings.keyboard[action];
-    if (keys) for (var i = 0; i < keys.length; i++) if (kb[keys[i]]) return true;
+    var keys = bindings.keyboard[action], i;
+    if (keys) for (i = 0; i < keys.length; i++) {
+      if (kbHeld(keys[i]) && !suppressedByChord('keyboard', keys[i], gp)) return true;
+    }
     var t = bindings.touch[action];
     if (t && touchHeld[t]) return true;
-    if(action==='SHOOT' && gp && padPressed(gp,bindings.pad.SUPER))return false;
     var p = bindings.pad[action];
-    if (p && gp && padPressed(gp, p)) return true;
+    if (p && gp && padPressed(gp, p) && !suppressedByChord('pad', p, gp)) return true;
     return false;
   }
 
@@ -334,6 +431,13 @@
     /** Is a gamepad connected right now? */
     hasPad: function () { return pads().length > 0; },
 
+    /** RAW pad read on the active pad, by button name or chord ("a", "rt+x").
+        The documented hatch out of the semantic layer, for the one case that
+        needs it: two actions legitimately share a physical button in different
+        contexts (the duel gives PlayStation's ✕ a MOVE, while ✕ is CONFIRM
+        everywhere else), so that handler has to know which device asked. */
+    padDown: function (name) { return padPressed(activePad(), name); },
+
     /** Which glyph set to show in prompts. */
     scheme: function () {
       if (pads().length) {
@@ -376,7 +480,11 @@
     reset: function () {
       var d = JSON.parse(JSON.stringify(DEFAULTS));
       for (var k in d) bindings[k] = d[k];
-    }
+      _chordIdx = null;                 // bindings changed — rebuild the index
+    },
+
+    /** B.3 hook: call after writing into UEInput.bindings by hand. */
+    rebound: function () { _chordIdx = null; }
   };
 
   /* Self-driving. The match loop's poll() call is now redundant but harmless —

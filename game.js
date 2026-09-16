@@ -3245,7 +3245,10 @@ function startAnim(){
       G_sprint=UEInput.held('SPRINT')||G_touchSprint;
     }
     if(G.paused){draw();raf=requestAnimationFrame(loop);return;}
-    if(G.phase==='duel' && typeof pvpDuelInput==='function') pvpDuelInput();
+    if(G.phase==='duel'){
+      if(typeof pvpDuelInput==='function') pvpDuelInput();   // PvP: two pads
+      if(typeof duelPadInput==='function') duelPadInput();   // single player
+    }
     if(G.phase==='moving')tick(dt);
     if(G.phase==='loose'&&!G._cineHold)tickLoose(dt);
     if(G.phase==='pass_anim'&&!G._cineHold){tickBallTravel(dt);if(G.phase==='pass_anim')tickPassMotion(dt);}
@@ -4551,7 +4554,7 @@ setInterval(_padChip, 700);
 if(typeof UEInput!=='undefined'){
   // PvP reads its assigned devices separately. Do not also route either
   // player's pad into the single-player home-side actions.
-  const soloAction=fn=>()=>{if(!PVP.on && !_navScreenEl())fn();};
+  const soloAction=fn=>()=>{if(!PVP.on && !_navScreenEl() && !duelOwnsButtons())fn();};
   UEInput.on('SHOOT',  soloAction(actShoot))
          .on('CROSS',  soloAction(actCross))
          .on('PASS',   soloAction(actPass))
@@ -4560,7 +4563,17 @@ if(typeof UEInput!=='undefined'){
          .on('JUMP',   soloAction(actJump))
          .on('PAUSE',  actPause)
          // CONFIRM serves both worlds: a menu if one is up, else the duel.
-         .on('CONFIRM',()=>{ if(!_navConfirm()) actConfirm(); })
+         .on('CONFIRM',()=>{
+           if(_navConfirm())return;
+           /* ✕ is CONFIRM everywhere else, but in a duel it carries a MOVE
+              (dribble / block / punch) - the same physical button firing two
+              actions in the same frame. Inside a duel the move wins, and you
+              confirm by re-pressing the highlighted row (or Enter / Start).
+              Enter never has ✕ down, so the keyboard keeps its confirm. */
+           if(duelOwnsButtons() && typeof UEInput!=='undefined' &&
+              UEInput.padDown && UEInput.padDown('a'))return;
+           actConfirm();
+         })
          .on('CANCEL', _navBack)
          .on('NAV_UP',   ()=>_navStep(-1))
          .on('NAV_DOWN', ()=>_navStep( 1))
@@ -6658,8 +6671,8 @@ function playDuelCutIn(opts,onDone){
 }
 
 // ── GK SHOT-DUEL LAYOUT ────────────────────────────────────────────
-// Shot duels (vs GK) restyle the duel overlay: net background + solo
-// enlarged keeper art (waist-up crop of the same duel-card image).
+// Shot duels (vs GK) restyle the duel overlay: net background + the solo
+// keeper art, shown WHOLE (see _gkDuelCSS).
 // Both infoboxes stay; card portraits, VS badge and ball chip hidden.
 // Net bg expected at GK_DUEL_BG; missing file = plain dark, no error.
 const GK_DUEL_BG='assets/ui/duel_net.png';
@@ -6675,8 +6688,65 @@ function _gkDuelCSS(){
     /* full-window copy on the world layer (see gkShotLayout) */
     '#gkduel-world{position:absolute;inset:0;z-index:6;background:#05070e center/cover no-repeat;pointer-events:none;}'+
     '#gkduel-world::after{content:"";position:absolute;inset:0;background:radial-gradient(ellipse at 50% 28%,rgba(0,0,0,0) 28%,rgba(3,5,12,.8) 100%);}'+
-    '#gkduel-art{position:absolute;left:50%;transform:translateX(-50%);top:4%;bottom:0;width:min(58%,760px);'+
-      'background:center top/auto 165% no-repeat;pointer-events:none;'+
+    /* KEEPER ART — WHOLE IMAGE, NEVER CROPPED (2026-09-16).
+       This was `center top / auto 165%`: a deliberate waist-up zoom that scaled
+       the art to 165% of the BOX HEIGHT and let the rest overflow. That only
+       works for a tall portrait, which every keeper image used to be
+       (career/clubs/gk.png is 941x1672, aspect 0.56; the retired
+       players/steiner-alt.png 1023x1537, 0.67).
+
+       The current keeper art is LANDSCAPE — players/donati.png 1086x737 and
+       players/steiner.png 1536x1024, both aspect ~1.47. Height-scaling those to
+       165% makes them ~243% of the box height WIDE, so the screen showed a cap
+       and one glove: cropped top, bottom and both sides at once. That is why
+       the keeper "changed size" — the rule never changed, the art's aspect did.
+
+       `contain` is the fix and it is aspect-AGNOSTIC: whatever shape the next
+       keeper image is, it is fitted inside the box whole. Nothing here needs
+       touching when the art is re-baked — which is the entire point, because a
+       size rule keyed to one aspect ratio is a trap that springs silently.
+
+       The four vars are the whole tuning surface, same idea as --duel-hero-h
+       on the outfield duel.
+
+       BOTTOM IS THE IMPORTANT ONE, and it is 0 for a reason worth knowing:
+       #duel-ov is NOT the full 720 stage, it is 1280x695, because .mcomm (the
+       commentary bar) takes the last 25px out of #s-match's flex flow. So the
+       overlay's own bottom edge already IS the top of the bar, and 0 lands the
+       art flush on it with no magic number to re-derive if that bar ever
+       changes height. (A first pass used 3.5% - 25/720 - and left a 25px gap,
+       because percentages in here resolve against 695, not 720. Any % measured
+       off the stage is wrong inside this overlay.)
+
+       It matters because these keeper images are a landscape crop across the
+       thighs, so the art has a hard horizontal bottom EDGE. Floating that edge
+       in mid-screen reads as a cut-out hanging in the air; landing it flush on
+       the bar hides the seam against a solid element, and is why the keeper is
+       big and low rather than politely tucked above the UI.
+
+       Overlapping the infobox is FINE and expected (author, 2026-09-16: "i
+       dont care if a little of the infobox covers it, its normal") - the
+       panels are meant to sit over the scene, as they do on the outfield duel.
+       An earlier pass shrank the art to clear them completely; that cost real
+       size for no gain and left the seam floating. The lean below still
+       trims the overlap for free, it just no longer dictates the size.
+
+       The width cap only exists to keep the art INSIDE THE SCREEN. The render
+       is height-limited for a wide image, so a wider source renders wider:
+       at this height donati 1.47 -> 1009px wide, steiner 1.50 -> 1028px. The
+       cap sits just above that, so anything wider becomes width-limited and
+       stops growing instead of running off the 1280 stage. */
+    '#duel-ov.gk-mode{--gk-art-top:1.4%;--gk-art-bottom:0;'+
+      '--gk-art-w:min(84%,1075px);--gk-art-x:55%;}'+
+    /* The keeper is not always on the left. His infobox sits on whichever side
+       he occupies, and half time swaps the sides, so a single fixed nudge
+       leans the wrong way half the time. Mirror it. This only trims how much
+       of him the panel covers - it is not load-bearing any more. */
+    '#duel-ov.gk-mode.gk-info-right{--gk-art-x:45%;}'+
+    '#gkduel-art{position:absolute;left:var(--gk-art-x);transform:translateX(-50%);'+
+      'top:var(--gk-art-top);bottom:var(--gk-art-bottom);width:var(--gk-art-w);'+
+      'background-repeat:no-repeat;background-position:center center;'+
+      'background-size:contain;pointer-events:none;'+
       'filter:drop-shadow(0 10px 34px rgba(0,0,0,.8));}';
   document.head.appendChild(st);
 }
@@ -6685,9 +6755,15 @@ function gkShotLayout(on,def,ds){
   // keeper visible). The NEW infobox is layered on via .gk-info in opDuel.
   const ov=document.getElementById('duel-ov');if(!ov)return;
   let bg=document.getElementById('gkduel-bg'),art=document.getElementById('gkduel-art');
-  if(!on){ov.classList.remove('gk-mode');if(bg)bg.remove();if(art)art.remove();return;}
+  if(!on){ov.classList.remove('gk-mode');ov.classList.remove('gk-info-right');
+          if(bg)bg.remove();if(art)art.remove();return;}
   _gkDuelCSS();
   ov.classList.add('gk-mode');
+  /* Lean the art away from the keeper's own infobox. Read the panel opDuel has
+     just placed rather than recomputing the side from G.half here, so the two
+     can never disagree - the side is decided in exactly one place. */
+  const _gkBox=ov.querySelector('.dside.gk-info');
+  ov.classList.toggle('gk-info-right', !!(_gkBox&&_gkBox.classList.contains('right')));
   if(!bg){bg=document.createElement('div');bg.id='gkduel-bg';ov.insertBefore(bg,ov.firstChild);}
   if(!art){art=document.createElement('div');art.id='gkduel-art';ov.insertBefore(art,bg.nextSibling);}
   /* The goal-net backdrop is opaque, and the 16:9 stage clips it - on a wide
@@ -7207,8 +7283,13 @@ function actLabelFor(actionId,label){
   return String(actionId||'').replace(/^(super|special)-/,'').replace(/-/g,' ').toUpperCase();
 }
 function actBtnInner(actionId, costTxt, label){
+  /* The button glyph sits between the word and the cost. Without it the menu
+     is a memory test - the same reason the on-screen d-pad relabels itself
+     when possession changes (see _updateDpad). */
+  const g=duelGlyphFor(actionId);
   return actIconSvg(actionId)
        + '<span class="dact3d-l">'+actLabelFor(actionId,label)+'</span>'
+       + (g?'<span class="dact3d-b">'+g+'</span>':'')
        + '<span class="dact3d-c">'+costTxt+'</span>';
 }
 function superToggleInner(on){
@@ -7283,6 +7364,254 @@ function clearDim(container){
   s.textContent='@keyframes dactSelPulseJS{0%,100%{transform:scale(1.10)}50%{transform:scale(1.20)}}';
   document.head.appendChild(s);
 })();
+/* Duel button glyph + pass-aim ring. Injected from JS for the same reason as
+   the pulse above: style.css is cache-busted by hand, and a stale copy would
+   hide the one thing that tells a pad player which button to press. px only -
+   vw/vh inside the fixed 1280x720 stage measure the window, not the box. */
+(function(){
+  if(document.getElementById('duelPadStyle'))return;
+  const s=document.createElement('style');s.id='duelPadStyle';
+  s.textContent=
+   '#duel-ov .dact3d .dact3d-b{flex:0 0 auto;display:inline-flex;align-items:center;'
+  +'justify-content:center;min-width:15px;height:15px;padding:0 4px;border-radius:4px;'
+  +'font-family:var(--u-font-ui);font-weight:700;font-size:10px;letter-spacing:.04em;'
+  +'color:var(--u-ink-strong);background:rgba(255,255,255,.07);'
+  +'border:1px solid rgba(255,255,255,.22);text-shadow:0 1px 2px rgba(0,0,0,.9);'
+  +'white-space:nowrap;line-height:1;}'
+  +'#duel-ov .dact-sel .dact3d-b{background:rgba(255,255,255,.2);border-color:rgba(255,255,255,.52);}'
+  +'#duel-ov .dact-dis .dact3d-b{opacity:.5;}'
+  +'#dpad-aim{position:fixed;z-index:60;pointer-events:none;transform:translate(-50%,-50%);'
+  +'border:2px solid rgb(var(--u-gold-rgb));border-radius:50%;'
+  +'box-shadow:0 0 14px rgba(var(--u-gold-rgb),.75),inset 0 0 10px rgba(var(--u-gold-rgb),.35);'
+  +'animation:dpadAimPulse .9s ease-in-out infinite alternate;}'
+  +'#dpad-aim i{position:absolute;left:50%;top:-20px;transform:translateX(-50%);'
+  +'font-style:normal;font-family:var(--u-font-ui);font-weight:700;font-size:12px;'
+  +'letter-spacing:.06em;white-space:nowrap;color:var(--u-ink-strong);'
+  +'background:rgba(var(--u-panel-rgb),.9);padding:1px 7px;border-radius:4px;'
+  +'border:1px solid rgba(var(--u-gold-rgb),.55);}'
+  +'@keyframes dpadAimPulse{0%{opacity:.7}100%{opacity:1}}';
+  document.head.appendChild(s);
+})();
+
+/* ══ DUEL CONTROLLER INPUT · 2026-09-15 ══════════════════════════════
+   The pad drove the match and every menu but NOT the duel - the one screen
+   that exists purely to make you choose. bldA/bldD build the rows with an
+   onclick and nothing else, so in single player you had to drop the pad and
+   reach for the mouse every time a tackle landed. (PvP already had pad picks
+   in pvpDuelInput, on its own older mapping: pass was □ there.)
+
+   THE BUTTON RULE (author's spec). One physical button keeps one MEANING on
+   both sides of the ball, mirroring the in-match action map:
+
+       △  read      Pass      · Intercept
+       ✕  body      Dribble   · Block    / Punch
+       □  commit    Shoot     · Tackle   / Save
+       ○  combo     One-two   · —
+
+   and RT + that button is its SUPER, exactly like the in-match super shot
+   (RT + □). The physical bindings live in ult11-input.js with every other
+   binding; this table only says which duel ACTION each menu row answers to.
+
+   It does not re-implement selection: it finds the live row and clicks it, so
+   cost gating, the dact-sel styling, the pass-target sub-mode, chkRdy and the
+   second-press-confirms rule all keep running down the one path the mouse
+   already used. An unaffordable row has no onclick, so the press is inert
+   exactly as a click on it would be - no separate affordability check to fall
+   out of step with bldA's. */
+const DUEL_ACT_INPUT={
+  /* attacking */
+  'pass':'DUEL_READ',        'dribble':'DUEL_BODY',
+  'shoot':'DUEL_COMMIT',     'one-two':'DUEL_COMBO',
+  'super-pass':'DUEL_S_READ','super-dribble':'DUEL_S_BODY',
+  'special':'DUEL_S_COMMIT', 'super-one-two':'DUEL_S_COMBO',
+  /* defending - the same four buttons, the same four meanings */
+  'intercept':'DUEL_READ',   'block':'DUEL_BODY',
+  'tackle':'DUEL_COMMIT',
+  'super-intercept':'DUEL_S_READ','super-block':'DUEL_S_BODY',
+  'super-tackle':'DUEL_S_COMMIT',
+  /* keeper facing a shot */
+  'punch':'DUEL_BODY',       'save':'DUEL_COMMIT',
+  'supersave':'DUEL_S_COMMIT'
+};
+/* One glyph set per scheme. R2 and RT are the same trigger under two names; a
+   finger gets no glyph at all, because a finger taps the row itself. */
+const DUEL_GLYPH={
+  playstation:{DUEL_READ:'△',DUEL_BODY:'✕',DUEL_COMMIT:'□',DUEL_COMBO:'○',
+    DUEL_S_READ:'R2+△',DUEL_S_BODY:'R2+✕',DUEL_S_COMMIT:'R2+□',DUEL_S_COMBO:'R2+○'},
+  xbox:{DUEL_READ:'Y',DUEL_BODY:'A',DUEL_COMMIT:'X',DUEL_COMBO:'B',
+    DUEL_S_READ:'RT+Y',DUEL_S_BODY:'RT+A',DUEL_S_COMMIT:'RT+X',DUEL_S_COMBO:'RT+B'},
+  keyboard:{DUEL_READ:'Q',DUEL_BODY:'X',DUEL_COMMIT:'E',DUEL_COMBO:'R',
+    DUEL_S_READ:'⇧Q',DUEL_S_BODY:'⇧X',DUEL_S_COMMIT:'⇧E',DUEL_S_COMBO:'⇧R'}
+};
+/* WHICH GLYPHS TO DRAW is not the same question as which button to read.
+   A PlayStation pad behind DS4Windows / Steam input reports itself as
+   "Xbox 360 Controller (XInput STANDARD GAMEPAD)" - the author's own pad does
+   exactly that - so UEInput.scheme() says xbox and the menu would print Y/A/X/B
+   at someone looking down at △✕□○. The BINDING is unaffected either way
+   (△ and Y are the same index); only the label is in doubt, so the label gets
+   a preference and the reading does not.
+
+   Default is 'playstation', the vocabulary this mapping was specified in.
+       padGlyphs()                -> current setting
+       padGlyphs('auto')          -> trust the pad's own id
+       padGlyphs('xbox')          -> Y / A / X / B
+       padGlyphs('playstation')   -> △ / ✕ / □ / ○
+       padGlyphs('keyboard')      -> Q / X / E / R
+   Persisted, and it rebuilds an open duel menu so the change is visible at
+   once instead of on the next duel. */
+const PAD_GLYPH_KEY='ue_pad_glyphs';
+let _padGlyphPref=(function(){
+  try{ return localStorage.getItem(PAD_GLYPH_KEY)||'playstation'; }
+  catch(e){ return 'playstation'; }
+})();
+function padGlyphs(v){
+  if(v===undefined) return _padGlyphPref;
+  _padGlyphPref=(v==='playstation'||v==='xbox'||v==='keyboard')?v:'auto';
+  try{ localStorage.setItem(PAD_GLYPH_KEY,_padGlyphPref); }catch(e){}
+  try{
+    if(typeof G!=='undefined'&&G&&G.D&&G.phase==='duel'){
+      bldA(G.D.carrier,G.D.isShot); bldD(G.D.def,G.D.ds,G.D.isShot);
+    }
+  }catch(e){}
+  return _padGlyphPref;
+}
+function duelInputScheme(){
+  if(_padGlyphPref!=='auto') return _padGlyphPref;
+  try{
+    const s=UEInput.scheme();
+    return (s==='playstation'||s==='xbox'||s==='keyboard')?s:'';   // '' = touch
+  }catch(e){ return 'keyboard'; }
+}
+function duelGlyphFor(actionId){
+  const act=DUEL_ACT_INPUT[actionId]; if(!act)return '';
+  const sch=duelInputScheme(); if(!sch)return '';
+  return (DUEL_GLYPH[sch]||DUEL_GLYPH.keyboard)[act]||'';
+}
+/* While the duel menu is up the duel OWNS the four face buttons. Every
+   in-match action on the same buttons is gated on phase==='moving' today and
+   is therefore already inert - this makes that a rule instead of a
+   coincidence, so a future action that forgets the phase gate cannot fire a
+   tackle out of a duel screen. */
+function duelOwnsButtons(){
+  if(typeof PVP!=='undefined'&&PVP&&PVP.on)return false;   // PvP has its own reader
+  if(typeof G==='undefined'||!G||!G.D||G.phase!=='duel')return false;
+  const ov=document.getElementById('duel-ov');
+  return !!(G.pm||(ov&&ov.classList.contains('show')));
+}
+
+if(typeof window!=='undefined') window.padGlyphs=padGlyphs;
+
+let _dpAim=null;                  // team-mate the pad is currently aiming at
+function duelPadInput(){
+  if(typeof UEInput==='undefined'||!duelOwnsButtons())return;
+  if(G.pm){ duelPadAim(); return; }        // picking a pass target, not a move
+  if(_dpAim){ _dpAim=null; duelPadAimPaint(null); }
+  for(const id in DUEL_ACT_INPUT){
+    if(!UEInput.pressed(DUEL_ACT_INPUT[id]))continue;
+    const row=document.querySelector('#abtns .dact3d[data-act="'+id+'"],'+
+                                     '#dbtns .dact3d[data-act="'+id+'"]');
+    if(!row)continue;                      // that move is not on offer this duel
+    G._duelT=Date.now();                   // input keeps the watchdog warm
+    row.click();                           // selA / selD own everything after this
+    return;
+  }
+}
+
+/* Pass and one-two need a TARGET, and picking one was a click on the pitch -
+   so choosing Pass with a pad used to strand you in a mode the pad could not
+   leave. Left/right (stick or d-pad) walks the team-mates in pitch order, the
+   move's own button or CONFIRM locks the pick, and CANCEL backs out to the
+   menu. The candidate list is the mouse handler's, minus nobody: it has to
+   stay the same set or the two input paths mean different things. */
+function duelPadAimList(){
+  const s=G.D&&G.D.as; if(!s||!PP[s])return [];
+  const sq2=sq(s);
+  return Object.keys(sq2)
+    .filter(k=>k!==G.ck&&sq2[k]&&PP[s][k])
+    .sort((a,b)=>(PP[s][a].x-PP[s][b].x)||(PP[s][a].y-PP[s][b].y));
+}
+function duelPadAim(){
+  const list=duelPadAimList(); if(!list.length)return;
+  if(!_dpAim||list.indexOf(_dpAim)<0){
+    const want=baseAction(G.D.ak||'pass');
+    const best=bestTeammateFor(G.D.as,G.ck,want)||bestTeammateFor(G.D.as,G.ck,'pass');
+    _dpAim=(best&&list.indexOf(best)>=0)?best:list[0];
+  }
+  let step=0;
+  if(UEInput.pressed('NAV_RIGHT')||UEInput.pressed('NAV_DOWN'))step=1;
+  else if(UEInput.pressed('NAV_LEFT')||UEInput.pressed('NAV_UP'))step=-1;
+  if(step){
+    _dpAim=list[(list.indexOf(_dpAim)+step+list.length)%list.length];
+    G._duelT=Date.now();
+  }
+  /* Lock is tested BEFORE cancel on purpose: ○ is both CANCEL and the
+     one-two button, so while you are aiming a one-two it must commit, not
+     back out. Aiming anything else, ○ is still your way back. */
+  const own=DUEL_ACT_INPUT[G.D.ak]||'';
+  if((own&&UEInput.pressed(own))||UEInput.pressed('CONFIRM')){ duelPadAimLock(_dpAim); return; }
+  if(UEInput.pressed('CANCEL')){ duelPadAimCancel(); return; }
+  duelPadAimPaint(_dpAim);
+}
+function duelPadAimLock(k){
+  if(!k||!G.D)return;
+  const nm=((sq(G.D.as)||{})[k]||{}).name||'team-mate';
+  G.D.pk=k; G.pm=false; _dpAim=null; duelPadAimPaint(null);
+  const pb=$id('pass-banner'); if(pb)pb.style.display='none';
+  const ov=document.getElementById('duel-ov'); if(ov)ov.classList.add('show');
+  chkRdy(); G._duelT=Date.now();
+  say((baseAction(G.D.ak)==='one-two'?'Wall pass':'Pass')+' to '+nm+' — press again to go');
+}
+function duelPadAimCancel(){
+  G.pm=false; _dpAim=null; duelPadAimPaint(null);
+  const pb=$id('pass-banner'); if(pb)pb.style.display='none';
+  const ov=document.getElementById('duel-ov'); if(ov)ov.classList.add('show');
+  G.D.ak=null; G.D.pk=null;
+  const ab=document.getElementById('abtns');
+  if(ab){
+    ab.querySelectorAll('.dact3d').forEach(b=>{b.classList.remove('dact-sel');applySelStyle(b,'clear');});
+    clearDim(ab);
+  }
+  chkRdy(); G._duelT=Date.now();
+}
+/* The aim has to be VISIBLE or the stick is guesswork. One ring on the chosen
+   man plus his name, positioned in CLIENT coordinates on document.body: the
+   stage (#viewport) carries a CSS transform, and position:fixed inside a
+   transformed ancestor resolves against that ancestor rather than the window,
+   so anything parented inside the stage would land in the wrong place. */
+function duelPadAimPaint(k){
+  let ring=document.getElementById('dpad-aim');
+  if(!k){ if(ring)ring.style.display='none'; return; }
+  if(!ring){
+    ring=document.createElement('div'); ring.id='dpad-aim';
+    ring.innerHTML='<i></i>';
+    document.body.appendChild(ring);
+  }
+  const pos=duelPadAimScreen(k);
+  if(!pos){ ring.style.display='none'; return; }
+  const d=Math.max(22,pos.r*2);
+  ring.style.display='block';
+  ring.style.left=pos.x+'px'; ring.style.top=pos.y+'px';
+  ring.style.width=d+'px'; ring.style.height=d+'px';
+  const nm=((sq(G.D.as)||{})[k]||{}).name||'';
+  const tag=ring.firstChild; if(tag&&tag.textContent!==nm)tag.textContent=nm;
+}
+function duelPadAimScreen(k){
+  if(!CV||!G.D)return null;
+  const r=CV.getBoundingClientRect();
+  if(!r.width||!r.height)return null;
+  const cw=CV.width||W, ch=CV.height||H;
+  if(window.P3D&&P3D.on&&P3D.playerScreenPos){
+    const s3=P3D.playerScreenPos(G.D.as,k);            // canvas backing-store px
+    if(!s3)return null;
+    return {x:r.left+s3.x*r.width/cw, y:r.top+s3.y*r.height/ch, r:s3.r*r.height/ch};
+  }
+  const p=PP[G.D.as]&&PP[G.D.as][k]; if(!p)return null;
+  /* 2D fallback. The pitch draw applies the camera, so this has to as well -
+     it is the inverse of the tap handler's un-project, not a copy of it. */
+  const sx=(perspX(p.x,p.y)-camX)*camZ+W/2, sy=(perspY(p.y)-camY)*camZ+H/2;
+  return {x:r.left+sx*r.width/W, y:r.top+sy*r.height/H,
+          r:(CR+10)*perspScale(p.y)*camZ*r.height/H};
+}
 
 function bldA(carrier,isShot){
   const sp=carrier?Math.round(carrier.spirit||1500):1500;
@@ -7324,6 +7653,7 @@ function bldA(carrier,isShot){
     const costTxt=cost>0?(ok?'−'+cost+' SP':'⚡ LOW'):'FREE';
     const btn=document.createElement('button');
     btn.className='dact3d '+(isSp?'dact-sp':'dact-atk')+(ok?'':' dact-dis');
+    btn.dataset.act=id;               // how the pad/keyboard finds this row
     btn.innerHTML=actBtnInner(id,costTxt,lbl);
     if(ok)btn.onclick=()=>selA({id:id,l:lbl,i:icon,sp:isSp,ot:ot},btn);
     return btn;
@@ -7359,6 +7689,7 @@ function bldD(def,ds,isShot){
     const costTxt=cost>0?(ok?'−'+cost+' SP':'⚡ LOW'):'FREE';
     const btn=document.createElement('button');
     btn.className='dact3d '+(isSp?'dact-ss':'dact-def')+(ok?'':' dact-dis');
+    btn.dataset.act=id;               // how the pad/keyboard finds this row
     btn.innerHTML=actBtnInner(id,costTxt,lbl);
     if(ok)btn.onclick=()=>selD({id:id,l:lbl,i:icon},btn);else btn.disabled=true;
     return btn;

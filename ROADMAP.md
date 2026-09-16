@@ -391,8 +391,118 @@ exist until there is an input layer to bind them to.
   **Verified** with a synthetic standard pad: 11 candidates found on the home
   screen, d-pad down walks 0→1→2, A activates FRIENDLY MATCH and lands on team
   select.
+- **B.1d · DUEL CONTROLLER INPUT — ✅ DONE 2026-09-15** (input v9 / js v164).
+  Author: *"the controller is now working but not in duel — i need pass to be
+  triangle, dribble to be x, shoot to be square and 1-2 to be circle, for the
+  super same concept but it needs RT as extra, same as in game super shot is
+  RT+square; in defense same concept, same 4 + 4 buttons."*
+
+  **Why it was dead.** `bldA`/`bldD` build the duel rows with an `onclick` and
+  nothing else, so in single player the duel was mouse-only — the one screen
+  that exists purely to make you choose. The pad *was* being read: the four face
+  buttons resolved to the in-match SHOOT/PASS/CROSS/JUMP actions, and every one
+  of those is gated on `phase==='moving'`, so each press ran and did nothing.
+  `_navScreenEl()` returns null on `s-match`, so d-pad menu nav was off too, and
+  `CONFIRM` worked only *after* a pick existed — which nothing could make.
+  (PvP already had pad picks in `pvpDuelInput`, on an older mapping where pass
+  was □; that path is untouched and still runs for PvP.)
+
+  **THE BUTTON RULE.** One physical button keeps one MEANING on both sides of
+  the ball, mirroring the in-match action map, so the duel teaches nothing new:
+
+  | button | meaning | attacking | defending | keeper |
+  |---|---|---|---|---|
+  | △ | read   | Pass    | Intercept | — |
+  | ✕ | body   | Dribble | Block     | Punch |
+  | □ | commit | Shoot   | Tackle    | Save |
+  | ○ | combo  | One-two | —         | — |
+
+  and **RT + that button is its super** — RT+△ Threading Pass, RT+✕ Falcon
+  Dribble, RT+□ the special shot / Iron Tackle / SUPER SAVE, RT+○ Lightning 1-2
+  — exactly like the in-match super shot on RT+□. Defence has no ○ because it
+  has only three moves; the slot is left empty rather than given a fourth.
+
+  **Where it lives.** The bindings are DATA in `ult11-input.js` beside every
+  other binding, as eight new semantic actions (`DUEL_READ/BODY/COMMIT/COMBO`
+  and `DUEL_S_*`) — named for the meaning, not the move, since one action serves
+  two or three moves. Keyboard follows the same meanings on the in-match letters:
+  **q** read, **x** body, **e** commit, **r** combo, **shift+** them for the
+  supers. Body took `x` rather than the in-match jump key because space is also
+  CONFIRM, and one key must not both pick a move and fire it.
+
+  **It does not re-implement selection.** `duelPadInput()` maps the action to a
+  row via a new `data-act` on each button and **clicks it**, so cost gating, the
+  `dact-sel` styling, the pass-target sub-mode, `chkRdy` and the
+  second-press-confirms rule all keep running down the one path the mouse
+  already used. An unaffordable row has no `onclick`, so the press is inert
+  exactly as a click on it would be — there is no second affordability check to
+  fall out of step with `bldA`'s.
+
+  **Three collisions that had to be solved, not ignored:**
+  1. `RT+□` would fire SUPER *and* SHOOT. The old fix was one hardcoded line
+     for that one pair; the duel adds four more chords, so suppression is now
+     derived from the bindings — index every chord by its last part, suppress a
+     plain binding whose chord is satisfied. Keyboard chords were added for the
+     same reason and go through the same test.
+  2. `✕` is CONFIRM everywhere else and a MOVE in a duel — the same button
+     firing two actions in one frame. Inside a duel the move wins; you confirm
+     by pressing the highlighted row's button **again** (or Enter / Start). The
+     CONFIRM handler checks the new `UEInput.padDown('a')` raw hatch to tell a
+     pad ✕ from an Enter, since Enter never has ✕ down.
+  3. `○` is CANCEL *and* one-two. While aiming a one-two, lock is tested before
+     cancel so ○ commits; aiming anything else, ○ is still the way back.
+
+  **Pass and one-two need a target**, and picking one was a click on the pitch —
+  so choosing Pass with a pad used to strand you in a mode the pad could not
+  leave. Left/right (stick or d-pad) now walks the team-mates in pitch order
+  with a gold ring + name over the chosen man, the move's own button or CONFIRM
+  locks it, CANCEL backs out. The ring is parented to `document.body` in CLIENT
+  coordinates: `#viewport` carries a CSS transform, and `position:fixed` inside
+  a transformed ancestor resolves against that ancestor, not the window.
+  (This is B.4's amended "pass-target selection stays a click" — still true for
+  touch; the pad now has a way through it too.)
+
+  **GLYPHS ARE A SEPARATE QUESTION FROM BINDINGS.** The author's own pad reports
+  itself as `Xbox 360 Controller (XInput STANDARD GAMEPAD)` (two of them, index
+  0 and 1), so `UEInput.scheme()` says xbox and the menu would print Y/A/X/B at
+  someone looking down at △✕□○. The binding is identical either way — △ and Y
+  are the same index — so only the label is in doubt, and only the label gets a
+  preference: `padGlyphs('playstation'|'xbox'|'keyboard'|'auto')`, persisted,
+  **defaulting to `playstation`** because that is the vocabulary this mapping was
+  specified in. It rebuilds an open duel menu so the change shows at once.
+  The badge itself is injected from JS like the selection pulse, not added to
+  `style.css`: a stale cached stylesheet would hide the one thing that tells a
+  pad player which button to press.
+
+  **Verified.** 45/45 assertions on the binding table in a node harness
+  (`lab/test-input.js`, run with `node lab/test-input.js`, browser stubbed, one poll per frame so `pressed()`
+  edges are exact) — every face button to its duel action, every RT chord to its
+  super *with the plain action suppressed*, RT+□ still driving the in-match
+  SUPER while killing SHOOT, plain □ still driving both SHOOT and DUEL_COMMIT,
+  keyboard shift-chords, and the index surviving `reset()`.
+  Then in a live Italy-vs-Germany match: attacking △→pass ✕→dribble ○→one-two
+  and all three RT supers; defending △→intercept ✕→block □→tackle and all three
+  RT supers; keeper □→save ✕→punch RT+□→supersave; shot duel □→shoot; the same
+  button twice = select then `confirmDuel()` (fired exactly once); pass aim
+  defaulting to `bestTeammateFor`, cycling right/left through all 10 team-mates
+  in pitch order with the ring tracking real screen coordinates, and locking to
+  `G.D.pk` with the overlay back and `#dcfm.rdy` true. Glyph preference checked
+  through playstation → xbox → auto → playstation with the binding still reading
+  `tackle` on □ throughout, and the setting persisted.
+
+  **Testing note that cost a run:** the open-duel watchdog closes the overlay
+  after 12s, so a duel probed across two separate tool calls is already gone and
+  every pick reads `null`. Force `G.paused=true` and keep `G._duelT` warm, or do
+  the whole probe in one call.
+
+  **Not done here:** two pads both report as index 0/1 Xbox 360 controllers on
+  this machine — PvP addresses pads by slot 1/2, so a phantom second pad may
+  make PvP think P2 is present. Not touched, flagged for whenever PvP is next
+  looked at.
+
 - **B.2 · Kill the mouse** — `GO` and on-screen `PAUSE` buttons removed; `Enter` =
-  confirm, `Tab` = pause, duel choices bound to keys/face buttons with visible prompts.
+  confirm, `Tab` = pause, duel choices bound to keys/face buttons with visible
+  prompts — **the duel half is ✅ DONE, see B.1d.**
 - **B.3 · Key binding settings screen** — remappable, persisted to `localStorage`,
   shows the correct glyph per detected device (WASD / Xbox / PlayStation / touch).
 - **B.4 · Android touch layer** — virtual stick + 4 action buttons, safe-area aware.
@@ -1869,6 +1979,80 @@ The user's plan; unchanged structurally, restated as steps:
 - **D.6 · GK screen upscale** — keeper portrait + net background at higher res, new UI
   language applied. Layout stays exactly as it is (keeper-only, net behind) — that
   screen already works.
+
+  **D.6a · KEEPER ART NO LONGER CROPPED — ✅ DONE 2026-09-16** (js v169).
+  Author: *"the image of gk is changed in size compared to the previous one —
+  make sure it is loaded correctly with its full size shown on screen, rather
+  than being cut anywhere."*
+
+  **The rule never changed; the art's ASPECT did.** `#gkduel-art` was
+  `background: center top / auto 165%` — a deliberate waist-up zoom that scales
+  the image to 165% of the BOX HEIGHT and lets the remainder overflow. That is
+  fine for a tall portrait, which every keeper image used to be
+  (`career/clubs/gk.png` 941x1672, aspect 0.56; the retired
+  `players/steiner-alt.png` 1023x1537, 0.67).
+
+  The current keeper art is **landscape** — `players/donati.png` 1086x737 and
+  `players/steiner.png` 1536x1024, both ~1.47-1.50. Height-scaling those to 165%
+  renders them ~243% of the box height WIDE, so the screen showed a cap and one
+  glove: cropped top, bottom and both sides at once.
+
+  **Fix: `background-size: contain`,** which is aspect-AGNOSTIC — whatever shape
+  the next keeper image is, it is fitted whole. Nothing needs re-tuning when the
+  art is re-baked, which is the entire point: a size rule keyed to one aspect
+  ratio is a trap that springs silently on the next art swap.
+
+  **BIG AND LOW, NOT TUCKED ABOVE THE UI** (author's correction, same day). A
+  first pass shrank the art so it cleared the infobox and the action rows
+  completely. That was the wrong call: it cost real size, and — the actual
+  problem — it left the art's **hard horizontal bottom edge floating in
+  mid-screen**, which reads as a cut-out hanging in the air. These keeper images
+  are a landscape crop across the thighs, so that seam exists and has to be
+  *hidden*, not framed. Author: *"the image has to end exactly where we see the
+  blue bar with the commentary, so it should be bigger and lower, and i dont
+  care if a little of the infobox covers it, its normal."* Correct — the panels
+  are meant to sit over the scene, exactly as they do on the outfield duel.
+
+  **`--gk-art-bottom` is `0`, and the reason is worth knowing:** `#duel-ov` is
+  **1280x695, not 1280x720**, because `.mcomm` (the commentary bar) takes the
+  last 25px out of `#s-match`'s flex flow. The overlay's own bottom edge already
+  *is* the top of the bar, so `0` lands the art flush on it with no constant to
+  re-derive if that bar ever changes height. An intermediate pass used `3.5%`
+  (25/720) and left a 25px gap, because percentages in here resolve against 695
+  — **any % measured off the 720 stage is wrong inside this overlay.**
+
+  The width cap now exists only to keep the art on screen: the render is
+  height-limited for a wide image, so at this height donati is 1009px wide and
+  steiner 1028px; the cap sits just above that, so a wider source becomes
+  width-limited and stops growing rather than running off the 1280 stage.
+
+  **The keeper is not always on the left.** His infobox sits on whichever side he
+  occupies and **half time swaps the sides**, so one fixed nudge leans the wrong
+  way half the time. `gk-info-right` mirrors it, driven by reading the
+  `.dside.gk-info` panel that `opDuel` has *just* placed rather than recomputing
+  the side from `G.half`, so the two cannot disagree. It now only trims how much
+  of him the panel covers — it is no longer load-bearing.
+
+  Both keeper images have **zero transparent padding** (donati content spans
+  x 0-1075 of 1086, steiner 0-1522 of 1536, alpha-scanned on a canvas), so an
+  overlapping panel covers real drawing rather than empty margin. That is why
+  the overlap is a deliberate, signed-off ~115px rather than an accident.
+
+  Four vars are the whole tuning surface, same idea as `--duel-hero-h`:
+  `--gk-art-top:1.4% / --gk-art-bottom:0 / --gk-art-w:min(84%,1075px) /
+  --gk-art-x:55%` (45% mirrored).
+
+  **Verified** at a true 1280x720 stage across all four cases (both keepers x
+  both halves, i.e. infobox left and right), asserting on computed rects:
+  FLUSH_WITH_BAR, NOT_CROPPED, INSIDE_SCREEN — 4/4 pass. Every case renders with
+  its bottom edge at exactly y=695, the bar's top. donati -> 1009x685, steiner
+  -> 1028x685 (was 786x534 and 800x534 in the too-timid pass: **+64% area**),
+  infobox overlap 113px / 122px.
+
+  **Testing note:** forcing a viewport size in the Browser pane fights
+  `fitViewport()` and can render the stage into a corner of the screenshot, or
+  produce an all-black frame — the numbers from `getBoundingClientRect` were
+  still correct while the picture was not. Measure, do not eyeball.
 - **D.7 · Kit de-branding** — replace the Adidas three-stripe with an original trim
   motif on the grayscale masters, then re-bake every team (rolls up 0.3's kit half).
   **Done when:** a duel plays with animated, correctly-facing, correctly-kitted
