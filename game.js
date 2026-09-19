@@ -13,6 +13,27 @@
 
 'use strict';
 
+/* OPENED AS A FILE (playtest, 2026-09-19). Double-clicking index.html loads it
+   from file://, where browsers block fetch() - the 12MB Blender stadium (.glb)
+   cannot load, and the game silently falls back to the classic bowl. A tester
+   picked the 3D stadium and never saw it, with no idea why. Tell them. */
+(function(){
+  if(location.protocol!=='file:')return;
+  const show=()=>{
+    if(document.getElementById('file-proto-warn'))return;
+    const b=document.createElement('div');
+    b.id='file-proto-warn';
+    b.textContent='\u26A0 This game was opened directly from a file. Some parts (like the 3D stadium) '+
+      'cannot load this way \u2014 run it from a local web server, e.g. VS Code \u201cLive Server\u201d. '+
+      'Click to dismiss.';
+    b.style.cssText='position:fixed;left:0;right:0;top:0;z-index:99999;padding:10px 16px;'+
+      'background:#7a1010;color:#fff;font:600 14px/1.35 system-ui,sans-serif;text-align:center;cursor:pointer;';
+    b.onclick=()=>b.remove();
+    document.body.appendChild(b);
+  };
+  if(document.readyState==='loading') document.addEventListener('DOMContentLoaded',show); else show();
+})();
+
 // Global error handler
 window.addEventListener('error', function(e) {
   console.error('Global error caught:', e.error);
@@ -2017,7 +2038,7 @@ function tick(dt=1){
   // PRESS: second player (cover) also sprints toward carrier.
   // Human via the PRESS button; CPU automatically when trailing hard.
   const _covPress=(G.pressing&&ds==='h')||(ds==='a'&&teamStance('a')>0.55);
-  if(_covPress&&ROLES.cover&&!ocd(ds,ROLES.cover)&&!isStalled(ds,ROLES.cover)){
+  if(!AI2.on&&_covPress&&ROLES.cover&&!ocd(ds,ROLES.cover)&&!isStalled(ds,ROLES.cover)){
     const dp2=PP[ds][ROLES.cover];
     if(dp2){
       const dx=cp.x-dp2.x,dy=cp.y-dp2.y;
@@ -2057,7 +2078,7 @@ function tick(dt=1){
   moveOffBall(s,ds,dt);
   stepLunge(dt);
   stepJumps();
-  applyRepulsion();
+  applyRepulsion(dt);
   clampAllToPitch();
   enforcePace(dt);
   enforceRestartSpace();
@@ -2140,7 +2161,7 @@ const AI2={
   decideCarrierMs:[250,420],  // CPU carrier looks up this often, not every frame
   closeBH:2.6, midBH:5.0,     // "under pressure" = a defender within 2.6 body heights
   escapePass:[0.12,0.45],     // chance to pass out of a telegraphed tackle (poor .. elite passer)
-  repelDist:0.075, repelForce:0.8, repelCap:0.35,  // team-mate spacing guard (v1: 0.085 / 1.4 / uncapped)
+  repelDist:0.038, repelForce:0.65, repelCap:0.22,  // team-mate spacing guard (v1: 0.085 / 1.4 / uncapped)
   defReactExtra:25,           // defenders re-read the play ~90ms later than attackers
   passMid:0.14, passFree:0.045   // per "head-up" beat (every 250-420ms): chance to look for a pass
 };
@@ -2335,13 +2356,13 @@ function aiMoveTo(cur,tx,ty,gait,pl,side,key,dt){
   if(canReact(side,key,pl)||!ph.tx){
     if(side!==G.poss) ph.nextReact+=AI2.defReactExtra;          // the attack moves first, the defence answers
     const nx=tx+aiNoise(ph,0), ny=ty+aiNoise(ph,1);
-    if(ph.tx&&ph._tT){
+    if(ph.tx&&ph._tT&&ph._teamRole===gait&&ph._teamPoss===G.poss&&Math.hypot(nx-ph.tx,ny-ph.ty)<W*.065){
       const ticks=Math.max(1,(now-ph._tT)/16.667);
       let fx=(nx-ph.tx)/ticks, fy=(ny-ph.ty)/ticks; const m=Math.hypot(fx,fy);
       if(m>top){ fx*=top/m; fy*=top/m; }
       ph._fvx=fx; ph._fvy=fy;
     } else { ph._fvx=0; ph._fvy=0; }
-    ph.tx=nx; ph.ty=ny; ph._tT=now;
+    ph.tx=nx; ph.ty=ny; ph._tT=now;ph._teamRole=gait;ph._teamPoss=G.poss;
   }
   const dx=ph.tx-cur.x, dy=ph.ty-cur.y, d=Math.hypot(dx,dy);
   /* A long way from where he should be, he RUNS. The block slid across for a
@@ -2380,24 +2401,26 @@ function offsideLineX(s,cp){
 const _aiJob={}; let _aiJobKey=null;
 function _aiJobsReset(s){
   const key=s+':'+G.goalGen+':'+G.half+':'+activeHomeFormation+':'+activeAwayFormation;
-  if(_aiJobKey!==key){ for(const id in _aiJob) delete _aiJob[id]; _aiJobKey=key; G._supp=null; G._outlet=null; G._noOutlet=0; }
+  if(_aiJobKey!==key){ G._defPlan=null;G._teamTransitionUntil=Date.now()+850; for(const id in _aiJob) delete _aiJob[id]; _aiJobKey=key; G._supp=null; G._outlet=null; G._noOutlet=0; }
 }
 /* The two players offering the short options: nearest non-forwards, one each
-   side of the ball where possible. Kept ~0.9s so the jobs do not flicker. */
+   side of the ball where possible. Kept ~1.4s across short passes so the jobs do not flicker. */
 function supportersFor(s,cp,keys,prog){
   const now=Date.now(), S=G._supp;
-  if(S&&S.ck===G.ck&&now<S.until&&S.keys.every(k=>keys.includes(k)&&!ocd(s,k))) return S.set;
+  if(S&&now<S.until&&S.keys.every(k=>keys.includes(k)&&!ocd(s,k)&&dist(PP[s][k],cp)<W*.32)) return S.set;
   const cand=keys.filter(k=>{ const z=aiZone(s,k); if(ocd(s,k)) return false;
     if(aiForward(s,k)) return false;
-    if(aiRole(s,k)==='centreback'&&prog>0.45) return false;   // centre-backs stay home past halfway
+    if(aiRole(s,k)==='centreback') return false;   // centre-backs anchor the rest defence
     return true; });
   cand.sort((a,b)=>dist(PP[s][a],cp)-dist(PP[s][b],cp));
-  const pick=[]; let above=null, below=null;
+  // Keep the remaining support player when his partner becomes the carrier.
+  const pick=S?S.keys.filter(k=>cand.includes(k)&&dist(PP[s][k],cp)<W*.32):[];
+  let above=pick.find(k=>PP[s][k].y<cp.y)||null,below=pick.find(k=>PP[s][k].y>=cp.y)||null;
   for(const k of cand){ const up=PP[s][k].y<cp.y; if(up&&!above) above=k; if(!up&&!below) below=k; if(above&&below) break; }
-  if(above) pick.push(above); if(below) pick.push(below);
+  if(pick.length<2&&above&&!pick.includes(above))pick.push(above);if(pick.length<2&&below&&!pick.includes(below))pick.push(below);
   for(const k of cand){ if(pick.length>=2) break; if(!pick.includes(k)) pick.push(k); }
   const set=new Set(pick);
-  G._supp={ck:G.ck,keys:pick,set,until:now+900};
+  G._supp={ck:G.ck,keys:pick,set,until:now+1400};
   return set;
 }
 /* Nobody open ahead for ~0.4s -> pick two men to go and get open. Re-picked
@@ -2408,7 +2431,7 @@ function outletsFor(s,cp,keys,ctx){
   let fwdOpen=0;
   keys.forEach(k=>{ const p=PP[s][k]; if(!p) return;
     if((p.x-cp.x)*dir>20 && openPassLaneScore(s,G.ck,k)>0.4) fwdOpen++; });
-  if(fwdOpen>0){ G._noOutlet=0; G._outlet=null; return new Set(); }
+  if(fwdOpen>0){ G._noOutlet=0;if(G._outlet&&now<G._outlet.commitUntil)return G._outlet.set; G._outlet=null; return new Set(); }
   if(!G._noOutlet) G._noOutlet=now;
   if(now-G._noOutlet<400) return G._outlet?G._outlet.set:new Set();
   if(G._outlet&&G._outlet.ck===G.ck&&now<G._outlet.until) return G._outlet.set;
@@ -2419,7 +2442,7 @@ function outletsFor(s,cp,keys,ctx){
     .sort((a,b)=>dist(PP[s][a],cp)-dist(PP[s][b],cp))
     .slice(0,2);
   const set=new Set(cand);
-  G._outlet={ck:G.ck,set,until:now+900};
+  G._outlet={ck:G.ck,set,until:now+1200,commitUntil:now+650};
   return set;
 }
 /* Like _laneClear but ignoring the first 15% of the pass: the man pressing the
@@ -2499,14 +2522,14 @@ function decideAttackJob(s,k,cp,ctx){
   if(isFwd){
     const tight=_nearDef(ctx,cur.x,cur.y)<W*AI2.tightMark;
     if(tight&&Math.random()<0.6) return {kind:'check',until:dur(650,1000)};
-    if(ctx.prog>0.30&&Math.random()<(ctx.prog>0.45?AI2.runChance+0.15:AI2.runChance)){
+    if(ctx.prog>0.30&&Object.keys(_aiJob).filter(id=>id.startsWith(s+':')&&_aiJob[id].kind==='run'&&_aiJob[id].until>now).length<2&&Math.random()<(ctx.prog>0.45?AI2.runChance+0.15:AI2.runChance)){
       const laneY=striker ? lerp(p.y*H,H*0.5,0.15)+(Math.random()-0.5)*H*0.16
                            : lerp(p.y*H,H*0.5,0.15);            // wingers attack the channel, not the middle
       return {kind:'run',until:dur(1700,2600),hold:dur(350,900),lane:laneY,lead:W*(0.03+Math.random()*0.04)};
     }
     return {kind:striker?'hold':'width',until:dur(900,1500)};
   }
-  if(isFB&&ctx.prog>0.45){
+  if(isFB&&ctx.prog>0.45&&Date.now()>=(G._teamTransitionUntil||0)&&!Object.keys(_aiJob).some(id=>id.startsWith(s+':')&&_aiJob[id].kind==='overlap'&&_aiJob[id].until>now)){
     const sameSide=(p.y<0.5)?(cp.y<H*0.45):(cp.y>H*0.55);   // ball on his flank
     if(sameSide&&Math.random()<AI2.overlapChance) return {kind:'overlap',until:dur(1500,2300)};
   }
@@ -2529,12 +2552,12 @@ function attackTarget(s,k,cp,j,ctx){
          is shut. */
       tx=ctx.line-dir*W*0.075;
       let bestY=lerp(p.y*H,cp.y,0.2), bestGap=-1;
-      for(let i=0;i<5;i++){
+      if(j.pocketY==null)for(let i=0;i<5;i++){
         const yy=clamp(lerp(p.y*H,cp.y,0.2)+(i-2)*H*0.10,H*0.10,H*0.90);
         const gap=Math.min(_nearDef(ctx,tx,yy),W*0.10)+Math.min(_laneClear(ctx,cp.x,cp.y,tx,yy),W*0.05)*1.5;
         if(gap>bestGap){ bestGap=gap; bestY=yy; }
       }
-      ty=bestY; gait='jog'; break;
+      if(j.pocketY==null)j.pocketY=bestY;ty=j.pocketY;gait='jog';break;
     }
     case 'width': tx=cp.x+dir*W*(ctx.prog<0.4?0.05:0.12); ty=(p.y<0.5)?H*0.07:H*0.93; gait='support'; break;
     case 'overlap': tx=cp.x+dir*W*0.10; ty=(cp.y<H/2)?H*0.08:H*0.92; gait='run'; break;
@@ -2560,14 +2583,83 @@ function attackTarget(s,k,cp,j,ctx){
   return {tx:clamp(tx,W*0.08,W*0.92),ty:clamp(ty,H*0.05,H*0.95),gait};
 }
 
+// One plan owns the block. Markers keep their opponent until a real handover.
+function defensivePlan(s,ds,cp,line,offsets,dt){
+  const now=Date.now(),dir=dirFor(ds),keys=validOutfieldKeys(ds);
+  let plan=G._defPlan;
+  if(!plan||plan.side!==ds){plan=G._defPlan={side:ds,marks:{},until:0,ballY:cp.y,line,anchors:{},presser:null};}
+  const blend=1-Math.exp(-Math.max(0,dt)/14);
+  plan.ballY=lerp(plan.ballY,cp.y,blend);plan.line=lerp(plan.line,line,blend);
+  const goal=ownGoalXFor(ds),prog=progressFor(s,cp),transition=now<(G._teamTransitionUntil||0);
+  for(const k of keys){
+    const p=fp(k,ds==='h'?'home':'away',G.half),z=aiZone(ds,k);
+    let lp=plan.line+(offsets[k]||0),shift=DEF_SHIFT.line;
+    if(z==='mid'){lp=clamp(1-prog-.03,plan.line+.06,plan.line+.20);shift=DEF_SHIFT.mid;}
+    if(z==='att'){lp=clamp(plan.line+.32,.36,.76);shift=DEF_SHIFT.fwd;}
+    plan.anchors[k]={x:clamp((dir>0?lp:1-lp)*W,W*.08,W*.92),y:defShiftY(p.y*H,plan.ballY,shift),zone:z};
+  }
+  const available=k=>keys.includes(k)&&!ocd(ds,k)&&!isStalled(ds,k)&&!isBlocking(ds,k)&&!lungeActive(ds,k);
+  const wantsPress=!transition&&((ds==='h'&&G.pressing)||(isCpuSide(ds)&&teamStance(ds)>.55));
+  if(!wantsPress)plan.presser=null;
+  else if(!plan.presser||!available(plan.presser)||dist(PP[ds][plan.presser],cp)>W*.20||plan.presser===ROLES.engager||plan.presser===ROLES.cover){
+    // Extra pressure comes from midfield, never by pulling both centre-backs out.
+    plan.presser=keys.filter(k=>available(k)&&k!==ROLES.engager&&k!==ROLES.cover&&aiZone(ds,k)==='mid'&&dist(PP[ds][k],cp)<W*.18)
+      .sort((a,b)=>dist(PP[ds][a],cp)-dist(PP[ds][b],cp))[0]||null;
+  }
+  const legal=(k,ak)=>{
+    const a=plan.anchors[k],p=PP[s][ak];
+    if(!a||!p||!sq(s)[ak]||ocd(s,ak)||ak===G.ck||!available(k)||k===ROLES.engager||k===ROLES.cover||k===plan.presser||a.zone==='att')return false;
+    const dy=Math.abs(p.y-a.y),dx=Math.abs(p.x-a.x);
+    return dy<H*(aiRole(ds,k)==='centreback'?.22:.27)&&dx<W*(a.zone==='def'?.22:.26)&&dist(PP[ds][k],p)<W*.32;
+  };
+  let invalid=false;
+  for(const k in plan.marks)if(!legal(k,plan.marks[k])){delete plan.marks[k];invalid=true;}
+  const roles=[ROLES.engager,ROLES.cover,plan.presser].join(':');
+  if(now>=plan.until||invalid||roles!==plan.roles){
+    const old=plan.marks,marks={},used=new Set();
+    const threats=validOutfieldKeys(s).filter(k=>k!==G.ck&&PP[s][k]&&(!ocd(s,k)))
+      .filter(k=>Math.abs(PP[s][k].y-cp.y)<H*.42||progressFor(s,PP[s][k])>.70)
+      .sort((a,b)=>(progressFor(s,PP[s][b])-.12*Math.abs(PP[s][b].y/H-.5))-(progressFor(s,PP[s][a])-.12*Math.abs(PP[s][a].y/H-.5)));
+    // Honour existing legal assignments first; do not swap men on tiny distance changes.
+    for(const k in old)if(legal(k,old[k])&&threats.includes(old[k])){marks[k]=old[k];used.add(old[k]);}
+    for(const ak of threats){if(used.has(ak))continue;let best=null,cost=Infinity;
+      for(const k of keys){if(marks[k]||!legal(k,ak))continue;
+        const v=dist(PP[ds][k],PP[s][ak])+.5*dist(plan.anchors[k],PP[s][ak]);
+        if(v<cost){cost=v;best=k;}}
+      if(best){marks[best]=ak;used.add(ak);}
+    }
+    plan.marks=marks;plan.until=now+1100;plan.roles=roles;
+  }
+  plan.transition=transition;plan.goal=goal;return plan;
+}
+function defensiveTarget(s,ds,k,cp,plan){
+  const anchor=plan.anchors[k],cur=PP[ds][k],dir=dirFor(ds);
+  let x=anchor.x,y=anchor.y,gait='shape';
+  const bounded=(tx,ty)=>{
+    const cb=aiRole(ds,k)==='centreback',z=anchor.zone;
+    x=clamp(tx,anchor.x-W*(cb?.075:z==='def'?.10:.14),anchor.x+W*(cb?.075:z==='def'?.10:.14));
+    y=clamp(ty,anchor.y-H*(cb?.15:.21),anchor.y+H*(cb?.15:.21));
+  };
+  if(ocd(ds,k))return {x,y,gait:'jog'};
+  if(k===plan.presser){bounded(lerp(cp.x,plan.goal,.08),cp.y);gait='press';}
+  else if(k===ROLES.cover){
+    const dx=plan.goal-cp.x,dy=H*.5-cp.y,d=Math.hypot(dx,dy)||1;
+    bounded(cp.x+dx/d*BODY()*2.4,cp.y+dy/d*BODY()*2.4);gait='track';
+  }else if(plan.marks[k]){
+    const p=PP[s][plan.marks[k]],dx=plan.goal-p.x,dy=H*.5-p.y,d=Math.hypot(dx,dy)||1;
+    bounded(p.x+dx/d*W*.025,p.y+dy/d*W*.025);gait='track';
+  }else if(k===ROLES.blocker){bounded(lerp(cp.x,plan.goal,.28),lerp(cp.y,H*.5,.22));gait='track';}
+  // Beaten players recover through their own corridor rather than joining a scrum.
+  if(plan.transition&&anchor.zone!=='att'&&(cur.x-cp.x)*dir>W*.025){x=anchor.x;y=anchor.y;gait='run';}
+  return {x:clamp(x,W*.08,W*.92),y:clamp(y,H*.04,H*.96),gait};
+}
+
 function moveOffBallV2(s,ds,dt=1){
   const cp=PP[s][G.ck]; if(!cp) return;
   const dir=dirFor(s), ddir=dirFor(ds);
   const stA=teamStance(s), stD=teamStance(ds);
   const bunker=Math.max(0,-stD), dchase=Math.max(0,stD);
   const carrierProg=progressFor(s,cp);
-  const threatLevel=clamp((carrierProg-.30)/.45,0,1);
-  const B=BODY();
   _aiJobsReset(s);
   const fpos=(side)=>(k)=>fp(k,side==='h'?'home':'away',G.half);
   const stagger=(side,dsign)=>{ const out={}; try{
@@ -2610,151 +2702,24 @@ function moveOffBallV2(s,ds,dt=1){
     aiMoveTo(cur,t.tx,t.ty,t.gait,pl,s,k,dt);
   });
 
-  // ── DEFENDING TEAM ── (v1's roles, v2 movement; your team-mates leave you the tackle)
-  const humanDef=!isCpuSide(ds);
+  // ── DEFENDING TEAM ── coordinated shape, cover and persistent zonal marks
   const attPosOwnFrame=1-carrierProg;
   const lineGap=0.13*(1-carrierProg*0.55);
   const defLineProg=clamp(attPosOwnFrame-lineGap-bunker*0.05+dchase*0.05,0.155,0.62);
   const _defOff=stagger(ds,ddir);
   const dfp=fpos(ds);
-  const assignedDefs=new Set([ROLES.engager,ROLES.cover,ROLES.blocker]);
-  const freeAtk=validOutfieldKeys(s).filter(k=>k!==G.ck);
-  const dgx=ownGoalXFor(ds);
-  // is the man you steer close enough to take it on himself?
-  let engEta=1e9;
-  if(humanDef&&ROLES.engager){ const v=(_cvel.k===G.ck)?_cvel:{vx:0,vy:0}; engEta=defenderETA(ds,ROLES.engager,cp.x,cp.y,v.vx,v.vy); }
-  const _pressers=new Set();
-  {
-    const pressCount=carrierProg>0.62?2:1;
-    const cands=[];
-    Object.keys(sq(ds)).forEach(k=>{
-      if(!sq(ds)[k]||k==='GK'||assignedDefs.has(k)||ocd(ds,k)||!PP[ds][k]) return;
-      if(aiZone(ds,k)==='att') return;
-      cands.push({k,d:dist(PP[ds][k],cp)});
-    });
-    cands.sort((a,b)=>a.d-b.d);
-    cands.slice(0,pressCount).forEach(c=>{ if(c.d<W*0.30) _pressers.add(c.k); });
-  }
-  const markerMap={};
-  {
-    const usedAtk=new Set(), usedDef=new Set(), pairs=[];
-    const MARK_RANGE=W*0.34;
-    Object.keys(sq(ds)).forEach(k=>{
-      if(!sq(ds)[k]||assignedDefs.has(k)||k==='GK'||!PP[ds][k]) return;
-      if(aiZone(ds,k)==='att') return;
-      freeAtk.forEach(ak=>{ if(PP[s][ak]) pairs.push({k,ak,d:dist(PP[ds][k],PP[s][ak])}); });
-    });
-    /* MOST DANGEROUS MAN FIRST, nearest free defender to him. Closest-pair-first
-       left the runner in behind unmarked while two defenders sorted out a man on
-       the touchline; ranking the PAIRS by danger was worse still (a defender 400
-       units away claimed the striker and the man next to him marked nobody -
-       measured: top threat marked 0%). */
-    /* FAR SIDE IS LEFT ALONE. Marking every attacker wherever he stood kept the
-       block spread across the full width, so a carrier on the touchline met a
-       block still centred (measured 184-262u infield of the ball). A man on the
-       far side is only tracked if he is a real threat; the rest of the defenders
-       drop into the shape and slide with the ball. */
-    const farBand=H*0.42;
-    const threats=freeAtk.filter(ak=>{
-      const p2=PP[s][ak]; if(!p2) return false;
-      return Math.abs(p2.y-cp.y)<farBand || progressFor(s,p2)>0.70;
-    }).sort((a,b)=>progressFor(s,PP[s][b])-progressFor(s,PP[s][a]));
-    threats.forEach(ak=>{
-      let best=null,bd=Infinity;
-      pairs.forEach(pr=>{ if(pr.ak!==ak||usedDef.has(pr.k)) return; if(pr.d<bd){ bd=pr.d; best=pr.k; } });
-      if(best&&bd<=MARK_RANGE){ markerMap[best]=ak; usedDef.add(best); usedAtk.add(ak); }
-    });
-  }
+  const plan=defensivePlan(s,ds,cp,defLineProg,_defOff,dt);
   Object.keys(sq(ds)).forEach(k=>{
-    if(!sq(ds)[k]||!PP[ds][k]) return;
-    if(k===ROLES.engager) return;                       // tick() / passFlightChaser
-    if(isStalled(ds,k)) return;
-    if(isBlocking(ds,k)) return;                        // braced for a block: planted
-    const cur=PP[ds][k], p=dfp(k), pl=sq(ds)[k];
+    const pl=sq(ds)[k],cur=PP[ds][k];
+    if(!pl||!cur||k===ROLES.engager||isStalled(ds,k)||isBlocking(ds,k)||lungeActive(ds,k))return;
+    const p=dfp(k);
     if(k==='GK'){
-      const gkBase=ddir>0?Math.min(p.x*W,W*.072):Math.max(p.x*W,W*.928);
-      const gkY=clamp(p.y*H+(cp.y-H*.5)*0.06,H*.12,H*.88);
-      cur.x=lerp(cur.x,gkBase,0.08); cur.y=lerp(cur.y,gkY,0.06);
-      if(ddir>0&&cur.x>W*.09)cur.x=W*.072;
-      if(ddir<0&&cur.x<W*.91)cur.x=W*.928;
-      return;
+      const gx=ddir>0?Math.min(p.x*W,W*.072):Math.max(p.x*W,W*.928);
+      cur.x=lerp(cur.x,gx,1-Math.pow(.92,dt));
+      cur.y=lerp(cur.y,clamp(p.y*H+(cp.y-H*.5)*.06,H*.12,H*.88),1-Math.pow(.94,dt));return;
     }
-    if(ocd(ds,k)){ aiMoveTo(cur,p.x*W,p.y*H,'jog',pl,ds,k,dt); return; }
-    const beaten=recoveryMult(ds,k,cur)>1.2;           // ball got goal-side of him: sprint back
-    if(k===ROLES.cover){
-      /* Measured 0% of frames with a cover behind the presser: lerp(ball,goal,0.35)
-         is 100+ units away, so the second man was never actually there. Now he
-         sits a fixed ~2.4 body heights goal-side of the ball, tucked inside. */
-      const gx2=dgx-cp.x, gy2=(H*0.5)-cp.y, gl2=Math.hypot(gx2,gy2)||1, R2=2.4*B;
-      aiMoveTo(cur,clamp(cp.x+gx2/gl2*R2,W*.04,W*.96),clamp(cp.y+gy2/gl2*R2,H*.05,H*.95),
-               beaten?'run':'track',pl,ds,k,dt);
-      return;
-    }
-    if(k===ROLES.blocker){
-      let threat=null,bestProg=-1;
-      freeAtk.forEach(ak=>{ if(!PP[s][ak]) return; const pr=progressFor(s,PP[s][ak]); if(pr>bestProg){bestProg=pr;threat=ak;} });
-      if(threat&&PP[s][threat]){ const tp=PP[s][threat];
-        aiMoveTo(cur,lerp(cp.x,tp.x,0.55),lerp(cp.y,tp.y,0.55),beaten?'run':'track',pl,ds,k,dt);
-      } else aiMoveTo(cur,clamp(lerp(cp.x,dgx,0.55),W*.04,W*.96),lerp(H*.5,cp.y,0.25),'track',pl,ds,k,dt);
-      return;
-    }
-    if(markerMap[k]){
-      const tgt=PP[s][markerMap[k]];
-      if(tgt){
-        const distToCarrier=Math.hypot(cur.x-cp.x,cur.y-cp.y), distToMarker=Math.hypot(cur.x-tgt.x,cur.y-tgt.y);
-        if(_pressers.has(k)&&carrierProg>0.55&&distToCarrier<distToMarker*1.15){
-          let tx=lerp(cp.x+dir*W*0.03,dgx,0.15);
-          const fX=(ddir>0?0.135:1-0.135)*W; tx=ddir>0?Math.max(tx,fX):Math.min(tx,fX);
-          aiMoveTo(cur,tx,lerp(cp.y,H*0.5,0.10),'press',pl,ds,k,dt);
-          return;
-        }
-        // goal-side of his man and a little ball-side, so the pass into him is contested
-        const gsb=0.18+threatLevel*0.12+bunker*0.15;
-        let tx=lerp(tgt.x,dgx,gsb);
-        const floorX=(ddir>0?0.135:1-0.135)*W; tx=ddir>0?Math.max(tx,floorX):Math.min(tx,floorX);
-        /* Tight on his man near the ball, TUCKED IN towards it the further his
-           man is from it. Marking everyone where he stood kept the block spread
-           across the width while the ball sat on a touchline. */
-        const dy=Math.abs(tgt.y-cp.y);
-        const tuck=clamp(dy/(H*0.42),0,1)*DEF_SHIFT.tuck;
-        const ty=lerp(tgt.y,cp.y,0.05+tuck);
-        aiMoveTo(cur,tx,ty,beaten?'run':'track',pl,ds,k,dt);
-        return;
-      }
-    }
-    if(_pressers.has(k)){
-      if(humanDef&&engEta<90){
-        // shepherd goal-side at ~3 body heights; the tackle belongs to the man you steer
-        const gx=dgx-cp.x, gy=H*0.5-cp.y, gl=Math.hypot(gx,gy)||1, R=AI2.containBH*B;
-        aiMoveTo(cur,cp.x+gx/gl*R,cp.y+gy/gl*R,beaten?'run':'track',pl,ds,k,dt);
-      } else aiMoveTo(cur,lerp(cp.x,dgx,0.10),lerp(cp.y,H*0.5,0.05),'press',pl,ds,k,dt);
-      return;
-    }
-    const zone=aiZone(ds,k);
-    let tx=p.x*W, ty=p.y*H;
-    /* 3.6 of 9 outfielders were goal-side of the ball while defending - the
-       rest were stranded upfield. A man the ball has gone past now runs back
-       into the block instead of holding his line. */
-    if(beaten&&zone!=='att'){
-      const backProg=clamp(defLineProg+0.02,0.15,0.62);
-      aiMoveTo(cur,clamp((ddir>0?backProg:1-backProg)*W,W*.06,W*.94),
-               defShiftY(p.y*H,cp.y,DEF_SHIFT.line),'run',pl,ds,k,dt);
-      return;
-    }
-    if(zone==='def'){
-      const myProg=defLineProg+(_defOff[k]||0);
-      tx=(ddir>0?myProg:1-myProg)*W;
-      ty=defShiftY(p.y*H,cp.y,DEF_SHIFT.line);            // the back line slides across with the ball
-      if(ROLES.engager&&aiZone(ds,ROLES.engager)==='def'){ const ep=dfp(ROLES.engager); ty=lerp(ty,ep.y*H,0.25); }
-      const cap=ddir>0?W*0.48:W*0.52; tx=ddir>0?Math.min(tx,cap):Math.max(tx,cap);
-    } else if(zone==='mid'){
-      const lp=clamp(attPosOwnFrame-0.03-bunker*0.08,defLineProg+0.06,defLineProg+0.23);
-      tx=(ddir>0?lp:1-lp)*W; ty=defShiftY(p.y*H,cp.y,DEF_SHIFT.mid);
-    } else {
-      tx=(carrierProg<0.35)?(ddir>0?0.35:0.65)*W:p.x*W;
-      ty=defShiftY(p.y*H,cp.y,DEF_SHIFT.fwd);
-    }
-    aiMoveTo(cur,clamp(tx,W*.06,W*.94),clamp(ty,H*.05,H*.95),beaten?'run':'shape',pl,ds,k,dt);
+    const t=defensiveTarget(s,ds,k,cp,plan);
+    aiMoveTo(cur,t.x,t.y,t.gait,pl,ds,k,dt);
   });
 }
 function moveOffBallV1(s,ds,dt=1){
@@ -3152,7 +3117,7 @@ function moveOffBallV1(s,ds,dt=1){
 
 
 // ── REPULSION — prevent teammates bunching into clumps ────────────────────
-function applyRepulsion(){
+function applyRepulsion(dt=1){
   /* Separation used to be 0.28px per tick against 4-13px of movement toward
      the ball — roughly 45x too weak to do anything, which is why the whole
      team ended up standing on the same blade of grass. */
@@ -3168,7 +3133,7 @@ function applyRepulsion(){
     const keys=Object.keys(sq(side)).filter(k=>sq(side)[k]&&PP[side][k]);
     // a STUNNED player is pinned too: teammates within REPEL_DIST (~109 units)
     // were shoving him up to 1.4/tick, so a "frozen" player slid ~130 units.
-    const _pinned=(k)=>k===G.ck||k==='GK'||(side===_ds&&k===ROLES.engager)||isStunned(sq(side)[k]);
+    const _pinned=(k)=>(side===G.poss&&k===G.ck)||k==='GK'||(side===_ds&&k===ROLES.engager)||isStunned(sq(side)[k]);
     /* AI v2: the sum of shoves a player takes in one tick is capped. Two
        team-mates 50 units apart were each pushed ~0.76/tick, and a man next to
        your runner ~1.4 - sprint pace - so team-mates "outran" the man you steer
@@ -3188,7 +3153,7 @@ function applyRepulsion(){
       for(const k in acc){
         if(_pinned(k))continue;
         const v=acc[k], m=Math.hypot(v.x,v.y), sc=m>AI2.repelCap?AI2.repelCap/m:1;
-        PP[side][k].x+=v.x*sc; PP[side][k].y+=v.y*sc;
+        PP[side][k].x+=v.x*sc*dt; PP[side][k].y+=v.y*sc*dt;
       }
       return;
     }
@@ -3307,7 +3272,8 @@ function startAnim(){
       // BUGFIX: a saved shot (esp. a clean CATCH) repositions the ball without
       // running animateBallTo, so ball.bz kept its in-flight height and the ball
       // hovered over the keeper/carrier's head until the next pass. Ground it.
-      if(ball.bz) ball.bz+=(0-ball.bz)*Math.min(.35*dt,1);
+      if(window.P3D&&P3D.getJumpLift)ball.bz=P3D.getJumpLift(G.poss,G.ck)/.09;
+      else if(ball.bz)ball.bz+=(0-ball.bz)*Math.min(.35*dt,1);
     }else{
       ball.x+=(ball.tx-ball.x)*Math.min(.18*dt,1);
       ball.y+=(ball.ty-ball.y)*Math.min(.18*dt,1);
@@ -4751,6 +4717,7 @@ function _buildDpad(){
   try{ applyCtrlLayout(); }catch(e){}
 }
 function _updateDpad(show){
+  if(G_dpadQte) return;       // the keeper QTE owns the pad (gkQteDpad); runs every frame, so this matters
   if(!G_dpadEl){if(show)_buildDpad();if(!G_dpadEl)return;}
   G_dpadEl.style.display=show?'grid':'none';
   if(!show){G_touchContain=false;G_touchSprint=false;G_sprint=false;return;}
@@ -5145,13 +5112,13 @@ function directionalPass(kind='ground'){
   }
   if(!best){
     const point={x:cp.x+ax*W*(kind==='cross'?.36:.20),y:cp.y+ay*W*(kind==='cross'?.36:.20)};
-    kickOr(s,'pass',()=>launchPass(s,null,kind,point),{tx:point.x,ty:point.y,wind:kind==='cross'?280:150});return;
+    kickOr(s,'pass',()=>launchPass(s,null,kind,point),{tx:point.x,ty:point.y,wind:kind==='cross'?KICK.crossWind:KICK.passWind});return;
   }
   if(G._kick) return;                              // already winding one up
   if(isOffside(s,best)){callOffside(s,best);return;}
   G_moveTarget=null;
   const _to=PP[s][best];
-  kickOr(s,'pass',()=>launchPass(s,best,kind),{tx:_to&&_to.x,ty:_to&&_to.y,wind:kind==='cross'?280:150});
+  kickOr(s,'pass',()=>launchPass(s,best,kind),{tx:_to&&_to.x,ty:_to&&_to.y,wind:kind==='cross'?KICK.crossWind:KICK.passWind});
 }
 
 // ── DEFENSIVE PLAYER SWITCH (✕ while defending) ───────────────────
@@ -5360,7 +5327,7 @@ function firePendingStun(){
    the line, is blown away (stunned) and the shot loses power, or - a strong
    defender far down the line, where the shot has already lost pace - stops it.
    Animation: 6 IDLE frames until the block row is drawn (pitch3d L12x8.block). */
-const KICK={ passWind:150, shotWind:300, quickWind:150 };
+const KICK={ passWind:45, crossWind:90, shotWind:300, quickWind:35 };
 const BLOCK={
   brace:450, lock:350, cost:40, refund:20,
   reach:1.15,                 // body heights either side of him that he covers
@@ -5452,7 +5419,7 @@ function startKick(side,kind,fire,opts){
   const q={side,k,kind,t0:now,at:now+wind,fire,gen:G.goalGen,tx:opts&&opts.tx,ty:opts&&opts.ty};
   G._kick=q;
   try{ if(window.P3D&&P3D.telegraph) P3D.telegraph(side+':'+k,{wind,kind}); }catch(e){}
-  try{ if(window.P3D&&P3D.action) P3D.action(side,k,kind==='shot'?'shoot':'pass',{dx:q.tx!=null?q.tx-PP[side][k].x:dirFor(side),dy:q.ty!=null?q.ty-PP[side][k].y:0}); }catch(e){}
+  try{ if(window.P3D&&P3D.action) P3D.action(side,k,kind==='shot'?'shoot':'pass',{dx:q.tx!=null?q.tx-PP[side][k].x:dirFor(side),dy:q.ty!=null?q.ty-PP[side][k].y:0,frames:kind==='pass'?[wind/2,wind/2,35,35,35,35,35,35]:null}); }catch(e){}
   aiPlanBlocks(side,k,kind,q);
   return true;
 }
@@ -5467,8 +5434,11 @@ function stepKick(){
   const q=G._kick; if(!q) return false;
   if(q.gen!==G.goalGen||G.poss!==q.side||G.ck!==q.k||G.phase!=='moving'){ clearKick(); return false; }
   if(Date.now()<q.at) return true;
-  G._kick=null;
+  clearKick();
+  // Release keeps the existing kick animation running into its follow-through.
+  G._kickRelease=q;
   try{ q.fire(); }catch(e){ console.warn('[kick] fire failed',e); }
+  finally{G._kickRelease=null;}
   return true;
 }
 /* CPU defenders read a kick: the ones near its line may brace, with a chance
@@ -6033,14 +6003,29 @@ function launchPass(s,tk,kind='ground',point){
   const distp=Math.hypot(tx-from.x,ty-from.y),speed=W*(cross?.007:.012);
   const dur=Math.max(8,distp/speed),fr=cross?.997:.988;
   const v=distp*(1-fr)/(1-Math.pow(fr,dur));
-  ballTravel={active:true,physicalPass:true,side:s,kicker:sk,receiver:tk,kind,
+  const launchBz=window.P3D&&P3D.getJumpLift?P3D.getJumpLift(s,sk)/.09:Math.max(0,ball.bz||0);
+  ballTravel={active:true,physicalPass:true,side:s,kicker:sk,receiver:tk,kind,launchBz,
     x:from.x,y:from.y,fx:from.x,fy:from.y,tx,ty,vx:(tx-from.x)/Math.max(distp,1)*v,vy:(ty-from.y)/Math.max(distp,1)*v,
     fr,dur,progress:0,arc:cross?Math.min(40,12+distp/W*55):0,
     offside:validOutfieldKeys(s).filter(k=>k!==sk&&isOffside(s,k))};
-  ball.x=ball.tx=from.x;ball.y=ball.ty=from.y;ball.bz=0;
+  ball.x=ball.tx=from.x;ball.y=ball.ty=from.y;ball.bz=launchBz;
   G.phase='pass_anim';G.pm=false;G_moveTarget=null;G_laneTarget=null;
   const banner=$id('pass-banner');if(banner)banner.style.display='none';
-  try{if(window.P3D&&P3D.action)P3D.action(s,sk,'pass',{dx:tx-from.x,dy:ty-from.y});}catch(e){}
+  const released=G._kickRelease;
+  if(!released||released.side!==s||released.k!==sk){
+    try{if(window.P3D&&P3D.action)P3D.action(s,sk,'pass',{dx:tx-from.x,dy:ty-from.y,frames:[20,25,35,35,35,35,35,35]});}catch(e){}
+  }
+}
+// First physical contact on the swept segment, not the closest player's
+// unbounded projection (which could be negative and steal a departing ball).
+function passContactTime(from,to,p,r){
+  const vx=to.x-from.x,vy=to.y-from.y,px=from.x-p.x,py=from.y-p.y;
+  const a=vx*vx+vy*vy;if(a<1e-12)return null;
+  const b=px*vx+py*vy,c=px*px+py*py-r*r;
+  if(c<=0)return b<0?0:null; // overlapping: only a ball moving INTO the player
+  const disc=b*b-a*c;if(disc<0)return null;
+  const t=(-b-Math.sqrt(disc))/a;
+  return t>=0&&t<=1?t:null;
 }
 function tickPhysicalPass(b,dt){
   let remaining=Math.max(0,dt);
@@ -6048,7 +6033,7 @@ function tickPhysicalPass(b,dt){
     const h=Math.min(.5,remaining,b.dur-b.progress);remaining-=h;
     const old={x:b.x,y:b.y},decay=Math.pow(b.fr,h),scale=(1-decay)/(1-b.fr);
     b.x+=b.vx*scale;b.y+=b.vy*scale;b.vx*=decay;b.vy*=decay;b.progress+=h;
-    const t=clamp(b.progress/b.dur,0,1);ball.bz=b.arc*4*t*(1-t);
+    const t=clamp(b.progress/b.dur,0,1);ball.bz=b.arc*4*t*(1-t)+(b.launchBz||0)*(1-t)*(1-t);
     ball.x=ball.tx=b.x;ball.y=ball.ty=b.y;
     if(b.x<W*.07||b.x>W*.93||b.y<H*.01||b.y>H*.99){b.active=false;goLoose(b.x,b.y,b.vx,b.vy,b.side);return;}
     if(ball.bz<3){
@@ -6056,9 +6041,9 @@ function tickPhysicalPass(b,dt){
       for(const side of ['h','a'])for(const k of Object.keys(sq(side))){
         const p=PP[side][k],pl=sq(side)[k];if(!p||!pl||ocd(side,k)||isStalled(side,k))continue;
         if(side===b.side&&k===b.kicker&&b.progress<8)continue;
-        const f=_segT(old,{x:b.x,y:b.y},p);
-        if(f.d>W*.010)continue;
-        if(!hit||f.t<hit.t)hit={side,k,t:f.t};
+        const contact=passContactTime(old,{x:b.x,y:b.y},p,W*.010);
+        if(contact===null)continue;
+        if(!hit||contact<hit.t)hit={side,k,t:contact};
       }
       if(hit){
         b.active=false;
@@ -7415,9 +7400,9 @@ function clearDim(container){
    It does not re-implement selection: it finds the live row and clicks it, so
    cost gating, the dact-sel styling, the pass-target sub-mode, chkRdy and the
    second-press-confirms rule all keep running down the one path the mouse
-   already used. An unaffordable row has no onclick, so the press is inert
-   exactly as a click on it would be - no separate affordability check to fall
-   out of step with bldA's. */
+   already used. An unaffordable row answers with the same "not enough
+   stamina" line a mouse click gets (duelCantAfford) - no separate
+   affordability check to fall out of step with bldA's. */
 const DUEL_ACT_INPUT={
   /* attacking */
   'pass':'DUEL_READ',        'dribble':'DUEL_BODY',
@@ -7504,6 +7489,7 @@ if(typeof window!=='undefined') window.padGlyphs=padGlyphs;
 let _dpAim=null;                  // team-mate the pad is currently aiming at
 function duelPadInput(){
   if(typeof UEInput==='undefined'||!duelOwnsButtons())return;
+  if(G.D && G.D._qte) return;                  // the keeper QTE reads the buttons itself
   if(G.pm){ duelPadAim(); return; }        // picking a pass target, not a move
   if(_dpAim){ _dpAim=null; duelPadAimPaint(null); }
   for(const id in DUEL_ACT_INPUT){
@@ -7613,6 +7599,14 @@ function duelPadAimScreen(k){
           r:(CR+10)*perspScale(p.y)*camZ*r.height/H};
 }
 
+/* PLAYTEST (2026-09-19): "the buttons sometimes don't respond." An action you
+   cannot afford used to be a DEAD button - no onclick on attack, `disabled` on
+   defence, no sound, no message - and "⚡ LOW" is easy to miss mid-duel. It now
+   says why, through the same click the mouse and the pad already use. */
+function duelCantAfford(lbl,cost,sp){
+  say('Not enough stamina for '+lbl+' \u2014 needs '+cost+' SP, you have '+Math.round(sp||0)+'.');
+}
+
 function bldA(carrier,isShot){
   const sp=carrier?Math.round(carrier.spirit||1500):1500;
   const el=document.getElementById('abtns'),ih=G.D.as==='h';
@@ -7656,6 +7650,7 @@ function bldA(carrier,isShot){
     btn.dataset.act=id;               // how the pad/keyboard finds this row
     btn.innerHTML=actBtnInner(id,costTxt,lbl);
     if(ok)btn.onclick=()=>selA({id:id,l:lbl,i:icon,sp:isSp,ot:ot},btn);
+    else  btn.onclick=()=>duelCantAfford(lbl,cost,sp);
     return btn;
   };
   const makeMenu=(cls,title,list,isSp)=>{
@@ -7691,7 +7686,8 @@ function bldD(def,ds,isShot){
     btn.className='dact3d '+(isSp?'dact-ss':'dact-def')+(ok?'':' dact-dis');
     btn.dataset.act=id;               // how the pad/keyboard finds this row
     btn.innerHTML=actBtnInner(id,costTxt,lbl);
-    if(ok)btn.onclick=()=>selD({id:id,l:lbl,i:icon},btn);else btn.disabled=true;
+    if(ok)btn.onclick=()=>selD({id:id,l:lbl,i:icon},btn);
+    else  btn.onclick=()=>duelCantAfford(lbl,cost,sp);   // was disabled: no event at all
     return btn;
   };
   let normals=[], specials=[];
@@ -7721,6 +7717,7 @@ function bldD(def,ds,isShot){
 }
 
 function selA(a,btn){
+  if(G.D && G.D._qte) return;
   // Second tap on the already-selected action confirms it. The GO button is
   // gone, so this is the only confirm phones have; PC keeps Enter as well.
   // Gated on #dcfm.rdy so a pass/one-two still can't fire before a target is
@@ -7750,6 +7747,7 @@ function selA(a,btn){
   }
 }
 function selD(a,btn){
+  if(G.D && G.D._qte) return;
   if(btn.classList.contains('dact-sel') &&
      document.getElementById('dcfm').classList.contains('rdy')){
     confirmDuel(); return;
@@ -8000,20 +7998,118 @@ function tryRes(){
   if(G.D.ds==='h' && !G.D.defA) return;
   if(G.D.ak && G.D.defA) resDuel();
 }
+/* ══ GOALKEEPER QUICK-TIME EVENT (roadmap D.6b, 2026-09-19) ══════════════════
+   After the keeper's move is locked, one QTE decides a bonus or a penalty on
+   his save power - Save = timing ring, Punch = mash, Super Save = sequence
+   (engine + rules: ult11-gkqte.js). Every road into resDuel for a keeper duel
+   goes through gkQteThen: GO / second press, the attacker's super cutscene,
+   and the countdown running out.
+     human keeper  plays it. The duel countdown stops, the menus and the timer
+                   hide, and re-picking / confirming is locked (G.D._qte) - or
+                   the [] of the QTE would press the Save row again and start a
+                   second one.
+     AI keeper     rolls the same PERFECT/GOOD/MISS from REFLEX.
+     PvP           neutral for now: its two players read their own devices
+                   (P1_down / P2_down), which the QTE does not listen to yet. */
+const _QTE_ACT={tri:'DUEL_READ',cross:'DUEL_BODY',square:'DUEL_COMMIT',circle:'DUEL_COMBO'};
+function gkQteGlyph(b){
+  // the same glyph set as the duel rows (padGlyphs preference); a phone gets PS marks
+  const set=DUEL_GLYPH[duelInputScheme()||'playstation']||DUEL_GLYPH.playstation;
+  return set[_QTE_ACT[b]]||b;
+}
+function gkQteApplies(D){
+  return !!(D && D.isShot && D.def && D.def.pos==='GK' && window.GKQTE &&
+            (D.defA==='save'||D.defA==='punch'||D.defA==='supersave'));
+}
+function gkQteThen(next){
+  const D=G.D;
+  if(!gkQteApplies(D) || D._qteDone){ next(); return; }
+  D._qteDone=true;
+  if(PVP.on){ next(); return; }
+  if(D.ds!=='h'){                                   // AI keeper: roll it
+    const r=GKQTE.simulate(D.defA, gs(D.def,'ref'));
+    D.gkQte=r.mult; D.gkQteGrade=r.grade;
+    next(); return;
+  }
+  stopAllCountdowns(); D._qte=true; G._duelT=Date.now();
+  const ov=document.getElementById('duel-ov');
+  _gkQteCSS(); ov.classList.add('gkqte-live'); gkQteDpad(D.defA);
+  GKQTE.run(D.defA,{ host:ov, touch:false, glyph:gkQteGlyph,
+                     stats:{ reflex:gs(D.def,'ref'), power:gs(D.def,'pow') } })
+    .then(res=>{
+      _gkQteClear();
+      if(G.D!==D || G.phase!=='duel') return;        // duel torn down meanwhile
+      D._qte=false; D.gkQte=res.mult; D.gkQteGrade=res.grade;
+      const pct=Math.round((res.mult-1)*100);
+      say((D.def.name||'Keeper')+' \u2014 '+res.grade+' ('+(pct>=0?'+':'')+pct+'% save power)');
+      // a pause mid-QTE must not let the duel resolve behind the pause menu
+      const go=()=>{ if(G.D!==D||G.phase!=='duel')return; if(G.paused){ setTimeout(go,200); return; } next(); };
+      go();
+    });
+}
+function _gkQteClear(){
+  try{ gkQteDpad(null); }catch(e){}
+  const ov=document.getElementById('duel-ov'); if(ov) ov.classList.remove('gkqte-live');
+}
+/* TOUCH: the QTE's buttons are the match's OWN face buttons (#dpad) - same
+   place, same colours, same Camera Lab layout, and real thumb size. #dpad
+   sits on document.body, outside the 1280x720 stage; a diamond drawn inside
+   the stage would be scaled down to ~45% on a phone. The pad is shown with
+   only its four faces, each labelled with what it does in THIS QTE. */
+var G_dpadQte=false, _dpadQteHooked=false;   // var, not let: _updateDpad (defined far above, runs every frame) reads it
+function gkQteDpad(move){
+  if(!G_dpadEl){ try{ _buildDpad(); }catch(e){} }
+  if(!G_dpadEl) return;
+  G_dpadQte=!!move;
+  G_dpadEl.classList.toggle('qte',!!move);
+  if(!_dpadQteHooked){
+    _dpadQteHooked=true;
+    const map={tri:'tri',sq:'square',ci:'circle',xx:'cross'};
+    // capture phase: runs before each button's own match handler, and stops it
+    G_dpadEl.addEventListener('pointerdown',e=>{
+      if(!G_dpadQte) return;
+      const b=e.target.closest&&e.target.closest('.db'); if(!b) return;
+      e.preventDefault(); e.stopPropagation();
+      for(const c in map) if(b.classList.contains(c)){ GKQTE.press(map[c]); b.classList.add('held');
+        setTimeout(()=>b.classList.remove('held'),90); break; }
+    },{capture:true,passive:false});
+  }
+  if(!move) return;                                 // _updateDpad relabels on its next pass
+  const LBL={ save:{sq:'SAVE'}, punch:{xx:'PUNCH'}, supersave:{} };
+  for(const c of ['tri','sq','ci','xx']){
+    const b=G_dpadEl.querySelector('.db.'+c); if(!b) continue;
+    b.classList.remove('dim');                      // a lunge lock must not dim a QTE button
+    const sp=b.querySelector('span'); if(sp) sp.textContent=(LBL[move]||{})[c]||'';
+  }
+}
+function _gkQteCSS(){
+  if(document.getElementById('gkqte-game-css')) return;
+  const st=document.createElement('style'); st.id='gkqte-game-css';
+  st.textContent=
+    /* the QTE owns the screen: menus, GO and the timer step aside */
+    '#duel-ov.gkqte-live #abtns,#duel-ov.gkqte-live #dbtns,#duel-ov.gkqte-live #dcfm,'+
+    '#duel-ov.gkqte-live .dtw,#duel-ov.gkqte-live #dzone{visibility:hidden!important}'+
+    /* the match pad, faces only, above everything while the QTE runs */
+    '#dpad.qte{display:grid!important;z-index:9000!important;opacity:1!important}'+
+    '#dpad.qte .sh,#dpad.qte .sup{visibility:hidden!important}';
+  document.head.appendChild(st);
+}
+
 function confirmDuel(){
+  if(G.D && G.D._qte) return;                       // a keeper QTE is running
   if(!PVP.on && !G.D.ak && G.D.as==='a') aiAtk();
   if(!PVP.on && !G.D.defA && G.D.ds==='a') aiDef();
   if(G.D.ak && G.D.defA){
     const _v2=!!(window.P3D&&P3D.superCine2&&P3D.superCine2.active());
     if(isSuperAtk(G.D.ak)&&!_v2){
       const spec=G.D.ak==='special'?getSpecial(G.D.carrier):SUPER_NAMES[G.D.ak];
-      if(spec){clearInterval(G.di);showSpecialCutscene(G.D.carrier,spec,()=>resDuel());return;}
+      if(spec){clearInterval(G.di);showSpecialCutscene(G.D.carrier,spec,()=>gkQteThen(resDuel));return;}
     }
     if(isSuperDef(G.D.defA) && G.D.defA!=='supersave'){
       const spec=SUPER_NAMES[G.D.defA];
       if(spec){clearInterval(G.di);showSpecialCutscene(G.D.def,spec,()=>resDuel());return;}
     }
-    resDuel();
+    gkQteThen(resDuel);
   }
 }
 
@@ -8042,6 +8138,14 @@ function startCD(){
       const arc=document.getElementById('dta'), ne=document.getElementById('dtn');
       if(ne){ ne.textContent=isGKDuel?'':String(v); if(v<=8) ne.classList.add('urg'); else ne.classList.remove('urg'); }
       if(arc) arc.style.strokeDashoffset=String(v>=30?0:c2*(1-v/30));
+      /* Choosing a pass target hides the duel overlay, and the countdown with
+         it - so it ran out unseen ("a counter keeps running in the background").
+         Carry it on the pass banner while that is the screen you are looking at. */
+      if(G.pm){
+        const pb=document.getElementById('pass-banner');
+        if(pb&&pb.style.display!=='none')
+          pb.textContent=pb.textContent.replace(/\s+\u00b7\s+\d+s$/,'')+'  \u00b7  '+v+'s';
+      }
     }catch(e){}
   };
   paint(s);
@@ -8062,7 +8166,7 @@ function startCD(){
         else if(G.D.isShot && G.D.def && G.D.def.pos==='GK') { G.D.defA='save'; }
         else { G.D.defA='tackle'; }
       }
-      resDuel();
+      gkQteThen(resDuel);
     }
   },1000);
   _cdTimers.push(id); G.di=id;
@@ -8256,6 +8360,10 @@ function calcDefencePower(def,defA,attackAction){
      ahead: x1.10 standing, x1.20 slide. G.D is rebuilt per duel, so it cannot
      carry over. Keepers are specialists and never get it. */
   if(!isGKAction && G.D && G.D.tackleEdge) mult*=G.D.tackleEdge;
+  /* KEEPER QTE (roadmap D.6b) - the keeper's own edge, won or lost with his
+     hands (human) or rolled from REFLEX (AI). Set once per duel by
+     gkQteThen; G.D is rebuilt for every duel, so it cannot carry over. */
+  if(isGKAction && G.D && G.D.gkQte) mult*=G.D.gkQte;
   return (sBase+sPhys/2)*mult*spiritMult(def)*rng;
 }
 
@@ -8302,12 +8410,30 @@ function resDuel(){
       G.D.ak={'super-pass':'pass','super-dribble':'dribble','super-one-two':'one-two'}[G.D.ak]||G.D.ak;
     if(G.D.defA&&isSuperDef(G.D.defA)&&!canSuper(G.D.def,G.D.defA))
       G.D.defA=(G.D.def&&G.D.def.pos==='GK')?'save':'tackle';
+    /* PLAYTEST (2026-09-19): "I click on players but nothing gets selected,
+       then suddenly the players start running on their own." Choosing Pass
+       sets G.D.ak at once but the TARGET only on a successful click - and the
+       clicks were missing (see P3D.playerScreenPos). The 30s countdown kept
+       running, and its expiry fallback only fills in a target when NO action
+       was chosen (`if(!G.D.ak)`), so it resolved a pass to nobody. launchPass
+       then returned early and nothing moved the phase on: the match sat frozen
+       in duel_result with every button dead until a watchdog force-resumed,
+       and the AI's off-ball movement carried on - which read as auto-play.
+       Fill the target here, the one place every resolution path goes through. */
+    if(G.D.ak){
+      const _b=baseAction(G.D.ak);
+      if((_b==='pass'||_b==='one-two')&&!(G.D.pk&&PP[G.D.as]&&PP[G.D.as][G.D.pk])){
+        G.D.pk=bestTeammateFor(G.D.as,G.ck,_b)||bestTeammateFor(G.D.as,G.ck,'pass')||
+               validOutfieldKeys(G.D.as).find(k=>k!==G.ck)||null;
+      }
+    }
   } // state safety — cutscene/timeout callbacks can land after teardown
   if(!G.D.ak&&G.D.as==='h')return;
   if(!G.D.defA&&G.D.ds==='h')return;
   clearInterval(G.di);
   G.phase='duel_result';G.pm=false;
   $id('pass-banner').style.display='none';
+  try{ _dpAim=null; duelPadAimPaint(null); }catch(e){}
   if(!G.D._silent){
     document.getElementById('duel-ov').classList.add('show');
     document.querySelectorAll('.dact3d').forEach(b=>b.classList.add('dact-dis'));
@@ -8525,7 +8651,7 @@ function resDuel(){
 function flushDuelSay(){
   try{ if(G&&G.D&&G.D._deferSay){ const t=G.D._deferSay; G.D._deferSay=null; say(t); } }catch(e){}
 }
-function closeDuel(){killCutIn();stopAllCountdowns();G._duelT=0;G._resT=0;try{gkShotLayout(false);}catch(e){}try{document.getElementById('s-match').classList.remove('duel-live');}catch(e){}document.getElementById('duel-ov').classList.remove('show');document.getElementById('duel-res').classList.remove('show');G.pm=false;$id('pass-banner').style.display='none';}
+function closeDuel(){killCutIn();stopAllCountdowns();G._duelT=0;G._resT=0;try{if(window.GKQTE&&GKQTE.active())GKQTE.cancel();_gkQteClear();}catch(e){}try{_dpAim=null;duelPadAimPaint(null);}catch(e){}try{gkShotLayout(false);}catch(e){}try{document.getElementById('s-match').classList.remove('duel-live');}catch(e){}document.getElementById('duel-ov').classList.remove('show');document.getElementById('duel-res').classList.remove('show');G.pm=false;$id('pass-banner').style.display='none';}
 /* SAFE DELAYED RESTART — several restarts fire on a 120-950ms setTimeout.
    Without a guard they can land after the whistle, after exitToMenu(), or
    while paused/in a cinematic, waking a dead match. Route them all here. */
@@ -8703,7 +8829,15 @@ function afSave(ds){
     doResolve();
   }
 }
-function afPass(s,tk){launchPass(s,tk,'ground');}
+function afPass(s,tk){
+  /* launchPass returns early without a target and leaves the phase where it
+     was - after a duel that is duel_result, i.e. a frozen match. resDuel now
+     fills the target, but every caller comes through here, so guard it too. */
+  if(!tk||!PP[s]||!PP[s][tk])
+    tk=bestTeammateFor(s,G.ck,'pass')||validOutfieldKeys(s).find(k=>k!==G.ck)||null;
+  if(!tk){ closeDuel(); resume(s); return; }
+  launchPass(s,tk,'ground');
+}
 
 function afOneTwo(s,tk,oldCarrier){
   // 1-2 (wall pass) — teammate touches the ball back, original carrier receives

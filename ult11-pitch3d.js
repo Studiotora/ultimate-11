@@ -670,7 +670,21 @@
           _bowlInfo={type:'classic-upgraded'};
           window.U11_CLASSIC.setTeamColors(flagData);
           buildExtras(); placeFlags();
-        }).catch(e=>console.warn('[P3D] Classic upgrade unavailable; original bowl retained',e));
+        }).catch(e=>{
+          console.warn('[P3D] Classic upgrade unavailable; original bowl retained',e);
+          /* PLAYTEST (2026-09-19): a tester picked the 3D stadium and simply saw
+             the old bowl - the fallback worked, but the ONLY trace of why was
+             this console line. Say it on screen. The commonest cause is opening
+             index.html straight from disk: browsers refuse to fetch() the .glb
+             from a file:// page. */
+          try{
+            const why=(location.protocol==='file:')
+              ?' The game was opened as a file - run it from a local web server.':'';
+            const msg='3D stadium could not load - showing the classic stadium.'+why;
+            if(typeof showEventBanner==='function') showEventBanner('\u26A0 STADIUM','foul',3200);
+            if(typeof say==='function') say(msg);
+          }catch(_){}
+        });
       }
       // ---- OVAL secondary stadium (ult11-bowl2.js) ----
       if(P3D.stadium==='oval' && window.U11_OVAL){
@@ -2330,7 +2344,7 @@
           o.sprite.scale.set(wWorld, hWorld, 1);
           // airborne lift — the sprite rises, the shadow below does not, which
           // is the only thing that actually sells a jump in a billboard engine
-          const _jt=P3D.jump[id]||0;
+          const _jt=renderJumpHeight(s,k);
           o.sprite.position.set(wx, 0.05+(P3D.spriteY||0)+_jt*hWorld*P3D.jumpPeak, wz);
           // ---- shadows ----
           const Lt=P3D.light, az=Lt.azim, el=Math.max(0.05,Math.min(1,Lt.elev));
@@ -2380,11 +2394,31 @@
     P3D.playerScreenPos=function(side,key){
       const o=sprites[side+':'+key]; if(!o||!o.sprite||!o.sprite.visible)return null;
       const sp=o.sprite.position;
-      const W=(CV.width||1280),H=(CV.height||720);
-      const foot=projectToScreen(sp.x,sp.y,sp.z,W,H);
-      const head=projectToScreen(sp.x,sp.y+o.sprite.scale.y,sp.z,W,H);
+      /* PLAYTEST BUG (2026-09-19): "I click on players but nothing gets
+         selected." Every caller measures in #C's pixel space (the engine /
+         stage canvas, 1280x695). But the camera renders into `gl`, which since
+         the full-width world layer (2026-09-09) is a FULL-WINDOW canvas in
+         #worldwrap, and resize() gives the camera THAT canvas's aspect. The
+         old code mapped the projection straight onto CV.width x CV.height, so
+         it only agreed with what is on screen when the browser window was the
+         stage's exact shape. On a 1920x969 window (a 1080p monitor minus tabs
+         and address bar) players were placed 17px off at the centre and
+         79-82px off towards the flanks - past the tap tolerance - so the
+         pass-target click, tap-to-pass and the pad aim ring all missed.
+         Project into gl's real client rect, then express that point in CV's
+         pixel space. When the two rects coincide this is exactly the old
+         result, so a 16:9 window is unaffected. */
+      const CW=(CV.width||1280), CH=(CV.height||720);
+      const foot=projectToScreen(sp.x,sp.y,sp.z,1,1);             // 0..1 of gl
+      const head=projectToScreen(sp.x,sp.y+o.sprite.scale.y,sp.z,1,1);
       if(foot.z>1)return null;                         // behind the camera
-      return { x:foot.x, y:(foot.y+head.y)/2, r:Math.max(18,Math.abs(foot.y-head.y)*0.5) };
+      const gr=gl.getBoundingClientRect(), cr=CV.getBoundingClientRect();
+      const toCV=(gr.width>0&&gr.height>0&&cr.width>0&&cr.height>0)
+        ? (p=>({ x:(gr.left+p.x*gr.width -cr.left)*CW/cr.width,
+                 y:(gr.top +p.y*gr.height-cr.top )*CH/cr.height }))
+        : (p=>({ x:p.x*CW, y:p.y*CH }));               // not laid out yet: old mapping
+      const f=toCV(foot), h=toCV(head);
+      return { x:f.x, y:(f.y+h.y)/2, r:Math.max(18,Math.abs(f.y-h.y)*0.5) };
     };
     function drawDebug(){
       ensureDbgCanvas();
@@ -2662,7 +2696,7 @@
       // During passes / loose balls, show the true ball position so it travels.
       const cp=carrierPos();
       const passing=(typeof G!=='undefined'&&G&&(G.phase==='pass_anim'||(G.phase==='moving'&&G.pm)));
-      if(cp && !passing){
+      if(cp && !passing && G.phase==='moving'){
         const t=0.6;                         // 0 = true pos, 1 = on the sprite
         bx+=(cp.x-bx)*t; by+=(cp.y-by)*t;
       }
@@ -2685,7 +2719,8 @@
         } else if(!shooting){ _os.bt=null; _trailFx=null; }
       }catch(e){}
       const r=d*0.5, hgt=Math.max(0,(ball.bz||0)*0.09)*hgtMul;
-      const bwy=r+hgt;                       // resting on the turf, lifted by bz
+      const carried=cp&&!passing&&G.phase==='moving'?P3D.getJumpLift(G.poss,G.ck):0;
+      const bwy=r+Math.max(hgt,carried);        // ball and carrier share the same lift
       const wx=ex2wx(bx), wz=ey2wz(by);
       ballMesh.position.set(wx,bwy,wz);
       // ROLL: rotate about the axis perpendicular to the direction of travel
@@ -3127,7 +3162,7 @@
       }
       // charge glow on the ball
       const bw=(typeof ball!=='undefined'&&ball)?{x:ex2wx(ball.x),z:ey2wz(ball.y)}:{x:swx,z:swz};
-      ballGlowSp.visible=true; ballGlowSp.material.color.set(col); ballGlowSp.position.set(bw.x,0.35,bw.z);
+      ballGlowSp.visible=true; ballGlowSp.material.color.set(col); ballGlowSp.position.set(bw.x,0.35+(c.jumpLift||0),bw.z);
       const bs=hh*(0.25+0.3*chg)*(1+0.2*Math.sin(_fxT*10)); ballGlowSp.scale.set(bs,bs,1); ballGlowSp.material.opacity=0.2+0.25*chg;
       // rising embers
       const now=performance.now();
@@ -3364,6 +3399,19 @@
       }
       t.mesh.visible=true;
     }
+    function renderJumpHeight(side,k){
+      if(cine&&cine.v2&&cine.o.as===side&&cine.o.sk===k){
+        if(cine.mode==='hold')return cine.jumpStart||0;
+        if(cine.mode==='fly')return (cine.jumpStart||0)*Math.max(0,1-cine.ft/.24);
+        return 0;
+      }
+      return typeof jumpHeight==='function'?jumpHeight(side,k):(P3D.jump[side+':'+k]||0);
+    }
+    P3D.getJumpLift=function(side,k){
+      const sheet=(k==='GK'&&GK_SHEET&&GK_SHEET.img.complete)?GK_SHEET:SHEETS[side];
+      const h=PLEN*(P3D.spriteFrac!=null?P3D.spriteFrac:.045)/((sheet&&sheet.hRef)||1);
+      return renderJumpHeight(side,k)*h*P3D.jumpPeak;
+    };
     P3D.setJump=function(id,t){ if(t>0.001) P3D.jump[id]=t; else delete P3D.jump[id]; };
 
     P3D.lunge=function(id,lean,dust){
@@ -3497,7 +3545,9 @@
         // only when dir>0). Goal half-mouth is PWID*0.052 → H*0.052 in engine y.
         const Hc=(CV.height||720), aim=pickAim(o);
         const dy=aim.s*dir*Hc*0.052*0.78;          // inside the post, not on it
-        cine={v2:true,mode:'hold',t:0,ft:0,ot:0,o,dir,arrived:false,gkRestore:null,
+        const jumpStart=typeof jumpHeight==='function'?jumpHeight(o.as,o.sk):0;
+        const jumpLift=P3D.getJumpLift(o.as,o.sk);
+        cine={v2:true,mode:'hold',t:0,ft:0,ot:0,o,dir,arrived:false,gkRestore:null,jumpStart,jumpLift,
           fx:sp.x,fy:sp.y, tx:stopX,ty:gp.y+dy*0.55, gx,gy:gp.y+dy, kx:gp.x,ky:gp.y,
           aim, aimDy:dy,
           col:o.color||sideColor(o.as)};
@@ -3680,7 +3730,7 @@
           const ramp=Math.min(1,Math.max(0,(c.ft-inAt)/0.22));
           const ease=Math.sin(Math.PI*Math.min(1,c.ft*1.05));
           const smo=1+(smoMax-1)*ramp*ease;
-          c.ft+=dt/(dur*smo);
+          c.ft+=dt*1.20/(dur*smo); // flight only: 20% faster, charge timing unchanged
           if(c._superRow){
             /* frames 3,4,5 at ~9fps: contact, then follow-through.
                The mirror is LOCKED to whatever the charge ended on, not
@@ -3709,7 +3759,7 @@
         if(c.mode==='wait')bz=4+Math.sin(c.t*6)*0.8;  // hover short of the keeper
       }else if(c.mode==='out'){
         c.ot+=dt;
-        const gt=Math.min(1,c.ot/0.55);
+        const gt=Math.min(1,c.ot/(0.55/1.20));
         gkOutcome(c,gt);                             // dive first — the ball meets his gloves
         if(c.isGoal){
           // into the corner he was aimed at, at the height he was aimed at
@@ -3736,7 +3786,8 @@
       if(typeof ball!=='undefined'&&ball){ball.x=bx;ball.y=by;ball.bz=0;}
       const W2=(CV.width||1280);
       const bwx=ex2wx(Math.min(Math.max(bx,0.02*W2),0.98*W2)),bwz=ey2wz(by);
-      const bwy=0.05+bz*0.09;
+      const launchLift=c.mode==='hold'?(c.jumpLift||0):c.mode==='fly'?(c.jumpLift||0)*Math.pow(1-Math.min(1,c.ft),2):0;
+      const bwy=Math.max(d*.5,0.05+bz*.09)+launchLift;
       ballMesh.scale.setScalar(d); ballMesh.position.set(bwx,bwy,bwz);
       if(c.mode==='fly'&&c.style){
         if(c.style.kind==='curve') ballMesh.rotateOnWorldAxis(_AY,dt*26);                 // side-spin
@@ -3746,7 +3797,7 @@
       c._pbw={x:bwx,z:bwz};
       try{ shotBallFx(c,bwx,bwy,bwz,d,(c.mode==='fly'||(c.mode==='out'&&c.isGoal)),c.mode==='wait'); }catch(e){}
       if(c.mode==='fly'){ try{ drawFlyLines(c,dt,bwx,bwy,bwz); }catch(e){} }
-      if(c.mode==='out'&&c.ot>=0.55&&!c._impact){ c._impact=true; try{ impactBurst(c,bwx,bwy,bwz,d); }catch(e){} }
+      if(c.mode==='out'&&c.ot>=0.55/1.20&&!c._impact){ c._impact=true; try{ impactBurst(c,bwx,bwy,bwz,d); }catch(e){} }
       c._bw={x:bwx,y:bwy,z:bwz};
     }
     // Cinematic keeper uses the single 4x4 gk sheet (gk_cine.png); the cinematic
