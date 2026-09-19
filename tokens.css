@@ -99,6 +99,28 @@
   --u-glow-home:   0 0 16px rgba(var(--u-home-rgb),.50);
   --u-glow-away:   0 0 16px rgba(var(--u-away-rgb),.50);
   --u-text-shadow: 0 2px 4px rgba(0,0,0,.95);    /* legibility over art */
+  /* Black OUTLINE for text on see-through panels (duel glass, 2026-09-19).
+     Eight 1px shadows rather than -webkit-text-stroke: a stroke eats INTO the
+     glyph and closes the counters of the Bold Pixel numerals - the same
+     failure as faux-bold (the "solid white squares" score). Shadows sit
+     outside the glyph, so every face keeps its shape. */
+  --u-outline-rgb: 0,0,0;
+  /* DUEL GLASS fill per side (2026-09-19, round 2). NOT the team colours:
+     the author's mockup is a muted grey-blue (player) and grey-red (CPU).
+     Fitted by measuring the mockup - scene outside the panel vs panel
+     interior - and solving pitch -> drop-shadow -> glass. Over the green
+     pitch these land on the mockup within 1-5 of 765:
+       player (18,38,78) @ ~.66 -> (27,54,61)   mockup (25,55,59)
+       cpu    (64,22,50) @ ~.64 -> (64,47,43)   mockup (65,47,43)
+     The CPU glass carries a little blue ON PURPOSE: red over green grass
+     goes olive; the blue is what makes it read grey-red. */
+  --u-glass-home-rgb: 18,38,78;
+  --u-glass-away-rgb: 64,22,50;
+  --u-text-outline: 1px 0 0 rgb(var(--u-outline-rgb)), -1px 0 0 rgb(var(--u-outline-rgb)),
+                    0 1px 0 rgb(var(--u-outline-rgb)), 0 -1px 0 rgb(var(--u-outline-rgb)),
+                    1px 1px 0 rgb(var(--u-outline-rgb)), -1px -1px 0 rgb(var(--u-outline-rgb)),
+                    1px -1px 0 rgb(var(--u-outline-rgb)), -1px 1px 0 rgb(var(--u-outline-rgb)),
+                    0 2px 5px rgba(var(--u-outline-rgb),.75);
 
   /* ── GEOMETRY ────────────────────────────────────────────────────────────
      Small radii only. Octopath frames are near-square with cut corners; the

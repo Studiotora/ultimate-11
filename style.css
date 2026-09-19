@@ -433,6 +433,17 @@ html,body{width:100%;height:100%;height:-webkit-fill-available;overflow:hidden;b
 #worldwrap>canvas{position:absolute;inset:0;width:100%;height:100%;display:block}
 #viewport{z-index:1}
 #viewport.world-live,#viewport.world-live #s-match{background:transparent}
+/* DUEL DIM, edge to edge. #duel-ov lives in the 16:9 stage and #viewport
+   clips (overflow:hidden), so on a wide phone its dim stopped at the stage
+   edge and the strips either side stayed fully lit. With the world layer live
+   the dim is drawn here instead (game.js _syncWorldDim toggles .dim) and the
+   stage copy is switched off, so it is never doubled. Same veil as the
+   #duel-ov.duel-aaa rule in index.html. */
+#worldwrap::after{content:'';position:absolute;inset:0;z-index:5;pointer-events:none;opacity:0;
+  transition:opacity .18s;
+  background:linear-gradient(180deg,rgba(4,7,14,.22) 0%,rgba(4,7,14,.08) 45%,rgba(4,7,14,.44) 100%)}
+#worldwrap.dim::after{opacity:1}
+#viewport.world-live #duel-ov,#viewport.world-live #duel-ov.duel-aaa{background:transparent !important}
 canvas#C{position:absolute;inset:0;width:100%;height:100%}
 
 /* DUEL */
@@ -4183,3 +4194,61 @@ html.ue-phone #vjoy-base{transform:scale(calc(0.5 + 0.5*var(--tb)));transform-or
 #duel-ov .dhero.right .dpav{
   filter:drop-shadow(0 10px 18px rgba(0,0,0,.75))!important;
 }
+
+/* ══ DUEL GLASS — author's mockup, 2026-09-19 ════════════════════════════
+   During a duel the info boxes, the special-skill boxes and the action rows
+   are soft glass: the match shows through, tinted with the team colour, and
+   every word wears a black outline (--u-text-outline) so it reads over
+   whatever is behind it.
+
+   THE RIM HAD TO BE REBUILT. It was never a border: .info was painted
+   entirely in the team gradient and .info-in laid an OPAQUE fill over it,
+   inset 1.7px, so only a hairline showed. Make that fill see-through and the
+   solid gradient floods the whole panel - bright blue, no pitch. So the
+   gradient moves to .info::before, clipped to a RING: the outer notch polygon
+   and the inner one - the same shape inset 1.7px, i.e. p% + 1.7px*(1-2p) - in
+   one evenodd path, which punches the inner shape out as a hole. The rim sits
+   pixel-for-pixel where it was.
+
+   No backdrop blur: .info carries a filter (its glow), which makes it the
+   backdrop root, so a blur inside it could not see the pitch anyway - and on
+   a phone a large backdrop-filter is the dearest thing on screen. The outline
+   does the readability job, as in the mockup. */
+#duel-ov .dside .info{ background:none!important;
+  /* was: a 7px team-coloured glow + a dark drop. On a solid panel the glow
+     sat behind it; on glass it shows THROUGH the whole interior and floods it
+     with colour. Only the dark drop stays (it is part of the fitted glass). */
+  filter:drop-shadow(0 14px 28px rgba(var(--u-outline-rgb),.45))!important; }
+#duel-ov .dside .info::before{ content:""; position:absolute; inset:0; z-index:0; pointer-events:none;
+  background:linear-gradient(150deg,var(--tc),var(--tf) 72%); }
+#duel-ov .dside.left .info::before{ clip-path:polygon(evenodd,
+  0 0, 45% 0, 66% 40%, 100% 40%, 100% 100%, 0 100%, 0 0,
+  1.7px 1.7px, calc(45% + .17px) 1.7px, calc(66% - .544px) calc(40% + .34px),
+  calc(100% - 1.7px) calc(40% + .34px), calc(100% - 1.7px) calc(100% - 1.7px),
+  1.7px calc(100% - 1.7px), 1.7px 1.7px); }
+#duel-ov .dside.right .info::before{ clip-path:polygon(evenodd,
+  55% 0, 100% 0, 100% 100%, 0 100%, 0 40%, 34% 40%, 55% 0,
+  calc(55% - .17px) 1.7px, calc(100% - 1.7px) 1.7px, calc(100% - 1.7px) calc(100% - 1.7px),
+  1.7px calc(100% - 1.7px), 1.7px calc(40% + .34px), calc(34% + .544px) calc(40% + .34px),
+  calc(55% - .17px) 1.7px); }
+/* the glass: the side's muted colour (--tg, set with --tc in fCard: player
+   grey-blue, CPU grey-red - tokens --u-glass-home/away-rgb), a touch lighter
+   at the top. Round 1 washed the bright TEAM colour over it and read far too
+   strong; the author wants grey-blue / grey-red. */
+#duel-ov .info-in{ position:relative; z-index:1; backdrop-filter:none!important; -webkit-backdrop-filter:none!important;
+  background:linear-gradient(180deg,rgba(var(--tg,var(--u-panel-rgb)),.58),rgba(var(--tg,var(--u-panel-rgb)),.72))!important; }
+#duel-ov .skill-in{ position:relative; z-index:0;
+  background:linear-gradient(180deg,rgba(var(--tg,var(--u-panel-rgb)),.58),rgba(var(--tg,var(--u-panel-rgb)),.72))!important; }
+/* empty bar tracks go dark, or they vanish into a bright pitch behind glass */
+#duel-ov .st-bar,#duel-ov .i-stam-bar{ background:rgba(var(--u-outline-rgb),.38)!important; }
+
+/* action rows: glass at rest; the SELECTED row keeps its solid fill so the
+   choice still jumps out (:not(.dact-sel) leaves those rules alone) */
+#duel-ov .dmenu .dact3d:not(.dact-sel){
+  background:linear-gradient(180deg,rgba(var(--u-panel-rgb),.58),rgba(var(--u-panel-rgb),.44))!important; }
+#duel-ov .dmenu .dact3d:not(.dact-sel):hover{
+  background:linear-gradient(180deg,rgba(var(--u-panel-rgb),.72),rgba(var(--u-panel-rgb),.58))!important; }
+
+/* the outline, on every word of the duel's panels, rows and centre plaque.
+   !important because a dozen rules give individual labels their own shadow. */
+#duel-ov .dside *,#duel-ov .dmenu *,#duel-ov .dueltop *{ text-shadow:var(--u-text-outline)!important; }

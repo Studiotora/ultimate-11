@@ -6854,7 +6854,9 @@ function fCard(role,pl,s,displayRole){
   const cardEl=document.getElementById(p+'c');
   // team colour drives the premium duel skin via CSS var (see #duel-ov styles)
   const _sideEl=document.getElementById(p+'side');
-  if(_sideEl){ _sideEl.style.setProperty('--tc',tl); _sideEl.style.setProperty('--tf',tf); }
+  if(_sideEl){ _sideEl.style.setProperty('--tc',tl); _sideEl.style.setProperty('--tf',tf);
+    // duel glass fill: muted grey-blue / grey-red, not the bright rim colour
+    _sideEl.style.setProperty('--tg', s==='h'?'var(--u-glass-home-rgb)':'var(--u-glass-away-rgb)'); }
   const tabEl=document.getElementById(p+'tab');
   if(tabEl){tabEl.textContent=(s==='h')?'PLAYER 1':'COM';}
   // Portrait — no mirroring, images always shown as supplied
