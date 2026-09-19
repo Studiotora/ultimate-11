@@ -500,6 +500,68 @@ exist until there is an input layer to bind them to.
   make PvP think P2 is present. Not touched, flagged for whenever PvP is next
   looked at.
 
+- **B.1e · FIRST OUTSIDE PLAYTEST — ✅ FIXED 2026-09-19** (js v170 / pitch3d v99).
+  A tester on PC: *"the buttons sometimes don't respond. A counter keeps running
+  in the background. When I get the option to 'select player', I click on
+  players but nothing gets selected, then suddenly the players start running on
+  their own taking the ball to the goal post."* Felt like auto-play. Also: picked
+  the 3D stadium and never saw it.
+
+  **One root cause drove most of it, and it was invisible on the author's
+  machine.** `P3D.playerScreenPos` — used by the pass-target click, tap-to-pass
+  and the pad aim ring — projected players onto `CV.width x CV.height` (the
+  1280x695 letterboxed stage). But since the full-width world layer (09-09) the
+  camera renders into `#C3D` in `#worldwrap`, the FULL WINDOW, with that
+  canvas's aspect. The two only agree when the window is exactly the stage's
+  shape. `lab/test-hit.js` clicks every point exactly where the player is drawn
+  and applies game.js's own mapping and tolerance:
+
+  | window | old: points outside tolerance | old: worst miss | fixed |
+  |---|---|---|---|
+  | 1280x720, exact 16:9 | **0 / 143** | 22.5 px | 0.0000 px |
+  | 1920x969, 1080p browser window | **64 / 143** | 70 px | 0.0000 px |
+  | 2560x1080, ultrawide | **110 / 143** | 193 px | 0.0000 px |
+
+  That first row is why this never showed up in testing here. Now projected
+  into `gl`'s real client rect and expressed in CV space, so every caller is
+  correct unchanged; identical to the old result when the rects coincide. (The
+  correctly-written `P3D.pickPlayerAt` already existed — and nothing called it.)
+
+  **The chain the tester saw, step by step:**
+  1. Pick Pass → `G.D.ak='pass'` at once; the target `G.D.pk` only on a click
+     that hits — and the clicks missed.
+  2. The 30s countdown ran on, **hidden** (pass mode hides the duel overlay).
+  3. At 0 its fallback fills a target only `if(!G.D.ak)` — false — so the duel
+     resolved a **pass to nobody**. `launchPass` returned early and nothing moved
+     the phase on: **frozen in `duel_result`, every button dead** ("buttons don't
+     respond") until a watchdog force-resumed, while the AI's off-ball movement
+     carried on ("running on their own"). There is no autopilot — it was this.
+
+  **Fixed at each link, not just the first:** `resDuel` fills a missing
+  pass/one-two target (the one place every resolution path passes through);
+  `afPass` falls back to the best team-mate and never hangs; the pass banner
+  carries the countdown (`PASS MODE — CLICK A PLAYER · 27s`); the pad aim ring
+  is cleared on resolve/close. And an **unaffordable row is no longer a dead
+  button** — no onclick on attack, `disabled` on defence, no feedback at all; it
+  now says *"Not enough stamina for Dribble — needs 80 SP, you have 10."*
+
+  **3D stadium:** the fallback was already correct — a failed `.glb` keeps the
+  classic bowl — but the only trace was a `console.warn`. It is now an on-screen
+  banner + commentary line. The likely cause is the game opened by
+  double-clicking `index.html` (`file://`), where browsers block the fetch of
+  the 12MB `.glb`; the game now shows a red "opened as a file — use a local
+  server" bar in that case. **Unconfirmed:** how the tester actually launched it.
+
+  **Verified** in a live match at 1920x969: the exact reported state (Pass
+  chosen, no target, countdown expiring) resolves to a real target and is back
+  in play 1.4s later, not frozen; `afPass(null)` launches; unaffordable rows
+  answer on both sides; `lab/test-hit.js` 3/3; `lab/test-input.js` still 45/45.
+  **Not verified on screen:** the renderer does not run in a hidden Browser pane,
+  so the corrected click was proven on the math against measured rects, not by
+  clicking a rendered player. First real look is the next playtest.
+
+  **GitHub (corrected same day):** GitHub IS current — the author publishes by web upload ("Add files via upload"), last on 2026-09-16 at js v169 / pitch3d v98. The LOCAL clone here just never fetched those, so its own history stopped in April; an earlier note said the repo was five months behind, which was wrong. Always `git fetch` before judging the remote. The real finding: two stadium files were never uploaded — `assets/stadium/GLTFLoader-r128.js` and `assets/stadium/classic-upgraded.glb`. Without the loader the stadium module rejects with "GLTFLoader is unavailable" and keeps the classic bowl, which is exactly the tester's report if they played the GitHub copy. Every other script/stylesheet index.html loads is on GitHub.
+
 - **B.2 · Kill the mouse** — `GO` and on-screen `PAUSE` buttons removed; `Enter` =
   confirm, `Tab` = pause, duel choices bound to keys/face buttons with visible
   prompts — **the duel half is ✅ DONE, see B.1d.**
@@ -1808,6 +1870,64 @@ going to be a massive part of the gameplay". Proposed order; the author sets it.
   freezes during a duel - that is existing behaviour, and it briefly looked like
   a broken bar until the phase was checked.
 
+- **PART 2k · ASTRA DROP, 2026-09-19 — merged, NOT written up by Astra** (js v170 -> v173,
+  pitch3d v99 -> v100). Recorded here from the diff so it is not lost. None of it
+  touches the keeper duel, and the B.1e playtest fixes all survived it.
+  - **Defence:** new `defensivePlan()` - one plan owns the block; markers keep
+    their man until a real handover; the line eases toward the ball instead of
+    snapping; centre-backs ALWAYS stay home (was: only past halfway). Replaces
+    ~150 lines of the old defending-team block. The cover-press path is off when
+    `AI2.on`.
+  - **Spacing:** repulsion halved (`repelDist .075->.038`, `repelForce .8->.65`,
+    `repelCap .35->.22`) and now scaled by frame time (`applyRepulsion(dt)`).
+  - **Support play:** support pairs survive the carrier changing; outlets commit
+    for 650ms; max 2 forward runners at once; no full-back overlap during an
+    850ms turnover transition; pocket positions are chosen once, not re-rolled.
+  - **Ball / kicks:** kick wind-up and pass physics tweaks in `launchPass` and
+    the pass tick; 3D jump height and the super-shot cinematic's ball height.
+  **Ask Astra to write up future drops** - reconstructing intent from a diff is
+  guesswork about the *why*.
+
+- **PART 2l · PIXEL CROWD + SUPPORTER FLAGS (Astra) — merged 2026-09-19, NOT written up by
+  Astra** (`ult11-stadium-classic.js` v1 -> v2, 4.4 KB -> 12.7 KB; nothing else changed).
+  Recorded here from the code.
+
+  **What it is:** a seat-aligned crowd for the Blender stadium (`classic-upgraded`),
+  built in `buildCrowd()` once the `.glb` has loaded.
+  - **Spectators:** 16 pixel-art variants x 2 poses (seated / arms up) on one
+    256x48 canvas atlas drawn in code - 4 skin tones, hair, some hats and scarves.
+    Pure-green pixels are a key the shader repaints as the shirt colour: home,
+    away, or neutral grey (28%). The stand splits by side of the pitch (home
+    left of x=8, away right). Laid along 3 tiers / 28 rows of the bowl outline
+    (coordinates mirror Blender's `build-runtime.py`), 77-93% occupancy, aisle
+    gaps, a gap at the tunnel. `NearestFilter` keeps it crisp pixel art.
+  - **Motion, all on the GPU:** the front 3 rows (+ ~8% elsewhere) bob and raise
+    arms, only near the camera (fades out 24-48 units away), and near spectators
+    turn toward the camera. **Goal cheer:** `api.update` watches `G.hG` / `G.aG` -
+    verified these ARE the score variables (`G.hG++` on a goal) - and the scoring
+    side's supporters celebrate for ~5s with bigger jumps.
+  - **Flags:** 20 small supporter flags (10 per long side), team colours with a
+    white stripe, cloth waving in the vertex shader; poles as one InstancedMesh.
+  - **Plumbing done right:** batched by the existing camera sectors (`front_00..11`
+    / `bowl_fixed`), so the near-stand hiding that keeps the low camera clear
+    hides its crowd too; team colours follow `setTeamColors`; `dispose` frees the
+    atlas; `U11_CLASSIC.inspect().crowd` reports the counts.
+
+  **Cost, measured by running Astra's own placement code** (not estimated):
+  **12,359 spectators** (1,559 animated), 20 flags, **~25,300 triangles in 27 draw
+  calls** - one shader for the whole crowd. On top of the bowl's ~133,000
+  triangles that is +19%.
+
+  **Visibility:** it exists ONLY in `classic-upgraded`, which is still opt-in
+  (default `classic`, ~1,800 triangles) "until it has been looked at on a real
+  phone". Nobody sees the crowd unless they pick that stadium
+  (`?stadium=classic-upgraded`, remembered after). **Decision for the author:**
+  the phone test should cover the Blender stadium WITH the crowd; if it holds
+  frame rate, make it the default.
+
+  **Upload state:** GitHub has v1 of this file - v2 and its `index.html` bump
+  still need uploading.
+
 - **C.3 · Short pass** — distinct from the through pass: fast, low risk, low reward.
   Gives the player a real decision instead of one pass verb.
 - **C.4 · Cross → header** — needs ball height (z) in the 2.5D sim, an aerial contest,
@@ -2053,6 +2173,77 @@ The user's plan; unchanged structurally, restated as steps:
   `fitViewport()` and can render the stage into a corner of the screenshot, or
   produce an all-black frame — the numbers from `getBoundingClientRect` were
   still correct while the picture was not. Measure, do not eyeball.
+- **D.6b · GOALKEEPER QUICK-TIME EVENT — ✅ IN THE MATCH 2026-09-19** (js v174, gkqte v2;
+  `lab/lab-gk-qte.html` still drives the same file for tuning). Wired in at the author's
+  request before a lab sign-off — **first feel test is the author's phone.**
+  Author: after picking Save / Punch / Super Save, a quick-time event decides
+  the outcome as bonus or penalty points.
+
+  **Design (author's picks):** a different QTE per move, and the AI keeper rolls
+  the same grades from REFLEX.
+
+  | move | QTE | graded by | stat |
+  |---|---|---|---|
+  | Save □ | ring shrinks onto a gold target, ONE press of □ | ms from the target | REFLEX widens the window |
+  | Punch ✕ | mash ✕ for 1.4s after a "get ready" beat | press count | POWER lowers the count |
+  | Super Save R2+□ | 3 random buttons in order, draining timer each | wrong/late = MISS, all fast = PERFECT | REFLEX adds time |
+
+  Result multiplies the keeper's defence power — the keeper's own
+  `tackleEdge`, which keepers never got. Bigger gamble on harder moves:
+  Save +20/+8/-15%, Punch +25/+10/-18%, Super Save +35/+12/-25%. The dice roll in
+  `calcDefencePower` is only +-10%, so the keeper's hands now outweigh luck.
+  All numbers in `GKQTE.TUNE`, editable live in the lab.
+
+  **AI keeper** (you shooting): `GKQTE.simulate(move, reflex)` on the same table.
+  At REFLEX 82 over 1000 rolls: Save 33/54/13%, Punch 29/56/16%, Super Save
+  17/55/28% (PERFECT/GOOD/MISS), i.e. +9% / +10% / +6% on average.
+
+  **Built so the lab IS the shipping code:** a pure core (`create/step/odds/
+  simulate` — time and presses passed in, no DOM) under a thin UI (`run()`).
+  Presses come from the game's own input layer as `DUEL_*` actions, so keyboard,
+  pad and the on-screen diamond are one path; the `DUEL_S_*` chords count as the
+  same buttons, because RT may still be held from choosing SUPER SAVE. Save
+  takes ONE press (spam cannot find the window); in the lab, Enter/Start is dead
+  while a QTE runs, since the pad's CONFIRM is ✕ = the Punch button.
+
+  **Verified:** `node lab/test-gkqte.js` 52/52 — every window edge (+54 PERFECT,
+  +56 GOOD, -141 MISS), early/no press, anti-spam, stat scaling, mash counts and
+  the get-ready beat, sequence wrong/slow/fast, odds summing to 1 and improving
+  with REFLEX. The lab loads clean (all assets 200), mounts the overlay with the
+  touch diamond, and runs the AI simulator. **Not verified: the feel** — the
+  animation needs a visible window; that is the author's sign-off in the lab.
+
+  **Integration (done):** every road into `resDuel` for a keeper duel goes through
+  `gkQteThen` — GO / second press, the attacker's super cutscene, and the countdown
+  running out (the keeper still gets to react). Human keeper: countdown stopped,
+  menus + GO + timer hidden, re-pick/confirm locked by `G.D._qte` (else the QTE's
+  □ would press the Save row and start a second QTE). AI keeper: `simulate` from
+  REFLEX. PvP: neutral for now (its devices are read separately). The result is
+  `G.D.gkQte`, applied in `calcDefencePower` for save/punch/supersave only,
+  beside `tackleEdge`; a pause mid-QTE holds the resolution until unpaused;
+  `closeDuel` cancels a live QTE.
+
+  **Touch = the match's own `#dpad`**, faces only, labelled for the move (Save →
+  □ SAVE, Punch → ✕ PUNCH, Super Save → blank). It lives on `document.body`
+  outside the stage, so it is real thumb size — a diamond inside the stage would
+  be ~45% scale on a phone — and it keeps the Camera Lab layout. A capture-phase
+  listener routes its presses to `GKQTE.press`; `_updateDpad` (runs every frame)
+  is told to leave it alone while `G_dpadQte`.
+
+  **Style pass:** px only (the lab's `max-width:70vmin` was the fixed-stage
+  viewport-unit bug), Cinzel title case like the duel rows, Rajdhani caps
+  captions on `--u-track-wide`, Bold Pixel on the NUMBER only (`+20%`), PS face
+  colours identical to `#dpad`, Super Save in special purple.
+
+  **Verified in a live match** (engine rAF run on a timer, since the pane is
+  hidden): Punch → real `#dpad` ✕ mashed → PERFECT ×1.25, Donati wins; countdown
+  stopped, menus hidden, pad in QTE mode, and a second GO / a Save-row click /
+  the per-frame `_updateDpad(false)` all ignored. Save with no press → MISS ×0.85
+  after 2.65s, duel resolves. Super Save wrong button → MISS ×0.75. AI keeper
+  (Steiner REF 80) rolled with no overlay. Save power ×1.200 / ×0.850 exactly,
+  outfield moves ×1.000. Engine rules 52/52. Screenshot confirmed the look.
+  **Not verified:** real-thumb feel and timing on a phone.
+
 - **D.7 · Kit de-branding** — replace the Adidas three-stripe with an original trim
   motif on the grayscale masters, then re-bake every team (rolls up 0.3's kit half).
   **Done when:** a duel plays with animated, correctly-facing, correctly-kitted
