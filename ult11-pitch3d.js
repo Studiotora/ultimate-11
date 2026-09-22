@@ -3030,7 +3030,9 @@
       }
       fxCv.style.display='block';
     }
+    function _c3on(){ return !!(window.U11_CINE3&&U11_CINE3.on); }
     function hideHoldFx(){
+      try{ if(window.U11_CINE3) U11_CINE3.hide(); }catch(e){}
       try{ applyFx(); }catch(e){}
       if(fxCv){fxCtx.clearRect(0,0,fxCv.width,fxCv.height);fxCv.style.display='none';}
       [auraCore,auraFlame,auraFlame2,auraRing1,auraRing2,auraFloor,auraSil,ballGlowSp].forEach(o=>{ if(o) o.visible=false; });
@@ -3707,7 +3709,8 @@
            frame and will re-place him next, so nudging here is safe and needs
            no cleanup. Goes to ZERO through the held-breath stage, which is
            what makes the stillness land. */
-        if(g&&g.sprite){
+        const _c3=_c3on();                             // ult11-cine3 owns the charge (tremble/burst/fx)
+        if(g&&g.sprite&&!_c3){
           const tr=chargeTremble(Math.min(1,_fxT/2.0));
           if(tr>0){
             const amp=PLEN*(P3D.spriteFrac!=null?P3D.spriteFrac:0.045)*0.035*tr;
@@ -3723,7 +3726,7 @@
            motionless, and THEN he kicks. */
         {
           const _hp=Math.min(1,_fxT/2.0);
-          if(!c._preBurst && _hp>=0.845){
+          if(!c._preBurst && _hp>=0.845 && !_c3){
             c._preBurst=true;
             try{
               const _bx=ex2wx(c.fx), _bz=ey2wz(c.fy);
@@ -3741,7 +3744,7 @@
             }catch(e){}
           }
         }
-        drawHoldFx(c,dt);                              // sakuga charge: lines/aura/glow
+        if(_c3){ _fxT+=dt; } else drawHoldFx(c,dt);    // sakuga charge: lines/aura/glow
       }else if(c.mode==='fly'||c.mode==='wait'){
         /* hideHoldFx() still runs once, to drop the 3D aura layers and the
            charge vignette. The 2D canvas is then re-shown by drawFlyLines,
@@ -3909,6 +3912,17 @@
       const c=cine; if(!c)return;
       const swx=ex2wx(c.fx),swz=ey2wz(c.fy);
       const gwx=ex2wx(c.gx),gwz=ey2wz(c.gy);
+      if(c.mode==='hold'&&_c3on()){
+        let _ok=false;
+        try{
+          ensureHoldFx();
+          _ok=U11_CINE3.holdFrame(c,rdt,{T,scene,camera,renderer,gl,g:sprites[c.o.as+':'+c.o.sk],
+            hh:PLEN*(P3D.spriteFrac!=null?P3D.spriteFrac:0.045),swx,swz,gwx,gwz,
+            col:((_trailFx&&_trailFx.col)||c.col||'#ffd24a'),cv:fxCv,ctx:fxCtx,proj:projectToScreen,
+            bloom:bloomPass,fxBase:P3D.fx});
+        }catch(e){ console.error('[C3] hold',e); window.U11DBG&&U11DBG('[C3] hold error: '+e.message); U11_CINE3.on=false; }
+        if(_ok){ applyShake(rdt||0); return; }
+      }
       if(c.mode==='hold'){
         /* FRONTAL while he loads the shot (author, 2026-09-10). The camera sits
            between the shooter and the goal, looking BACK at him, so the wind-up
