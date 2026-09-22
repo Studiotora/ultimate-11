@@ -51,22 +51,26 @@
     bowl:{ yOff:0, gap:16, rake:64, tierH:29, sharp:false, roof:true,
            openFront:true, mode:'crowd', tiers:{1:true,2:true,3:true} },
     // ---- STADIUM VARIANT ----
-    // 'classic' = segmented photo-textured bowl (default)
+    // 'classic' = segmented photo-textured bowl (the default until 2026-09-19)
     // 'oval'    = elliptical lit bowl from ult11-bowl2.js (secondary stadium)
-    // 'classic-upgraded' = Blender bowl GLB from ult11-stadium-classic.js.
-    // Set via ?stadium=oval / classic / classic-upgraded (persists in
-    // localStorage), or at runtime: P3D.stadium='oval'; P3D._rebuildBowl();
-    // DEFAULT IS DELIBERATELY 'classic': the GLB bowl is opt-in until it has
-    // been looked at on a real phone (it is ~133k triangles against 1.8k).
+    // 'classic-upgraded' = ASTRA STADIUM - the Blender bowl GLB + pixel crowd
+    // (ult11-stadium-classic.js), named by the author after Astra, who built it.
+    // Set via ?stadium=astra / classic / oval (persists in localStorage), or at
+    // runtime: P3D.stadium='oval'; P3D._rebuildBowl();
+    // THE DEFAULT since 2026-09-19: the author tested it on a phone and it runs
+    // (~133k bowl + ~25k crowd triangles). It was held back as opt-in until then.
+    // The internal key stays 'classic-upgraded' - saved settings, the .glb file
+    // name and a dozen code paths use it; 'astra' is accepted as an alias.
     stadium:(function(){
       const OK=['oval','classic','classic-upgraded'];
       try{
-        const q=new URLSearchParams(location.search).get('stadium');
+        let q=new URLSearchParams(location.search).get('stadium');
+        if(q==='astra') q='classic-upgraded';
         if(OK.indexOf(q)>=0){ localStorage.setItem('ue_stadium',q); return q; }
         const s=localStorage.getItem('ue_stadium');
         if(OK.indexOf(s)>=0) return s;
       }catch(e){}
-      return 'classic';
+      return 'classic-upgraded';
     })(),
     spriteScale:1.9,     // (legacy) billboard height vs engine token radius CR
     spriteY:-0.12,       // vertical plant offset (negative sinks feet into pitch for low-angle cam)
@@ -938,16 +942,13 @@
            still gets its own frame material and phase (that module makes one
            shared static material, which would freeze the wave). */
         if(_bowlInfo && _bowlInfo.type==='classic-upgraded'){
-          const k=PLEN/70, w=PWID/44.87, ov={w:1.6*k,h:1.0*k};
-          for(let i=0;i<6;i++){
-            const upper=i>=3, row=upper?3:5;
-            const off=upper?11.7:0, base=upper?8.4:0.8, rise=upper?0.57:0.5;
-            const m=flagMesh(art,rng,ov);
-            m.position.set((homeSide?-1:1)*(8+(i%3)*9)*k,
-                           (base+row*rise+0.45)*2/3*k,
-                           -(40+off+row*0.83-0.1)*2/3*w);
-            m.rotation.x=-Math.atan2(0.83,rise);
-            flagGroup.add(m);
+          const k=PLEN/70,w=PWID/44.87,ov={w:2.2*k,h:1.6*k};
+          // Original animated pixel art, held upright ahead of the first seating row.
+          for(let i=0;i<8;i++){
+            const end=i>=5,m=flagMesh(art,rng,ov);
+            if(!end)m.position.set((homeSide?-1:1)*(6+i*6.7)*k,1.75*k,-26.2*w);
+            else {m.position.set((homeSide?-1:1)*39.5*k,1.75*k,(-16+(i-5)*14)*w);m.rotation.y=homeSide?Math.PI/2:-Math.PI/2;}
+            m.rotation.z=(rng()-.5)*.08;flagGroup.add(m);
           }
           return;
         }
@@ -1212,7 +1213,18 @@
       extrasGroup=new T.Group(); scene.add(extrasGroup); MASTS.length=0;
       const B=_bowlInfo; if(!B) return;
       const spots=[];
-      if(B.type==='classic'){
+      if(B.type==='classic-upgraded'&&window.U11_CLASSIC){
+        spots.push(...U11_CLASSIC.flashSpots());
+        if(gfxOn('floods')){
+          const k=PLEN/70,w=PWID/44.87;
+          for(let i=0;i<7;i++)extrasGroup.add(...floodBank((-32+i*10.7)*k,5.0*k,-32*w,.48*k));
+          for(const sign of [-1,1])for(let i=0;i<3;i++)extrasGroup.add(...floodBank(sign*45*k,5.0*k,(-18+i*18)*w,.48*k));
+        }
+        if(gfxOn('lamps')){
+          const halo=new T.SpriteMaterial({map:haloTex(),color:'#dcecff',transparent:true,opacity:.27,depthWrite:false,blending:T.AdditiveBlending,fog:false});
+          for(let i=0;i<9;i++){const h=new T.Sprite(halo);h.position.set((-37+i*9.25)*PLEN/70,16.1*PLEN/70,-38*PWID/44.87);h.scale.set(3,3,1);extrasGroup.add(h);}
+        }
+      } else if(B.type==='classic'){
         const r=B.r, th=B.th, out=B.out, of=B.of;
         B.tiers.forEach((t,ti)=>{
           const N=[150,110,80][ti]||60;
@@ -2420,6 +2432,17 @@
       const f=toCV(foot), h=toCV(head);
       return { x:f.x, y:(f.y+h.y)/2, r:Math.max(18,Math.abs(f.y-h.y)*0.5) };
     };
+    /* A point ON THE GRASS -> #C pixel space, through the same gl-rect mapping
+       as playerScreenPos (the full-window world canvas). For markers drawn over
+       the pitch - the corner zones (2026-09-19). */
+    P3D.pitchScreenPos=function(x,y){
+      const CW=(CV.width||1280), CH=(CV.height||720);
+      const p=projectToScreen(ex2wx(x),0,ey2wz(y),1,1); if(p.z>1) return null;
+      const gr=gl.getBoundingClientRect(), cr=CV.getBoundingClientRect();
+      if(gr.width>0&&gr.height>0&&cr.width>0&&cr.height>0)
+        return { x:(gr.left+p.x*gr.width-cr.left)*CW/cr.width, y:(gr.top+p.y*gr.height-cr.top)*CH/cr.height };
+      return { x:p.x*CW, y:p.y*CH };
+    };
     function drawDebug(){
       ensureDbgCanvas();
       if(!P3D.debug){ if(dbgCv.style.display!=='none') dbgCv.style.display='none'; return; }
@@ -3407,6 +3430,16 @@
       }
       return typeof jumpHeight==='function'?jumpHeight(side,k):(P3D.jump[side+':'+k]||0);
     }
+    /* Header heights in ENGINE ball units (ball.bz - a pass is drawn at
+       bz*0.09 world, see syncBall). Read live so a Camera Lab sprite-size change
+       moves the header window with the picture (ult11-aerial.js). Body height is
+       PLEN*spriteFrac whatever the sheet (see syncPlayers); the lift is exactly
+       what getJumpLift draws at the top of a jump. */
+    P3D.aerialHeights=function(side){
+      const frac=P3D.spriteFrac!=null?P3D.spriteFrac:.045, sheet=SHEETS[side];
+      const body=PLEN*frac, cell=body/((sheet&&sheet.hRef)||1);
+      return { headBz: body*0.92/0.09, jumpBz: cell*(P3D.jumpPeak!=null?P3D.jumpPeak:0.55)/0.09 };
+    };
     P3D.getJumpLift=function(side,k){
       const sheet=(k==='GK'&&GK_SHEET&&GK_SHEET.img.complete)?GK_SHEET:SHEETS[side];
       const h=PLEN*(P3D.spriteFrac!=null?P3D.spriteFrac:.045)/((sheet&&sheet.hRef)||1);

@@ -44,7 +44,7 @@ That is a systems problem (no evasion, no tempo, one input verb), fixed in Phase
 3. **Every step has a "done when"** — written below. If we can't demo it, it isn't done.
 4. Bump `?v=` on every touched file, and hard-refresh (`Ctrl+Shift+R`) — the HTML
    document itself caches, this has bitten us twice.
-5. Keep `CHANGELOG_SESSION.md` current so a lost context window never costs us work.
+5. Read `ROADMAP.md` before changing/applying files. Update it after every delivered change with intent, files/cache versions, validation and remaining checks; keep `CHANGELOG_SESSION.md` current too. This is the shared Claude/Codex handoff (author requirement, 2026-09-19).
 
 ---
 
@@ -245,6 +245,38 @@ minutes; changing it after we've built five new screens is a day.
   it is where to look if those files are ever deleted from the repo.
 
 ---
+
+- **A.4 · DUEL GLASS — ✅ DONE 2026-09-19** (round 2: tokens v8 / style v95 / js v175). From the author's
+  mockup: during a duel the info boxes, special-skill boxes and action rows are
+  soft, team-tinted glass with the match showing through, and every word has a
+  black outline for readability.
+  - **The rim had to be rebuilt.** It was never a border: `.info` was painted
+    entirely in the team gradient under an opaque `.info-in` inset 1.7px. A
+    see-through fill would have flooded the panel solid blue/red. The gradient
+    now lives on `.info::before`, clipped to a RING (outer notch polygon + the
+    same shape inset 1.7px, one `evenodd` path) - the rim sits where it was.
+  - **Round 2 (author: "colours too strong - player grey-blue, CPU grey-red").**
+    Round 1 washed the bright team colour over the glass, AND the panel's 7px
+    team-coloured `drop-shadow` glow - harmless behind a solid box - now showed
+    THROUGH the glass and flooded it. Fix: per-side glass colour `--tg`, set in
+    `fCard` beside `--tc` (tokens `--u-glass-home-rgb` 18,38,78 /
+    `--u-glass-away-rgb` 64,22,50, at .58 -> .72), no team wash, and the glow
+    dropped (a dark drop-shadow only). The colours were FITTED to the mockup:
+    measured scene-outside vs panel-inside with Pillow, solved pitch -> shadow ->
+    glass; over green pitch the result lands within 1-5 (of 765) of the mockup
+    on both sides. The CPU glass carries some blue on purpose - red over green
+    grass goes olive. The blue/red rim is untouched, as asked. Empty bar
+    tracks darkened so they do not vanish over a bright pitch. The SELECTED row
+    keeps its solid fill (`:not(.dact-sel)`) so the choice still jumps out.
+  - **Outline = new token `--u-text-outline`**: eight 1px shadows + a soft drop,
+    NOT `-webkit-text-stroke` - a stroke eats into glyphs and closes the Bold
+    Pixel counters (the faux-bold "solid squares" failure).
+  - No backdrop blur: `.info` has a filter, which makes it the backdrop root (a
+    blur inside cannot see the pitch), and it is the dearest thing on a phone.
+  - **Verified** in a live duel: every background rule wins the cascade (rim
+    clip is `evenodd` both sides, glass/tint/rows/tracks as specified), and all
+    15 kinds of duel text resolve to the 9-layer outline incl. both Bold Pixel
+    numerals; full-frame screenshot matches the mockup.
 
 ## PHASE B — Input system (pure code, no art dependency)
 
@@ -1177,7 +1209,7 @@ going to be a massive part of the gameplay". Proposed order; the author sets it.
 | **2** | AI balance under the new rules: AI passing under pressure, AI defensive jumping/blocking, Contain. **2a AI v2** (selection, pace, CPU passing, off-ball); **2b Block + kick wind-up** | 2a + 2b ✅ need a playtest; Contain open |
 | **3** | Tempo pass (C.1) | open |
 | **4** | Short pass (C.3) | open |
-| **5** | Cross -> header (C.4) - depends on the jump from part 1 | open |
+| **5** | Cross -> header (C.4) - depends on the jump from part 1 | **step 1 ✅ headers, step 2 ✅ corners**; step 3 CPU set-piece brain - open |
 
 - **PART 1 · TACKLES + JUMP - ✅ DONE 2026-09-11** (js v141 / pitch3d v84).
   Supersedes C.2 above; its three observed problems and its "done when" are all met.
@@ -1928,6 +1960,94 @@ going to be a massive part of the gameplay". Proposed order; the author sets it.
   **Upload state:** GitHub has v1 of this file - v2 and its `index.html` bump
   still need uploading.
 
+- **PART 5 · STEP 1 · HEADERS — ✅ DONE 2026-09-19** (aerial v2 / js v180 / pitch3d v102;
+  rules `ult11-aerial.js`, tests `node lab/test-aerial.js` 31/31).
+  **Why now (author):** free kicks form a wall but the CPU always just runs at it,
+  and corners need aerial play. Traced: **the CPU cannot cross at all** (crossing
+  exists only on the human's button; every CPU pass is `'ground'`) and **only
+  shoots from inside the box** (`progress>.88 && centrality>.35`) - so from a free
+  kick it can only dribble into the wall. Corners exist only as "nearest attacker
+  takes it at the flag, play on". Order agreed: **1 headers, 2 corners, 3 the
+  CPU's set-piece brain.** Author's calls: REAL-TIME jump timing (no pause); corners
+  = pick a zone on phone, free aim on PC.
+
+  **The model is physical.** A dropping ball can be played by anyone in reach
+  sideways whose head - standing, or lifted by a jump - gets up to it:
+  `reach = headBz + jumpBz * jumpHeight`; the highest wins it. A jump peaking as
+  the ball arrives reaches highest, so timing decides it; the grade is how high the
+  winner was (PERFECT / GOOD / STANDING). Heights come live from the renderer
+  (`P3D.aerialHeights`): at the author's sprite size, head bz 14.3 and jump +17.1.
+  Outcomes: attacker in the box + central -> **header at goal = the keeper duel**
+  (new `header` action, x1.15, free; grade edge x1.20/1.00/0.85 via `G.D.headerEdge`;
+  the GK QTE applies); attacker elsewhere -> knock-down to a team-mate; defender ->
+  clearance; keeper in his area -> claim. A PERFECT header is aimed with the stick.
+  AI jumps are timed from heading skill (power + finishing / defending / reflexes).
+
+  **Everything below was found by MEASURING, and each fixed a real problem:**
+  - Timing thresholds guessed at .85/.35 measured as a lopsided 166ms PERFECT;
+    **.93/.55 = PERFECT -48..+63ms (111ms)** - the keeper's Save ring - stable across
+    cross lengths and sprite sizes.
+  - **Crosses were aimed at the FEET.** A cross is headed ~7% of the pitch before it
+    lands, so the runner was never under it: a perfect jump won 0/12 and a sprinting
+    defender headed it standing every time. Now the flight is stretched (solved,
+    4 passes) so the ball is at jumping-head height ON the target and carries on to
+    the far post if missed. Header point now ~8px from the striker (was ~90).
+  - **Short crosses never rose above a jumping head** (peak bz 24 vs reach 31), so
+    there was no moment to time - every AI jump silently never fired. Crosses are now
+    lofted to >= 1.3x a full jump.
+  - **AI too precise**: at 25-110ms timing error a good CB was PERFECT ~95% of the
+    time. **70-160ms**: against TWO centre-backs marking him, a perfect human jump
+    wins 13/30 (all PERFECT), late 3/20 (GOOD), early / no jump 0.
+  - **The target man reacts at once** (`nextReact=0`): AI movement only re-reads its
+    target when reaction allows, so he kept running his old route into the cross.
+  - **Touch:** the pad and stick only showed in open play - during a cross the X
+    button VANISHED. They now stay up while a cross is in the air.
+  - **Jumps are drawn during passes** (`stepJumps` only ran in open play).
+  - Side fix: a cross/pass can no longer target a team-mate on cooldown (he jogs
+    back to shape and it flies past him).
+
+  **Verified** with a fixed-step harness (Date.now stubbed, exactly 60fps) in a live
+  Italy-Germany match - timer-driven runs in a background tab were throttled and
+  desynced the wall-clock jump from the frame-based ball, which is also a note for
+  anyone testing this later. End to end: Mancuso PERFECT header -> keeper duel vs
+  Steiner, `HEADER - COMMITTED`, edge 1.20; the X pad visible during the cross.
+  **Not verified: the feel under a real thumb** - the author's phone test.
+
+  **PART 5 · STEP 2 · CORNERS — ✅ DONE 2026-09-19** (js v182 / pitch3d v103).
+  Was: "nearest attacker takes it at the flag, play on". Now a set piece:
+  - **Set-up** (phase `corner`, play frozen): the three best headers of the ball
+    (power + finishing) on the penalty spot / far post / near post, one on the
+    edge of the box, one SHORT option, the best crosser (pas + tec) takes it.
+    Defenders: the best in the air mark them goal-side, one zonal at the near
+    post, keeper on his line. Real geometry (1m ~ 0.0082W; spot 11m, box 16.5m).
+  - **Delivery** (author's split): phone = tap a zone drawn ON the pitch (thumb-
+    sized, on `document.body` like the match pad); PC/pad = aim a gold target with
+    stick/WASD, O / R / Enter to cross (not the pad's X: that is the header jump a
+    moment later). 10s untouched -> penalty spot. CPU after 1.4s: WEIGHTED pick,
+    base 45/28/27 penalty/far/near scaled by header-vs-marker, 12% short - the
+    first version took the best zone outright and chose the penalty spot 11/11.
+  - **In the air** = the step-1 contest; no offside from a corner; the target man
+    reacts at once. New `P3D.pitchScreenPos` projects any pitch point through the
+    corrected full-window mapping (used to draw the zones).
+  **Verified** (fixed-step harness, live match): a real loose ball out off a
+  defender starts it; roles placed 8px off the spots, markers 18px goal-side,
+  keeper on his line, taker at the flag. Human, PERFECT jump: 9/10 penalty spot,
+  9/10 far, 10/10 near - all headers at goal (-> keeper duel); good/early/late
+  jumps and no jump: the marker wins. CPU corner, you not jumping: 12/12 CPU
+  headers at goal; you jumping perfectly: you clear 5/11. CPU picks over 300:
+  penalty 61% / near 14% / far 13% / short 11%. Timeout 10.0s -> penalty spot;
+  short = ground pass to the short man; PC aim moves, stays in the box, O delivers
+  3px from the aim; phone tap on Far post delivers 3px from it; UI cleared.
+  **Tuning note:** at a corner ONLY a perfect jump beats a marker (he is on the
+  same spot, unlike open play). If it plays too harsh, relax `AERIAL.TUNE.goodH`
+  or the markers' 18px spacing (`startCorner`).
+  **Not verified:** the look/feel on a real screen (camera framing of the box
+  during the set-up included) - the author's phone test.
+
+  **Stadium:** the Blender bowl is now the DEFAULT and is named **ASTRA STADIUM**
+  in Settings (author: tested on phone, works). Internal key stays
+  `classic-upgraded` (saved settings / file names); `?stadium=astra` is an alias.
+
 - **C.3 · Short pass** — distinct from the through pass: fast, low risk, low reward.
   Gives the player a real decision instead of one pass verb.
 - **C.4 · Cross → header** — needs ball height (z) in the 2.5D sim, an aerial contest,
@@ -2291,3 +2411,38 @@ Phase A is deliberately before Phase D: if the palette isn't locked first, every
 sprite baked in D has to be re-baked.
 
 **Blocked on the user:** 0.3's name replacement — see `BRAND-AUDIT.md`.
+
+---
+
+## 2026-09-19 — ASTRA stadium atmosphere revision (Codex/Astra)
+
+**Applied locally:** `ult11-stadium-classic.js?v=3`, `ult11-pitch3d.js?v=104`, and the corresponding `index.html` tags. No game.js change: current v182 and Claude's keeper/header/corner work are preserved. ASTRA STADIUM remains the default, internal key `classic-upgraded`; `astra` alias preserved. This supersedes the crowd-color and generic-flag details in Part 2l, not its historical record.
+
+- **Team identity:** `SUPPORTER_PALETTES` defines primary/secondary/accent colors for every current national team (Italy azzurro, Holland orange, Germany white/black); clubs read existing `CR_CLUBS.colors`, unknown teams fall back safely. Team identity uses `homeKey` / `awayKey`, independent of hard-coded home/away UI blue/red. Each supporter has ~55% primary, 13% secondary, 8% accent, 24% varied everyday clothing. Home/away affiliation mixes gradually across the main stand and favors each end. Seats use subdued neutral stadium colors, not two bright team-colored blocks.
+- **Original pixel flags restored:** removed the 20 procedural striped flags from the adapter. Renderer uses its existing eight-frame team PNG animation, now 8 flags per team, upright at front-row/end-stand positions rather than buried in the seating rake. Existing frame phases and wave speed remain authoritative.
+- **Opaque structure:** `buildStandShell()` adds treads, risers, continuous under-decks, concourses and rear walls. Added 17,488 triangles in 13 sector batches; foreground pieces inherit the existing camera-clearance sectors. Existing GLB is unchanged. Structural vertex shading darkens undersides, with a foot-to-head brightness gradient for the crowd. This is inexpensive baked-style shading, NOT a new real-time shadow-map system.
+- **Atmosphere:** the upgraded bowl now enters the renderer's existing effects pipeline: 440 seat-aligned possible camera-flash positions in one Points batch, 13 floodlight banks and 9 roof halos, honoring existing graphics switches. These are emissive fixtures/halos using existing scene lights, not 13 additional dynamic lights. No full-screen flash.
+- **Crowd retained:** 12,359 spectators, 1,559 motion-eligible; distance fades animation. Crowd alone now 13 batches (generic flag batches removed). Goal cheers, recoloring, cancellation/disposal and camera-sector behavior retained. `U11_CLASSIC.inspect().crowd.flags` is zero because pixel flags belong to the renderer, not the adapter.
+
+**Validation:** syntax checks on both JS files; actual r128 GLB integration tests passed for crowd bounds, palette samples, recoloring, camera sectors, goal reaction/expiry, texture disposal and cancelled load. Live Italy/Germany match visually inspected: mixed crowd, front-row pixel flags, solid stand backing, lamps; no browser errors reported. The latest renderer/index were re-read and the targeted stadium changes rebased over concurrent Claude edits before application.
+
+**Still to verify:** phone frame time with added terracing/lighting, flags during both supershot camera paths, and live Netherlands/club palette appearance. No claim of target-device performance validation for this revision. No deployment performed.
+
+**Evidence/backups:** Codex workspace `outputs/stadium-atmosphere/` contains `tests.json`, `in-game.png`, initial `before/`, and latest-original `pre-apply/`. Test script: `work/test-atmosphere.cjs`.
+
+
+## 2026-09-20 — Free-kick decisions and corner controls (Codex/Astra)
+
+**Files:** `game.js?v=183` (from v182) and its `index.html` script tag. Local implementation complete; phone/controller feel remains to verify. Existing stadium, keeper QTE, corners and aerial rules preserved.
+
+**Cause:** `rollFoul()` placed a wall, then called `liveResume()`, returning the CPU to its normal carrier/dribbling AI. There was no dead-ball action state for human free kicks either.
+
+**Change:** `freeKickBegin/Tick/Take` now own phase `freekick`. The taker and ball stay stationary until a kick is chosen. Existing restart-distance enforcement remains active through setup and kick wind-up; nearby kicks retain the four-player wall. Human action buttons stay visible: PASS (triangle/Q), CROSS (circle/R), SHOOT (square/E), and eligible super shots. Stick/direction input aims passes/crosses using the existing directional selection; shooting reuses existing shot physics and miss rules, not a new curve/power meter. No new UI layout: existing action diamond and commentary provide instructions. Jump/sprint/switch are dimmed during setup; jumping cannot consume a set piece.
+
+**CPU:** decides after ~1.6s: central scoring-range kicks favor shooting (72% initial preference), wide attacking kicks favor crosses to eligible onside box targets (82%), deep kicks choose a passing lane. No dribble choice. Samples of 300 decisions per scripted situation: close central 219 shots / 43 crosses / 38 passes; wide 252 crosses / 48 passes; deep 300 passes. These are test distributions, not measured match frequencies.
+
+**Corners:** PASS now executes the existing short-corner option; CROSS retains aimed delivery and touch zone targets; SHOOT allows a difficult direct attempt using normal shot rules. Corner passes/crosses preserve their no-offside exemption and existing header system. Existing CPU corner targeting and 10s human corner timeout are unchanged. Paused corner delivery is blocked.
+
+**Validation:** `node --check` passes; jsdom tests execute current game code and the actual `rollFoul` delayed callback, stationary taker, four-man walls in both halves, all three free-kick releases, CPU choices/execution, corner short/cross/shot paths, offside exemption, pause guard, stale restart cleanup and visible PASS/CROSS/SHOOT controls. Existing `lab/test-aerial.js`: 31/31 passed. Evidence in Codex workspace `outputs/set-pieces/tests.json`; reproducible harness `work/ai-test/set-pieces.cjs`; original backups in `outputs/set-pieces/before/`.
+
+**Next checks:** real phone and physical controller aiming/button feel, shot balance against walls and keeper, wide free-kick receiver positioning, and corner direct-shot difficulty. No live visual or hardware playtest claimed for this pass; no deployment. PvP set-piece device routing was not extended in this single-player patch.

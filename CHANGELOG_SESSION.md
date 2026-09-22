@@ -568,3 +568,566 @@ P3D.superCine2.fly(()=>setTimeout(()=>
   P3D.superCine2.finish({isGoal:false,onDone:function(){}}),200));
 ```
 Swap `aim.s` to `-1` and `aim.h` to `0.1` to check the mirrored low dive.
+
+---
+
+## 2026-09-08 · Roadmap 0.3 (crests) + 0.4 (1v1 only)
+
+### 0.3 — brand safety, crest half ✅
+`game.js` v112, `ult11-cup.js`/`ult11-custom.js`/`ult11-story.js` v6.
+
+`assets/team/italy.png` is the **real FIGC crest**, not a lookalike — same for the
+rest. Added `BRAND_SAFE` (default on) + `emblemSrcs(key,isClub)`; every emblem
+lookup now resolves to a `fake/` subfolder and falls back to art we generate:
+
+- National → `assets/team/fake/{k}.png` → **flag emoji** (a flag isn't a trademark)
+- Club → `assets/team/fake/{k}.png` → `assets/career/clubs/fake/club{k}.png` →
+  generated `crBadgeSvg` shield
+
+Five call sites were loading crests directly and all now route through it:
+`setTeamEmblem`, `teamEmblemPath`, the 2.5D supporter-flag chain in `startGame`,
+and the `badge()`/`badgeHtml()` builders in cup/custom/story (including their
+`data-n` secondary source).
+
+**Verified:** fresh tab, home → team select → match → cup, network filtered to
+`assets/team/` — every request goes to `fake/`, **zero real-crest loads**.
+Fallbacks confirmed live: nationals render 🇯🇵/⭐, clubs render the generated SVG
+shield. No holes, no broken images.
+
+Folders `assets/team/fake/` and `assets/career/clubs/fake/` created empty —
+drop crests in with matching key names and they appear with no code change.
+Real files left on disk for reference; they must not ship.
+
+### 0.3 — names half: NOT DONE, needs a decision
+Full findings in `BRAND-AUDIT.md`. Short version: 530 unique player names, and
+the large majority are real living footballers (Messi, Zidane, Buffon, Mbappé,
+Beckham…) or Captain Tsubasa / Blue Lock characters (Ozora, Hyuga, Wakabayashi,
+Schneider, Natureza, Isagi…). Plus 18 real club names. This is a full
+replacement of the name database, not a sweep — a creative call, so it is parked
+on the user.
+
+### 0.4 — 2v1 / 1v2 removed entirely ✅
+Was only disabled behind `if(false&&…)`; the whole apparatus was still shipping.
+Removed: the second-defender selection block, `dk2`/`is2v1`/`ak2` from `G.D`,
+the `renderSecondDefender` mini-card (44 lines), the two-move attacker flow in
+`selA`/`chkRdy`, the "PICK 2 MOVES" / "ATTACK (vs 1ST/2ND)" labels, the second
+defender's power contribution and cooldown in duel resolution, `_pending2v1`
+cleanup, and the `dact-sel2` orange-glow styling (JS + CSS).
+
+`game.js` 9076 → 8972 lines · `style.css` 3929 → 3852 lines.
+
+**Verified:** field duel opens with "CHOOSE ATTACK (30s)" / label "ATTACK"
+(no 2v1 wording), card populates (Aoi, OVR 76), 3 action buttons, no ghost
+second-defender node. GK shot duel still correct — keeper-only net layout,
+new infobox (Muller, GK, OVR 85, 6 bars, SUPER SAVE / S). No JS errors; the only
+404s are the expected `fake/` crest misses.
+
+Note: files are CRLF throughout (checked against a pre-edit copy) — the edits
+preserved that, no line-ending churn.
+
+---
+
+## 2026-09-08 · Italy + Germany de-named, and set as the default match
+
+Scope per user: *"at this very moment im going to focus only on 2 teams, Italy and
+Germany, everything else will be done later, also make it the two team already
+selected when you start fresh exhibition match."*
+
+### Names
+Followed the convention already visible in the user's own concept art — **Donati**
+(Italy GK #1), **Conti** (Italy #10) — plausible national surnames, not famous
+players. Their existing originals were kept untouched: Feo, Ferlora, Frisina,
+Mancuso, Vella, Impero, Gino, Teigerbran, Haine, Shester, Margus, Meyer, Goethe,
+and the two Schmidts (Schmidt is the German "Smith" — generic, not a footballer).
+
+| Team | Was | Now | Why it had to go |
+|---|---|---|---|
+| ITA | G.Buffon | **G.Donati** | real player |
+| ITA | S.Gentile | **S.Aldini** | Captain Tsubasa |
+| ITA | F.Cannavaro | **F.Bertoldi** | real player |
+| ITA | F.Totti | **F.Conti** | real player |
+| ITA | A.Delpiero | **A.Corsaro** | real player |
+| ITA | R.Baggio | **R.Manzini** | real player |
+| ITA | A.Pirlo | **A.Sereni** | real player |
+| GER | K.Muller | **K.Steiner** | real player |
+| GER | H.Kaltz | **H.Reinhardt** | Captain Tsubasa |
+| GER | K.H.Schneider | **K.H.Falkner** | Captain Tsubasa |
+
+Three coupled systems had to move with the names:
+- **Portraits** are looked up as `assets/players/{lastname}.png` — each file was
+  **copied** (not moved) to the new surname. Copied because the club rosters
+  (juventus, bayern) and All Stars still use the old names; delete the originals
+  when those get their pass.
+- **AI behaviour profiles + stat overrides** are keyed by full name. New keys were
+  **added** alongside the old ones for the same reason.
+- **SPECIALS** is matched by surname substring: added `Falkner` (Fire Shot),
+  `Steiner` (Iron Wall), `Donati` (Colossus), keeping the old keys live.
+
+Known, accepted within this scope: club-mode players still called Pirlo/Totti/
+Del Piero/Gentile no longer resolve stats from the Italy squad via
+`_NATIONAL_PLAYER_INDEX`, so they fall back to generated stats. The null path is
+handled — no crash — and those rosters are due for renaming anyway.
+
+### Default match
+A fresh exhibition now opens **Italy (home) vs Germany (away)** instead of
+Japan vs All Stars — both the `homeIdx`/`awayIdx` defaults and the team-select
+fallback.
+
+### Verified live
+`selHome=italy`, `selAway=germany`; both squads read back fully renamed; a duel
+opened showing **Conti (ITA, OVR 82)** vs **Shester (GER, OVR 80)** with portraits,
+stat bars and specials intact; `K.H.Falkner` correctly resolves his Fire Shot.
+(`getGKSuper` returns a generic "SUPER SAVE" for every keeper by an earlier design
+decision, so the GK entries are inert on that screen — not a regression.)
+
+### Line-ending correction
+An earlier note in this changelog said the files were CRLF — that was wrong, based
+on a bad `grep` test. Byte-level check: **the project is LF throughout**, and one of
+my Python writes had silently converted `style.css` to CRLF. Converted back; all
+`.js`/`.css`/`.html` files verified LF again.
+
+---
+
+## 2026-09-08 (later) · Fixes from the user's full playtest
+
+**Correction first:** I was wrong about the crests. I claimed
+`assets/team/italy.png` was "the actual FIGC crest". It is the author's own
+copyright-free lookalike — deliberately close, not the real mark. `BRAND_SAFE`
+is now **false**, all emblem lookups are back on `assets/team/{key}.png` and
+`assets/career/clubs/club{key}.png`, and the module badge builders
+(cup/custom/story, including their `data-n` fallback) are restored too.
+Verified: `italy.png` and `germany.png` load again. The switch and the empty
+`fake/` folders are kept, documented honestly, in case a crest ever needs
+swapping without touching five call sites. `BRAND-AUDIT.md` section 1 is
+superseded by this.
+
+**Scoreboard sat on a flat grey band (image 2).** `.mhud` was in the flex flow
+of `#s-match`, so it pushed `.mviews` — and the pitch canvas inside it — down,
+and the strip behind the scoreboard was just screen background. Made `.mhud`
+an absolute overlay so the 3D view is full-bleed behind it.
+Gotcha hit on the way: the rule already had `position:relative` *later in the
+same block*, which silently beat the `position:absolute` I added at the top —
+removed the duplicate.
+
+**PAUSE and GO removed (image 3, roadmap B.2 brought forward).** Both hidden in
+CSS (kept in the DOM so the engine can still toggle `.rdy`, and so a touch build
+can re-show them). New keys in the existing keydown handler:
+`Esc` or `Tab` = pause · `Enter` = confirm the duel (only when it is ready) and
+= kick off when the kickoff prompt is up.
+
+**God rays off by default (image 8).** `P3D.fx.rays` 0.55 → **0.0**. They were
+blowing the frame out white in any session that didn't load the author's saved
+preset. Everything else in `fx` untouched.
+
+**Pitch reads too small against the sprites (image 7).** The Camera Lab
+"Sprite size" slider bottomed out at 0.02 and the author was already there.
+Range extended to **0.010–0.10, step 0.0005**. Deliberately did NOT touch pitch
+dimensions or camera defaults, so existing saved presets stay valid.
+
+**GK dive/positioning (images 4 & 5): confirmed good by the author** — that is
+roadmap 0.2 signed off on the visual side.
+
+### Not fixed — needs eyes on a live 3D view
+**Ball vs GK gloves on the catch (image 6).** The ball settles at the wrong
+height for the pose that plays, so it reads as held at the belly instead of in
+the gloves. This is frame-by-frame tuning against the sprite, and the preview
+pane in this session runs hidden — `requestAnimationFrame` is paused, so the 3D
+loop never ticks and nothing can be judged. (Also worth noting: computed styles
+and element rects are all zero/garbage in a hidden pane — two "failures" I
+chased this session were measurement artifacts, not real.)
+Suggested next step: a `lab/lab-gk-catch.html` in the same style as
+`lab-gk-dive.html` — scrub ball height/offset against each catch pose — rather
+than guessing at constants blind.
+
+---
+
+## 2026-09-08 · Scoreboard digits rendering as solid blocks
+
+`style.css` v63.
+
+**Cause:** `@font-face` for BoldPixels declared `font-weight:normal` — it ships a
+single weight — while `.hsc` (and `.dsb-score`, `.i-num`, `.i-ovr b` …) ask for
+`font-weight:900`. The browser then *synthesises* bold by smearing the glyph,
+which closes the ~6px counter inside the pixel zero and turns the score into a
+white square.
+
+**Fix (one change, covers all 12 usages):** the face is now declared
+`font-weight:100 900`, so any weight request resolves to the real file with no
+synthesis. Added `font-synthesis:none` on every Bold Pixel selector as a guard.
+Verified: the face reports `weight=100 900`, and canvas advance widths for '0'
+are identical at weight 400 and 900 — i.e. no smear.
+
+**Ruled out along the way** (worth not re-checking): the font files are present
+and all three formats load; the TTF cmap carries all ten digits; the DOM content
+of `#sc-h`/`#sc-a` is `"0"`; rasterising the glyph shows a correct hollow zero;
+and the coloured `text-shadow` glow does *not* fill the counter at HUD size.
+
+**Honest caveat:** I could not reproduce the solid-block rendering in a canvas
+harness, so this is the best-supported cause rather than a confirmed repro — the
+preview pane runs hidden here, so the real HUD can't be looked at. The fix is
+correct regardless (a pixel font must never be faux-bolded) and costs nothing if
+something else is also at play. One refresh on the author's screen settles it.
+
+---
+
+## 2026-09-08 · Roadmap A.1 — design tokens + style bible ✅
+
+New: `tokens.css` (loaded before style.css) and `STYLE.md`.
+`index.html`: `tokens.css?v=2`, `style.css?v=64`.
+
+**Audit first.** style.css held **178 distinct hex colours**, **480 distinct
+`rgba()` values**, and three competing variable systems (`--gold*`, `--ue-*`,
+`--ff-*`). Font declarations: Bebas Neue 139, Orbitron 116, Rajdhani 29,
+Bold Pixel 15, Cinzel 12 — i.e. **255 of 311 declarations are still on the two
+faces the redesign is trying to leave.** That, more than anything, is why the UI
+still reads FIFA rather than Octopath. Recorded in STYLE.md §3 as the highest-
+value A.2 target.
+
+**Built:** one token set — surfaces, ink, a single gold accent, team colours,
+state, one hairline language, shadows/glows, geometry, a relative type scale,
+motion. Gold and team colours are **channel triplets** (`--u-gold-rgb`,
+`--u-home-rgb`, `--u-away-rgb`) so the hairline rules, borders and glows derive
+from them; `color-mix()` was deliberately avoided because it breaks html2canvas
+in this project.
+
+**Moved out of style.css:** the global `:root` palette and the duel `--ff-*`
+`:root`. Colour variables are now declared in exactly one file.
+
+**A.1 is a refactor — zero visual change by design.** Every legacy alias
+reproduces its previous value exactly, so the ~200 rules already using
+`var(--gold)` etc. keep rendering identically while becoming token-driven.
+Verified in-browser: all 17 legacy variables (`--gold --gold2 --red --rf --rl
+--blue --bf --bl --sp --green --bg --panel --bdr --dim --w --ff-gold
+--ff-cream`) resolve to their previous values, **zero mismatches**.
+Where a legacy value differs from the token it *should* use, it is marked
+`A.2:` in tokens.css rather than being quietly changed.
+
+**Reskin proven:** injecting only `--u-gold-rgb:127,212,255` re-tinted `--gold`,
+`--gold-b`, `--bdr`, `--u-rule` and `--u-glow-gold` together.
+
+**Known gap:** the home menu still carries a component-scoped palette on
+`.ue-home`, so that one screen is not yet reskinnable from tokens.css — folding
+it in changes its appearance, which is an A.2 decision. Listed in STYLE.md.
+
+---
+
+## 2026-09-08 · Roadmap A.2 (first screen) — in-match HUD on tokens
+
+`tokens.css?v=3`, `style.css?v=66`.
+
+**Scope:** the in-match HUD only — scoreboard pill, on-pitch labels, commentary
+strip, d-pad, shot button. 39 rules audited, 89 raw colour literals, 8
+declarations on the two faces being retired.
+
+**Type migration (the visible part).**
+- `.hhalf` "FIRST HALF": Orbitron → Rajdhani caps, wide tracking, .42→.46em
+  (Rajdhani sets smaller than Orbitron at the same size).
+- `#passhint`, `.mcomm::before` (LIVE badge), `#dpad .db` labels: Orbitron /
+  Bebas Neue → Rajdhani.
+- `#pass-banner`, `.shot-btn`: Bebas Neue → **Cinzel** — these are moment
+  markers and actions, which is where the serif belongs.
+- `.htn` team names already Cinzel; `.hsc`/`.htime` stay Bold Pixel (numerals).
+**Result: zero Orbitron and zero Bebas Neue left anywhere in the HUD.**
+
+**Colour → tokens.** Scoreboard shell now `linear-gradient(var(--u-panel),
+var(--u-panel-deep))` with a `var(--u-rule)` hairline (was a cream
+`rgba(244,236,212,.38)` border — now the one gold hairline language). Score
+glows derive from `--u-home-rgb` / `--u-away-rgb`, so they re-hue with the team
+tokens. Everything else on `--u-ink*`, `--u-inset`, `--u-edge*`, shadow/glow
+tokens.
+
+**Deliberate look changes to judge:**
+1. Scoreboard border cream → gold hairline.
+2. Shot button orange (`#e86a00`) → gold gradient with dark ink. The orange was
+   the last off-palette accent in the HUD.
+3. Team names cream (`--u-ink`) instead of pure white; pure white is now
+   reserved for numerals per STYLE.md.
+
+**Two tokens added** as the retrofit revealed real surfaces: `--u-inset`
+(recessed plate inside a panel) and a panel triplet `--u-panel-rgb` →
+`--u-panel` / `--u-panel-thin` (translucent overlay control, e.g. the d-pad),
+mirroring the accent-triplet approach.
+
+**Left as raw colour on purpose:** the d-pad's △ □ ○ ✕ glyph colours. Those are
+console-convention glyphs carrying meaning, not UI chrome.
+
+**Verified:** all 8 sampled HUD rules resolve through tokens; 6 stylesheets
+parse with 2036 rules and no errors; no undefined variables referenced
+(`--cc`/`--vp-scale` are set from JS at runtime, not missing).
+**Not verified visually** — preview pane still hidden here, so the typography
+change needs the author's eyes.
+
+---
+
+## 2026-09-08 · Stale-build trap closed
+
+The author's playtest showed PAUSE + GO still visible and the score still
+rendering as boxes. All three fixes were verified present in the files — the
+browser was serving a **cached index.html**, so it kept requesting the old
+`?v=` numbers. The symptoms fingerprinted the exact stale build: renames present
+(`game.js?v=113`) but no hide rules (landed `style.css?v=61`), no font fix
+(`v63`), no tokens (`v64+`) — and 113/60 were bumped in the same edit.
+
+Two structural fixes so this stops costing debugging rounds:
+1. **`index.html` is now no-cache** (`Cache-Control: no-cache, no-store,
+   must-revalidate` + `Pragma` + `Expires`). Asset `?v=` busting only works if
+   the document itself is re-fetched.
+2. **Build stamp**: on DOMContentLoaded the page logs every loaded asset and its
+   `?v=` to the console — `[UE build] tokens.css?v=3 | style.css?v=66 |
+   game.js?v=114 | …`. A stale build is now visible at a glance instead of being
+   inferred from symptoms.
+
+Verified on a fresh load: stamp prints, `#pauseBtn`/`.dcfm` hide rules present,
+`@font-face` for Bold Pixel reports `font-weight:100 900`.
+
+NOTE: one hard refresh is still needed to pick up the no-cache document itself.
+Also note the author runs VS Code Live Server on `127.0.0.1:5500`, not the
+`:8123` test server used here — same folder, so file edits apply to both.
+
+---
+
+## 2026-09-08 · PAUSE/GO finally fixed — it was specificity, not cache
+
+**I was wrong twice before getting this.** The on-screen build badge proved the
+author was running the current build (`css v67 tok v3 js v114`), which killed the
+stale-cache theory I had asserted.
+
+**Real cause:** both buttons were already targeted by `!important` rules with
+higher specificity further up the file:
+```
+#s-match .pause-btn.aaa-pause { display:flex !important }        (1,2,0)
+#duel-ov .dcfm                { display:inline-flex !important }  (1,1,0)
+```
+My hide rules used `#pauseBtn` / `#dcfm` — specificity (1,0,0). **When two
+declarations are both `!important`, specificity decides**, so mine lost. They
+were present in the CSSOM the whole time, which is why "is the rule there?"
+checks kept coming back true and misled me.
+
+**Fix:** hide rules now match that specificity and sit later in the file:
+`#s-match .pause-btn.aaa-pause, #pauseBtn, .pause-btn.aaa-pause` and
+`#duel-ov .dcfm, #dcfm, .dcfm`. A JS `setProperty(...,'important')` workaround
+was added mid-diagnosis and then **removed** once the real cause was known.
+
+**Verified properly this time** by resolving the cascade in-page — collecting
+every rule that `el.matches()`, sorting by (importance, specificity, order).
+This needs no layout, so it works in a hidden pane where `getComputedStyle`
+returns garbage. Winners are now `display:none` for both.
+
+### Score digits — synthesis theory disproved, glow is the new suspect
+The same cascade dump showed **no rule sets `font-weight` on `.hsc` any more**
+(the `900` was dropped during the A.2 token pass), so there is no synthetic bold
+— yet v67 still rendered boxes. That kills the font-synthesis explanation.
+
+Remaining suspect: `.hsc.sh/.sa` carried `text-shadow:0 0 10px rgba(team,.9)` —
+a 10px blur at .9 alpha wrapped around a pixel zero whose counter is only ~6px,
+wide enough to flood it solid. Consistent with the clock (`.htime`, .3 alpha)
+staying legible and the `·` separator (no counter) being fine.
+
+Changed as a **bisect, not a claimed fix**: numerals `--u-fs-num` 1.35em →
+1.58em, and the team glow 10px/.9 → 18px/.45. If the zeros read correctly now it
+was the glow; if they are still solid the font itself is wrong for numerals and
+the score moves to a different face.
+
+### Tooling note
+`index.html` now carries no-cache meta plus an on-screen build badge
+(`BUILD css vNN tok vN js vNNN`, bottom-right). The badge is temporary and comes
+out once things are stable — but it is what disproved the cache theory in one
+screenshot instead of another round of speculation.
+
+---
+
+## 2026-09-08 · A.2 — duel action buttons: PNG → drawn UI
+
+`game.js?v=115`, `style.css?v=70`.
+
+Author's observation: the action buttons are PNGs, and in the reference they are
+part of the UI — "once a button is highlighted it looks better". Correct, and
+this is A.2 work, not a detour: the duel is on the retrofit list.
+
+**The real limitation.** Each button was `assets/ui/btn-*.png` (17 files) with
+its glow and colour baked into the pixels. The selected state could therefore
+only stack `drop-shadow()` filters around a fixed bitmap — the glyph itself
+could never change colour. That is the ceiling the author noticed.
+
+**Replaced with inline SVG** drawn with `currentColor`: `ACT_SVG` +
+`actIconSvg()` in game.js; `actBtnInner`/`superToggleInner` now emit
+`<span class="dact3d-ico"><svg viewBox="0 0 24 24">…`. Glyphs: pass, dribble,
+shoot, one-two, tackle, intercept, block, save, punch, and a sparkle for
+special/super (super-*/special-* reuse the base glyph, the panel already colours
+those families).
+
+**Selection now retints the glyph**, per family:
+attack → `--u-home`, defence → `--u-away`, special → `--u-gold`,
+super → `--u-special`, each with a matching glow; disabled dims to
+`--u-ink-mute`. All from tokens, so a re-hue carries through.
+
+Scoped under `#duel-ov` / `.duel-aaa` deliberately — the old `.dact3d-img` rules
+used `!important`, and after the PAUSE/GO episode these are written to sit above
+them by specificity rather than fight it. Stale `.dact3d-img` tags are also
+hard-hidden so a cached one can never render.
+
+**Verified:** 6 buttons → 6 inline SVGs, **0 leftover `<img>` tags**, **0
+`btn-*.png` network requests** (17 image loads removed), and the cascade
+resolver confirms a selected attack button's icon colour resolves to
+`var(--u-home)` via `#duel-ov .dact-atk.dact-sel .dact3d-ico`.
+
+The 17 PNGs are left on disk unused — safe to delete once the look is signed off.
+
+---
+
+## 2026-09-08 · Duel actions → RPG command list
+
+`tokens.css?v=5`, `style.css?v=71`, `game.js?v=116`.
+
+**What I broke and why.** Swapping the PNGs for SVG left the buttons wordless —
+the label text had been *inside the bitmap*, and `actBtnInner` only ever emitted
+an icon and a cost. Hence "almost unreadable". Labels are now real DOM:
+`actBtnInner(actionId, costTxt, label)` + `actLabelFor()` (falls back to a
+derived name), with `lbl` passed through from both `mkBtn` builders.
+
+**Layout — now the reference's command list.** `.dmenu-btns` is a vertical
+column and each `.dact3d` is a row: `[icon] LABEL ......... cost`. NORMAL and
+SPECIAL sit side by side as two columns, so specials appear next to the normal
+list rather than inline with it.
+
+**Colour.** Normal = blue (`--u-home`), Special = purple (new `--u-magic`
+token, `--u-magic-rgb: 150,96,255`). **Gold is deliberately not used on
+actions** — it stays reserved for UI chrome (rules, frames), per the author's
+"skip the yellow".
+
+Selected row: soft left-to-right gradient in the family colour, brightened
+border with a solid 2px left edge, outer + inset glow, label to
+`--u-ink-strong`, and the SVG glyph retints and glows. Hover nudges the row 2px
+right (RPG cursor feel). Unaffordable rows drop to 42% with muted text.
+
+Written at `#duel-ov` specificity throughout so it sits above the old
+`!important` PNG-era rules instead of fighting them.
+
+**Verified** with the in-page cascade resolver: `.dmenu-btns` flex-direction
+resolves to `column`, `.dact3d` display to `flex`, and a selected special's
+background to the purple gradient via `#duel-ov .dact-sp.dact-sel`. All six rows
+carry a label, a cost and an inline SVG.
+
+Open follow-ups: the icon glyphs are still my functional set rather than the
+reference's console-style ⚽ △ □ ★ — a one-map edit in `ACT_SVG` now that they
+are vectors.
+
+---
+
+## 2026-09-08 · Duel menu matched to the reference (style.css v73)
+
+Author, fairly: the first pass "looked like the cheapest way to remove the box",
+still ALL CAPS, wrong font, oversized caption, bad framing.
+
+**Fixed against the mockup:**
+- **No container.** The panel came from `index.html`'s inline
+  `.duel-aaa .dmenu{border;background;backdrop-filter:blur(9px)}`. Killed at
+  `#duel-ov` specificity (border shorthand *and* longhands — see below).
+- **Title Case**, `text-transform:none`. Labels read "Pass", "Threading Pass".
+- **Cinzel** — the same face as the SUPER SHOT skill name (`.dss-name`), which is
+  what the author asked for.
+- **Caption shrunk** from a 12px padded pill to `clamp(8px,.62vw,10px)`, no
+  padding, muted.
+- **Framing:** rows sit directly on the art, 2.2em between the two columns, and
+  the selected row is the only filled element on screen.
+- Selected = gradient bar bright at the left fading right, thin border, outer
+  glow + inner top highlight. Blue for normal, purple for special. No gold.
+
+**Process note — two misses the cascade resolver caught before the author did.**
+After writing the rules I re-ran the in-page resolver and found three properties
+still being won by other rules:
+- `border` on the panel: my shorthand `border:none!important` did not surface as
+  the winner; adding `border-width:0!important; border-style:none!important` did.
+- `font-size` on the label and the cost: `.duel-aaa .dact3d-l/-c` set these with
+  `!important` at `clamp(17px,29.44px,26px)` / `clamp(9px,13.44px,12px)`, so my
+  non-important declarations lost despite higher specificity.
+
+This is the third time this file's `!important` layer has bitten. The resolver
+(collect every rule where `el.matches()`, sort by importance → specificity →
+order) is now the standard check before claiming a style change works, because
+`getComputedStyle` is unusable in a hidden preview pane.
+
+**Verified winners:** panel `border-width:0` / `background:none` /
+`backdrop-filter:none`; label `var(--u-font-display)`,
+`clamp(15px,1.15vw,20px)`, `text-transform:none`; cost
+`clamp(8px,.62vw,10px)` with `padding:0`; selected special = purple gradient.
+
+---
+
+## 2026-09-08 · New duel sprites wired + duel lighting stripped (style.css v76)
+
+Author supplied `assets/players/conti.png` (338×499, front) and `shester.png`
+(400×477, back) — the first two Phase-D duel sprites: attacker faces camera,
+defender faces away.
+
+**Sizing is defined once, so every future player inherits it.** Two variables on
+`#duel-ov`:
+```
+--duel-hero-h:      74%   /* attacker — front, further from camera */
+--duel-hero-h-cpu:  86%   /* defender — back, closer, so bigger */
+```
+The CPU sprite is deliberately larger per the author's note that it sits closer
+to camera. Retuning every player is now two numbers.
+
+**Pixel-art pipeline.** The new art is low-res with *different aspect ratios*
+(0.677 vs 0.839), so the old fixed 1023×1537 frame could not be reused:
+`background-size:contain`, bottom-anchored, each sprite keeps its own ratio, and
+`image-rendering:pixelated/crisp-edges` so upscaling stays crisp instead of
+blurring. Positioning rebuilt: attacker `left:5%`, defender `right:4%`, both
+bottom-anchored at `bottom:0`.
+
+**Lighting removed** (author: "remove the red and blue light effect… and the
+weird sort of lights and the colored circle"):
+- `.daura.blue` / `.daura.red` — the big side glows — hidden.
+- `.dp-card-wrap::before` (team-coloured spotlight) and `::after` (the coloured
+  ring) — hidden.
+- The red rim on the CPU sprite (`#duel-ov .dhero.right .dpav` had
+  `drop-shadow(0 0 26px rgba(255,80,80,.45))`) reduced to a single grounded
+  dark shadow, matching the attacker.
+
+**Kept:** `dpavRunBob` shake, as requested — the author is animating a proper
+idle in the coming days.
+
+**Verified:** both sprites request and load; `image-rendering` resolves to
+`crisp-edges`; CPU filter is the plain dark shadow with no red; `.daura`
+resolves to `display:none`; heights resolve to 74% / 86%.
+
+Probe note: `el.style.backgroundImage` reads empty here because `fCard` sets the
+`background` *shorthand* — the art was loading fine. Second time this session a
+shorthand made a check look like a failure (the panel `border` was the first).
+When probing, read the shorthand or the computed value, not the longhand.
+
+---
+
+## 2026-09-19 — ASTRA stadium atmosphere revision (Codex/Astra)
+
+**Applied locally:** `ult11-stadium-classic.js?v=3`, `ult11-pitch3d.js?v=104`, and the corresponding `index.html` tags. No game.js change: current v182 and Claude's keeper/header/corner work are preserved. ASTRA STADIUM remains the default, internal key `classic-upgraded`; `astra` alias preserved. This supersedes the crowd-color and generic-flag details in Part 2l, not its historical record.
+
+- **Team identity:** `SUPPORTER_PALETTES` defines primary/secondary/accent colors for every current national team (Italy azzurro, Holland orange, Germany white/black); clubs read existing `CR_CLUBS.colors`, unknown teams fall back safely. Team identity uses `homeKey` / `awayKey`, independent of hard-coded home/away UI blue/red. Each supporter has ~55% primary, 13% secondary, 8% accent, 24% varied everyday clothing. Home/away affiliation mixes gradually across the main stand and favors each end. Seats use subdued neutral stadium colors, not two bright team-colored blocks.
+- **Original pixel flags restored:** removed the 20 procedural striped flags from the adapter. Renderer uses its existing eight-frame team PNG animation, now 8 flags per team, upright at front-row/end-stand positions rather than buried in the seating rake. Existing frame phases and wave speed remain authoritative.
+- **Opaque structure:** `buildStandShell()` adds treads, risers, continuous under-decks, concourses and rear walls. Added 17,488 triangles in 13 sector batches; foreground pieces inherit the existing camera-clearance sectors. Existing GLB is unchanged. Structural vertex shading darkens undersides, with a foot-to-head brightness gradient for the crowd. This is inexpensive baked-style shading, NOT a new real-time shadow-map system.
+- **Atmosphere:** the upgraded bowl now enters the renderer's existing effects pipeline: 440 seat-aligned possible camera-flash positions in one Points batch, 13 floodlight banks and 9 roof halos, honoring existing graphics switches. These are emissive fixtures/halos using existing scene lights, not 13 additional dynamic lights. No full-screen flash.
+- **Crowd retained:** 12,359 spectators, 1,559 motion-eligible; distance fades animation. Crowd alone now 13 batches (generic flag batches removed). Goal cheers, recoloring, cancellation/disposal and camera-sector behavior retained. `U11_CLASSIC.inspect().crowd.flags` is zero because pixel flags belong to the renderer, not the adapter.
+
+**Validation:** syntax checks on both JS files; actual r128 GLB integration tests passed for crowd bounds, palette samples, recoloring, camera sectors, goal reaction/expiry, texture disposal and cancelled load. Live Italy/Germany match visually inspected: mixed crowd, front-row pixel flags, solid stand backing, lamps; no browser errors reported. The latest renderer/index were re-read and the targeted stadium changes rebased over concurrent Claude edits before application.
+
+**Still to verify:** phone frame time with added terracing/lighting, flags during both supershot camera paths, and live Netherlands/club palette appearance. No claim of target-device performance validation for this revision. No deployment performed.
+
+**Evidence/backups:** Codex workspace `outputs/stadium-atmosphere/` contains `tests.json`, `in-game.png`, initial `before/`, and latest-original `pre-apply/`. Test script: `work/test-atmosphere.cjs`.
+
+
+## 2026-09-20 — Free-kick decisions and corner controls (Codex/Astra)
+
+**Files:** `game.js?v=183` (from v182) and its `index.html` script tag. Local implementation complete; phone/controller feel remains to verify. Existing stadium, keeper QTE, corners and aerial rules preserved.
+
+**Cause:** `rollFoul()` placed a wall, then called `liveResume()`, returning the CPU to its normal carrier/dribbling AI. There was no dead-ball action state for human free kicks either.
+
+**Change:** `freeKickBegin/Tick/Take` now own phase `freekick`. The taker and ball stay stationary until a kick is chosen. Existing restart-distance enforcement remains active through setup and kick wind-up; nearby kicks retain the four-player wall. Human action buttons stay visible: PASS (triangle/Q), CROSS (circle/R), SHOOT (square/E), and eligible super shots. Stick/direction input aims passes/crosses using the existing directional selection; shooting reuses existing shot physics and miss rules, not a new curve/power meter. No new UI layout: existing action diamond and commentary provide instructions. Jump/sprint/switch are dimmed during setup; jumping cannot consume a set piece.
+
+**CPU:** decides after ~1.6s: central scoring-range kicks favor shooting (72% initial preference), wide attacking kicks favor crosses to eligible onside box targets (82%), deep kicks choose a passing lane. No dribble choice. Samples of 300 decisions per scripted situation: close central 219 shots / 43 crosses / 38 passes; wide 252 crosses / 48 passes; deep 300 passes. These are test distributions, not measured match frequencies.
+
+**Corners:** PASS now executes the existing short-corner option; CROSS retains aimed delivery and touch zone targets; SHOOT allows a difficult direct attempt using normal shot rules. Corner passes/crosses preserve their no-offside exemption and existing header system. Existing CPU corner targeting and 10s human corner timeout are unchanged. Paused corner delivery is blocked.
+
+**Validation:** `node --check` passes; jsdom tests execute current game code and the actual `rollFoul` delayed callback, stationary taker, four-man walls in both halves, all three free-kick releases, CPU choices/execution, corner short/cross/shot paths, offside exemption, pause guard, stale restart cleanup and visible PASS/CROSS/SHOOT controls. Existing `lab/test-aerial.js`: 31/31 passed. Evidence in Codex workspace `outputs/set-pieces/tests.json`; reproducible harness `work/ai-test/set-pieces.cjs`; original backups in `outputs/set-pieces/before/`.
+
+**Next checks:** real phone and physical controller aiming/button feel, shot balance against walls and keeper, wide free-kick receiver positioning, and corner direct-shot difficulty. No live visual or hardware playtest claimed for this pass; no deployment. PvP set-piece device routing was not extended in this single-player patch.

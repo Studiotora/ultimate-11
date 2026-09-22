@@ -2301,14 +2301,15 @@ function passFlightBegin(s,ds){
   if(!b||!b.active||b.loose||G._shotTrail||G._cineHold) return;
   if(G._pfRef===b) return;
   G._pfRef=b;
+  const fa=flightAim(b);
   // the attacker nearest the landing spot is the one coming to meet it
   let rk=null,rd=1e9;
-  validOutfieldKeys(s).forEach(k=>{ if(k===G.ck)return; const d=Math.hypot(PP[s][k].x-b.tx,PP[s][k].y-b.ty); if(d<rd){rd=d;rk=k;} });
+  validOutfieldKeys(s).forEach(k=>{ if(k===G.ck)return; const d=Math.hypot(PP[s][k].x-fa.x,PP[s][k].y-fa.y); if(d<rd){rd=d;rk=k;} });
   G._pfRecv=b.physicalPass?b.receiver:rk;
   // and the defender who gets to it first takes the chase - and the stick
   const human=!isCpuSide(ds);
   if(human&&Date.now()<(G._switchLockUntil||0)) return;
-  const e=bestEngager(ds,b.tx,b.ty,0,0,null);
+  const e=bestEngager(ds,fa.x,fa.y,0,0,null);
   if(!e.k) return;
   /* Keep the man you are already running with unless the new one is clearly
      better placed. Swapping on EVERY pass meant that during the CPU's passing
@@ -2316,7 +2317,7 @@ function passFlightBegin(s,ds){
      arrived (author, 2026-09-12: "my man didn't advance and stayed in the
      middle... I was too distant"). */
   if(human&&ROLES.engager&&ROLES.engager!==e.k&&!ocd(ds,ROLES.engager)&&!isStalled(ds,ROLES.engager)){
-    const cur=defenderETA(ds,ROLES.engager,b.tx,b.ty,0,0);
+    const cur=defenderETA(ds,ROLES.engager,fa.x,fa.y,0,0);
     if(e.t>cur*0.70) return;                                  // not clearly better: keep him
   }
   ROLES.engager=e.k; G.chk=e.k; fixRoleOverlap(ds);
@@ -2332,7 +2333,7 @@ function passFlightChaser(s,ds,dt){
   let ux,uy,step;
   if(manual){ ux=iv.x; uy=iv.y; step=top*(_sprintForSide(ds)?AI2.humanSprint:1)*dt; }
   else{
-    const dx=b.tx-dp.x, dy=b.ty-dp.y, d=Math.hypot(dx,dy)||1;
+    const fa=flightAim(b), dx=fa.x-dp.x, dy=fa.y-dp.y, d=Math.hypot(dx,dy)||1;
     ux=dx/d; uy=dy/d;
     step=Math.min(MAX_DEF_STEP()*1.30*fieldSpdMult(pl)*recoveryMult(ds,k,dp), top)*dt;
     if(d<step*3) step=d/3;
@@ -2689,7 +2690,7 @@ function moveOffBallV2(s,ds,dt=1){
     }
     if(isStalled(s,k)) return;
     if(ocd(s,k)){ aiMoveTo(cur,p.x*W,p.y*H,'jog',pl,s,k,dt); return; }
-    if(flying&&k===G._pfRecv){ aiMoveTo(cur,ballTravel.tx,ballTravel.ty,'support',pl,s,k,dt); return; }  // meet the ball
+    if(flying&&k===G._pfRecv){ const fa=flightAim(ballTravel); aiMoveTo(cur,fa.x,fa.y,'support',pl,s,k,dt); return; }  // meet the ball
     const id=s+':'+k, now=Date.now();
     let j=_aiJob[id];
     const wantsOutlet=!!(ctx.outlet&&ctx.outlet.has(k));
@@ -3216,6 +3217,8 @@ function startAnim(){
     }
     if(G.phase==='moving')tick(dt);
     if(G.phase==='loose'&&!G._cineHold)tickLoose(dt);
+    if(G.phase==='corner'&&!G._cineHold)cornerTick(dt);
+    if(G.phase==='freekick'&&!G._cineHold)freeKickTick();
     if(G.phase==='pass_anim'&&!G._cineHold){tickBallTravel(dt);if(G.phase==='pass_anim')tickPassMotion(dt);}
     /* WATCHDOG — 50s was far too long to sit staring at a stuck overlay, and
        it only covered phase==='duel'. The reported symptom (menu stays open
@@ -4389,15 +4392,21 @@ window.addEventListener('blur',()=>{G_touchContain=false;});
 let G_touchSprint=false;   // held state from the on-screen button
 
 function actShoot(){        // X/□ · E    — shoot / tackle
+  if(freeKickHumanTaking()){freeKickTake('shoot');return;}
+  if(cornerHumanTaking()){cornerShoot();return;}
   if(G.awaitKickoff==='h'){doKickoff();return;}
   if(G.poss==='h') manualShot('shoot'); else startLunge('h','shoulder');
 }
 function actCross(){        // B/○ · R    — cross / slide tackle
+  if(freeKickHumanTaking()){freeKickTake('cross');return;}
+  if(cornerHumanTaking()){ cornerDeliver(G._corner.aim); return; }   // ○ / R delivers the corner
   if(G.awaitKickoff==='h'){doKickoff();return;}
   if(G.poss==='h'){ if(G.phase==='moving') directionalPass('cross'); }
   else startLunge('h','tackle');
 }
 function actPass(){         // Y/△ · Q    — short pass / contain
+  if(freeKickHumanTaking()){freeKickTake('ground');return;}
+  if(cornerHumanTaking()){cornerDeliver('short');return;}
   if(G.awaitKickoff==='h'){doKickoff();return;}
   if(G.poss==='h') directionalPass('ground');
   // Defence reads the held PASS state each simulation frame.
@@ -4407,17 +4416,26 @@ function actSwitch(){       // LB/L1 · F  — switch player (defence only)
   if(G.poss!=='h') switchDefender();
 }
 function actSuper(){        // RT+X · V   — special / super
+  if(freeKickHumanTaking()){freeKickTake('special');return;}
   if(G.awaitKickoff==='h'){doKickoff();return;}
   if(G.poss==='h' && G.phase==='moving') manualShot('special');
 }
 function actJump(){         // A/✕ · Space — jump (attacking) / block (defending)
+  if(G.phase==='freekick'||G.phase==='corner')return;
   // a super shot is being charged at our goal: throw the man in the line in front of it
   if(G._ssBlk&&G._ssBlk.ds==='h'&&!G._ssBlk.committed&&window.P3D&&P3D.superCine2&&P3D.superCine2.active()){ superBlockCommit(); return; }
+  if(aerialLive()){ aerialHumanJump(); return; }            // a cross is coming down: go up for it
   if(G.poss!=='h'&&G.phase==='moving'){ const k=G.chk||ROLES.engager; if(k) startBlock('h',k); return; }
   if(typeof playerJump==='function') playerJump('h');
 }
 function actPause(){ if(typeof togglePause==='function') togglePause(); }
 function actConfirm(){
+  /* Enter delivers a corner too - but not the pad's X: X is the header jump a
+     moment later, and a double-tap would deliver AND jump far too early. */
+  if(cornerHumanTaking()){
+    if(!(typeof UEInput!=='undefined'&&UEInput.padDown&&UEInput.padDown('a'))) cornerDeliver(G._corner.aim);
+    return;
+  }
   if(G.awaitKickoff==='h'){ doKickoff(); return; }
   const cf=document.getElementById('dcfm');
   if(cf && cf.classList.contains('rdy') && typeof confirmDuel==='function') confirmDuel();
@@ -4656,11 +4674,16 @@ function _buildJoystick(){
   try{ applyCtrlLayout(); }catch(e){}
 }
 function _updateJoystickVisibility(){
+  if(G._freeKick&&G.phase!=='freekick')freeKickCleanup();
+  if(G._corner&&G.phase!=='corner') cornerCleanup();     // a goal / half time / menu ended it
   if(!G_joyEl)return;
   const isTouch=('ontouchstart' in window)||navigator.maxTouchPoints>0;
   // Visible whenever the field is live — attack steers the carrier,
   // defense steers the engager.
-  const live=G.phase==='moving' && !G.paused;
+  /* a cross in the air counts as live: the X button and the stick are exactly
+     what you need then, and they used to vanish the moment the ball left the
+     foot (they only showed in phase 'moving') */
+  const live=(G.phase==='moving' || freeKickHumanTaking() || cornerHumanTaking() || aerialLive()) && !G.paused;
   const show=isTouch && live;
   G_joyEl.style.display=show?'block':'none';
   if(!show && G_joyActive){
@@ -4734,6 +4757,10 @@ function _updateDpad(show){
   // Switching only means anything while defending.
   const sw=G_dpadEl.querySelector('[data-a="switch"]');
   if(sw) sw.classList.toggle('dim', atk);
+  if(freeKickHumanTaking()||cornerHumanTaking()){
+    for(const key of ['jump','switch','sprint']){const b=G_dpadEl.querySelector('[data-a="'+key+'"]');if(b)b.classList.add('dim');}
+  }else{const b=G_dpadEl.querySelector('[data-a="sprint"]');if(b)b.classList.remove('dim');}
+
 
   // A lunge locks the tackle buttons out until it resolves.
   const _lk=(()=>{ const dk=G.chk||ROLES.engager; if(!dk)return 0;
@@ -4751,7 +4778,7 @@ function _updateDpad(show){
     let ok=false;
     try{
       const cp=atk && G.ck ? sq('h')[G.ck] : null;
-      ok=!!(cp && G.phase==='moving' && typeof getSpecial==='function' && getSpecial(cp));
+      ok=!!(cp && (G.phase==='moving'||freeKickHumanTaking()) && typeof getSpecial==='function' && getSpecial(cp));
     }catch(e){ ok=false; }
     sup.style.display = ok ? 'flex' : 'none';
   }
@@ -5098,7 +5125,9 @@ function directionalPass(kind='ground'){
   else { ax/=mag; ay/=mag; }
   let best=null,bestScore=-Infinity;
   for(const k of Object.keys(sq2)){
-    if(k===G.ck||!sq2[k]||sq2[k].pos==='GK')continue;
+    // not a team-mate on cooldown: he jogs back to shape and the ball flies past
+    // him (found tracing headers, 2026-09-19)
+    if(k===G.ck||!sq2[k]||sq2[k].pos==='GK'||ocd(s,k))continue;
     const p=PP[s][k];if(!p)continue;
     let dx=p.x-cp.x, dy=p.y-cp.y;
     const d=Math.hypot(dx,dy);if(d<W*0.02)continue;
@@ -5593,6 +5622,12 @@ function playerJump(side){
   if(!G||G.phase!=='moving'||G.paused||G._cineHold) return false;
   // whoever this side is currently steering: the carrier, or the engager
   const k=(G.poss===side) ? G.ck : (G.chk||(typeof ROLES!=='undefined'&&ROLES?ROLES.engager:null));
+  return jumpPlayer(side,k);
+}
+/* The jump itself, for a GIVEN player. Split out of playerJump (2026-09-19) so
+   a header can lift the man under a cross - phase pass_anim, and not
+   necessarily the carrier or the engager. Same cost, locks and art. */
+function jumpPlayer(side,k){
   if(!k||!PP[side]||!PP[side][k]) return false;
   const pl=sq(side)[k];
   const ph=physOf(side,k,pl);
@@ -5989,6 +6024,355 @@ const BALLPHYS={
   shotLift:1.05,    // launch speed of a shot (x distance factor)
   loosePop:0.55     // deflections / loose balls hop a little
 };
+/* ══ CORNER KICKS (roadmap Part 5 step 2, 2026-09-19) ════════════════════════
+   Before this a corner was "the nearest attacker gets the ball at the flag,
+   play on" - no set-up, no delivery, nothing in the air. Now:
+     1 SET-UP  play freezes (phase 'corner'). The three best headers of the ball
+               go to the NEAR POST, PENALTY SPOT and FAR POST; one waits on the
+               edge of the box, one offers a SHORT option, the best crosser takes
+               it. Defenders mark goal-side, one guards the near post zonally, the
+               keeper stands on his line.
+     2 DELIVERY  phone: tap a zone on the pitch. PC / pad: aim a target with the
+               stick or WASD, O / R / Enter to cross (author's split). CPU: picks
+               near / penalty / far by where its header beats his marker, now and
+               then short. Nobody choosing in 10s -> it goes to the penalty spot.
+     3 IN THE AIR  the delivery is a cross into the step-1 aerial contest; there
+               is no offside from a corner.
+   Geometry is real: 105m = 0.86W, so 1m ~ 0.0082W; box 16.5m deep, penalty
+   spot 11m, goal y .446-.554. */
+const CORNER={ cpuDelayMs:1400, humanTimeoutMs:10000, aimSpeed:0.0065, shortChance:0.12 };
+function cornerGeom(atk,top){
+  const gx=goalXFor(atk), into=gx>W/2?-1:1;             // +into steps off the goal line into the pitch
+  const near=top?-1:1;                                   // the near post is on the corner's side
+  const P=(depth,yf)=>({x:gx+into*W*depth, y:H*yf});
+  const xa=gx+into*W*.012, xb=gx+into*W*.17;
+  return { gx, into, near, top,
+    flag:{x:gx, y:top?H*.02:H*.98},
+    zones:{ near:P(0.040,.5+near*.065), penalty:P(0.092,.5), far:P(0.055,.5-near*.085), short:P(0.075,top?.14:.86) },
+    edge:P(0.145,.5), gkSpot:P(0.008,.5), zonal:P(0.022,.5+near*.05),
+    box:{ x0:Math.min(xa,xb), x1:Math.max(xa,xb), y0:H*.17, y1:H*.83 } };
+}
+function _cornerPut(s,k,p){
+  if(!k||!PP[s]||!PP[s][k]) return;
+  PP[s][k].x=p.x; PP[s][k].y=p.y;
+  if(typeof PT!=='undefined'&&PT[s]) PT[s][k]={x:p.x,y:p.y};
+  const ph=physOf(s,k,sq(s)[k]); ph.vx=ph.vy=0; ph.tx=undefined; ph.nextReact=0;
+}
+function startCorner(atk,top){
+  const ds=atk==='h'?'a':'h', geo=cornerGeom(atk,top), A=AERIAL;
+  looseBall=null; ballTravel.active=false; clearKick(); G._restart=null;
+  const aq=sq(atk), dq=sq(ds);
+  const outA=validOutfieldKeys(atk).filter(k=>PP[atk][k]&&!ocd(atk,k));
+  const byHead=outA.slice().sort((a,b)=>A.skill(aq[b],'atk')-A.skill(aq[a],'atk'));
+  const headers=byHead.slice(0,3), rest=byHead.slice(3);
+  const crossQ=k=>(gs(aq[k],'pas')+gs(aq[k],'tec'))/2;
+  rest.sort((a,b)=>crossQ(b)-crossQ(a));
+  const taker=rest.shift()||byHead[byHead.length-1], edgeK=rest.shift(), shortK=rest.shift();
+  // attackers: best header on the penalty spot, then far post, then near post
+  const spots=[geo.zones.penalty,geo.zones.far,geo.zones.near];
+  headers.forEach((k,i)=>{ if(k!==taker) _cornerPut(atk,k,{x:spots[i].x+geo.into*W*.006, y:spots[i].y}); });
+  _cornerPut(atk,edgeK,geo.edge); _cornerPut(atk,shortK,geo.zones.short); _cornerPut(atk,taker,geo.flag);
+  // defenders: the best in the air mark the most dangerous headers, goal-side
+  const outD=validOutfieldKeys(ds).filter(k=>PP[ds][k]).sort((a,b)=>A.skill(dq[b],'def')-A.skill(dq[a],'def'));
+  headers.forEach(k=>{ const m=outD.shift(), p=PP[atk][k]; if(m&&p) _cornerPut(ds,m,{x:p.x-geo.into*W*.014, y:p.y+(Math.random()-.5)*H*.02}); });
+  _cornerPut(ds,outD.shift(),geo.zonal);
+  if(edgeK&&PP[atk][edgeK]) _cornerPut(ds,outD.shift(),{x:PP[atk][edgeK].x-geo.into*W*.02, y:PP[atk][edgeK].y});
+  if(dq.GK) _cornerPut(ds,'GK',geo.gkSpot);
+  G.poss=atk; G.ck=taker; G.chk=null; G.pm=false;
+  ball.x=ball.tx=geo.flag.x; ball.y=ball.ty=geo.flag.y; ball.bz=0;
+  G._corner={ atk, ds, geo, taker, headers, edgeK, shortK, t0:Date.now(),
+              aim:{x:geo.zones.penalty.x, y:geo.zones.penalty.y}, human:!isCpuSide(atk) };
+  G.phase='corner'; G.kickoffUntil=Date.now()+300;
+  updP(); try{ showReferee('CORNER'); }catch(e){}
+  const tn=((atk==='h'?HT:AT)||{}).name||atk.toUpperCase();
+  say('Corner \u2014 '+tn+'. '+((aq[taker]||{}).name||'')+' to take it.');
+  const ph=$id('passhint'); if(ph) ph.style.display='none';
+  cornerPaint();
+}
+function cornerHumanTaking(){ return !!(G.phase==='corner'&&G._corner&&G._corner.human); }
+function cornerTouch(){
+  try{ return UEInput.scheme()==='touch'; }catch(e){ return ('ontouchstart' in window); }
+}
+function cornerTick(dt){
+  const c=G._corner; if(!c){ G.phase='moving'; return; }
+  const now=Date.now();
+  if(c.human){
+    if(!cornerTouch()&&typeof UEInput!=='undefined'){        // PC / pad: steer the target
+      const mv=UEInput.move(), b=c.geo.box;
+      c.aim.x=clamp(c.aim.x+mv.x*W*CORNER.aimSpeed*dt,b.x0,b.x1);
+      c.aim.y=clamp(c.aim.y+mv.y*W*CORNER.aimSpeed*dt,b.y0,b.y1);
+    }
+    cornerPaint();
+    if(now-c.t0>CORNER.humanTimeoutMs){ say('Time \u2014 it goes to the penalty spot.'); cornerDeliver('penalty'); }
+  } else {
+    cornerPaint();
+    if(now-c.t0>CORNER.cpuDelayMs) cornerDeliver(cornerCpuPick());
+  }
+}
+/* CPU: a WEIGHTED pick - base 45% penalty spot / 28% far / 27% near, each
+   scaled by how that zone's header matches up against his marker, and 12%
+   short. The first version took the best-scoring zone outright and, since the
+   best header stands on the penalty spot, chose it 11 times out of 11:
+   corners need to be unreadable. */
+function cornerCpuPick(){
+  const c=G._corner, A=AERIAL;
+  if(c.shortK&&Math.random()<CORNER.shortChance) return 'short';
+  const base={penalty:.45,far:.28,near:.27}, w={}; let sum=0;
+  ['penalty','far','near'].forEach((z,i)=>{
+    const k=c.headers[i]; if(!k||!PP[c.atk][k]) return;
+    let mk=null,md=1e9;
+    validOutfieldKeys(c.ds).forEach(d=>{ const p=PP[c.ds][d]; if(!p) return; const dd=Math.hypot(p.x-PP[c.atk][k].x,p.y-PP[c.atk][k].y); if(dd<md){md=dd;mk=d;} });
+    const edge=A.skill(sq(c.atk)[k],'atk')-(mk?A.skill(sq(c.ds)[mk],'def'):0.5);
+    w[z]=base[z]*Math.exp(2*edge); sum+=w[z];
+  });
+  if(!sum) return 'penalty';
+  let r=Math.random()*sum;
+  for(const z in w){ r-=w[z]; if(r<=0) return z; }
+  return 'penalty';
+}
+function cornerDeliver(z){
+  const c=G._corner; if(!c||G.phase!=='corner'||G.paused) return;
+  const A=c.atk, taker=c.taker;
+  cornerCleanup();
+  G.ck=taker;
+  if(z==='short'&&c.shortK&&PP[A][c.shortK]){
+    launchPass(A,c.shortK,'ground');
+    if(ballTravel&&ballTravel.active) ballTravel.offside=[];
+    say('Played short to '+((sq(A)[c.shortK]||{}).name||'a team-mate')+'.');
+    return;
+  }
+  const point=(typeof z==='string')?(c.geo.zones[z]||c.geo.zones.penalty):{x:z.x,y:z.y};
+  // the attacker nearest the delivery is the man it is for
+  let recv=null,rd=1e9;
+  validOutfieldKeys(A).forEach(k=>{ if(k===taker||!PP[A][k]||ocd(A,k)) return; const d=Math.hypot(PP[A][k].x-point.x,PP[A][k].y-point.y); if(d<rd){rd=d;recv=k;} });
+  launchPass(A,null,'cross',point);                 // no tk: no offside check - none from a corner
+  const b=ballTravel;
+  if(b&&b.active){
+    b.offside=[];
+    if(recv){ b.receiver=recv; physOf(A,recv,sq(A)[recv]).nextReact=0; }
+  }
+  const lbl=(typeof z==='string')?({near:'the near post',penalty:'the penalty spot',far:'the far post'}[z]||'the box'):'the box';
+  say('Corner swung in to '+lbl+'!');
+}
+function cornerCleanup(){
+  G._corner=null;
+  const r=document.getElementById('corner-ui'); if(r) r.remove();
+}
+/* pitch point -> client px, through the corrected 3D projection */
+function pitchClient(x,y){
+  if(!CV) return null;
+  const r=CV.getBoundingClientRect(); if(!r.width||!r.height) return null;
+  const cw=CV.width||W, ch=CV.height||H;
+  if(window.P3D&&P3D.on&&P3D.pitchScreenPos){
+    const s=P3D.pitchScreenPos(x,y); if(!s) return null;
+    return { x:r.left+s.x*r.width/cw, y:r.top+s.y*r.height/ch };
+  }
+  const sx=(perspX(x,y)-camX)*camZ+W/2, sy=(perspY(y)-camY)*camZ+H/2;
+  return { x:r.left+sx*r.width/W, y:r.top+sy*r.height/H };
+}
+function _cornerCSS(){
+  if(document.getElementById('corner-css')) return;
+  const st=document.createElement('style'); st.id='corner-css';
+  /* On document.body in real px - like the match pad - so the zones are
+     thumb-sized on a phone instead of scaled down with the stage. */
+  st.textContent=
+    '#corner-ui{position:fixed;inset:0;pointer-events:none;z-index:8000;font-family:var(--u-font-ui)}'+
+    '#corner-ui .cz{position:fixed;transform:translate(-50%,-50%);width:58px;height:58px;border-radius:50%;'+
+      'border:2px solid rgba(var(--u-accent-rgb),.9);background:rgba(var(--u-accent-rgb),.18);'+
+      'box-shadow:0 0 14px rgba(var(--u-accent-rgb),.5);pointer-events:auto;cursor:pointer;'+
+      'touch-action:none;-webkit-tap-highlight-color:transparent;padding:0}'+
+    '#corner-ui .cz:active{transform:translate(-50%,-50%) scale(.92)}'+
+    '#corner-ui .cz span{position:absolute;left:50%;top:100%;transform:translateX(-50%);margin-top:4px;'+
+      'white-space:nowrap;font-weight:700;font-size:12px;letter-spacing:.12em;text-transform:uppercase;'+
+      'color:var(--u-ink);text-shadow:var(--u-text-outline)}'+
+    '#corner-ui.pc .cz{opacity:.55}'+
+    '#corner-ui .cret{position:fixed;transform:translate(-50%,-50%);width:44px;height:44px;border-radius:50%;'+
+      'border:2px solid rgb(var(--u-gold-rgb));box-shadow:0 0 16px rgba(var(--u-gold-rgb),.7);pointer-events:none}'+
+    '#corner-ui .cret::after{content:"";position:absolute;left:50%;top:50%;width:6px;height:6px;margin:-3px 0 0 -3px;'+
+      'border-radius:50%;background:rgb(var(--u-gold-rgb))}'+
+    '#corner-ui .chint{position:fixed;left:50%;bottom:9%;transform:translateX(-50%);padding:8px 18px;border-radius:6px;'+
+      'background:rgba(var(--u-panel-rgb),.62);border:1px solid rgba(var(--u-accent-rgb),.55);text-align:center;'+
+      'color:var(--u-ink);text-shadow:var(--u-text-outline)}'+
+    '#corner-ui .chint b{display:block;font-family:var(--u-font-display);font-size:20px;letter-spacing:.04em}'+
+    '#corner-ui .chint i{font-style:normal;font-weight:700;font-size:12px;letter-spacing:var(--u-track-wide);'+
+      'text-transform:uppercase;color:var(--u-ink-dim)}';
+  document.head.appendChild(st);
+}
+function cornerPaint(){
+  const c=G._corner; if(!c) return;
+  _cornerCSS();
+  let root=document.getElementById('corner-ui');
+  const touch=cornerTouch();
+  if(!root){
+    root=document.createElement('div'); root.id='corner-ui';
+    if(c.human){
+      [['near','Near post'],['penalty','Penalty spot'],['far','Far post'],['short','Short']].forEach(([z,l])=>{
+        const b=document.createElement('button'); b.className='cz'; b.dataset.z=z;
+        b.innerHTML='<span>'+l+'</span>';
+        b.addEventListener('pointerdown',e=>{ e.preventDefault(); e.stopPropagation(); cornerDeliver(z); },{passive:false});
+        root.appendChild(b);
+      });
+      if(!touch){ const r=document.createElement('div'); r.className='cret'; root.appendChild(r); }
+    }
+    const h=document.createElement('div'); h.className='chint';
+    const glyph=(typeof gkQteGlyph==='function')?gkQteGlyph('circle'):'\u25cb';
+    h.innerHTML=c.human
+      ? '<b>Corner</b><i>'+(touch?'tap where you want it':'aim with the stick \u00b7 △ short pass · □ shoot · '+glyph+' / Enter cross')+'</i>'
+      : '<b>Defend the corner</b><i>'+(typeof gkQteGlyph==='function'?gkQteGlyph('cross'):'\u2715')+' to jump when it comes in</i>';
+    root.appendChild(h);
+    root.classList.toggle('pc',!touch);
+    document.body.appendChild(root);
+  }
+  if(!c.human) return;
+  root.querySelectorAll('.cz').forEach(b=>{
+    const p=pitchClient(c.geo.zones[b.dataset.z].x,c.geo.zones[b.dataset.z].y);
+    if(p){ b.style.left=p.x+'px'; b.style.top=p.y+'px'; b.style.display=''; } else b.style.display='none';
+  });
+  const ret=root.querySelector('.cret');
+  if(ret){ const p=pitchClient(c.aim.x,c.aim.y); if(p){ ret.style.left=p.x+'px'; ret.style.top=p.y+'px'; } }
+}
+
+/* ══ AERIAL CONTEST - HEADERS (roadmap C.4 / Part 5 step 1, 2026-09-19) ═════
+   Rules live in ult11-aerial.js (tested: node lab/test-aerial.js). This is the
+   game side: who is under the ball, when the AI jumps, what X does, and what
+   happens after the header. Real time, no pause (author's choice): a cross
+   comes down; everyone in reach whose head - standing, or lifted by a jump -
+   gets up to the ball can play it; the highest wins it. A jump that peaks as
+   the ball arrives reaches highest, so TIMING decides it. Grade = how high the
+   winner was: PERFECT / GOOD / STANDING.
+
+   THE HEADER POINT is not the landing spot. A cross is met at head height on
+   the way down, ~80% of the flight - about 7% of the pitch short of where it
+   would land. Runners, chasers and the AI's jump timing all aim at b.meet
+   (flightAim), or they stand where the ball lands and it sails over them. */
+function flightAim(b){ return (b&&b.meet)?b.meet:{x:b.tx,y:b.ty}; }
+function aerialLive(){
+  const b=ballTravel;
+  return !!(G&&G.phase==='pass_anim'&&b&&b.active&&b.aerial&&!b.aerial.done);
+}
+function aerialInit(b){
+  const A=AERIAL, hts={};
+  for(const s of ['h','a']) hts[s]=(window.P3D&&P3D.aerialHeights)?P3D.aerialHeights(s):A.TUNE.fallbackHeights;
+  // where the ball is at a jumping head's height, on the way down
+  const top=Math.max(A.reach(hts.h,1),A.reach(hts.a,1));
+  const tm=A.descentT(b.arc,b.launchBz||0,top);
+  const n=(tm==null?0.82:tm)*b.dur, frac=(1-Math.pow(b.fr,n))/(1-Math.pow(b.fr,b.dur));
+  b.meet={x:b.fx+(b.tx-b.fx)*frac, y:b.fy+(b.ty-b.fy)*frac};
+  b.aerial={hts, ai:{}, done:false};
+  /* the man it is aimed at reacts AT ONCE - the cross is called for him. AI
+     movement only re-reads its target when reaction allows (canReact), so he
+     used to keep running his old route for a reaction interval - a big slice
+     of a ~700ms cross - and arrive after the ball had gone past his head. */
+  if(b.receiver&&sq(b.side)[b.receiver]){ physOf(b.side,b.receiver,sq(b.side)[b.receiver]).nextReact=0; }
+  /* AI contenders: every CPU player near the header point, and BOTH keepers'
+     claims (the human never steers a keeper in open play). Each gets one
+     timing error now, from his heading skill, so a jump is decided once and
+     not re-rolled every frame. The crosser's own keeper stays home. */
+  const cs=b.side;
+  for(const s of ['h','a']) for(const k of Object.keys(sq(s))){
+    const p=PP[s][k], pl=sq(s)[k]; if(!p||!pl||ocd(s,k)) continue;
+    const isGK=k==='GK';
+    if(isGK&&s===cs) continue;
+    if(!isGK&&!isCpuSide(s)) continue;              // the human times his own man
+    if(s===cs&&k===b.kicker) continue;
+    if(Math.hypot(p.x-b.meet.x,p.y-b.meet.y)>W*A.TUNE.aiReactW*(isGK?1.8:1)) continue;
+    const role=isGK?'gk':(s===cs?'atk':'def');
+    b.aerial.ai[s+':'+k]={s,k,role,noise:A.aiPressDelay(0,A.skill(pl,role))+A.TUNE.apexMs,fired:false};
+  }
+}
+function aerialStep(b,old){
+  const A=AERIAL, ae=b.aerial, t=clamp(b.progress/b.dur,0,1);
+  /* AI jumps: aim each man's jump peak at the moment the ball comes down to
+     his best height - measured in the same 60fps ticks the flight runs on */
+  for(const id in ae.ai){
+    const a=ae.ai[id]; if(a.fired) continue;
+    const tBest=A.descentT(b.arc,b.launchBz||0,A.reach(ae.hts[a.s],1,a.k==='GK'));
+    if(tBest==null) continue;                        // never that high: he stays on his feet
+    const msTo=(tBest*b.dur-b.progress)*16.667;
+    if(msTo-A.TUNE.apexMs+a.noise<=0){ a.fired=true; jumpPlayer(a.s,a.k); }
+  }
+  if(t<=0.5) return false;                           // still rising: nobody heads a ball going up
+  const R=W*A.TUNE.reachW, cs=b.side, cands=[];
+  for(const s of ['h','a']) for(const k of Object.keys(sq(s))){
+    const p=PP[s][k], pl=sq(s)[k]; if(!p||!pl||ocd(s,k)||isStalled(s,k)) continue;
+    if(s===cs&&k===b.kicker) continue;
+    const isGK=k==='GK';
+    if(isGK){
+      if(s===cs) continue;
+      if(Math.abs(p.x-ownGoalXFor(s))>W*A.TUNE.gkBoxDepth||Math.abs(p.y-H*.5)>H*A.TUNE.gkBoxHalf) continue;
+    }
+    if(Math.hypot(p.x-b.x,p.y-b.y)>R&&passContactTime(old,{x:b.x,y:b.y},p,R)===null) continue;
+    const jh=jumpHeight(s,k), role=isGK?'gk':(s===cs?'atk':'def');
+    cands.push({s,k,role,jumpH:jh,reach:A.reach(ae.hts[s],jh,isGK),skill:A.skill(pl,role)});
+  }
+  if(!cands.length) return false;
+  const w=A.contest(cands,ball.bz,Math.min(ae.hts.h.headBz,ae.hts.a.headBz));
+  if(!w) return false;
+  ae.done=true; b.active=false;
+  aerialResolve(b,w);
+  return true;
+}
+/* X during a cross: jump for YOUR man under the ball - the nearest to the
+   header point, preferring the defender you are already steering. */
+function aerialHumanJump(){
+  const b=ballTravel, m=flightAim(b);
+  let best=null,bd=1e9;
+  validOutfieldKeys('h').forEach(k=>{
+    const p=PP.h[k]; if(!p||ocd('h',k)) return;
+    if(b.side==='h'&&k===b.kicker) return;
+    let d=Math.hypot(p.x-m.x,p.y-m.y);
+    if(b.side!=='h'&&k===ROLES.engager) d*=0.66;
+    if(d<bd){ bd=d; best=k; }
+  });
+  if(best) jumpPlayer('h',best);
+}
+function aerialBanner(text){
+  if(!document.getElementById('aerial-css')){
+    const st=document.createElement('style'); st.id='aerial-css';
+    // blue, not the foul red: a header is a skill moment, not an infringement
+    st.textContent='.event-banner.aerial{background:rgba(var(--u-accent-rgb),.92);border-color:rgba(255,255,255,.35);}';
+    document.head.appendChild(st);
+  }
+  try{ showEventBanner(text,'aerial',1300); }catch(e){}
+}
+function aerialResolve(b,w){
+  const A=AERIAL, pl=sq(w.s)[w.k], nm=pl?pl.name:'Player';
+  if(w.role==='atk'&&b.offside&&b.offside.includes(w.k)){ callOffside(w.s,w.k); return; }
+  // the stick aims a PERFECT header (human only)
+  const iv=!isCpuSide(w.s)?_manualInputForSide(w.s):null, im=iv?Math.hypot(iv.x,iv.y):0;
+  const aim=(w.grade==='PERFECT'&&im>0.3)?{x:iv.x/im,y:iv.y/im}:null;
+  if(w.grade==='PERFECT') aerialBanner(w.role==='gk'?'Keeper claims':'Perfect header');
+  const oc=A.outcome(w.role, progressFor(w.s,{x:b.x,y:b.y}), b.y/H);
+  if(oc==='claim'){ _assignLoose(w.s,'GK'); say(nm+' claims the cross!'); return; }
+  const spd={PERFECT:9,GOOD:7,STANDING:4.5}[w.grade];
+  if(oc==='clear'){
+    let vx=dirFor(w.s)*spd, vy=(Math.random()-.5)*spd*.8;
+    if(aim){ vx=aim.x*spd; vy=aim.y*spd; if(vx*dirFor(w.s)<0) vx=-vx; }   // never back at his own goal
+    goLoose(b.x,b.y,vx,vy,w.s);
+    say(nm+' heads it clear! ('+w.grade.toLowerCase()+')');
+    return;
+  }
+  if(oc==='shot'){
+    clearInterval(G.di);
+    G.poss=w.s; G.ck=w.k; G.phase='pass_anim';
+    G._pendingHeaderEdge=w.edge;
+    const spread={PERFECT:0.05,GOOD:0.09,STANDING:0.13}[w.grade];
+    const gy=aim?H*.5+clamp(aim.y,-1,1)*H*.07:H*.5+(Math.random()-.5)*2*H*spread;
+    say('HEADER! '+nm+' goes for goal ('+w.grade.toLowerCase()+')');
+    launchShot(b.x,b.y,goalXFor(w.s),gy,w.s,'header',30);   // -> the keeper duel, with the GK QTE
+    return;
+  }
+  // knock-down: into a team-mate's path, or where the stick says
+  let dir=aim;
+  if(!dir){
+    const tk=bestTeammateFor(w.s,w.k,'pass'), to=tk&&PP[w.s][tk];
+    if(to){ const dx=to.x-b.x,dy=to.y-b.y,d=Math.hypot(dx,dy)||1; dir={x:dx/d,y:dy/d}; }
+    else dir={x:dirFor(w.s),y:0};
+  }
+  goLoose(b.x,b.y,dir.x*4.5,dir.y*4.5,w.s);
+  say(nm+' knocks it down! ('+w.grade.toLowerCase()+')');
+}
+
 // Shared by human and CPU: fixed launch point, swept contact, no receiver snap.
 function launchPass(s,tk,kind='ground',point){
   const sk=G.ck,from=PP[s]&&PP[s][sk],to=point||(PP[s]&&PP[s][tk]);
@@ -6000,14 +6384,47 @@ function launchPass(s,tk,kind='ground',point){
   const dx=tx-from.x,dy=ty-from.y,d=Math.hypot(dx,dy)||1;
   const error=(Math.random()-.5)*W*(cross?.018:.006)*(1-quality*.7);
   tx-=dy/d*error;ty+=dx/d*error;
+  /* A CROSS IS AIMED AT THE HEAD, NOT THE FEET (2026-09-19). tx,ty is where the
+     ball LANDS; a header happens earlier, on the way down, ~7% of the pitch
+     short. Aimed to land on the target, a cross passed head height before the
+     runner got there - measured: a perfectly timed jump won 0 of 12, and the
+     sprinting defender headed it standing every time. So stretch the flight
+     until the ball is at a jumping head's height ON the target, and let it
+     carry on beyond him if nobody meets it (a missed cross flies to the far
+     post). Arc and duration both grow with distance, so solve it: 4 passes
+     converge to well under a pixel. */
+  /* ...and a cross is LOFTED ABOVE a jumping head. Measured in a live match:
+     a short cross (~20% of the pitch) peaked at bz 24 while a jumping head
+     reaches bz 31 - the ball never came down THROUGH full jump height, so there
+     was no moment to aim the cross at or to time an AI jump for (every AI jump
+     silently never fired) and the man who happened to be standing nearest won
+     it with his feet on the grass, every time. Floor: 1.3x a full jump. */
+  let crossArcMin=0;
+  if(cross&&window.AERIAL){
+    const A=AERIAL, lb0=window.P3D&&P3D.getJumpLift?P3D.getJumpLift(s,sk)/.09:Math.max(0,ball.bz||0);
+    const hh=(window.P3D&&P3D.aerialHeights)?P3D.aerialHeights(s):A.TUNE.fallbackHeights;
+    const top=A.reach(hh,1), dm=Math.hypot(tx-from.x,ty-from.y)||1;
+    const ux=(tx-from.x)/dm, uy=(ty-from.y)/dm;
+    crossArcMin=top*1.3;
+    let D=dm;
+    for(let i=0;i<4;i++){
+      const arcI=Math.max(crossArcMin,Math.min(40,12+D/W*55)), durI=Math.max(8,D/(W*.007));
+      const tm=A.descentT(arcI,lb0,top);
+      if(tm==null) break;                               // too short to rise that high: land it on him
+      const frac=(1-Math.pow(.997,tm*durI))/(1-Math.pow(.997,durI));
+      D=dm/frac;
+    }
+    tx=from.x+ux*D; ty=from.y+uy*D;
+  }
   const distp=Math.hypot(tx-from.x,ty-from.y),speed=W*(cross?.007:.012);
   const dur=Math.max(8,distp/speed),fr=cross?.997:.988;
   const v=distp*(1-fr)/(1-Math.pow(fr,dur));
   const launchBz=window.P3D&&P3D.getJumpLift?P3D.getJumpLift(s,sk)/.09:Math.max(0,ball.bz||0);
   ballTravel={active:true,physicalPass:true,side:s,kicker:sk,receiver:tk,kind,launchBz,
     x:from.x,y:from.y,fx:from.x,fy:from.y,tx,ty,vx:(tx-from.x)/Math.max(distp,1)*v,vy:(ty-from.y)/Math.max(distp,1)*v,
-    fr,dur,progress:0,arc:cross?Math.min(40,12+distp/W*55):0,
+    fr,dur,progress:0,arc:cross?Math.max(crossArcMin,Math.min(40,12+distp/W*55)):0,
     offside:validOutfieldKeys(s).filter(k=>k!==sk&&isOffside(s,k))};
+  if(cross&&window.AERIAL) aerialInit(ballTravel);
   ball.x=ball.tx=from.x;ball.y=ball.ty=from.y;ball.bz=launchBz;
   G.phase='pass_anim';G.pm=false;G_moveTarget=null;G_laneTarget=null;
   const banner=$id('pass-banner');if(banner)banner.style.display='none';
@@ -6036,6 +6453,7 @@ function tickPhysicalPass(b,dt){
     const t=clamp(b.progress/b.dur,0,1);ball.bz=b.arc*4*t*(1-t)+(b.launchBz||0)*(1-t)*(1-t);
     ball.x=ball.tx=b.x;ball.y=ball.ty=b.y;
     if(b.x<W*.07||b.x>W*.93||b.y<H*.01||b.y>H*.99){b.active=false;goLoose(b.x,b.y,b.vx,b.vy,b.side);return;}
+    if(b.aerial&&!b.aerial.done&&aerialStep(b,old)) return;
     if(ball.bz<3){
       let hit=null;
       for(const side of ['h','a'])for(const k of Object.keys(sq(side))){
@@ -6096,6 +6514,7 @@ function tickPassMotion(dt=1){
   if(PP[s]&&PP[s][G.ck]) moveOffBall(s,ds,AI2.on?dt:dt*0.55);
   if(AI2.on) passFlightChaser(s,ds,dt);
   clampAllToPitch();
+  stepJumps();          // a header jump happens mid-pass; without this it was never drawn
 }
 
 function tickBallTravel(dt=1){
@@ -6205,7 +6624,8 @@ function tickLoose(dt){
     const defOwner=(Math.abs(ownGoalXFor('h')-bx)<Math.abs(ownGoalXFor('a')-bx))?'h':'a';
     const atk=defOwner==='h'?'a':'h';
     if(lb.touch===defOwner){ // last touched by a defender → corner for attackers
-      looseRestart(atk,(bx<=W*0.5?W*0.045:W*0.955),(ball.y<=H*0.5?H*0.06:H*0.94),'Corner');
+      if(window.AERIAL) startCorner(atk, ball.y<=H*0.5);      // a real set piece (Part 5 step 2)
+      else looseRestart(atk,(bx<=W*0.5?W*0.045:W*0.955),(ball.y<=H*0.5?H*0.06:H*0.94),'Corner');
     }else{                   // last touched by an attacker → goal kick for defenders
       looseRestart(defOwner,null,null,'Goal kick',true);
     }
@@ -6781,6 +7201,8 @@ function opDuel(isShot, committedAk){
   // so the old 2v1/1v2 second-defender path is gone entirely.
   // committedAk: shot already decided in field duel — attacker gets no second choice, no extra stamina cost
   G.D={carrier,def,dk,as,ds,isShot,ak:committedAk||null,pk:null,defA:null,duelStage:1};
+  // a header's jump grade rides into ITS duel only (G.D is rebuilt per duel)
+  if(committedAk==='header'){ G.D.headerEdge=G._pendingHeaderEdge||1; G._pendingHeaderEdge=null; }
   const zL={gk:'BUILD-UP',def:'DEFENSIVE THIRD',mid:'MIDFIELD',att:'ATTACKING THIRD'};
   const z=isShot?'att':zo(G.ck);
   let zoneTxt=isShot?'GOAL ATTEMPT':(zL[z]||'DUEL');
@@ -7621,7 +8043,7 @@ function bldA(carrier,isShot){
     const lbl=document.createElement('div');
     lbl.style.cssText='color:var(--gold);font-size:11px;font-family:Orbitron,sans-serif;font-weight:700;letter-spacing:1px;opacity:.8;align-self:center;border:1px solid rgba(240,192,64,.2);border-radius:6px;padding:7px 12px;';
     const sn=SUPER_NAMES[G.D.ak];
-    const lblTxt = G.D.ak==='special' ? '⚡ SPECIAL SHOT' : (sn? sn.i+' '+sn.l.toUpperCase() : '⚽ SHOT');
+    const lblTxt = G.D.ak==='special' ? '⚡ SPECIAL SHOT' : G.D.ak==='header' ? '⚽ HEADER' : (sn? sn.i+' '+sn.l.toUpperCase() : '⚽ SHOT');
     lbl.textContent=lblTxt+' — COMMITTED';
     el.appendChild(lbl);chkRdy();return;
   }
@@ -8185,6 +8607,9 @@ const ATK_ACTIONS={
   dribble:        {base:'dri', phys:'spd', mult:1.12, cost:80 },
   'one-two':      {base:'pas', phys:'dri', mult:1.20, cost:60 },
   shoot:          {base:'sho', phys:'pow', mult:1.30, cost:120},
+  // HEADER (roadmap C.4): weaker than a struck shot, free - it came off a cross.
+  // Its jump grade is applied as G.D.headerEdge in calcAttackPower.
+  header:         {base:'sho', phys:'pow', mult:1.15, cost:0  },
   special:        {base:'sho', phys:'pow', mult:2.50, cost:400},
   // ── Generic super attack variants — every player can use these ──────
   'super-pass':   {base:'pas', phys:'dri', mult:1.65, cost:160},
@@ -8327,6 +8752,7 @@ function calcAttackPower(carrier,ak,side){
   }
   const rng=ENGINE_CONFIG.duel.rngMin+Math.random()*(ENGINE_CONFIG.duel.rngMax-ENGINE_CONFIG.duel.rngMin);
   if(ak==='special'&&G._ssWeaken) mAction*=G._ssWeaken;     // a defender threw himself in front of it
+  if(ak==='header'&&G.D&&G.D.headerEdge) mAction*=G.D.headerEdge;   // PERFECT / GOOD / STANDING jump
   return (sBase+sPhys/2)*mAction*spiritMult(carrier)*rng;
 }
 
@@ -9274,6 +9700,62 @@ function restartOutside(p,x,y,r,side){
     if(nx>=W*FB.x0&&nx<=W*FB.x1&&ny>=H*FB.y0&&ny<=H*FB.y1){p.x=nx;p.y=ny;return;}
   }
 }
+// Dead-ball setup owns the taker until a legal kick is committed. No dribble restart.
+function freeKickHumanTaking(){return !!(G.phase==='freekick'&&G._freeKick&&G._freeKick.human);}
+function freeKickBegin(side,taker,x,y){
+  G.poss=side;G.ck=taker;G._kick=null;G_moveTarget=null;G_laneTarget=null;G.pm=false;
+  G_inputVec={x:0,y:0};resetPhysics();
+  setupFreeKick(side,taker,x,y);
+  G._freeKick={side,taker,x,y,gen:G.goalGen,t0:Date.now(),human:!isCpuSide(side)};
+  G.phase='freekick';ball.x=ball.tx=x;ball.y=ball.ty=y;ball.bz=0;
+  freeKickPaint();
+}
+function freeKickPaint(){
+  const f=G._freeKick;if(!f)return;
+  say(f.human?'FREE KICK — aim with stick / direction keys; PASS, CROSS or SHOOT.':'CPU FREE KICK — preparing the delivery');
+}
+function freeKickCleanup(){G._freeKick=null;}
+
+function freeKickCpuChoice(f){
+  const s=f.side,cp=PP[s][f.taker],dir=dirFor(s),distance=Math.abs(goalXFor(s)-cp.x)/W;
+  const central=Math.abs(cp.y/H-.5)<.24;
+  const keys=validOutfieldKeys(s).filter(k=>k!==f.taker&&!ocd(s,k)&&PP[s][k]&&!isOffside(s,k));
+  const safe=keys.slice().sort((a,b)=>{
+    const score=k=>openPassLaneScore(s,f.taker,k)*3-Math.abs(dist(cp,PP[s][k])/W-.15)*3;
+    return score(b)-score(a);
+  });
+  const box=keys.filter(k=>Math.abs(goalXFor(s)-PP[s][k].x)<W*.25&&Math.abs(PP[s][k].y-H*.5)<H*.29);
+  // Central scoring range favors a strike; wide attacking restarts favor service.
+  if(distance<.30&&central&&Math.random()<.72)return {kind:'shoot'};
+  if(distance<.43&&box.length&&Math.random()<(central?.55:.82)){
+    box.sort((a,b)=>(sq(s)[b].pwr||50)-(sq(s)[a].pwr||50));return {kind:'cross',target:box[0]};
+  }
+  if(safe.length)return {kind:'ground',target:safe[0]};
+  return distance<.34?{kind:'shoot'}:{kind:'ground',point:{x:clamp(cp.x+dir*W*.16,W*.06,W*.94),y:cp.y}};
+}
+function freeKickTake(kind,choice){
+  const f=G._freeKick;if(!f||G.phase!=='freekick'||G.paused)return;
+  if(f.gen!==G.goalGen||!sq(f.side)[f.taker]){freeKickCleanup();G._restart=null;G.phase='idle';return;}
+  if(kind==='special'&&!canSuper(sq(f.side)[f.taker],'special')){say('Super shot unavailable — choose pass, cross or shoot.');return;}
+  freeKickCleanup();G.phase='moving';G.poss=f.side;G.ck=f.taker;
+  G_moveTarget=null;G_laneTarget=null;G.kickoffUntil=Date.now()+120;
+  if(kind==='shoot'||kind==='special')manualShot(kind);
+  else if(choice){launchPass(f.side,choice.target||null,kind,choice.point);}
+  else directionalPass(kind);
+}
+function freeKickTick(){
+  const f=G._freeKick;if(!f||G.paused)return;
+  if(f.gen!==G.goalGen||G.poss!==f.side||G.ck!==f.taker){freeKickCleanup();G._restart=null;if(G.phase==='freekick')G.phase='idle';return;}
+  PP[f.side][f.taker].x=f.x;PP[f.side][f.taker].y=f.y;
+  enforceRestartSpace();
+  if(!f.human&&Date.now()-f.t0>=1600){const choice=freeKickCpuChoice(f);freeKickTake(choice.kind,choice);}
+}
+function cornerShoot(){
+  const c=G._corner;if(!cornerHumanTaking()||G.paused)return;
+  cornerCleanup();G.phase='moving';G.poss=c.atk;G.ck=c.taker;
+  G_moveTarget=null;G_laneTarget=null;manualShot('shoot');
+}
+
 function setupFreeKick(side,taker,x,y){
   const ds=side==='h'?'a':'h',r=KICKOFF_R()+W*.006,wall={};
   const gx=goalXFor(side),dx=gx-x,dy=H*.5-y,d=Math.hypot(dx,dy)||1;
@@ -9294,7 +9776,7 @@ function enforceRestartSpace(){
   const f=G._restart;if(!f)return;
   const cp=PP[f.side]&&PP[f.side][f.taker];
   if(G.goalGen!==f.gen||G.poss!==f.side||G.ck!==f.taker||!cp||
-     !['idle','moving'].includes(G.phase)||Math.hypot(cp.x-f.x,cp.y-f.y)>W*.012){G._restart=null;return;}
+     !['idle','moving','freekick'].includes(G.phase)||Math.hypot(cp.x-f.x,cp.y-f.y)>W*.012){G._restart=null;return;}
   G.kickoffUntil=Math.max(G.kickoffUntil||0,Date.now()+150);
   const ds=f.side==='h'?'a':'h';
   for(const s of [f.side,ds])for(const k of Object.keys(sq(s))){
@@ -9369,9 +9851,6 @@ function rollFoul(defSide,defSlot,attSide,prob){
     /* CLEAR THE BALL. Play restarted with the fouler and the fouled man on the
        same blade of grass, so the free kick was unplayable (author 2026-09-12).
        The wall stands off ~9.15m; team-mates give him room too. */
-    if(!isPK){
-      setupFreeKick(attSide,ak,fkx,fky);
-    }
     // PENALTY (#2): spot sits in front of the goal on the X axis (was Y —
     // the old spot was on the sideline), then a REAL shot duel vs the GK.
     if(isPK){
@@ -9397,17 +9876,8 @@ function rollFoul(defSide,defSlot,attSide,prob){
       return;
     }
     updP();
-    /* A free kick is UNCONTESTED at the moment it's taken — no duel. The taker
-       gets the ball in-field and plays on normally (dribble / pass / shoot); a
-       grace window keeps defenders off him for the first beat. */
-    G.phase='idle';
-    G.kickoffUntil=Date.now()+1500;
-    setTimeout(()=>{
-      if(G._fkGen!==_fk||!G.mt)return;
-      if(G.phase==='duel'||G.phase==='duel_result')return;
-      G.kickoffUntil=Date.now()+1000;
-      liveResume(attSide);           // resume IN-FIELD — no forced duel vs the GK
-    },900);
+    // Hold a real dead-ball phase; normal liveResume makes the CPU dribble.
+    freeKickBegin(attSide,ak,fkx,fky);
   },isPK?3500:3200);
   return true;
 }
