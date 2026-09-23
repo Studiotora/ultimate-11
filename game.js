@@ -774,6 +774,56 @@ function showSc(id){
   if(id==='s-career-clubs'){crBuildClubList();}
   if(id==='s-ts'){if(typeof syncTeamSelections==='function')syncTeamSelections(); if(typeof _pvpInjectToggle==='function')_pvpInjectToggle();}
 }
+/* Transitions wait for actual artwork; failed portraits use the game's silhouette. */
+const UELoader={
+  serial:0,
+  image(url){return new Promise(resolve=>{if(!url){resolve(false);return;}const img=new Image();img.onload=()=>resolve(true);img.onerror=()=>resolve(false);img.src=url;if(img.complete)resolve(img.naturalWidth>0);});},
+  portraits(players,progress){
+    const list=[...new Set(players.filter(Boolean).map(pl=>pl.clubKey?'cr_'+(playerLastName(pl)||'')+'_'+pl.clubKey:playerLastName(pl)).filter(Boolean))];
+    players.forEach(pl=>playerImg(pl));
+    return new Promise(resolve=>{
+      if(!list.length){progress(1);resolve();return;}
+      const start=Date.now();
+      const check=()=>{
+        const n=list.filter(k=>IMG_CACHE[k]&&IMG_CACHE[k]!=='loading'&&IMG_CACHE[k]!=='loading2').length;
+        progress(n/list.length);
+        if(n===list.length||Date.now()-start>12000){resolve();return;}
+        setTimeout(check,100);
+      };
+      check();
+    });
+  },
+  async run(title,tasks,finish){
+    const serial=++this.serial;
+    showSc('s-loading');
+    const heading=document.getElementById('loadHeading'),stage=document.getElementById('loadStage');
+    const fill=document.getElementById('loadFill'),count=document.getElementById('loadCount');
+    const track=fill?.parentElement;
+    if(heading)heading.textContent=title;
+    let done=0;
+    const update=(part=0)=>{
+      const pct=Math.min(100,Math.round((done+part)/Math.max(1,tasks.length)*100));
+      if(fill)fill.style.width=pct+'%';
+      if(count)count.textContent=pct+'%';
+      if(track)track.setAttribute('aria-valuenow',pct);
+    };
+    update();
+    await new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve)));
+    for(const task of tasks){
+      if(serial!==this.serial)return;
+      if(stage)stage.textContent=task.name;
+      try{await task.load(fraction=>update(Math.max(0,Math.min(1,fraction))));}
+      catch(e){console.warn('Loading task:',task.name,e);}
+      done++;update();
+    }
+    if(serial!==this.serial)return;
+    if(stage)stage.textContent='Ready to play';
+    await new Promise(resolve=>requestAnimationFrame(resolve));
+    if(serial===this.serial&&typeof finish==='function')finish();
+  }
+};
+window.UELoader=UELoader;
+
 function cs(){say('Coming soon!');}
 
 // Home menu image switcher
@@ -1209,28 +1259,12 @@ function openTeamMenu(){
   }
   initHomeSlots(true);
   buildFormationMenu();
-  // Show loading screen while portraits preload, then show team editor
-  showSc('s-loading');
-  // Kick off image loading for all roster players (both teams)
   const allPlayers=[];
   [HT,AT].forEach(t=>{if(t&&t.p)t.p.forEach(pl=>allPlayers.push(pl));});
-  allPlayers.forEach(pl=>playerImg(pl));
-  // Poll for completion: check IMG_CACHE entries for each player
-  const cacheKeyFor=(pl)=>{
-    if(!pl)return null;
-    if(pl.clubKey){const ln=playerLastName(pl)||'';return'cr_'+ln+'_'+pl.clubKey;}
-    return playerLastName(pl);
-  };
-  const keys=allPlayers.map(cacheKeyFor).filter(Boolean);
-  const allResolved=()=>keys.every(k=>{const c=IMG_CACHE[k];return c&&c!=='loading'&&c!=='loading2';});
-  if(!keys.length||allResolved()){showSc('s-team');[200,600].forEach(t=>setTimeout(buildFormationMenu,t));}
-  else{
-    let done=false;
-    const finish=()=>{if(done)return;done=true;showSc('s-team');[200,600].forEach(t=>setTimeout(buildFormationMenu,t));};
-    const poll=setInterval(()=>{if(allResolved()){clearInterval(poll);finish();}},120);
-    setTimeout(()=>{clearInterval(poll);finish();},4000); // 4s safety
-  }
-  [200,600].forEach(t=>setTimeout(buildFormationMenu,t));
+  UELoader.run('ASSEMBLING YOUR TEAM',[
+    {name:'Loading player portraits',load:progress=>UELoader.portraits(allPlayers,progress)},
+    {name:'Preparing formation board',load:()=>UELoader.image('assets/wallpaper/teamedit.png')}
+  ],()=>{showSc('s-team');buildFormationMenu();});
 }
 function startGame(){
   if(PVP.intent && !PVP._setupDone){
@@ -1266,8 +1300,15 @@ function startGame(){
   document.getElementById('atn').textContent=AT.name;
   setTeamEmblem(document.getElementById('h-flag-hud'), selHome, HT.flag);
   setTeamEmblem(document.getElementById('a-flag-hud'), selAway, AT.flag);
-  showSc('s-loading');
-  setTimeout(initMatch, 1200);
+  UELoader.run('PREPARING THE MATCH',[
+    {name:'Loading the starting elevens',load:progress=>UELoader.portraits([...Object.values(hSq),...Object.values(aSq)],progress)},
+    {name:'Warming up the stadium',load:()=>new Promise(resolve=>{
+      if(window.P3D&&P3D.ready){resolve();return;}
+      const since=Date.now();
+      const check=()=>window.P3D&&P3D.ready||Date.now()-since>6000?resolve():setTimeout(check,80);
+      check();
+    })}
+  ],initMatch);
 }
 
 const CV=document.getElementById('C');const cx=CV.getContext('2d');

@@ -20,7 +20,7 @@
 <meta name="description" content="Ultimate Eleven - A Captain Tsubasa inspired football strategy game with 11 vs 11 gameplay">
 <link href="https://fonts.googleapis.com/css2?family=Permanent+Marker&family=Rajdhani:wght@600;700&family=Orbitron:wght@400;700&family=Cinzel:wght@500;700;900&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="tokens.css?v=8">
-<link rel="stylesheet" href="style.css?v=95">
+<link rel="stylesheet" href="style.css?v=96">
 <script>
 /* BUILD STAMP — prints which ?v= of each asset actually loaded. A stale
    index.html keeps requesting old versions and every edit looks like nothing
@@ -1055,7 +1055,7 @@ addEventListener('DOMContentLoaded',function(){
 
 <div id="s-team" class="screen">
   <div class="tm-hdr">
-    <h2>DREAM TEAM EDIT</h2>
+    <div><span class="tm-hdr-eyebrow">MATCH PREPARATION / 01</span><h2>TEAM MANAGEMENT</h2></div>
     <button class="back-btn" id="tmBackBtn" onclick="tmBackHandler()">← BACK</button>
   </div>
   <div class="tm-body v6">
@@ -1065,7 +1065,7 @@ addEventListener('DOMContentLoaded',function(){
       <div class="tm-side-top">
         <div class="tm-crest-wrap"><div class="tm-crest-flag" id="tmFlag">🏳</div></div>
         <div>
-          <div class="tm-side-kicker">HOME TEAM</div>
+          <div class="tm-side-kicker">YOUR STARTING ELEVEN</div>
           <div class="tm-side-name" id="teamMenuTitle">TEAM</div>
           <div class="tm-side-sub" id="teamMenuBadge">FORMATION</div>
         </div>
@@ -1104,14 +1104,14 @@ addEventListener('DOMContentLoaded',function(){
     <div class="tm-panel tm-pitch-panel">
       <div class="tm-pitch-top">
         <div class="tm-title">FORMATION BOARD</div>
-        <div class="tm-pitch-sub">Tap a player to select · Tap roster to assign</div>
+        <div class="tm-pitch-sub">Select a starter, then a reserve to swap</div>
       </div>
       <div class="tm-field-wrap v6">
         <div class="tm-field v6" id="teamPreviewField"></div>
       </div>
       <!-- RESERVES ROW -->
       <div class="tm-reserves-row">
-        <div class="tm-reserves-lbl">RESERVES — tap a pitch player first, then tap a reserve to swap</div>
+        <div class="tm-reserves-lbl">THE BENCH <span>SELECT A STARTER → SELECT A RESERVE</span></div>
         <div class="tm-reserves-slots" id="reserveSlots"></div>
       </div>
     </div>
@@ -1420,12 +1420,16 @@ addEventListener('DOMContentLoaded',function(){
 
 <!-- LOADING SCREEN -->
 <div id="s-loading" class="screen">
+  <div class="loading-center" role="status" aria-live="polite">
+    <div class="loading-eyebrow">ULTIMATE ELEVEN <span>◆</span> MATCHDAY</div>
+    <div class="loading-heading" id="loadHeading">PREPARING THE PITCH</div>
+    <div class="loading-stage" id="loadStage">Getting everything ready…</div>
+    <div class="loading-track" role="progressbar" aria-label="Loading" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0"><div class="loading-fill" id="loadFill"></div></div>
+    <div class="loading-count" id="loadCount">0%</div>
+  </div>
   <div class="loading-corner">
     <div class="loading-runner" aria-hidden="true"></div>
-    <div class="loading-info">
-      <div class="loading-dots"><span></span><span></span><span></span></div>
-      <div class="loading-label">NOW LOADING</div>
-    </div>
+    <div class="loading-ball" aria-hidden="true"></div>
   </div>
 </div>
 
@@ -1663,7 +1667,7 @@ addEventListener('DOMContentLoaded',function(){
 <script src="ult11-input.js?v=9" defer></script>
 <script src="ult11-gkqte.js?v=2" defer></script>
 <script src="ult11-aerial.js?v=2" defer></script>
-<script src="game.js?v=185" defer></script>
+<script src="game.js?v=186" defer></script>
 <!-- ps1-mod.js removed: P3D is the only renderer, its post-FX drew into the hidden 2D canvas.
      Re-add this line to restore it: <script src="ps1-mod.js?v=1" defer></script> -->
 <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js" defer></script>
@@ -1727,26 +1731,11 @@ addEventListener('DOMContentLoaded',function(){
     return m?m[1]:'';
   }
   function hmModeLoad(imgUrl,label,go){
-    var ov=document.getElementById('hm-loader');
-    if(!ov){
-      ov=document.createElement('div'); ov.id='hm-loader';
-      ov.innerHTML='<div class="hml-img"></div><div class="hml-grad"></div>'
-        +'<div class="hml-foot"><div class="hml-label"></div>'
-        +'<div class="hml-bar"><i></i></div><div class="hml-tip">LOADING…</div></div>';
-      document.body.appendChild(ov);
-    }
-    ov.querySelector('.hml-img').style.backgroundImage = imgUrl ? ("url('"+imgUrl+"')") : 'none';
-    ov.querySelector('.hml-label').textContent = label||'';
-    var bar=ov.querySelector('.hml-bar i');
-    bar.style.transition='none'; bar.style.width='0%';
-    ov.classList.add('show');
-    void ov.offsetWidth;
-    bar.style.transition='width 5s linear'; bar.style.width='100%';
-    clearTimeout(ov._t);
-    ov._t=setTimeout(function(){
-      ov.classList.remove('show');
-      try{ if(typeof go==='function') go(); }catch(e){}
-    },5000);
+    // The same visible loader is used for menu, team editor and match entry.
+    if(!window.UELoader){if(typeof go==='function')go();return;}
+    var jobs=[{name:'Loading mode artwork',load:function(){return UELoader.image(imgUrl);}}];
+    if(document.fonts&&document.fonts.ready)jobs.push({name:'Preparing interface',load:function(){return document.fonts.ready;}});
+    UELoader.run('ENTERING '+(label||'MATCHDAY').toUpperCase(),jobs,go);
   }
   function hmWireLoaders(){
     var panels=document.querySelectorAll('#s-home .ae-panel');
