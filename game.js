@@ -1296,7 +1296,8 @@ function fieldSpdMult(pl){
   // a sprinting defender can recover against a quicker carrier.
   const base=clamp(1.0+(gs(pl,'spd')-72)*0.009,0.84,1.22);
   const maxSp=pl.pos==='GK'?2000:1500;
-  const fat=clamp(0.88+((pl.spirit!=null?pl.spirit:maxSp)/maxSp)*0.12,0.88,1.0);
+  const reserve=clamp((pl.spirit!=null?pl.spirit:maxSp)/maxSp,0,1);
+  const fat=0.74+Math.sqrt(reserve)*0.26;
   const stunM=(pl._slowUntil&&Date.now()<pl._slowUntil)?(pl._slowMult||0.6):1;   // stunned/slowed
   return base*fat*stunM;
 }
@@ -1574,6 +1575,12 @@ function nearestDefenderDistance(side,p,ignoreGK=true){
   });
   return best===Infinity?W*.4:best;
 }
+// The same distance-based ground-pass timing drives both actual ball flight
+// and the CPU's estimate of whether a defender can reach the lane.
+function groundPassFlight(distance){
+  const speed=W*clamp(.0055+distance/W*.006,.0058,.0098);
+  return {dur:Math.max(11,distance/speed),fr:.975};
+}
 function openPassLaneScore(side,fromKey,toKey){
   const from=PP[side][fromKey],to=PP[side][toKey];
   if(!from||!to)return -999;
@@ -1581,15 +1588,19 @@ function openPassLaneScore(side,fromKey,toKey){
   if(len<W*.05)return -999;
   const nx=dx/len,ny=dy/len;
   const other=side==='h'?'a':'h';
+  const flight=groundPassFlight(len),total=1-Math.pow(flight.fr,flight.dur);
   let pressure=0;
   Object.keys(sq(other)).forEach(k=>{
-    if(!sq(other)[k]||k==='GK'||!PP[other][k])return;
+    if(!sq(other)[k]||k==='GK'||!PP[other][k]||ocd(other,k)||isStalled(other,k))return;
     const op=PP[other][k];
     const t=((op.x-from.x)*nx+(op.y-from.y)*ny)/len;
     if(t<=0||t>=1)return;
     const cx=from.x+dx*t,cy=from.y+dy*t;
     const d=Math.hypot(op.x-cx,op.y-cy);
-    pressure+=clamp(1-d/(W*.09),0,1)*(isBlocking(other,k)?2.5:1);   // a braced blocker shuts a lane
+    if(t*len<W*.025&&d>W*.006) return; // passer shields a nearby side-on challenge
+    const ticks=Math.log(Math.max(.001,1-t*total))/Math.log(flight.fr);
+    const reach=aiTop(sq(other)[k],other)*Math.max(0,ticks-4)*.65;
+    pressure+=clamp((reach+W*.020-d)/(W*.028),0,1.5)*(isBlocking(other,k)?2.5:1.7);
   });
   const progBoost=(progressFor(side,to)-progressFor(side,from))*2.2;
   const spacing=clamp(nearestDefenderDistance(side,to)/(W*.18),0,2);
@@ -1997,10 +2008,10 @@ function tick(dt=1){
         const dd=Math.hypot(dx,dy)||1;
         ux=dx/dd;uy=dy/dd;
       }
-      const cpuPress=ds==='a'&&teamStance('a')>0.55; // trailing CPU presses on its own
+      const cpuPress=isCpuSide(ds)&&teamStance(ds)>0.55&&spiritOf(sq(ds)[ROLES.engager])>450;
       const pressMult=((G.pressing&&ds==='h')||cpuPress)?1.5:1.0;
       const engPl=sq(ds)[ROLES.engager];
-      if(engPl && _sprintForSide(ds)) engPl.spirit=Math.max(0,spiritOf(engPl)-0.5*dt); // sprint costs stamina on defense too
+      if(engPl && _sprintForSide(ds)) engPl.spirit=Math.max(0,spiritOf(engPl)-0.5*dt);
       const sprintMult=(_sprintForSide(ds))?1.34:1.30; // AI commits to the chase
       const manualMult=manualDef?1.3:1.0;
       // A committed lunge → skip normal chase steering, but DON'T return: flow
@@ -2024,8 +2035,13 @@ function tick(dt=1){
           step=Math.min(step,d*.20*dt);
           if(d<W*.002){step=0;_ephy.vx=0;_ephy.vy=0;}
         }
+        const beforeX=dp2.x,beforeY=dp2.y;
         moveMomentum(dp2,_ephy,containing?ct.x:dp2.x+ux*step*8,containing?ct.y:dp2.y+uy*step*8,step/Math.max(dt,0.001),engPl,dt,
                      (AI2.on&&manualDef)?AI2.accelManual:0,(AI2.on&&manualDef)?AI2.turnManual:0);
+        if(AI2.on&&engPl&&!manualDef){
+          const effort=Math.hypot(dp2.x-beforeX,dp2.y-beforeY)/Math.max(0.1,DEF_TOP()*dt);
+          engPl.spirit=Math.max(0,spiritOf(engPl)-(.14+.34*clamp(effort,0,1))*dt);
+        }
         dp2.x=clamp(dp2.x,W*.01,W*.99);
         dp2.y=clamp(dp2.y,H*.03,H*.97);
         /* Tackles only: getting close no longer opens a duel by itself. The AI
@@ -2191,6 +2207,8 @@ function bestEngager(ds,tx,ty,vx,vy,exclude){
     if(k===exclude||ocd(ds,k)) return;
     let t=defenderETA(ds,k,tx,ty,vx,vy);
     if(isCpuSide(ds)&&aiZone(ds,k)==='att') t*=1.25;                   // CPU forwards stay up unless clearly nearest
+    if(aiRole(ds,k)==='centreback'&&progressFor(ds==='h'?'a':'h',{x:tx})<.65)
+      t*=1.28; // let midfield screen attacks before pulling a centre-back out
     if(t<bestT){ bestT=t; best=k; }
   });
   return {k:best,t:bestT};
@@ -2263,6 +2281,9 @@ function cpuCarrierPassV2(s,ds,cp){
   if(close) want=0.50+0.25*q;                                   // pressed: usually moves it on
   else if(mid) want=Math.max(AI2.passMid,0.20)*(bh.passBias||1);
   else want=Math.max(AI2.passFree,plan.passes<3?0.10:0.06)*(bh.passBias||1);
+  // A tired carrier looks for a team-mate earlier instead of always driving
+  // into another sprint; lane safety is still checked before releasing it.
+  want=clamp(want+(1-spiritOf(pl)/spiritMax(pl))*.22,0,.95);
   if(Math.random()>=want) return false;
   /* Every team-mate by his lane, not only bestTeammateFor's pick - that pick
      often had a closed lane, so the free carrier "wanted" to pass and never
@@ -2408,8 +2429,16 @@ function passFlightBegin(s,ds){
   const fa=flightAim(b);
   // the attacker nearest the landing spot is the one coming to meet it
   let rk=null,rd=1e9;
-  validOutfieldKeys(s).forEach(k=>{ if(k===G.ck)return; const d=Math.hypot(PP[s][k].x-fa.x,PP[s][k].y-fa.y); if(d<rd){rd=d;rk=k;} });
-  G._pfRecv=b.physicalPass?b.receiver:rk;
+  validOutfieldKeys(s).forEach(k=>{
+    if(k===G.ck||ocd(s,k)||(b.kind==='cross'&&aiRole(s,k)==='centreback'))return;
+    const d=Math.hypot(PP[s][k].x-fa.x,PP[s][k].y-fa.y);
+    if(d<rd){rd=d;rk=k;}
+  });
+  G._pfRecv=b.receiver||rk;
+  if(b.physicalPass&&!b.receiver&&rk){
+    b.receiver=rk;
+    physOf(s,rk,sq(s)[rk]).nextReact=0;
+  }
   // and the defender who gets to it first takes the chase - and the stick
   const human=!isCpuSide(ds);
   if(human&&Date.now()<(G._switchLockUntil||0)) return;
@@ -2444,6 +2473,7 @@ function passFlightChaser(s,ds,dt){
   }
   moveMomentum(dp,physOf(ds,k,pl),dp.x+ux*step*8,dp.y+uy*step*8,step/Math.max(dt,0.001),pl,dt,
                manual?AI2.accelManual:0,manual?AI2.turnManual:0);
+  if(!manual) pl.spirit=Math.max(0,spiritOf(pl)-.38*dt);
 }
 
 /* ── Movement with a gait ──────────────────────────────────────────────── */
@@ -2485,7 +2515,15 @@ function aiMoveTo(cur,tx,ty,gait,pl,side,key,dt){
   let sp=Math.hypot(vx,vy);
   if(sp>top){ vx*=top/sp; vy*=top/sp; sp=top; }
   if(sp<0.02){ ph.vx*=(1-AI_REAL.decel); ph.vy*=(1-AI_REAL.decel); cur.x+=ph.vx*dt; cur.y+=ph.vy*dt; return; }
+  const beforeX=cur.x,beforeY=cur.y;
   moveMomentum(cur,ph,cur.x+vx*8,cur.y+vy*8,sp,pl,dt);
+  // Passive recovery happens earlier in tick(). Running must cost more than
+  // that recovery; a player standing in shape can still catch his breath.
+  const effort=Math.hypot(cur.x-beforeX,cur.y-beforeY)/Math.max(0.1,top*dt);
+  if(effort>.40){
+    const cost=(gname==='press'||gname==='run'?.34:.20)*effort*dt;
+    pl.spirit=Math.max(0,spiritOf(pl)-cost);
+  }
 }
 
 /* x the attacking side must stay behind: the second-last opponent
@@ -2509,18 +2547,21 @@ function _aiJobsReset(s){
   if(_aiJobKey!==key){
     const turnover=_aiJobKey&&_aiJobKey.slice(1)===key.slice(1)&&_aiJobKey[0]!==key[0];
     G._counterUntil=turnover?Date.now()+3000:0;               // the side that lost it presses for 3s
-    G._defPlan=null;G._cpuPlan=null;G._cpuBackChain=0;G._teamTransitionUntil=Date.now()+850; for(const id in _aiJob) delete _aiJob[id]; _aiJobKey=key; G._supp=null; G._outlet=null; G._noOutlet=0; }
+    G._defPlan=null;G._cpuPlan=null;G._cpuBackChain=0;G._teamTransitionUntil=Date.now()+850; for(const id in _aiJob) delete _aiJob[id]; _aiJobKey=key; G._supp=null; G._outlet=null; G._boxR=null; G._noOutlet=0; }
 }
 /* The two players offering the short options: nearest non-forwards, one each
    side of the ball where possible. Kept ~1.4s across short passes so the jobs do not flicker. */
 function supportersFor(s,cp,keys,prog){
   const now=Date.now(), S=G._supp;
   if(S&&now<S.until&&S.keys.every(k=>keys.includes(k)&&!ocd(s,k)&&dist(PP[s][k],cp)<W*.32)) return S.set;
-  const cand=keys.filter(k=>{ const z=aiZone(s,k); if(ocd(s,k)) return false;
+  const cand=keys.filter(k=>{ if(ocd(s,k)) return false;
     if(aiForward(s,k)) return false;
     if(aiRole(s,k)==='centreback') return false;   // centre-backs anchor the rest defence
     return true; });
-  cand.sort((a,b)=>dist(PP[s][a],cp)-dist(PP[s][b],cp));
+  // Midfield provides the short triangle. A full-back can still fill a missing
+  // option, but should not repeatedly leave the back line just for proximity.
+  cand.sort((a,b)=>dist(PP[s][a],cp)+(aiZone(s,a)==='def'?W*.07:0)
+                   -dist(PP[s][b],cp)-(aiZone(s,b)==='def'?W*.07:0));
   // Keep the remaining support player when his partner becomes the carrier.
   const kept=S?S.keys.filter(k=>cand.includes(k)&&dist(PP[s][k],cp)<W*.32):[];
   let above=kept.find(k=>PP[s][k].y<cp.y)||null,below=kept.find(k=>PP[s][k].y>=cp.y)||null;
@@ -2533,7 +2574,7 @@ function supportersFor(s,cp,keys,prog){
   G._supp={ck:G.ck,keys:pick,set,until:now+1400};
   return set;
 }
-/* Nobody open ahead for ~0.4s -> pick two men to go and get open. Re-picked
+/* Nobody open ahead for ~0.4s -> ask one free midfielder to go and get open. Re-picked
    on a beat so it does not thrash, and dropped as soon as a forward option
    exists again. */
 function outletsFor(s,cp,keys,ctx){
@@ -2548,9 +2589,9 @@ function outletsFor(s,cp,keys,ctx){
   /* MIDFIELD shows for the ball - the forwards stay high. Sending the two most
      advanced men (i.e. the strikers) to fetch it emptied the space ahead:
      measured forward options 0.45 against the old AI's 0.84. */
-  const cand=keys.filter(k=>!ocd(s,k)&&!aiForward(s,k)&&aiRole(s,k)!=='centreback')
+  const cand=keys.filter(k=>!ocd(s,k)&&!aiForward(s,k)&&aiZone(s,k)==='mid'&&!ctx.supp.has(k))
     .sort((a,b)=>Number(ctx.supp.has(a))-Number(ctx.supp.has(b))||dist(PP[s][a],cp)-dist(PP[s][b],cp))
-    .slice(0,2);
+    .slice(0,1);
   const set=new Set(cand);
   G._outlet={ck:G.ck,set,until:now+1200,commitUntil:now+650};
   return set;
@@ -2603,7 +2644,7 @@ function pickSupportSpot(s,k,cp,ctx){
   }
   return best||{x:-dir*W*0.08,y:side*W*0.06};
 }
-/* The carrier has nobody to play forward to: the two best-placed attackers go
+/* The carrier has nobody to play forward to: one free midfielder goes
    and MAKE an option instead of holding shape. Sampled ahead of the ball,
    onside, scored on how clear the lane is and how much space the spot has. */
 function pickOpenSpot(s,k,cp,ctx){
@@ -2756,7 +2797,7 @@ function defensivePlan(s,ds,cp,line,offsets,dt){
     const B=BODY(), free=nearestDefenderDistance(s,cp)>AI2.closeBH*B*1.3;
     let deep=1;
     validOutfieldKeys(s).forEach(k=>{ if(k===G.ck||ocd(s,k)) return; const d=1-progressFor(s,PP[s][k]); if(d<deep) deep=d; });
-    if(free&&deep<line+0.02) line=Math.max(0.155,Math.min(line,deep-0.02));
+    if(free&&deep<line+0.02) line=Math.max(0.11,Math.min(line,deep-0.02));
     /* STEP UP together: on a backward pass, or when the carrier is pressed and
        nobody is running in behind, the line pushes out and leaves forwards offside. */
     const bt=ballTravel, backPass=G.phase==='pass_anim'&&bt&&bt.physicalPass&&bt.side===s&&bt.kind!=='cross'
@@ -2768,26 +2809,43 @@ function defensivePlan(s,ds,cp,line,offsets,dt){
   const goal=ownGoalXFor(ds),prog=progressFor(s,cp),transition=now<(G._teamTransitionUntil||0);
   for(const k of keys){
     const p=fp(k,ds==='h'?'home':'away',G.half),z=aiZone(ds,k);
-    let lp=plan.line+(offsets[k]||0),shift=DEF_SHIFT.line;
+    let lp=Math.max(.105,plan.line+(offsets[k]||0)),shift=DEF_SHIFT.line;
     if(z==='mid'){lp=clamp(1-prog-.03,plan.line+.06,plan.line+.20);shift=DEF_SHIFT.mid;}
     if(z==='att'){lp=clamp(plan.line+.32,.36,.76);shift=DEF_SHIFT.fwd;}
-    plan.anchors[k]={x:clamp((dir>0?lp:1-lp)*W,W*.08,W*.92),y:defShiftY(p.y*H,plan.ballY,shift),zone:z};
+    plan.anchors[k]={x:clamp((dir>0?lp:1-lp)*W,W*.08,W*.92),y:defShiftY(p.y*H,plan.ballY,shift),zone:z,homeY:p.y*H};
   }
   const available=k=>keys.includes(k)&&!ocd(ds,k)&&!isStalled(ds,k)&&!isBlocking(ds,k)&&!lungeActive(ds,k);
+  // In the defensive third keep one available centre-back between the ball
+  // and the keeper. The other defenders remain free to press and mark.
+  plan.guard=prog>.48?keys.filter(k=>k!==ROLES.engager&&available(k)&&aiRole(ds,k)==='centreback')
+    .sort((a,b)=>Math.abs(plan.anchors[a].homeY-H*.5)-Math.abs(plan.anchors[b].homeY-H*.5))[0]||null:null;
+  // A same-team pass can switch flanks without changing possession. Reassign
+  // cover if its old assignment is now on the wrong side of the pitch.
+  if(now>=(plan.coverAt||0)){
+    plan.coverAt=now+450;
+    const old=ROLES.cover,oldDist=old&&PP[ds][old]?dist(PP[ds][old],cp):Infinity;
+    if(!old||!available(old)||old===ROLES.engager||old===plan.guard||oldDist>W*.22){
+      const next=keys.filter(k=>available(k)&&k!==ROLES.engager&&k!==plan.guard&&k!==ROLES.blocker&&aiZone(ds,k)!=='att')
+        .sort((a,b)=>dist(PP[ds][a],cp)+(aiRole(ds,a)==='centreback'&&prog<.7?W*.09:0)
+                     -dist(PP[ds][b],cp)-(aiRole(ds,b)==='centreback'&&prog<.7?W*.09:0))[0];
+      if(next&&(!available(old)||old===ROLES.engager||old===plan.guard||dist(PP[ds][next],cp)<oldDist*.72))ROLES.cover=next;
+    }
+  }
   const counter=now<(G._counterUntil||0);
-  const wantsPress=counter||(!transition&&((ds==='h'&&G.pressing)||(isCpuSide(ds)&&teamStance(ds)>.55)));
+  const wantsPress=(counter&&prog<.60)||(!transition&&((ds==='h'&&G.pressing)||(isCpuSide(ds)&&prog<.70&&teamStance(ds)>.55)));
   if(!wantsPress)plan.presser=null;
-  else if(!plan.presser||!available(plan.presser)||dist(PP[ds][plan.presser],cp)>W*(counter?.24:.20)||plan.presser===ROLES.engager||plan.presser===ROLES.cover){
+  else if(!plan.presser||!available(plan.presser)||spiritOf(sq(ds)[plan.presser])<spiritMax(sq(ds)[plan.presser])*.25||dist(PP[ds][plan.presser],cp)>W*(counter?.24:.20)||plan.presser===ROLES.engager||plan.presser===ROLES.cover){
     // Extra pressure comes from midfield, never by pulling both centre-backs out.
     // Counter-press (just lost it): whoever is closest, bar the centre-backs.
     plan.presser=keys.filter(k=>available(k)&&k!==ROLES.engager&&k!==ROLES.cover
-        &&(counter?aiRole(ds,k)!=='centreback':aiZone(ds,k)==='mid')&&dist(PP[ds][k],cp)<W*(counter?.22:.18))
+        &&aiZone(ds,k)==='mid'&&spiritOf(sq(ds)[k])>spiritMax(sq(ds)[k])*.28
+        &&dist(PP[ds][k],cp)<W*(counter?.15:.18))
       .sort((a,b)=>dist(PP[ds][a],cp)-dist(PP[ds][b],cp))[0]||null;
   }
   plan.counter=counter;
   const legal=(k,ak)=>{
     const a=plan.anchors[k],p=PP[s][ak];
-    if(!a||!p||!sq(s)[ak]||ocd(s,ak)||ak===G.ck||!available(k)||k===ROLES.engager||k===ROLES.cover||k===plan.presser||a.zone==='att')return false;
+    if(!a||!p||!sq(s)[ak]||ocd(s,ak)||ak===G.ck||!available(k)||k===ROLES.engager||k===ROLES.cover||k===plan.presser||k===plan.guard||a.zone==='att')return false;
     const dy=Math.abs(p.y-a.y),upfield=(p.x-a.x)*dir;           // + = away from our goal
     const dx=upfield>0?upfield:-upfield*0.45;                   // runs in behind stay tracked
     return dy<H*(aiRole(ds,k)==='centreback'?.22:.27)&&dx<W*(a.zone==='def'?.22:.26)&&dist(PP[ds][k],p)<W*.36;
@@ -2818,10 +2876,14 @@ function defensiveTarget(s,ds,k,cp,plan){
   const bounded=(tx,ty)=>{
     const cb=aiRole(ds,k)==='centreback',z=anchor.zone;
     x=clamp(tx,anchor.x-W*(cb?.075:z==='def'?.10:.14),anchor.x+W*(cb?.075:z==='def'?.10:.14));
-    y=clamp(ty,anchor.y-H*(cb?.15:.21),anchor.y+H*(cb?.15:.21));
+    y=clamp(ty,anchor.y-H*(cb?.11:z==='def'?.13:.17),anchor.y+H*(cb?.11:z==='def'?.13:.17));
   };
   if(ocd(ds,k))return {x,y,gait:'jog'};
-  if(k===plan.presser){bounded(lerp(cp.x,plan.goal,.08),cp.y);gait='press';}
+  if(k===plan.guard){
+    x=anchor.x;
+    y=lerp(anchor.y,H*.5,.42);
+    gait='track';
+  }else if(k===plan.presser){bounded(lerp(cp.x,plan.goal,.08),cp.y);gait='press';}
   else if(k===ROLES.cover){
     const dx=plan.goal-cp.x,dy=H*.5-cp.y,d=Math.hypot(dx,dy)||1;
     bounded(cp.x+dx/d*BODY()*2.4,cp.y+dy/d*BODY()*2.4);gait='track';
@@ -2838,11 +2900,15 @@ function defensiveTarget(s,ds,k,cp,plan){
        open man ahead. Near the ball / in the box he marks tight. */
     if(far>0&&!danger){ const z=.45*far; tx=lerp(tx,anchor.x,z); ty=lerp(ty,lerp(anchor.y,cp.y,.25),z); }
     bounded(tx,ty);
-    if((tx-anchor.x)*dir<0) x=clamp(tx,W*.08,W*.92);            // follow a runner toward our goal
+    if(danger&&(tx-anchor.x)*dir<0)
+      x=clamp(tx,anchor.x-W*.11,anchor.x+W*.11); // track a box run without breaking the entire line
     gait='track';
   }else if(k===ROLES.blocker){bounded(lerp(cp.x,plan.goal,.28),lerp(cp.y,H*.5,.22));gait='track';}
   // Beaten players recover through their own corridor rather than joining a scrum.
   if((plan.transition||plan.counter)&&k!==plan.presser&&anchor.zone!=='att'&&(cur.x-cp.x)*dir>W*.025){x=anchor.x;y=anchor.y;gait='run';}
+  // Marking and cover may step into a nearby lane; the opposite-side defender
+  // must still protect the far post and the next pass.
+  if(anchor.zone==='def') y=clamp(y,anchor.homeY-H*.19,anchor.homeY+H*.19);
   return {x:clamp(x,W*.08,W*.92),y:clamp(y,H*.04,H*.96),gait};
 }
 
@@ -2857,7 +2923,10 @@ function moveOffBallV2(s,ds,dt=1){
   const stagger=(side,dsign)=>{ const out={}; try{
       const ks=validOutfieldKeys(side).filter(k=>aiZone(side,k)==='def'); if(!ks.length) return out;
       let sum=0; const raw={}; ks.forEach(k=>{ const q=fp(k,side==='h'?'home':'away',G.half); raw[k]=q.x; sum+=q.x; });
-      const mean=sum/ks.length; ks.forEach(k=>{ out[k]=clamp((raw[k]-mean)*(dsign>0?1:-1),-0.075,0.075); });
+      const mean=sum/ks.length; ks.forEach(k=>{
+        out[k]=clamp((raw[k]-mean)*(dsign>0?1:-1),-0.075,0.075)
+          -(aiRole(side,k)==='centreback'?.06:0); // centre-backs protect the space in front of the keeper
+      });
     }catch(e){} return out; };
 
   // ── ATTACKING TEAM ──
@@ -2904,13 +2973,20 @@ function moveOffBallV2(s,ds,dt=1){
     aiMoveTo(cur,t.tx,t.ty,t.gait,pl,s,k,dt);
   });
 
-  // ── DEFENDING TEAM ── coordinated shape, cover and persistent zonal marks
-  const attPosOwnFrame=1-carrierProg;
-  const lineGap=0.13*(1-carrierProg*0.55);
-  const defLineProg=clamp(attPosOwnFrame-lineGap-bunker*0.05+dchase*0.05,0.155,0.62);
+  // ── DEFENDING TEAM ── during a pass read the arriving ball, not the passer
+  // who is still G.ck until first contact. Only the chaser used to anticipate;
+  // the rest of the back line followed the old location and arrived too late.
+  const bt=ballTravel;
+  const reading=G.phase==='pass_anim'&&bt&&bt.active&&bt.physicalPass&&bt.side===s;
+  const landing=reading?flightAim(bt):cp;
+  const threat=reading?{x:clamp(landing.x,W*.08,W*.92),y:clamp(landing.y,H*.05,H*.95)}:cp;
+  const threatProg=progressFor(s,threat);
+  const attPosOwnFrame=1-threatProg;
+  const lineGap=0.13*(1-threatProg*0.55);
+  const defLineProg=clamp(attPosOwnFrame-lineGap-bunker*0.05+dchase*0.05,0.11,0.62);
   const _defOff=stagger(ds,ddir);
   const dfp=fpos(ds);
-  const plan=defensivePlan(s,ds,cp,defLineProg,_defOff,dt);
+  const plan=defensivePlan(s,ds,threat,defLineProg,_defOff,dt);
   Object.keys(sq(ds)).forEach(k=>{
     const pl=sq(ds)[k],cur=PP[ds][k];
     if(!pl||!cur||k===ROLES.engager||isStalled(ds,k)||isBlocking(ds,k)||lungeActive(ds,k))return;
@@ -2918,9 +2994,9 @@ function moveOffBallV2(s,ds,dt=1){
     if(k==='GK'){
       const gx=ddir>0?Math.min(p.x*W,W*.072):Math.max(p.x*W,W*.928);
       cur.x=lerp(cur.x,gx,1-Math.pow(.92,dt));
-      cur.y=lerp(cur.y,clamp(p.y*H+(cp.y-H*.5)*.06,H*.12,H*.88),1-Math.pow(.94,dt));return;
+      cur.y=lerp(cur.y,clamp(p.y*H+(threat.y-H*.5)*.06,H*.12,H*.88),1-Math.pow(.94,dt));return;
     }
-    const t=defensiveTarget(s,ds,k,cp,plan);
+    const t=defensiveTarget(s,ds,k,threat,plan);
     aiMoveTo(cur,t.x,t.y,t.gait,pl,ds,k,dt);
   });
 }
@@ -5988,13 +6064,10 @@ function tackleCanLand(L,dp,cp,v,judge){
                              defender over-reads his reach and dives in from
                              too far; a great one is nearly exact */
 const TACKLE_AI={ reachMargin:0.92, travelMargin:0.9, slideShare:0.35, slideFar:0.45, errAmp:0.30, errBias:0.06 };
-/* BALL-SIDE SLIDE. The block only moved 26% of the way towards the ball's lane,
-   so a carrier down the touchline was defended by a block still sitting in the
-   middle: measured block centre 191u (left wing) and 303u (right wing) infield
-   of the ball, against 3u when he came through the middle (author, 2026-09-12:
-   "analyse how my defence works when a player runs on the side"). A real block
-   slides across and narrows - the far-side full-back tucks in. */
-const DEF_SHIFT={ line:0.75, mid:0.62, fwd:0.30, compress:0.72, tuck:0.55 };
+/* Slide toward the ball while keeping four distinct defensive lanes. A
+   larger slide pulled even the far-side full-back into the ball-side crowd;
+   the engager can still leave his lane to meet the carrier. */
+const DEF_SHIFT={ line:0.32, mid:0.36, fwd:0.22, compress:0.86, tuck:0.55 };
 function defShiftY(formY,ballY,shift){
   const mid=H/2;
   return clamp(mid+(formY-mid)*DEF_SHIFT.compress+(ballY-mid)*shift,H*0.05,H*0.95);
@@ -6610,7 +6683,10 @@ function launchPass(s,tk,kind='ground',point){
   if(!from||!to)return;
   if(tk&&checkOffside(s,tk)){callOffside(s,tk);return;}
   const quality=_passQ(sq(s)[sk]),cross=kind==='cross';
-  const ph=tk&&_phys[s+':'+tk], lead=cross?8:5;
+  // A supplied point is already a predicted landing spot (human run lead or
+  // CPU through ball). Add motion lead only when aiming at the current player.
+  const ph=tk&&_phys[s+':'+tk];
+  const lead=point?0:(cross?8:clamp(groundPassFlight(Math.hypot(to.x-from.x,to.y-from.y)).dur*.45,5,18));
   let tx=to.x+(ph?clamp(ph.vx||0,-2,2)*lead:0),ty=to.y+(ph?clamp(ph.vy||0,-2,2)*lead:0);
   const dx=tx-from.x,dy=ty-from.y,d=Math.hypot(dx,dy)||1;
   const error=(Math.random()-.5)*W*(cross?.018:.006)*(1-quality*.7);
@@ -6647,8 +6723,11 @@ function launchPass(s,tk,kind='ground',point){
     }
     tx=from.x+ux*D; ty=from.y+uy*D;
   }
-  const distp=Math.hypot(tx-from.x,ty-from.y),speed=W*(cross?.007:.012);
-  const dur=Math.max(8,distp/speed),fr=cross?.997:.988;
+  const distp=Math.hypot(tx-from.x,ty-from.y);
+  // A short ground pass rolls at a controllable speed; a longer driven pass
+  // carries more pace. The travel solver still reaches the target exactly.
+  const ground=groundPassFlight(distp);
+  const dur=cross?Math.max(8,distp/(W*.007)):ground.dur,fr=cross?.997:ground.fr;
   const v=distp*(1-fr)/(1-Math.pow(fr,dur));
   const launchBz=window.P3D&&P3D.getJumpLift?P3D.getJumpLift(s,sk)/.09:Math.max(0,ball.bz||0);
   ballTravel={active:true,physicalPass:true,side:s,kicker:sk,receiver:tk,kind,launchBz,
@@ -6690,6 +6769,16 @@ function tickPhysicalPass(b,dt){
       for(const side of ['h','a'])for(const k of Object.keys(sq(side))){
         const p=PP[side][k],pl=sq(side)[k];if(!p||!pl||ocd(side,k)||isStalled(side,k))continue;
         if(side===b.side&&k===b.kicker&&b.progress<8)continue;
+        // The ball starts at the passer's centre. An opponent alongside his
+        // body must not collect it on frame one as though the passer vanished.
+        // Someone directly in the kicking lane can still block the pass.
+        if(side!==b.side&&Math.hypot(p.x-b.fx,p.y-b.fy)<W*.025){
+          const len=Math.hypot(b.tx-b.fx,b.ty-b.fy)||1;
+          const ux=(b.tx-b.fx)/len,uy=(b.ty-b.fy)/len;
+          const ahead=(p.x-b.fx)*ux+(p.y-b.fy)*uy;
+          const across=Math.abs((p.x-b.fx)*uy-(p.y-b.fy)*ux);
+          if(ahead<W*.004||across>W*.006)continue;
+        }
         // the intended receiver adjusts his stride to it: a wider control radius
         const contact=passContactTime(old,{x:b.x,y:b.y},p,(side===b.side&&k===b.receiver&&b.kind!=='cross')?W*.018:W*.010);
         if(contact===null)continue;
