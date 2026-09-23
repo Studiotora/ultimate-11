@@ -104,7 +104,7 @@
     // ---- GFX UPGRADE PACK ----
     pixelPitch:true,     // procedural pixel-art turf instead of assets/stadium/pitch.png
     pitchPx:2048,        // turf texture width in texels (higher = crisper pitch; upscaled)
-    gfx:{ sky:true, masts:true, lamps:true, boards:true, flags:true, flashes:true, floods:true, banners:true },
+    gfx:{ sky:true, masts:true, lamps:true, boards:true, flags:true, flashes:true, floods:true, banners:true, volumetrics:true },
     // super-shot cinematic camera (console-tunable): hold = charging aura, chase = ball flight
     cine:{ holdFront:true, holdDist:9.6, holdHeight:1.55, holdSide:1.1, holdLookAhead:20, holdLookY:1.25,
            // chase: sits well back and off to the side so the tail reads in
@@ -1016,7 +1016,7 @@
        plus the particle / ring / ribbon pools shared by the super-shot
        aura and the ball comet. Toggles: P3D.gfx.*  Rebuilt with the bowl.
        ════════════════════════════════════════════════════════════════ */
-    let _bowlInfo=null, extrasGroup=null, boardGroup=null, cornerGroup=null;
+    let _bowlInfo=null, extrasGroup=null, boardGroup=null, cornerGroup=null, astraVolume=null;
     let boardTex=null, flashPts=null, skyMesh=null;
     const MASTS=[], CFLAGS=[];
     function gfxOn(k){ return !(P3D.gfx&&P3D.gfx[k]===false); }
@@ -1222,9 +1222,88 @@
       halo.scale.set(7*s,7*s,1);
       return [g,halo];
     }
+    /* Astra third-tier lamps: screen-facing shafts simulate suspended dust in
+       the light. One batched ray mesh and one batched grass-pool mesh; no shadow
+       maps, real fog volumes, or extra per-frame light sources. */
+    function buildAstraVolumetrics(){
+      if(!gfxOn('volumetrics')) return;
+      const k=PLEN/70, w=PWID/44.87, sources=[];
+      for(let i=0;i<5;i++){
+        const x=(-27+i*13.5)*k;
+        const source=new T.Vector3(x,14.35*k,44.5*w);
+        const target=new T.Vector3(x*.70,0.055,8.0*w);
+        sources.push({source,target});
+        if(gfxOn('lamps') && gfxOn('floods')){
+          const [bank,halo]=floodBank(source.x,source.y,source.z,.55*k);
+          extrasGroup.add(bank,halo);
+        }
+      }
+      const positions=new Float32Array(sources.length*18),uv=[];
+      for(let i=0;i<sources.length;i++)uv.push(0,1,0,0,1,0,0,1,1,0,1,1);
+      const rayGeo=new T.BufferGeometry();
+      const posAttr=new T.BufferAttribute(positions,3);
+      posAttr.setUsage(T.DynamicDrawUsage);
+      rayGeo.setAttribute('position',posAttr);
+      rayGeo.setAttribute('uv',new T.Float32BufferAttribute(uv,2));
+      const uniforms={time:{value:0},strength:{value:1}};
+      const rayMat=new T.ShaderMaterial({uniforms,transparent:true,depthWrite:false,
+        depthTest:true,side:T.DoubleSide,blending:T.AdditiveBlending,fog:false,
+        vertexShader:'varying vec2 vUv;void main(){vUv=uv;gl_Position=projectionMatrix*modelViewMatrix*vec4(position,1.0);}',
+        fragmentShader:'varying vec2 vUv;uniform float time;uniform float strength;void main(){float center=pow(max(0.0,1.0-abs(vUv.x*2.0-1.0)),2.4);float fall=smoothstep(0.0,.17,vUv.y)*(1.0-smoothstep(.76,1.0,vUv.y));float dust=.86+.14*sin(vUv.y*34.0-time*.65);float a=.12*center*fall*dust*strength;gl_FragColor=vec4(.70,.82,1.0,a);}' });
+      const rayMesh=new T.Mesh(rayGeo,rayMat);
+      rayMesh.frustumCulled=false;rayMesh.renderOrder=8;extrasGroup.add(rayMesh);
+      const canvas=document.createElement('canvas');canvas.width=canvas.height=128;
+      const ctx=canvas.getContext('2d'),grad=ctx.createRadialGradient(64,64,3,64,64,64);
+      grad.addColorStop(0,'rgba(226,239,255,.32)');
+      grad.addColorStop(.35,'rgba(196,226,255,.15)');
+      grad.addColorStop(1,'rgba(176,211,255,0)');
+      ctx.fillStyle=grad;ctx.fillRect(0,0,128,128);
+      const tex=new T.CanvasTexture(canvas),poolPos=[],poolUv=[];
+      sources.forEach(({target})=>{
+        const x=target.x,z=target.z,y=.045,r=6.8*k;
+        [[x-r,z-r,0,0],[x+r,z-r,1,0],[x+r,z+r,1,1],
+         [x-r,z-r,0,0],[x+r,z+r,1,1],[x-r,z+r,0,1]].forEach(q=>{
+          poolPos.push(q[0],y,q[1]);poolUv.push(q[2],q[3]);
+        });
+      });
+      const poolGeo=new T.BufferGeometry();
+      poolGeo.setAttribute('position',new T.Float32BufferAttribute(poolPos,3));
+      poolGeo.setAttribute('uv',new T.Float32BufferAttribute(poolUv,2));
+      const poolMat=new T.MeshBasicMaterial({map:tex,transparent:true,depthWrite:false,
+        depthTest:true,blending:T.AdditiveBlending,side:T.DoubleSide,fog:false});
+      const pools=new T.Mesh(poolGeo,poolMat);pools.renderOrder=2;extrasGroup.add(pools);
+      astraVolume={sources,rayMesh,pools,tex,uniforms};
+    }
+    function tickAstraVolumetrics(now){
+      const v=astraVolume;if(!v)return;
+      const tier=P3D._tier||'high';
+      v.uniforms.time.value=now*.001;
+      v.uniforms.strength.value=tier==='low'?.38:(tier==='med'?.70:1);
+      v.pools.material.opacity=tier==='low'?.5:1;
+      const arr=v.rayMesh.geometry.attributes.position.array;
+      const side=new T.Vector3(),axis=new T.Vector3(),view=new T.Vector3();
+      v.sources.forEach(({source,target},i)=>{
+        axis.subVectors(target,source);view.subVectors(camera.position,source);
+        side.crossVectors(axis,view);
+        if(side.lengthSq()<.001)side.set(1,0,0);else side.normalize();
+        const top=.45,bottom=5.0,off=i*18;
+        [[source,-top],[target,-bottom],[target,bottom],
+         [source,-top],[target,bottom],[source,top]].forEach((q,j)=>{
+          arr[off+j*3]=q[0].x+side.x*q[1];
+          arr[off+j*3+1]=q[0].y+side.y*q[1];
+          arr[off+j*3+2]=q[0].z+side.z*q[1];
+        });
+      });
+      v.rayMesh.geometry.attributes.position.needsUpdate=true;
+    }
     /* masts, roof lamps, flash spots — rebuilt whenever the bowl is */
     function buildExtras(){
       buildSky();
+      if(astraVolume){
+        astraVolume.rayMesh.geometry.dispose();astraVolume.rayMesh.material.dispose();
+        astraVolume.pools.geometry.dispose();astraVolume.pools.material.dispose();
+        astraVolume.tex.dispose();astraVolume=null;
+      }
       if(extrasGroup){ scene.remove(extrasGroup); extrasGroup=null; }
       extrasGroup=new T.Group(); scene.add(extrasGroup); MASTS.length=0;
       const B=_bowlInfo; if(!B) return;
@@ -1240,6 +1319,7 @@
           const halo=new T.SpriteMaterial({map:haloTex(),color:'#dcecff',transparent:true,opacity:.27,depthWrite:false,blending:T.AdditiveBlending,fog:false});
           for(let i=0;i<9;i++){const h=new T.Sprite(halo);h.position.set((-37+i*9.25)*PLEN/70,16.1*PLEN/70,-38*PWID/44.87);h.scale.set(3,3,1);extrasGroup.add(h);}
         }
+        buildAstraVolumetrics();
       } else if(B.type==='classic'){
         const r=B.r, th=B.th, out=B.out, of=B.of;
         B.tiers.forEach((t,ti)=>{
@@ -1921,6 +2001,7 @@
       if(ballGlow){ ballGlow.visible=false; ballCore.visible=false; }
     }
     function tickGfx(dt,now){
+      tickAstraVolumetrics(now);
       if(flashPts){ flashPts.material.uniforms.time.value=now*0.001; flashPts.material.uniforms.scale.value=renderer.getPixelRatio(); }
       if(boardTex) boardTex.offset.x-=dt*0.045;
       for(const f of CFLAGS) f.rotation.y=Math.sin(now*0.003+f.userData.ph)*0.45+(f.position.x<0?0.3:Math.PI-0.3);
