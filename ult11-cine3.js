@@ -17,7 +17,7 @@
    ============================================================ */
 (function(){
 'use strict';
-const C3={on:true, built:false};
+const C3={on:true, built:false, chaseMul:1.3};   // chaseMul: tunable from ?debug=1 via U11_CINE3.chaseMul
 window.U11_CINE3=C3;
 
 const NOISE=`
@@ -458,11 +458,21 @@ function comet(c,dt,A){
   const H=fl.H, last=H[H.length-1];
   if(!last||last.x!==b.x||last.y!==b.y||last.z!==b.z||fl.now-last.t>0.05) H.push({x:b.x,y:b.y,z:b.z,t:fl.now});
   while(H.length>2&&H[1].t<fl.now-0.6) H.shift();
-  const moving=(c.mode==='fly')||(c.mode==='out'&&arr===null);
+  const moving=(c.mode==='fly')||(c.mode==='wait'&&fl.reel>0)||(c.mode==='out'&&arr===null);
   fl.op=Math.max(0,Math.min(1,fl.op+(moving?dt*6:-dt*1.6)));
-  const span=0.34*Math.min(1,fl.now/0.2);
-  const tm=fl.now;
-  for(let i=0;i<TRN;i++) histAt(H,tm-(i/(TRN-1))*span,trail.pts[i]);
+  /* TAIL = the mockup's: sampled along the real flight path over the last
+     31% of the flight (grows in over the first 15%). In 'wait' it reels in
+     to the ball over 0.5s; only the short goal/save leg uses frame history. */
+  if(A.pathAt&&(c.mode==='fly'||c.mode==='wait')){
+    const f=c.mode==='fly'?Math.min(1,c.ft||0):1;
+    if(c.mode==='wait') fl.reel=Math.max(0,(fl.reel==null?1:fl.reel)-dt/0.5); else fl.reel=1;
+    const span=0.31*Math.min(1,f/0.15)*fl.reel;
+    for(let i=0;i<TRN;i++){ const q=A.pathAt(f-(i/(TRN-1))*span); trail.pts[i].set(q.x,q.y,q.z); }
+    if(c.mode==='wait') trail.pts[0].set(b.x,b.y,b.z);
+  } else {
+    const span=0.3, tm=fl.now;
+    for(let i=0;i<TRN;i++) histAt(H,tm-(i/(TRN-1))*span,trail.pts[i]);
+  }
   const BR=Math.max(0.2*S,(A.ballR||0)*0.9);
   const vis=fl.op>0.01;
   for(const r of [trail,strandA,strandB]){ r.mesh.visible=vis; r.mat.uniforms.time.value=performance.now()/1000; }
@@ -597,6 +607,10 @@ C3.flyCam=function(c,rdt,A){
     }
     lag=1-Math.exp(-dt*9);
   }
+  /* the game ball is ~2x the mockup's relative to the body, so the chase and
+     goal frames sit a bit further out to keep the mockup's ball/trail size */
+  if(!strike){ const M=C3.chaseMul, o=c.mode==='out'?Lk:[b.x,b.y,b.z];
+    for(let i=0;i<3;i++) P[i]=o[i]+(P[i]-o[i])*M; }
   if(!c._c3cam||strike){ c._c3cam={p:P.slice(),l:Lk.slice()}; }
   else { const q=c._c3cam; for(let i=0;i<3;i++){ q.p[i]+=(P[i]-q.p[i])*lag; q.l[i]+=(Lk[i]-q.l[i])*lag; } }
   const q=c._c3cam;

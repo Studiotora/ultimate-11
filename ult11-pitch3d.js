@@ -3048,6 +3048,27 @@
       fxCv.style.display='block';
     }
     function _c3on(){ return !!(window.U11_CINE3&&U11_CINE3.on); }
+    /* cine3 view: the mockup was framed at fov 42 with no tilt-shift. The game
+       camera is fov 30 (1.43x tighter) and tilt-shift blurs everything off the
+       focus band - both made the cinematic read "too close". updateCamera()
+       puts fov back on the first normal frame; applyFx() restores the blur. */
+    function _c3view(){
+      if(camera.fov!==42){ camera.fov=42; camera.updateProjectionMatrix(); }
+      if(hTilt&&vTilt){ hTilt.uniforms.h.value=0; vTilt.uniforms.v.value=0; }
+    }
+    /* world position of the super shot at flight fraction f (0..1) - the SAME
+       maths cineStep2 uses, so the comet can be sampled along the real path
+       (mockup: tail = last 31% of the flight) instead of from frame history. */
+    function cinePathW(c,f){
+      f=Math.max(0,Math.min(1,f));
+      const stl=c.style||{curve:0,loft:1,speed:1,kind:'normal'}, fe=f*f*(3-2*f);
+      let bx=c.fx+(c.tx-c.fx)*fe, by=c.fy+(c.ty-c.fy)*fe;
+      if(c.curveAmt){ const off=Math.sin(Math.PI*fe)*c.curveAmt; bx+=c.perpX*off; by+=c.perpY*off; }
+      const bz=shotArc(c.arc,fe,stl), W2=(CV.width||1280);
+      const d=PLEN*(P3D.spriteFrac!=null?P3D.spriteFrac:0.045)*0.21;
+      const lift=(c.jumpLift||0)*Math.pow(1-f,2);
+      return {x:ex2wx(Math.min(Math.max(bx,0.02*W2),0.98*W2)), y:Math.max(d*.5,0.05+bz*.09)+lift, z:ey2wz(by)};
+    }
     function hideHoldFx(){
       try{ if(window.U11_CINE3) U11_CINE3.hide(); }catch(e){}
       try{ applyFx(); }catch(e){}
@@ -3644,6 +3665,7 @@
             bx:_b.x,by:_b.y,bz:_b.z,swx:ex2wx(cine.fx),swz:ey2wz(cine.fy),gwx:ex2wx(cine.gx),gwz:ey2wz(cine.gy),
             col:((_trailFx&&_trailFx.col)||cine.col||'#ffd24a')});
         }catch(e){ console.error('[C3] impact',e); window.U11DBG&&U11DBG('[C3] impact error: '+e.message); } }
+        if(_c3imp){ try{ clearTrail(); [ballGlow,ballCore,ballHalo].forEach(o=>{ if(o) o.visible=false; }); }catch(e){} }
         if(!_c3imp){
         try{ kickBurst(cine); }catch(e){}
         try{ // kick burst flash (radial white), ~0.3s
@@ -3958,7 +3980,7 @@
             col:((_trailFx&&_trailFx.col)||c.col||'#ffd24a'),cv:fxCv,ctx:fxCtx,proj:projectToScreen,
             bloom:bloomPass,fxBase:P3D.fx});
         }catch(e){ console.error('[C3] hold',e); window.U11DBG&&U11DBG('[C3] hold error: '+e.message); U11_CINE3.on=false; }
-        if(_ok){ applyShake(rdt||0); return; }
+        if(_ok){ _c3view(); applyShake(rdt||0); return; }
       }
       let _c3cam=false;
       if(c.mode!=='hold'&&_c3on()){
@@ -4016,7 +4038,9 @@
       }
       if(c.mode!=='hold'&&_c3on()){ try{
         const _nc=U11_CINE3.needsCanvas(c); if(_nc) ensureHoldFx();
+        _c3view();
         U11_CINE3.flyFrame(c,rdt,{camera,renderer,gl,hh:PLEN*(P3D.spriteFrac!=null?P3D.spriteFrac:0.045),ballR:c._bd,
+          pathAt:(f)=>cinePathW(c,f),
           cv:_nc?fxCv:null,ctx:_nc?fxCtx:null,proj:projectToScreen});
       }catch(e){ console.error('[C3] fly',e); } }
       applyShake(rdt||0);      // after every branch, so it shakes any framing
