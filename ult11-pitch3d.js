@@ -3655,7 +3655,7 @@
         cine.mode='fly';cine.ft=0;cine.onArrive=onArrive;
         const _CC=P3D.cine||{};
         cine._hitStop=Math.max(0,(_CC.hitStopMs!=null?_CC.hitStopMs:110))/1000;
-        try{ shakeCam((_CC.shakeAmp!=null?_CC.shakeAmp:0.22),(_CC.shakeMs!=null?_CC.shakeMs:420)); }catch(e){}
+        if(!_c3on()) try{ shakeCam((_CC.shakeAmp!=null?_CC.shakeAmp:0.22),(_CC.shakeMs!=null?_CC.shakeMs:420)); }catch(e){}   // cine3 shakes on contact
         /* ult11-cine3 owns the impact beat (hit-stop, impact frame, waves,
            debris); the old ring/flash burst only runs when it is off. */
         let _c3imp=false;
@@ -3663,7 +3663,7 @@
           const _b=cine._bw||{x:ex2wx(cine.fx),y:0.3,z:ey2wz(cine.fy)};
           _c3imp=U11_CINE3.impact(cine,{T,scene,camera,hh:PLEN*(P3D.spriteFrac!=null?P3D.spriteFrac:0.045),
             bx:_b.x,by:_b.y,bz:_b.z,swx:ex2wx(cine.fx),swz:ey2wz(cine.fy),gwx:ex2wx(cine.gx),gwz:ey2wz(cine.gy),
-            col:((_trailFx&&_trailFx.col)||cine.col||'#ffd24a')});
+            col:((_trailFx&&_trailFx.col)||cine.col||'#ffd24a'),shake:(a,ms)=>shakeCam(a,ms)});
         }catch(e){ console.error('[C3] impact',e); window.U11DBG&&U11DBG('[C3] impact error: '+e.message); } }
         if(_c3imp){ try{ clearTrail(); [ballGlow,ballCore,ballHalo].forEach(o=>{ if(o) o.visible=false; }); }catch(e){} }
         if(!_c3imp){
@@ -3978,7 +3978,7 @@
           _ok=U11_CINE3.holdFrame(c,rdt,{T,scene,camera,renderer,gl,g:sprites[c.o.as+':'+c.o.sk],
             hh:PLEN*(P3D.spriteFrac!=null?P3D.spriteFrac:0.045),swx,swz,gwx,gwz,
             col:((_trailFx&&_trailFx.col)||c.col||'#ffd24a'),cv:fxCv,ctx:fxCtx,proj:projectToScreen,
-            bloom:bloomPass,fxBase:P3D.fx});
+            bloom:bloomPass,fxBase:P3D.fx,ballMesh});
         }catch(e){ console.error('[C3] hold',e); window.U11DBG&&U11DBG('[C3] hold error: '+e.message); U11_CINE3.on=false; }
         if(_ok){ _c3view(); applyShake(rdt||0); return; }
       }
@@ -4040,6 +4040,7 @@
         const _nc=U11_CINE3.needsCanvas(c); if(_nc) ensureHoldFx();
         _c3view();
         U11_CINE3.flyFrame(c,rdt,{camera,renderer,gl,hh:PLEN*(P3D.spriteFrac!=null?P3D.spriteFrac:0.045),ballR:c._bd,
+          g:sprites[c.o.as+':'+c.o.sk],ballMesh,bloom:bloomPass,
           pathAt:(f)=>cinePathW(c,f),
           cv:_nc?fxCv:null,ctx:_nc?fxCtx:null,proj:projectToScreen});
       }catch(e){ console.error('[C3] fly',e); } }
@@ -4189,7 +4190,7 @@
       if(rayPass){
         _v3.copy(sun.position).project(camera);
         rayPass.uniforms.lightPos.value.set(_v3.x*0.5+0.5, _v3.y*0.5+0.5);
-        rayPass.enabled = (P3D.fx.rays>0.001) && (_v3.z<1) && !(cine&&cine.v2&&cine.mode==='hold');   // off when sun behind camera / during the charge hold
+        rayPass.enabled = (P3D.fx.rays>0.001) && (_v3.z<1) && !(cine&&cine.v2&&cine.mode==='hold') && !(cine&&_c3on());   // off when sun behind camera / during the charge hold
       }
       if(composer && P3D.fx && P3D.fx.on) composer.render(dt);
       else renderer.render(scene,camera);

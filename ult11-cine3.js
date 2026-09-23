@@ -17,7 +17,7 @@
    ============================================================ */
 (function(){
 'use strict';
-const C3={on:true, built:false, chaseMul:1.3};   // chaseMul: tunable from ?debug=1 via U11_CINE3.chaseMul
+const C3={on:true, built:false, chaseMul:1.0};   // 1.0 = mockup framing exactly
 window.U11_CINE3=C3;
 
 const NOISE=`
@@ -60,7 +60,21 @@ const WAVE_FS=NOISE+`uniform float rad,op,w; uniform vec3 col; varying vec2 vUv;
     float inner=smoothstep(rad,0.0,r)*0.18;
     float I=(band+inner)*op*smoothstep(1.0,0.92,r);
     gl_FragColor=vec4(mix(col,vec3(1.0),band*0.6)*I,1.0); }`;
-let T=null, scene=null, waves=[], imp=null;
+const FS_BODY=`
+uniform sampler2D map; uniform vec2 off,rep; uniform float flash,rimAmt; uniform vec3 rim;
+varying vec2 vUv;
+float A(vec2 p){ return texture2D(map,off+clamp(p,0.002,0.998)*rep).a; }
+void main(){
+  vec4 c=texture2D(map,off+clamp(vUv,0.002,0.998)*rep);
+  if(c.a<0.45) discard;
+  vec3 k=c.rgb;
+  float o=0.018;
+  float e=1.0-min(min(A(vUv+vec2(o,0.0)),A(vUv-vec2(o,0.0))),min(A(vUv+vec2(0.0,o*.7)),A(vUv-vec2(0.0,o*.7))));
+  k+=rim*e*rimAmt*1.4;
+  k=mix(k,vec3(1.0),flash);
+  gl_FragColor=vec4(k,1.0);
+}`;
+let T=null, scene=null, waves=[], imp=null, body=null, hidSil=null;
 let trail=null, strandA=null, strandB=null, shell=null, bglow=null, fl=null, arr=null;
 const TRN=44;
 const RIB_FS=NOISE+`uniform vec3 col; uniform float time,op,core; varying vec2 vUv;
@@ -89,6 +103,38 @@ let auraB=null, auraF=null, pillar=null, seal=null, glow=null, rocks=null;
 const COL={v:null};
 let fxT=0, filterStr='', glc=null, fontOK=false;
 
+/* Draw the shooter OURSELVES (mockup body shader: aura rim light + white
+   flash) on a plane registered exactly on the game sprite, and hide the
+   sprite for the frame (syncPlayers re-shows it every frame). col>=0 forces
+   a column of the same sheet row - the strike frames before contact. */
+function placeShooter(g,cam,S,amt,tight,rimAmt,flash,col){
+  const sp=g&&g.sprite;
+  if(!(sp&&sp.material&&sp.material.map)){ auraB.visible=auraF.visible=body.visible=false; return; }
+  const map=sp.material.map, AU=C3._AU, BU=body.material.uniforms;
+  AU.map.value=map; AU.off.value.copy(map.offset); AU.rep.value.copy(map.repeat);
+  if(col>=0){ const rx=map.repeat.x; AU.off.value.x=rx<0?(col+1)*Math.abs(rx):col*rx; }
+  AU.time.value=fxT; AU.amt.value=amt; AU.tight.value=tight;
+  BU.map.value=map; BU.off.value.copy(AU.off.value); BU.rep.value.copy(AU.rep.value);
+  BU.rimAmt.value=rimAmt; BU.flash.value=flash;
+  const e=cam.matrixWorld.elements;
+  const sx=Math.abs(sp.scale.x), sy=Math.abs(sp.scale.y), cx=sp.center.x, cy=sp.center.y;
+  const ox=(0.5-cx)*sx, oy=(0.5-cy)*sy, bz=0.02*S;
+  const bx=sp.position.x+e[0]*ox+e[4]*oy, by=sp.position.y+e[1]*ox+e[5]*oy, bzz=sp.position.z+e[2]*ox+e[6]*oy;
+  auraB.position.set(bx-e[8]*bz,by-e[9]*bz,bzz-e[10]*bz);
+  auraF.position.set(bx+e[8]*bz,by+e[9]*bz,bzz+e[10]*bz);
+  body.position.set(bx,by,bzz);
+  for(const m of [auraB,auraF,body]){ m.quaternion.copy(cam.quaternion); m.scale.set(sx,sy,1); m.visible=true; }
+  auraB.visible=auraF.visible=amt>0.001;
+  sp.visible=false;
+  if(g.sil&&g.sil.visible){ g.sil.visible=false; hidSil=g.sil; }
+}
+function releaseShooter(){ if(body) body.visible=false; if(hidSil){ hidSil.visible=true; hidSil=null; } }
+function setBloom(A,str){ const b=A&&A.bloom; if(!b) return; b.strength=str; b.radius=0.5; b.threshold=0.8; }
+/* the mockup ball: radius 0.2 m on a 1.8 m body -> radius 0.2*S. pitch3d's
+   ball geometry is r=0.5, so its scale is the DIAMETER: 0.4*S. (The trail
+   used to be sized off that diameter as if it were a radius - 2x too wide,
+   which is what cut the comet's head off flat.) */
+function mockBall(A,S){ if(A&&A.ballMesh) A.ballMesh.scale.setScalar(0.4*S); }
 function mkAdd(o){ return Object.assign({transparent:true,depthWrite:false,blending:T.AdditiveBlending,side:T.DoubleSide,fog:false},o); }
 
 function build(A){
@@ -103,6 +149,9 @@ function build(A){
      (it writes depth) draws BEFORE the sprites: negative renderOrder */
   auraB.renderOrder=-3; auraF.renderOrder=12; auraB.frustumCulled=auraF.frustumCulled=false;
   C3._AU=AU;
+  body=new T.Mesh(geo,new T.ShaderMaterial({uniforms:{map:{value:null},off:{value:new T.Vector2()},rep:{value:new T.Vector2(1,1)},
+    flash:{value:0},rimAmt:{value:0},rim:{value:COL.v}},vertexShader:VS,fragmentShader:FS_BODY,transparent:true,fog:false}));
+  body.renderOrder=10; body.frustumCulled=false;
 
   pillar=new T.Mesh(new T.CylinderGeometry(1.25,0.75,7,40,1,true).translate(0,3.5,0),
     new T.ShaderMaterial(mkAdd({uniforms:{time:{value:0},amt:{value:0},col:{value:COL.v}},vertexShader:VS,
@@ -143,7 +192,7 @@ function build(A){
   rx.fillStyle=rg; rx.fillRect(0,0,128,128);
   bglow=new T.Sprite(new T.SpriteMaterial({map:new T.CanvasTexture(rc),transparent:true,depthWrite:false,depthTest:false,blending:T.AdditiveBlending,fog:false,opacity:0}));
   shell.visible=bglow.visible=false; shell.renderOrder=bglow.renderOrder=13; scene.add(shell); scene.add(bglow);
-  for(const o of [auraB,auraF,pillar,seal,glow.pts,rocks.pts]){ o.visible=false; scene.add(o); }
+  for(const o of [auraB,auraF,body,pillar,seal,glow.pts,rocks.pts]){ o.visible=false; scene.add(o); }
   if(document.fonts&&document.fonts.load) document.fonts.load('80px Anton').then(()=>fontOK=true,()=>{});
   C3.built=true;
 }
@@ -241,19 +290,16 @@ C3.holdFrame=function(c,rdt,A){
     if(g.sil){ g.sil.position.x=sp.position.x; g.sil.position.y=sp.position.y; }
   }
 
-  /* ---- aura billboards registered on the sprite ---- */
-  if(sp&&sp.visible&&sp.material&&sp.material.map){
-    const map=sp.material.map, AU=C3._AU;
-    AU.map.value=map; AU.off.value.copy(map.offset); AU.rep.value.copy(map.repeat);
-    AU.time.value=fxT; AU.amt.value=amt; AU.tight.value=tight;
-    const e=cam.matrixWorld.elements;
-    const sx=Math.abs(sp.scale.x), sy=Math.abs(sp.scale.y), cx=sp.center.x, cy=sp.center.y;
-    const ox=(0.5-cx)*sx, oy=(0.5-cy)*sy, bz=0.02*S;
-    const bx=sp.position.x+e[0]*ox+e[4]*oy, by=sp.position.y+e[1]*ox+e[5]*oy, bzz=sp.position.z+e[2]*ox+e[6]*oy;
-    auraB.position.set(bx-e[8]*bz,by-e[9]*bz,bzz-e[10]*bz);
-    auraF.position.set(bx+e[8]*bz,by+e[9]*bz,bzz+e[10]*bz);
-    for(const m of [auraB,auraF]){ m.quaternion.copy(cam.quaternion); m.scale.set(sx,sy,1); m.visible=true; }
-  } else { auraB.visible=auraF.visible=false; }
+  /* ---- shooter: mockup body (rim light + release flash) + aura ---- */
+  placeShooter(g,cam,S,amt,tight,Math.min(1,amt),release?(k-.92)/.08*0.3:0,-1);
+  /* ---- charged ball (mockup: shell 0.4, glow 0.22 x charge) ---- */
+  mockBall(A,S);
+  const b0=c._bw, chg=sm(.2,.9,k);
+  if(b0){ shell.visible=bglow.visible=true;
+    shell.position.set(b0.x,b0.y,b0.z); shell.scale.setScalar(0.2*S*(1.45+0.15*Math.sin(fxT*30)));
+    shell.material.uniforms.op.value=chg*0.4;
+    bglow.material.color.copy(COL.v); bglow.position.set(b0.x,b0.y,b0.z); bglow.scale.setScalar(1.0*S);
+    bglow.material.opacity=chg*0.22*(breath?0.3:1); }
 
   /* ---- pillar + ground seal ---- */
   const y0=0;
@@ -290,7 +336,7 @@ C3.holdFrame=function(c,rdt,A){
 
   /* ---- held breath: the whole frame drains of colour ---- */
   setFilter(breath?'saturate(0.2) brightness(0.78) contrast(1.15)':'');
-  if(A.bloom&&A.fxBase){ A.bloom.strength=(A.fxBase.bloom||1)*0.55; A.bloom.threshold=Math.max(A.fxBase.bloomThresh||0,0.82); }
+  setBloom(A,0.6);
 
   drawOverlay(c,A,k,breath,release,tremble,S);
   return true;
@@ -351,13 +397,14 @@ function drawOverlay(c,A,k,breath,release,tremble,S){
 C3.hide=function(){
   fxT=0; if(!imp) setFilter('');
   if(!C3.built) return;
-  for(const o of [auraB,auraF,pillar,seal]) o.visible=false;
-  for(const pl of [glow,rocks]) for(let i=0;i<pl.N;i++){ const k=pl.kind[i]; if(k===0||k===1||k===3) pl.life[i]=0; }
+  if(!imp){ for(const o of [auraB,auraF,pillar,seal]) o.visible=false; releaseShooter(); }
+  else pillar.visible=false;
+  for(const pl of [glow,rocks]) for(let i=0;i<pl.N;i++){ const k=pl.kind[i]; if(k===0||k===1||(k===3&&!imp)) pl.life[i]=0; }
   if(!imp){ glow.pts.visible=rocks.pts.visible=false; }
 };
 /* end = the whole cinematic is over (cineEnd / abort) */
 C3.end=function(){
-  C3.hide(); imp=null; setFilter('');
+  imp=null; C3.hide(); setFilter(''); releaseShooter();
   if(!C3.built) return;
   glow.life.fill(0); rocks.life.fill(0); glow.pts.visible=rocks.pts.visible=false;
   for(const w of waves){ w.t=-1; w.m.visible=false; }
@@ -375,8 +422,18 @@ C3.impact=function(c,A){
   const S=A.hh/1.8, C=COL.v.set(A.col||'#3ec8ff');
   let dx=A.gwx-A.swx, dz=A.gwz-A.swz; const L=Math.hypot(dx,dz)||1; dx/=L; dz/=L;
   const bx=A.bx, by=A.by, bz=A.bz;
-  imp={t:0,S,bx,by,bz};
-  c._hitStop=Math.max(c._hitStop||0,0.17);
+  /* mockup STRIKE: 0.2s side-on wind-through (cols 7,8) with the ball still
+     at the boot, THEN contact on col 9 + 0.17s freeze. Held by hit-stop so
+     game.js timing is untouched (the flight just starts 0.37s later). */
+  imp={t:-0.2,S,bx,by,bz,A,dx,dz,fired:false};
+  c._hitStop=Math.max(c._hitStop||0,0.2+0.17);
+  window.U11DBG&&U11DBG('[C3] strike');
+  return true;
+};
+function fireImpact(c,imp){
+  const S=imp.S, C=COL.v, A=imp.A, dx=imp.dx, dz=imp.dz, bx=imp.bx, by=imp.by, bz=imp.bz;
+  imp.fired=true;
+  try{ A.shake&&A.shake(0.32*S,450); }catch(e){}
   fireWave(waves[0],A.swx,0.05*S,A.swz,9*S,0.7,0.07);
   fireWave(waves[1],bx,by,bz,3.2*S,0.4,0.07);
   for(let i=0;i<150;i++){
@@ -394,8 +451,7 @@ C3.impact=function(c,A){
     rocks.life[i]=1.2; rocks.max[i]=1.2; } }
   glow.pts.visible=rocks.pts.visible=true;
   window.U11DBG&&U11DBG('[C3] impact');
-  return true;
-};
+}
 C3.needsCanvas=function(c){ return !!((imp&&imp.t<0.4)||(c&&c.mode==='fly')||(arr&&arr.t<0.7)||C3._dirty); };
 
 /* ═══ FLY FRAME ═══ every frame after the kick (fly / wait / out), after the
@@ -409,10 +465,22 @@ C3.flyFrame=function(c,rdt,A){
   if(A.cv&&A.ctx){ A.ctx.clearRect(0,0,A.cv.width,A.cv.height); C3._dirty=false; }
   comet(c,dt,A);
   arrival(c,dt,A);
-  if(!imp) return;
+  if(!imp){ setBloom(A,arr&&arr.goal&&arr.t<0.4?0.9:0.6); mockBall(A,fl?fl.S:A.hh/1.8); return; }
   const S=imp.S; imp.t+=dt;
   const e=imp.t;
-  setFilter(e<0.06?'invert(1) grayscale(1) contrast(5)':e<0.11?'grayscale(1) contrast(4) brightness(1.3)':e<0.17?'saturate(1.6) brightness(1.2)':'');
+  if(e>=0&&!imp.fired) fireImpact(c,imp);
+  mockBall(A,S);
+  setBloom(A,e>=0&&e<0.3?1.0:0.6);
+  /* shooter through the strike: cols 7,8 before contact, then the game's
+     own contact/follow-through frames; rim + aura bleed off (mockup) */
+  const sa=Math.max(0,0.9-(e+0.2)*3.2);
+  if(e<0.6&&A.g){ placeShooter(A.g,cam,S,sa,0,sa*0.6,0,e<-0.1?7:e<0?8:-1);
+    seal.material.uniforms.amt.value=Math.max(0,0.8-(e+0.2)*4); seal.material.uniforms.crack.value=Math.max(0,.8-(e+0.2)*2); seal.material.uniforms.time.value+=dt; }
+  else { releaseShooter(); auraB.visible=auraF.visible=seal.visible=false; }
+  if(e<0){
+    if(A.cv&&A.ctx){ C3._dirty=true; const g=A.ctx,W=A.cv.width,H=A.cv.height,bh=H*0.085; g.fillStyle='#000'; g.fillRect(0,0,W,bh); g.fillRect(0,H-bh,W,bh); }
+    return; }
+  setFilter(e<0?'':e<0.06?'invert(1) grayscale(1) contrast(5)':e<0.11?'grayscale(1) contrast(4) brightness(1.3)':e<0.17?'saturate(1.6) brightness(1.2)':'');
   const wdt=dt*(e<0.17?0.25:1);
   for(const w of waves){ if(w.t<0) continue; w.t+=wdt; const k=w.t/w.dur;
     if(k>=1){ w.t=-1; w.m.visible=false; continue; }
@@ -473,7 +541,7 @@ function comet(c,dt,A){
     const span=0.3, tm=fl.now;
     for(let i=0;i<TRN;i++) histAt(H,tm-(i/(TRN-1))*span,trail.pts[i]);
   }
-  const BR=Math.max(0.2*S,(A.ballR||0)*0.9);
+  const BR=0.2*S;
   const vis=fl.op>0.01;
   for(const r of [trail,strandA,strandB]){ r.mesh.visible=vis; r.mat.uniforms.time.value=performance.now()/1000; }
   if(vis){
@@ -492,11 +560,12 @@ function comet(c,dt,A){
     strandA.update(A.camera,s=>BR*0.35*(1-s)); strandB.update(A.camera,s=>BR*0.35*(1-s));
     strandA.mat.uniforms.op.value=strandB.mat.uniforms.op.value=fl.op*0.9;
   }
-  const bd=A.ballR||BR;
+  const bd=BR;
   shell.visible=bglow.visible=vis;
   shell.position.set(b.x,b.y,b.z); shell.scale.setScalar(bd*(1.45+0.15*Math.sin(performance.now()/33)));
   shell.material.uniforms.op.value=0.9*fl.op;
-  bglow.material.color.copy(C); bglow.position.set(b.x,b.y,b.z); bglow.scale.setScalar(Math.max(2.0*S,bd*4)); bglow.material.opacity=0.55*fl.op;
+  if(c.mode==='fly'&&imp&&imp.t<0){ shell.material.uniforms.op.value=0.4; bglow.material.opacity=0.22; bglow.scale.setScalar(1.0*S); }
+  bglow.material.color.copy(C); bglow.position.set(b.x,b.y,b.z); bglow.scale.setScalar(2.4*S); bglow.material.opacity=0.7*fl.op;
   // sparks off the comet + dust where it skims the turf
   if(c.mode==='fly'&&!(c._hitStop>0)&&dt>0){
     for(let i=0;i<5;i++){ const w=Math.random()<.4;
@@ -520,7 +589,7 @@ function comet(c,dt,A){
   // flight overlay: letterbox retracting + streaks against the ball's screen travel
   if(A.cv&&A.ctx&&c.mode==='fly'){
     const W=A.cv.width,Hh=A.cv.height,g=A.ctx; C3._dirty=true;
-    const lb=Math.max(0,1-(imp?imp.t:1)*3);
+    const it=imp?imp.t:1, lb=it<0.2?1:Math.max(0,1-(it-0.2)*3);
     if(lb>0){ g.fillStyle='#000'; const bh=Hh*0.085*lb; g.fillRect(0,0,W,bh); g.fillRect(0,Hh-bh,W,bh); }
     const p0=A.proj(trail.pts[4].x,trail.pts[4].y,trail.pts[4].z,W,Hh), bp=A.proj(b.x,b.y,b.z,W,Hh);
     let dx=bp.x-p0.x, dy=bp.y-p0.y; const L=Math.hypot(dx,dy);
