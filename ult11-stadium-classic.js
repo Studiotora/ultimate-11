@@ -52,7 +52,7 @@ function buildCrowd(T,model,state){
   }
   var texture=new T.CanvasTexture(canvas);texture.magFilter=T.NearestFilter;texture.minFilter=T.NearestFilter;
   texture.generateMipmaps=false;state.crowdTexture=texture;
-  var uniforms={atlas:{value:texture},time:{value:0},eye:{value:new T.Vector3()},home:{value:new T.Color(colors.homeCol)},away:{value:new T.Color(colors.awayCol)},homeAlt:{value:new T.Color()},awayAlt:{value:new T.Color()},homeAccent:{value:new T.Color()},awayAccent:{value:new T.Color()},cheer:{value:0},winner:{value:0}};
+  var uniforms={atlas:{value:texture},time:{value:0},eye:{value:new T.Vector3()},home:{value:new T.Color(colors.homeCol)},away:{value:new T.Color(colors.awayCol)},homeAlt:{value:new T.Color()},awayAlt:{value:new T.Color()},homeAccent:{value:new T.Color()},awayAccent:{value:new T.Color()},cheer:{value:0},winner:{value:0},standLight:{value:.9}};
   var material=new T.ShaderMaterial({uniforms:uniforms,side:T.DoubleSide,depthWrite:true,
     vertexShader:`attribute vec3 anchor;attribute vec4 fan;attribute vec2 facing;varying vec2 tileUV;varying float team;varying float shade;varying float outfit;uniform float time;uniform vec3 eye;uniform float cheer;uniform float winner;
     void main(){float near=1.-smoothstep(24.,48.,distance(eye,anchor));float motion=fan.z*near;float celebrate=cheer*(1.-step(.1,abs(fan.y-winner)));
@@ -63,11 +63,13 @@ function buildCrowd(T,model,state){
     vec3 p=anchor+vec3(right.x*position.x,position.y,right.y*position.x);
     p.y+=max(0.,sin(time*(3.5+celebrate*3.)+fan.w))*motion*(.018+celebrate*.13);
     gl_Position=projectionMatrix*modelViewMatrix*vec4(p,1.);}`,
-    fragmentShader:`uniform sampler2D atlas;uniform vec3 home;uniform vec3 away;uniform vec3 homeAlt;uniform vec3 awayAlt;uniform vec3 homeAccent;uniform vec3 awayAccent;varying float outfit;varying vec2 tileUV;varying float team;varying float shade;
+    fragmentShader:`uniform sampler2D atlas;uniform vec3 home;uniform vec3 away;uniform vec3 homeAlt;uniform vec3 awayAlt;uniform vec3 homeAccent;uniform vec3 awayAccent;uniform float standLight;varying float outfit;varying vec2 tileUV;varying float team;varying float shade;
     void main(){vec4 p=texture2D(atlas,tileUV);if(p.a<.5)discard;vec3 shirt=mix(home,away,team);
     if(outfit>.55)shirt=mix(homeAlt,awayAlt,team);if(outfit>.68)shirt=mix(homeAccent,awayAccent,team);
     if(outfit>.76)shirt=vec3(.17,.20,.25);if(outfit>.81)shirt=vec3(.60,.57,.49);if(outfit>.86)shirt=vec3(.79,.78,.70);if(outfit>.91)shirt=vec3(.36,.41,.39);if(outfit>.96)shirt=vec3(.40,.29,.25);
-    if(p.g>.65&&p.r<.1&&p.b<.1)p.rgb=shirt*p.g;gl_FragColor=vec4(p.rgb*shade,1.);}`});
+    if(p.g>.65&&p.r<.1&&p.b<.1)p.rgb=shirt*p.g;
+    float lamp=0.88+0.12*sin(tileUV.x*100.0+team*3.0);
+    gl_FragColor=vec4(p.rgb*shade*standLight*lamp,1.);}`});
   state.crowdUniforms=uniforms;state.crowdStats={spectators:0,animated:0,flags:0,batches:0};
   state.flashSpots=[];var batches={},parents={},seed=731;
   function rnd(){seed=(Math.imul(seed,1664525)+1013904223)>>>0;return seed/4294967296;}
@@ -141,6 +143,58 @@ function buildStandShell(T,model,state){
   });
 }
 
+// Seat finish: broad lighting and fine seat-to-seat variation without extra meshes.
+// This is attached only to the imported seat materials, so the original geometry
+// and the near-side camera sectors keep their existing behaviour.
+function finishSeats(material){
+  material.onBeforeCompile=function(shader){
+    shader.vertexShader='varying vec3 vAstraSeat;\n'+shader.vertexShader;
+    shader.vertexShader=shader.vertexShader.replace('#include <begin_vertex>',
+      '#include <begin_vertex>\n vAstraSeat=(modelMatrix*vec4(position,1.0)).xyz;');
+    shader.fragmentShader='varying vec3 vAstraSeat;\n'+shader.fragmentShader;
+    shader.fragmentShader=shader.fragmentShader.replace('#include <color_fragment>',
+      '#include <color_fragment>\n'+
+      'float seatNoise=fract(sin(dot(floor(vAstraSeat.xz*2.6),vec2(127.1,311.7)))*43758.5453);\n'+
+      'float aisleGlow=pow(max(0.0,1.0-abs(sin(vAstraSeat.x*0.22))),18.0);\n'+
+      'diffuseColor.rgb*=mix(0.80,1.08,seatNoise)*(0.91+0.10*aisleGlow);');
+  };
+  material.customProgramCacheKey=function(){return 'astra-seat-finish-v1';};
+  material.needsUpdate=true;
+}
+
+// Thin strips trace the real tier edges. All strips share one draw call and
+// stay attached to camera sectors so no foreground ribbon crosses gameplay.
+function buildConcourse(T,model,state){
+  var parents={},batches={};
+  model.traverse(function(o){if(o.name==='bowl_fixed'||/^front_\d\d$/.test(o.name))parents[o.name]=o;});
+  function outline(off){var hx=60+off,hy=40+off,r=12+off*.14,p=[];
+    [[hx-r,hy-r,0],[-hx+r,hy-r,90],[-hx+r,-hy+r,180],[hx-r,-hy+r,270]].forEach(function(q){
+      if(q[2]===270)p.push([-12,-hy],[12,-hy]);for(var i=0;i<9;i++){var a=(q[2]+i*90/8)*Math.PI/180;p.push([q[0]+r*Math.cos(a),q[1]+r*Math.sin(a)]);}});return p;}
+  [[10.9,6.10],[19.85,12.45],[28.35,20.30]].forEach(function(t,tier){
+    var path=outline(t[0]);
+    for(var i=0;i<path.length;i++){
+      var a=path[i],b=path[(i+1)%path.length],count=Math.max(1,Math.ceil(Math.hypot(b[0]-a[0],b[1]-a[1])/2));
+      for(var j=0;j<count;j++){
+        var x0=a[0]+(b[0]-a[0])*j/count,z0=a[1]+(b[1]-a[1])*j/count;
+        var x1=a[0]+(b[0]-a[0])*(j+1)/count,z1=a[1]+(b[1]-a[1])*(j+1)/count;
+        var key=(z0+z1)<-60?'front_'+String(Math.max(0,Math.min(11,Math.floor(((x0+x1)*.5+96)/16)))).padStart(2,'0'):'bowl_fixed';
+        var arr=batches[key]||(batches[key]={p:[],uv:[]}),h=t[1],s=2/3;
+        var quad=[[x0,h-.065,z0,0,0],[x1,h-.065,z1,1,0],[x1,h+.065,z1,1,1],[x0,h+.065,z0,0,1]];
+        [0,1,2,0,2,3].forEach(function(q){var v=quad[q];arr.p.push(v[0]*s,v[1]*s,-v[2]*s);arr.uv.push((j+v[3])*0.25+tier*0.17,v[4]);});
+      }
+    }
+  });
+  var uniforms={time:{value:0}};
+  var mat=new T.ShaderMaterial({uniforms:uniforms,side:T.DoubleSide,depthWrite:false,transparent:true,
+    vertexShader:'varying vec2 vUv; void main(){vUv=uv;gl_Position=projectionMatrix*modelViewMatrix*vec4(position,1.0);}',
+    fragmentShader:'uniform float time;varying vec2 vUv;void main(){float module=step(.08,fract(vUv.x));float pulse=.92+.08*sin(time*.8+vUv.x*3.0);vec3 navy=vec3(.025,.075,.13);vec3 cyan=vec3(.12,.51,.75);vec3 amber=vec3(.90,.53,.17);float accent=step(.84,fract(vUv.x*.29));vec3 ink=mix(cyan,amber,accent);float edge=smoothstep(0.,.2,vUv.y)*(1.-smoothstep(.8,1.,vUv.y));gl_FragColor=vec4(mix(navy,ink,module*edge*.74)*pulse,.94);}',
+    fog:false});
+  state.concourseUniforms=uniforms;
+  Object.keys(batches).forEach(function(key){var b=batches[key],g=new T.BufferGeometry();g.setAttribute('position',new T.Float32BufferAttribute(b.p,3));g.setAttribute('uv',new T.Float32BufferAttribute(b.uv,2));
+    var mesh=new T.Mesh(g,mat);mesh.name='astra_concourse_'+key;mesh.frustumCulled=false;(parents[key]||model).add(mesh);
+  });
+}
+
 function release(root){
   var gs=new Set(),ms=new Set();
   root.traverse(function(o){if(o.geometry)gs.add(o.geometry);if(o.material)(Array.isArray(o.material)?o.material:[o.material]).forEach(function(m){ms.add(m);});});
@@ -175,6 +229,7 @@ api.build=function(T,group,PLEN,PWID){
         var glowing=/^(Lamp|Amber)$/.test(name);
         var m=glowing?new T.MeshBasicMaterial({color:old.color}):new T.MeshLambertMaterial({color:old.color,side:T.DoubleSide});
         m.name=name;materials.set(name,m);
+        if(/^seats_(home|away|neutral)$/.test(name))finishSeats(m);
       }
       o.material=materials.get(name);o.castShadow=false;o.receiveShadow=false;
     });
@@ -183,6 +238,7 @@ api.build=function(T,group,PLEN,PWID){
     model.traverse(function(o){if(/^front_\d\d$/.test(o.name))state.sectors.push({node:o,box:new T.Box3().setFromObject(o)});});
     buildStandShell(T,model,state);
     buildCrowd(T,model,state);
+    buildConcourse(T,model,state);
     state.ready=true;api.status='ready';api.setTeamColors();
     return true;
   });
@@ -192,7 +248,9 @@ api.build=function(T,group,PLEN,PWID){
 api.update=function(camera){
   if(!active||!active.ready)return;
   var u=active.crowdUniforms,now=performance.now()/1000;
+  if(active.concourseUniforms)active.concourseUniforms.time.value=now;
   if(u){u.time.value=now;active.root.updateMatrixWorld(true);u.eye.value.copy(camera.position);active.root.worldToLocal(u.eye.value);
+    var light=window.P3D&&P3D.light;u.standLight.value=light?Math.max(.55,Math.min(1.15,1.07-(light.shade||0)*.28)):.93;
     if(typeof G!=='undefined'){
       var score=[G.hG||0,G.aG||0];
       if(active.score&&(score[0]>active.score[0]||score[1]>active.score[1])){active.cheerUntil=now+5;u.winner.value=score[0]>active.score[0]?0:1;}
