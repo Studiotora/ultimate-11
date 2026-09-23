@@ -2255,13 +2255,14 @@ function cpuCarrierPassV2(s,ds,cp){
   G._cpuDecideAt=now+AI2.decideCarrierMs[0]+Math.random()*(AI2.decideCarrierMs[1]-AI2.decideCarrierMs[0]);
   const B=BODY(), d=nearestDefenderDistance(s,cp);
   const close=d<AI2.closeBH*B, mid=!close&&d<AI2.midBH*B;
+  const plan=cpuPossessionPlan(s,ds,cp,now);
   // v3: the final ball - a cross from wide, or a pass in behind for a runner
   if(cpuCross(s,ds,cp,pl,close)) return true;
   if((!close||Math.random()<0.4)&&cpuThroughBall(s,ds,cp,pl,q)) return true;
   let want;
   if(close) want=0.50+0.25*q;                                   // pressed: usually moves it on
-  else if(mid) want=AI2.passMid*(bh.passBias||1);               // pressure coming: look for it
-  else want=AI2.passFree*(bh.passBias||1);                      // free: keep the ball moving now and then
+  else if(mid) want=Math.max(AI2.passMid,0.20)*(bh.passBias||1);
+  else want=Math.max(AI2.passFree,plan.passes<3?0.10:0.06)*(bh.passBias||1);
   if(Math.random()>=want) return false;
   /* Every team-mate by his lane, not only bestTeammateFor's pick - that pick
      often had a closed lane, so the free carrier "wanted" to pass and never
@@ -2269,19 +2270,47 @@ function cpuCarrierPassV2(s,ds,cp){
   const thr=close?-0.2:(mid?0.35:0.7);
   const mustGoForward=(G._cpuBackChain||0)>=2 && !close;      // no more square balls
   const here=progressFor(s,cp);
-  let tk=null, best=-1e9;
+  let tk=null, best=-1e9, lateral=null, lateralScore=-1e9;
   validOutfieldKeys(s).forEach(k=>{
     if(k===G.ck||ocd(s,k)||isOffside(s,k)) return;
     const ln=openPassLaneScore(s,G.ck,k);
     if(ln<=thr) return;
     const gain=progressFor(s,PP[s][k])-here;
-    if(mustGoForward&&gain<=0.02) return;
-    const sc=ln+progressFor(s,PP[s][k])*1.2+(mustGoForward?gain*3:0)+(Math.random()-0.5)*0.3;
+    const target=PP[s][k];
+    const laneFit=1-Math.min(1,Math.abs(target.y-plan.lane)/(H*.70));
+    const planBias=(plan.passes<3&&here<.68)?laneFit*1.35:0;
+    const returnPenalty=k===plan.previousCarrier?1.4:0;
+    const sc=ln+progressFor(s,target)*1.2+planBias-returnPenalty
+      +(mustGoForward?gain*3:0)+(Math.random()-0.5)*0.3;
+    if(mustGoForward&&gain<=0.02){
+      // If the forward lanes close, switch safely instead of dribbling into
+      // the block. Deep backward passes remain excluded.
+      if(gain>=-0.06&&k!==plan.previousCarrier&&laneFit>0.58&&sc>lateralScore){lateralScore=sc;lateral=k;}
+      return;
+    }
     if(sc>best){ best=sc; tk=k; }
   });
+  if(!tk&&mustGoForward) tk=lateral;
   if(!tk) return false;
   cpuDoPass(s,tk,pl);
   return true;
+}
+/* Keep one attacking direction across several CPU passes. Re-evaluate after
+   four seconds or a real advance. Pass safety still wins over this preference. */
+function cpuPossessionPlan(s,ds,cp,now){
+  const old=G._cpuPlan, here=progressFor(s,cp);
+  if(old&&old.side===s&&old.gen===G.goalGen&&old.half===G.half&&
+     now<old.until&&!(old.passes>=3&&here>old.start+.16)) return old;
+  const defenders=validOutfieldKeys(ds).map(k=>PP[ds][k]).filter(Boolean);
+  const wings=[H*.20,H*.80].map(y=>{
+    let crowd=0;
+    for(const p of defenders)
+      if(Math.abs(p.y-y)<H*.23&&Math.abs(p.x-cp.x)<W*.30) crowd++;
+    return crowd;
+  });
+  const wing=wings[0]===wings[1]?(cp.y<H*.5?0:1):(wings[0]<wings[1]?0:1);
+  return G._cpuPlan={side:s,gen:G.goalGen,half:G.half,lane:[H*.20,H*.80][wing],
+    start:here,passes:0,previousCarrier:null,until:now+4200};
 }
 /* Pass INTO SPACE ahead of a forward who is running (or sitting on the
    last defender's shoulder): only if he gets there before any defender or the
@@ -2352,6 +2381,10 @@ function cpuCross(s,ds,cp,pl,close){
 }
 function cpuDoPass(s,tk,pl,quick,point,kind){
   clearInterval(G.di);
+  if(G._cpuPlan&&G._cpuPlan.side===s){
+    G._cpuPlan.previousCarrier=G.ck;
+    G._cpuPlan.passes++;
+  }
   /* the "melina": the CPU knocked it sideways and backwards between its
      defenders for a minute (author, 2026-09-12). Count passes that make no
      ground - cpuCarrierPassV2 then demands a forward one. */
@@ -2455,15 +2488,14 @@ function aiMoveTo(cur,tx,ty,gait,pl,side,key,dt){
   moveMomentum(cur,ph,cur.x+vx*8,cur.y+vy*8,sp,pl,dt);
 }
 
-/* x the attacking side must stay behind: the second-last outfield defender
+/* x the attacking side must stay behind: the second-last opponent
    (same rule as isOffside), never inside their own half, never behind the ball. */
 function offsideLineX(s,cp){
   const ds=s==='h'?'a':'h', dir=dirFor(s);
-  const xs=validOutfieldKeys(ds).map(k=>PP[ds][k].x).sort((a,b)=>a-b);
-  if(!xs.length) return dir>0?W*0.93:W*0.07;
-  // GK is excluded above, so the offside line is the LAST outfield defender, not the second-last.
-  const last=dir>0?xs[xs.length-1]:xs[0];
-  return dir>0?Math.max(last,cp.x,W*0.5):Math.min(last,cp.x,W*0.5);
+  const xs=Object.keys(sq(ds)).filter(k=>sq(ds)[k]&&PP[ds][k]).map(k=>PP[ds][k].x).sort((a,b)=>a-b);
+  if(xs.length<2) return dir>0?W*0.93:W*0.07;
+  const secondLast=dir>0?xs[xs.length-2]:xs[1];
+  return dir>0?Math.max(secondLast,cp.x,W*0.5):Math.min(secondLast,cp.x,W*0.5);
 }
 
 /* ── Attacking jobs ────────────────────────────────────────────────────────
@@ -2474,7 +2506,10 @@ function offsideLineX(s,cp){
 const _aiJob={}; let _aiJobKey=null;
 function _aiJobsReset(s){
   const key=s+':'+G.goalGen+':'+G.half+':'+activeHomeFormation+':'+activeAwayFormation;
-  if(_aiJobKey!==key){ G._defPlan=null;G._teamTransitionUntil=Date.now()+850; for(const id in _aiJob) delete _aiJob[id]; _aiJobKey=key; G._supp=null; G._outlet=null; G._noOutlet=0; }
+  if(_aiJobKey!==key){
+    const turnover=_aiJobKey&&_aiJobKey.slice(1)===key.slice(1)&&_aiJobKey[0]!==key[0];
+    G._counterUntil=turnover?Date.now()+3000:0;               // the side that lost it presses for 3s
+    G._defPlan=null;G._cpuPlan=null;G._cpuBackChain=0;G._teamTransitionUntil=Date.now()+850; for(const id in _aiJob) delete _aiJob[id]; _aiJobKey=key; G._supp=null; G._outlet=null; G._noOutlet=0; }
 }
 /* The two players offering the short options: nearest non-forwards, one each
    side of the ball where possible. Kept ~1.4s across short passes so the jobs do not flicker. */
@@ -2487,10 +2522,12 @@ function supportersFor(s,cp,keys,prog){
     return true; });
   cand.sort((a,b)=>dist(PP[s][a],cp)-dist(PP[s][b],cp));
   // Keep the remaining support player when his partner becomes the carrier.
-  const pick=S?S.keys.filter(k=>cand.includes(k)&&dist(PP[s][k],cp)<W*.32):[];
-  let above=pick.find(k=>PP[s][k].y<cp.y)||null,below=pick.find(k=>PP[s][k].y>=cp.y)||null;
+  const kept=S?S.keys.filter(k=>cand.includes(k)&&dist(PP[s][k],cp)<W*.32):[];
+  let above=kept.find(k=>PP[s][k].y<cp.y)||null,below=kept.find(k=>PP[s][k].y>=cp.y)||null;
   for(const k of cand){ const up=PP[s][k].y<cp.y; if(up&&!above) above=k; if(!up&&!below) below=k; if(above&&below) break; }
-  if(pick.length<2&&above&&!pick.includes(above))pick.push(above);if(pick.length<2&&below&&!pick.includes(below))pick.push(below);
+  const pick=[];
+  if(above)pick.push(above);
+  if(below&&below!==above)pick.push(below);
   for(const k of cand){ if(pick.length>=2) break; if(!pick.includes(k)) pick.push(k); }
   const set=new Set(pick);
   G._supp={ck:G.ck,keys:pick,set,until:now+1400};
@@ -2512,7 +2549,7 @@ function outletsFor(s,cp,keys,ctx){
      advanced men (i.e. the strikers) to fetch it emptied the space ahead:
      measured forward options 0.45 against the old AI's 0.84. */
   const cand=keys.filter(k=>!ocd(s,k)&&!aiForward(s,k)&&aiRole(s,k)!=='centreback')
-    .sort((a,b)=>dist(PP[s][a],cp)-dist(PP[s][b],cp))
+    .sort((a,b)=>Number(ctx.supp.has(a))-Number(ctx.supp.has(b))||dist(PP[s][a],cp)-dist(PP[s][b],cp))
     .slice(0,2);
   const set=new Set(cand);
   G._outlet={ck:G.ck,set,until:now+1200,commitUntil:now+650};
@@ -2628,6 +2665,9 @@ function decideAttackJob(s,k,cp,ctx){
      wide, the far one tucks in at halfway as rest defence. */
   if(isFB&&ctx.prog>0.42&&now>=(G._teamTransitionUntil||0)){
     const sameSide=(p.y<0.5)?(cp.y<H*0.5):(cp.y>=H*0.5);
+    const overlapFree=!Object.keys(_aiJob).some(id=>id.startsWith(s+':')&&_aiJob[id].kind==='overlap'&&_aiJob[id].until>now);
+    if(sameSide&&ctx.prog>0.45&&overlapFree&&Math.random()<AI2.overlapChance)
+      return {kind:'overlap',until:dur(1500,2300)};
     return {kind:sameSide?'advance':'tuck',until:dur(900,1400)};
   }
   if(isFwd){
@@ -2639,10 +2679,6 @@ function decideAttackJob(s,k,cp,ctx){
       return {kind:'run',until:dur(1700,2600),hold:dur(350,900),lane:laneY,lead:W*(0.03+Math.random()*0.04)};
     }
     return {kind:striker?'hold':'width',until:dur(900,1500)};
-  }
-  if(isFB&&ctx.prog>0.45&&Date.now()>=(G._teamTransitionUntil||0)&&!Object.keys(_aiJob).some(id=>id.startsWith(s+':')&&_aiJob[id].kind==='overlap'&&_aiJob[id].until>now)){
-    const sameSide=(p.y<0.5)?(cp.y<H*0.45):(cp.y>H*0.55);   // ball on his flank
-    if(sameSide&&Math.random()<AI2.overlapChance) return {kind:'overlap',until:dur(1500,2300)};
   }
   return {kind:'shape',until:dur(900,1600)};
 }
@@ -2671,7 +2707,15 @@ function attackTarget(s,k,cp,j,ctx){
       if(j.pocketY==null)j.pocketY=bestY;ty=j.pocketY;gait='jog';break;
     }
     case 'width': tx=cp.x+dir*W*(ctx.prog<0.4?0.05:0.12); ty=(p.y<0.5)?H*0.07:H*0.93; gait='support'; break;
-    case 'box': tx=j.spot.x; ty=j.spot.y; gait='run'; break;
+    case 'box': {
+      /* TIMED run: wait short of the spot, attack it as the cross is struck
+         (or the carrier reaches the byline). A man already standing on the
+         spot is beaten to it by the defender every time. */
+      const kq=G._kick, bt=ballTravel;
+      const go=(kq&&kq.side===s)||(G.phase==='pass_anim'&&bt&&bt.active&&bt.side===s&&bt.kind==='cross')||ctx.prog>0.84;
+      if(go||j.spot.id==='edge'){ tx=j.spot.x; ty=j.spot.y; gait='run'; }
+      else { tx=j.spot.x-dir*W*.075; ty=lerp(j.spot.y,cp.y,.15); gait='jog'; }
+      break; }
     case 'advance': { const wb=aiRole(s,k)==='wingback';
       tx=cp.x-dir*W*(wb?0.02:0.06); ty=(p.y<0.5)?H*0.08:H*0.92; gait='support'; break; }
     case 'tuck': { const lp=clamp(ctx.prog-0.30,0.30,0.50);
@@ -2713,6 +2757,12 @@ function defensivePlan(s,ds,cp,line,offsets,dt){
     let deep=1;
     validOutfieldKeys(s).forEach(k=>{ if(k===G.ck||ocd(s,k)) return; const d=1-progressFor(s,PP[s][k]); if(d<deep) deep=d; });
     if(free&&deep<line+0.02) line=Math.max(0.155,Math.min(line,deep-0.02));
+    /* STEP UP together: on a backward pass, or when the carrier is pressed and
+       nobody is running in behind, the line pushes out and leaves forwards offside. */
+    const bt=ballTravel, backPass=G.phase==='pass_anim'&&bt&&bt.physicalPass&&bt.side===s&&bt.kind!=='cross'
+      &&progressFor(s,{x:bt.tx,y:bt.ty})<progressFor(s,{x:bt.fx,y:bt.fy})-0.04;
+    if(backPass) line=Math.min(0.62,line+0.06);
+    else if(!free&&deep>line+0.03) line=Math.min(0.62,line+0.025);
   }
   plan.ballY=lerp(plan.ballY,cp.y,blend);plan.line=lerp(plan.line,line,blend*(line<plan.line?1.8:1));   // drop faster than step up
   const goal=ownGoalXFor(ds),prog=progressFor(s,cp),transition=now<(G._teamTransitionUntil||0);
@@ -2724,13 +2774,17 @@ function defensivePlan(s,ds,cp,line,offsets,dt){
     plan.anchors[k]={x:clamp((dir>0?lp:1-lp)*W,W*.08,W*.92),y:defShiftY(p.y*H,plan.ballY,shift),zone:z};
   }
   const available=k=>keys.includes(k)&&!ocd(ds,k)&&!isStalled(ds,k)&&!isBlocking(ds,k)&&!lungeActive(ds,k);
-  const wantsPress=!transition&&((ds==='h'&&G.pressing)||(isCpuSide(ds)&&teamStance(ds)>.55));
+  const counter=now<(G._counterUntil||0);
+  const wantsPress=counter||(!transition&&((ds==='h'&&G.pressing)||(isCpuSide(ds)&&teamStance(ds)>.55)));
   if(!wantsPress)plan.presser=null;
-  else if(!plan.presser||!available(plan.presser)||dist(PP[ds][plan.presser],cp)>W*.20||plan.presser===ROLES.engager||plan.presser===ROLES.cover){
+  else if(!plan.presser||!available(plan.presser)||dist(PP[ds][plan.presser],cp)>W*(counter?.24:.20)||plan.presser===ROLES.engager||plan.presser===ROLES.cover){
     // Extra pressure comes from midfield, never by pulling both centre-backs out.
-    plan.presser=keys.filter(k=>available(k)&&k!==ROLES.engager&&k!==ROLES.cover&&aiZone(ds,k)==='mid'&&dist(PP[ds][k],cp)<W*.18)
+    // Counter-press (just lost it): whoever is closest, bar the centre-backs.
+    plan.presser=keys.filter(k=>available(k)&&k!==ROLES.engager&&k!==ROLES.cover
+        &&(counter?aiRole(ds,k)!=='centreback':aiZone(ds,k)==='mid')&&dist(PP[ds][k],cp)<W*(counter?.22:.18))
       .sort((a,b)=>dist(PP[ds][a],cp)-dist(PP[ds][b],cp))[0]||null;
   }
+  plan.counter=counter;
   const legal=(k,ak)=>{
     const a=plan.anchors[k],p=PP[s][ak];
     if(!a||!p||!sq(s)[ak]||ocd(s,ak)||ak===G.ck||!available(k)||k===ROLES.engager||k===ROLES.cover||k===plan.presser||a.zone==='att')return false;
@@ -2775,14 +2829,20 @@ function defensiveTarget(s,ds,k,cp,plan){
     const p=PP[s][plan.marks[k]],dx=plan.goal-p.x,dy=H*.5-p.y,d=Math.hypot(dx,dy)||1;
     const bx=cp.x-p.x,by=cp.y-p.y,bd=Math.hypot(bx,by)||1;
     const danger=Math.abs(p.x-plan.goal)<W*.16;                 // in or near our box: stay tight
-    const gap=danger?W*.022:W*(.022+.035*clamp((bd-W*.12)/(W*.25),0,1));
-    const tx=p.x+dx/d*gap*.8+bx/bd*gap*.6, ty=p.y+dy/d*gap*.8+by/bd*gap*.6;
+    const far=danger?0:clamp((bd-W*.14)/(W*.22),0,1);          // 0 near the ball .. 1 far from it
+    const gap=W*(.022+.035*far);
+    let tx=p.x+dx/d*gap*.8+bx/bd*gap*.6, ty=p.y+dy/d*gap*.8+by/bd*gap*.6;
+    /* Away from the ball a marker is a ZONE player who watches his man: he
+       sits between his slot and the man, on the ball side (in the lane),
+       rather than standing on him - that is what left the carrier with no
+       open man ahead. Near the ball / in the box he marks tight. */
+    if(far>0&&!danger){ const z=.45*far; tx=lerp(tx,anchor.x,z); ty=lerp(ty,lerp(anchor.y,cp.y,.25),z); }
     bounded(tx,ty);
     if((tx-anchor.x)*dir<0) x=clamp(tx,W*.08,W*.92);            // follow a runner toward our goal
     gait='track';
   }else if(k===ROLES.blocker){bounded(lerp(cp.x,plan.goal,.28),lerp(cp.y,H*.5,.22));gait='track';}
   // Beaten players recover through their own corridor rather than joining a scrum.
-  if(plan.transition&&anchor.zone!=='att'&&(cur.x-cp.x)*dir>W*.025){x=anchor.x;y=anchor.y;gait='run';}
+  if((plan.transition||plan.counter)&&k!==plan.presser&&anchor.zone!=='att'&&(cur.x-cp.x)*dir>W*.025){x=anchor.x;y=anchor.y;gait='run';}
   return {x:clamp(x,W*.08,W*.92),y:clamp(y,H*.04,H*.96),gait};
 }
 
@@ -5270,6 +5330,20 @@ function togglePassMode(){ if(G.poss!=='h'||G.phase!=='moving'||!G.ck) return; G
 // □ in open play: pass to the teammate that best lines up with the way
 // you're aiming the stick/d-pad (G_inputVec) — true angle, not just L/R.
 // Neutral stick → pass forward (toward the attacking goal).
+/* Where a team-mate running forward will be when a ground pass reaches him
+   (his pace x the flight time). null if he is not running forward. */
+function runLeadPoint(s,k,from){
+  const r=PP[s][k], ph=_phys[s+':'+k], pl=sq(s)[k]; if(!r||!ph||!pl) return null;
+  const dir=dirFor(s), vx=ph.vx||0, vy=ph.vy||0, sp=Math.hypot(vx,vy), rs=aiTop(pl,s);
+  if(sp<rs*0.5||vx*dir<sp*0.5||(r.x-from.x)*dir<W*.02) return null;
+  const gx=goalXFor(s); let T=8, px=r.x, py=r.y;
+  for(let it=0;it<3;it++){
+    const len=sp*T; px=r.x+vx/sp*len; py=clamp(r.y+vy/sp*len,H*.08,H*.92);
+    px=dir>0?Math.min(px,gx-W*.035):Math.max(px,gx+W*.035);
+    T=Math.max(8,Math.hypot(px-from.x,py-from.y)/(W*.012));
+  }
+  return {x:px,y:py};
+}
 function directionalPass(kind='ground'){
   if(G.phase!=='moving'||!G.ck)return;
   const s=G.poss, sq2=sq(s);
@@ -5302,8 +5376,9 @@ function directionalPass(kind='ground'){
   if(G._kick) return;                              // already winding one up
   if(isOffside(s,best)){callOffside(s,best);return;}
   G_moveTarget=null;
-  const _to=PP[s][best];
-  kickOr(s,'pass',()=>launchPass(s,best,kind),{tx:_to&&_to.x,ty:_to&&_to.y,wind:kind==='cross'?KICK.crossWind:KICK.passWind});
+  const _lead=kind==='ground'?runLeadPoint(s,best,cp):null;      // a runner gets it in front of him
+  const _to=_lead||PP[s][best];
+  kickOr(s,'pass',()=>launchPass(s,best,kind,_lead||undefined),{tx:_to&&_to.x,ty:_to&&_to.y,wind:kind==='cross'?KICK.crossWind:KICK.passWind});
 }
 
 // ── DEFENSIVE PLAYER SWITCH (✕ while defending) ───────────────────
@@ -6151,12 +6226,11 @@ function isOffside(side,receiverKey){
   if(!inOpponentHalf) return false;
   const aheadOfBall = dir>0 ? receiver.x > carrier.x + W*.015 : receiver.x < carrier.x - W*.015;
   if(!aheadOfBall) return false;
-  const defXs=Object.keys(sq(defSide)).filter(k=>sq(defSide)[k]&&PP[defSide][k]&&k!=='GK').map(k=>PP[defSide][k].x);
-  if(!defXs.length) return false;
+  const defXs=Object.keys(sq(defSide)).filter(k=>sq(defSide)[k]&&PP[defSide][k]).map(k=>PP[defSide][k].x);
+  if(defXs.length<2) return false;
   defXs.sort((a,b)=>a-b);
-  // GK excluded above: second-last opponent = the LAST outfield defender
-  const lastOut = dir>0 ? defXs[defXs.length-1] : defXs[0];
-  const line = dir>0 ? Math.max(lastOut, carrier.x) : Math.min(lastOut, carrier.x);
+  const secondLast = dir>0 ? defXs[defXs.length-2] : defXs[1];
+  const line = dir>0 ? Math.max(secondLast, carrier.x) : Math.min(secondLast, carrier.x);
   const buffer = W*0.012;
   return dir>0 ? receiver.x > line + buffer : receiver.x < line - buffer;
 }
