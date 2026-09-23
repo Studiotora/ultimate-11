@@ -429,6 +429,21 @@
       apronMesh.rotation.x=-Math.PI/2; apronMesh.position.y=-0.05;
       scene.add(apronMesh);
     }
+    /* bulging nets (see buildGoals). netHit(side,z,y): side = sign of the goal's world x */
+    const NETS={};
+    function netHit(side,z,y){ const N=NETS[side]; if(!N) return; N.t=0; N.hz=z; N.hy=y; }
+    P3D.netHit=netHit;
+    function tickNets(dt){
+      for(const k in NETS){ const N=NETS[k]; if(N.t<0) continue;
+        N.t+=dt; const a=N.geo.attributes.position, b=N.base, t=N.t;
+        if(t>4){ for(let i=0;i<b.length;i++) a.array[i]=b[i]; a.needsUpdate=true; N.t=-1; continue; }
+        const amp=(1.35*Math.exp(-t*3.2)*Math.cos(t*9)+0.35*Math.exp(-t*1.2))*N.DEP/1.6*(1-Math.min(1,Math.max(0,(t-3)/1)));
+        const sc=N.HW/3.66, s2=sc*sc;
+        for(let i=0;i<b.length/3;i++){ const y=b[i*3+1], z=b[i*3+2];
+          const d2=((y-N.hy)*(y-N.hy)*1.6+(z-N.hz)*(z-N.hz))/s2;
+          a.array[i*3]=b[i*3]+N.side*amp*Math.exp(-d2/1.6); }
+        a.needsUpdate=true; }
+    }
     function buildGoals(){
       goalGroup.clear();
       // net = repeating diamond-mesh canvas texture (reads as real netting)
@@ -480,28 +495,29 @@
           l2.rotation.z=side*Math.atan2(DEP-TOPD,GH);
           g.add(l2);
         });
-        // ── NET PANELS (each sized + UV-repeated so the mesh is continuous) ──
-        // roof: front crossbar → top-back rail (horizontal)
-        const roof=new T.Mesh(new T.PlaneGeometry(TOPD,HW*2),netMatFor(TOPD*NPM,HW*2*NPM));
-        roof.rotation.set(-Math.PI/2,0,0);        // flat: local x→world X (depth), y→Z (span)
-        roof.position.set((gx+tx)/2,GH,0); g.add(roof);
-        // back: top-back rail → ground bar (slanted, edges meet both rails)
-        const slant=Math.hypot(DEP-TOPD,GH);
-        const back=new T.Mesh(new T.PlaneGeometry(HW*2,slant),netMatFor(HW*2*NPM,slant*NPM));
-        back.position.set((tx+bx)/2,GH/2,0);
-        back.rotation.y=Math.PI/2;
-        back.rotation.x=side*Math.atan2(DEP-TOPD,GH);
-        g.add(back);
-        // sides: true profile polygon (front post → top link → slope → ground)
-        [-HW,HW].forEach(z=>{
-          const sh=new T.Shape();
-          sh.moveTo(0,0); sh.lineTo(0,GH); sh.lineTo(side*TOPD,GH); sh.lineTo(side*DEP,0);
-          sh.closePath();
-          const sd=new T.Mesh(new T.ShapeGeometry(sh),netMatFor(DEP*NPM,GH*NPM));
-          // ShapeGeometry lies in XY = exactly a side panel's plane (normal = Z)
-          sd.position.set(gx,0,z);
-          g.add(sd);
-        });
+        // ── NET: white line grid (the approved cine3 mockup look). The back
+        //    panel is a displaceable grid so a goal can bulge it: P3D.netHit.
+        {
+          const nm=new T.LineBasicMaterial({color:0xffffff,transparent:true,opacity:0.34,depthWrite:false});
+          const NZ=26, NY=12, base=[], idx=[];
+          for(let j=0;j<=NY;j++){ const f=j/NY, x=bx+(tx-bx)*f, y=GH*f;       // j=0 ground-back .. NY top-back
+            for(let i=0;i<=NZ;i++) base.push(x,y,-HW+2*HW*i/NZ); }
+          for(let j=0;j<=NY;j++) for(let i=0;i<=NZ;i++){ const k=j*(NZ+1)+i;
+            if(i<NZ) idx.push(k,k+1); if(j<NY) idx.push(k,k+NZ+1); }
+          const bgeo=new T.BufferGeometry(); bgeo.setAttribute('position',new T.Float32BufferAttribute(base.slice(),3)); bgeo.setIndex(idx);
+          const backL=new T.LineSegments(bgeo,nm); backL.frustumCulled=false; g.add(backL);
+          const st=[];
+          for(let i=0;i<=NZ;i++){ const z=-HW+2*HW*i/NZ; st.push(gx,GH,z, tx,GH,z); }      // roof
+          for(let k=0;k<=3;k++){ const x=gx+(tx-gx)*k/3; st.push(x,GH,-HW, x,GH,HW); }
+          [-HW,HW].forEach(z=>{                                                       // side profiles
+            for(let k=0;k<=8;k++){ const ax=DEP*k/8, x=gx+side*ax;
+              const h=ax<=TOPD?GH:GH*(1-(ax-TOPD)/(DEP-TOPD)); st.push(x,0,z, x,h,z); }
+            for(let m=0;m<=8;m++){ const y=GH*m/8, xb=bx+(tx-bx)*(y/GH); st.push(gx,y,z, xb,y,z); }
+          });
+          const sgeo=new T.BufferGeometry(); sgeo.setAttribute('position',new T.Float32BufferAttribute(st,3));
+          g.add(new T.LineSegments(sgeo,nm));
+          NETS[side]={geo:bgeo,base,t:-1,hy:0,hz:0,HW,DEP,side};
+        }
         goalGroup.add(g);
       });
     }
@@ -1611,6 +1627,7 @@
            all of the drop lands in the final ~20% of the flight.
            Ends at exactly 4 = the hover height 'wait' mode takes over at, so
            there is no snap on the handoff (v1 ended at 1.6 and jumped). */
+        if(window.U11_CINE3&&U11_CINE3.on) return 4*fe+64*Math.sin(Math.PI*Math.pow(fe,1.45));   // mockup drive
         const P=0.62, peak=58;
         const up=Math.pow(Math.min(1,fe/P),0.55);
         const k=Math.max(0,(fe-P)/(1-P));
@@ -3536,6 +3553,7 @@
     function cineEnd(){
       if(!cine)return;
       try{hideHoldFx();_fxT=0;}catch(e){}
+      try{ if(window.U11_CINE3) U11_CINE3.end(); }catch(e){}
       if(cine.v2)window.U11DBG&&U11DBG('[3D] cine v2 end');
       if(cine.shRestore){ const s2=cine.shRestore;
         if(s2.g&&s2.g.sprite){ s2.g.sprite.material.map=s2.map; s2.g.sprite.material.needsUpdate=true;
@@ -3617,6 +3635,16 @@
         const _CC=P3D.cine||{};
         cine._hitStop=Math.max(0,(_CC.hitStopMs!=null?_CC.hitStopMs:110))/1000;
         try{ shakeCam((_CC.shakeAmp!=null?_CC.shakeAmp:0.22),(_CC.shakeMs!=null?_CC.shakeMs:420)); }catch(e){}
+        /* ult11-cine3 owns the impact beat (hit-stop, impact frame, waves,
+           debris); the old ring/flash burst only runs when it is off. */
+        let _c3imp=false;
+        if(_c3on()){ try{
+          const _b=cine._bw||{x:ex2wx(cine.fx),y:0.3,z:ey2wz(cine.fy)};
+          _c3imp=U11_CINE3.impact(cine,{T,scene,camera,hh:PLEN*(P3D.spriteFrac!=null?P3D.spriteFrac:0.045),
+            bx:_b.x,by:_b.y,bz:_b.z,swx:ex2wx(cine.fx),swz:ey2wz(cine.fy),gwx:ex2wx(cine.gx),gwz:ey2wz(cine.gy),
+            col:((_trailFx&&_trailFx.col)||cine.col||'#ffd24a')});
+        }catch(e){ console.error('[C3] impact',e); window.U11DBG&&U11DBG('[C3] impact error: '+e.message); } }
+        if(!_c3imp){
         try{ kickBurst(cine); }catch(e){}
         try{ // kick burst flash (radial white), ~0.3s
           let b=document.getElementById('cine-burst');
@@ -3627,6 +3655,7 @@
             document.body.appendChild(b); }
           if(b.animate)b.animate([{opacity:0,transform:'scale(.6)'},{opacity:1,transform:'scale(1)'},{opacity:0,transform:'scale(1.35)'}],{duration:320,easing:'ease-out'});
         }catch(e){}
+        }
       },
       finish(o){
         if(!(cine&&cine.v2)){o&&o.onDone&&o.onDone();return;}
@@ -3831,10 +3860,18 @@
           if(Math.hypot(ddx,ddz)>1e-4){ _bAxis.set(ddz,0,-ddx).normalize(); ballMesh.rotateOnWorldAxis(_bAxis,dt*(c.style.kind==='power'?40:22)); } }
       }
       c._pbw={x:bwx,z:bwz};
-      try{ shotBallFx(c,bwx,bwy,bwz,d,(c.mode==='fly'||(c.mode==='out'&&c.isGoal)),c.mode==='wait'); }catch(e){}
-      if(c.mode==='fly'){ try{ drawFlyLines(c,dt,bwx,bwy,bwz); }catch(e){} }
-      if(c.mode==='out'&&c.ot>=0.55/1.20&&!c._impact){ c._impact=true; try{ impactBurst(c,bwx,bwy,bwz,d); }catch(e){} }
-      c._bw={x:bwx,y:bwy,z:bwz};
+      if(!_c3on()) try{ shotBallFx(c,bwx,bwy,bwz,d,(c.mode==='fly'||(c.mode==='out'&&c.isGoal)),c.mode==='wait'); }catch(e){}
+      if(c.mode==='fly'&&!_c3on()){ try{ drawFlyLines(c,dt,bwx,bwy,bwz); }catch(e){} }
+      if(c.mode==='out'&&c.ot>=0.55/1.20&&!c._impact){ c._impact=true;
+        let _c3a=false;
+        if(_c3on()){ try{
+          const _gwx=ex2wx(c.gx),_gwz=ey2wz(c.gy),_swx=ex2wx(c.fx),_swz=ey2wz(c.fy);
+          let _dx=_gwx-_swx,_dz=_gwz-_swz; const _L=Math.hypot(_dx,_dz)||1;
+          _c3a=U11_CINE3.arrive(c,{T,scene,camera,hh:PLEN*frac,bx:bwx,by:bwy,bz:bwz,isGoal:!!c.isGoal,
+            gwx:_gwx,gwz:_gwz,dx:_dx/_L,dz:_dz/_L,netHit:()=>netHit(Math.sign(_gwx)||1,bwz,bwy)});
+        }catch(e){ console.error('[C3] arrive',e); } }
+        if(!_c3a){ try{ impactBurst(c,bwx,bwy,bwz,d); }catch(e){} } }
+      c._bw={x:bwx,y:bwy,z:bwz}; c._bd=d;
     }
     // Cinematic keeper uses the single 4x4 gk sheet (gk_cine.png); the cinematic
     // dives live on rows 2-3. `col`,`row` are absolute grid cells (0..3).
@@ -3923,7 +3960,13 @@
         }catch(e){ console.error('[C3] hold',e); window.U11DBG&&U11DBG('[C3] hold error: '+e.message); U11_CINE3.on=false; }
         if(_ok){ applyShake(rdt||0); return; }
       }
-      if(c.mode==='hold'){
+      let _c3cam=false;
+      if(c.mode!=='hold'&&_c3on()){
+        try{ _c3cam=U11_CINE3.flyCam(c,rdt,{camera,hh:PLEN*(P3D.spriteFrac!=null?P3D.spriteFrac:0.045),swx,swz,gwx,gwz}); }
+        catch(e){ console.error('[C3] cam',e); window.U11DBG&&U11DBG('[C3] cam error: '+e.message); }
+      }
+      if(_c3cam){ /* ult11-cine3 placed the camera */ }
+      else if(c.mode==='hold'){
         /* FRONTAL while he loads the shot (author, 2026-09-10). The camera sits
            between the shooter and the goal, looking BACK at him, so the wind-up
            plays to the lens - you see the face and the plant, not a pair of
@@ -3971,6 +4014,11 @@
         const la=(CC.chaseLookAhead||4.5);
         camera.lookAt(b.x+dx*la, Math.max(0.8,b.y)+0.5, b.z+dz*la);
       }
+      if(c.mode!=='hold'&&_c3on()){ try{
+        const _nc=U11_CINE3.needsCanvas(c); if(_nc) ensureHoldFx();
+        U11_CINE3.flyFrame(c,rdt,{camera,renderer,gl,hh:PLEN*(P3D.spriteFrac!=null?P3D.spriteFrac:0.045),ballR:c._bd,
+          cv:_nc?fxCv:null,ctx:_nc?fxCtx:null,proj:projectToScreen});
+      }catch(e){ console.error('[C3] fly',e); } }
       applyShake(rdt||0);      // after every branch, so it shakes any framing
     }
 
@@ -4107,6 +4155,7 @@
         try{ U11_CLASSIC.update(camera); }catch(e){}
       }
       tickTrail(dt);
+      try{ tickNets(dt); }catch(e){}
       try{ scorchUpdate(dt,now); }catch(e){}
       try{ tickTele(); }catch(e){}
       try{ tickGfx(dt,now); }catch(e){}
