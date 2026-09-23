@@ -4936,7 +4936,7 @@ function superShotCine(){
      before the skill banner; 4.5s made every super shot feel like a loading
      screen. Declared here (not at the timer below) because the 3D side needs
      it to pace the 6-frame charge so the energy peaks exactly on release. */
-  const SSC_HOLD=2250;
+  const SSC_HOLD=superHoldMs();
   if(!(window.P3D&&P3D.on&&P3D.superCine2&&P3D.superCine2.start({as:s,sk:G.ck,ds,dir:dirFor(s),gx:goalXFor(s),holdMs:SSC_HOLD,asKey:(s==='h'?selHome:selAway),dsKey:(ds==='h'?selHome:selAway)}))){U11DBG('SSC: start() failed → legacy');return false;}
   U11DBG('SSC: start ok, hold cam');
   try{ superBlockPrepare(s,ds); }catch(e){ U11DBG('SSC: block prep '+e); }
@@ -4962,34 +4962,49 @@ function superShotCine(){
     say((carrier.name||'').split('.').pop()+' — '+(spec.l||'Super Shot')+'!');
     try{if(window.SFX){SFX.windupStop&&SFX.windupStop();SFX.ballKick(1);SFX.whoosh&&SFX.whoosh(1.0);}}catch(e){}
     let _blk=null; try{ _blk=superBlockResolve(s); }catch(e){ U11DBG('SSC: block resolve '+e); }
+    /* DECIDE FIRST (author 2026-09-23): against an AI keeper the save is
+       rolled at the kick, so the flight plays straight through into the net
+       or the gloves like the approved mockup. A human keeper still gets the
+       duel menu + QTE on arrival; a block that stops the ball needs no keeper. */
+    const _pre=!PVP.on&&ds!=='h'&&!(_blk&&_blk.stop)&&window.U11_CINE3&&U11_CINE3.on;
     P3D.superCine2.fly((how)=>{
       if(G.goalGen!==_gen){_bail('stale at arrival');return;}
       if(how==='blocked'){ U11DBG('SSC: blocked in flight'); superBlockStopped(); return; }
+      if(_pre&&G._ssPre) return;               // already decided — pitch3d flies on into the finish
       G._ssBlk=null;
       U11DBG('SSC: arrived → GK duel');
       G.phase='idle';opDuel(true,'special');   // menu shows (CPU picks on-screen)
-    },_blk?{block:_blk}:undefined);
+    },Object.assign(_blk?{block:_blk}:{},{decided:_pre}));
+    G._ssPre=_pre&&silentShotDuel();
   },SSC_HOLD);
   return true;
 }
-/* Committed super shot from the field button — no duel menu.
-   The AI keeper decides off-screen, then the normal resolution
-   (GK banner video → goal/save result) takes over. */
+/* DECIDE FIRST — the super shot's keeper duel, resolved off-screen at the
+   kick (called from superShotCine while the ball is in the air). The AI
+   keeper picks and rolls its QTE exactly as in a visible duel; resDuel's
+   cinematic route then hands finish({isGoal}) to pitch3d, which holds it
+   until the ball arrives. Returns false when it cannot run, and the flight
+   falls back to the duel menu on arrival. */
 function silentShotDuel(){
-  clearInterval(G.di);
-  G.phase='duel';G.pm=false;G._duelT=Date.now();
+  if(G.phase!=='pass_anim'||!(window.P3D&&P3D.superCine2&&P3D.superCine2.active()))return false;
   const as=G.poss,ds=as==='h'?'a':'h';
   const carrier=sq(as)[G.ck];
   const def=sq(ds)['GK'];
-  if(!carrier||!def){say('Shot blocked — no goalkeeper!');G.phase='moving';try{P3D.superCine2.abort();}catch(e){}return;}
+  if(!carrier||!def)return false;
+  /* a defender who got in the way without stopping it takes power off the
+     shot when the ball reaches him - known now, so apply it now */
+  const b=G._ssBlk; if(b&&b.committed&&b.stop===false&&b.power) G._ssWeaken=clamp(1-(0.15+0.25*clamp(b.str/b.power,0,1)),0.55,0.85);
+  clearInterval(G.di);
+  G.phase='duel';G.pm=false;G._duelT=Date.now();
   G.D={carrier,def,dk:'GK',as,ds,isShot:true,ak:'special',pk:null,defA:null,duelStage:1,_silent:true};
   try{aiDef();}catch(e){}
   if(!G.D.defA){
     const canSuper=(typeof getGKSuper==='function')&&getGKSuper(def)&&(def.spirit||2000)>=(((typeof DEF_ACTIONS!=='undefined'&&DEF_ACTIONS['supersave'])||{}).cost||600);
     G.D.defA=canSuper?'supersave':'save';
   }
-  U11DBG('silent duel: GK '+G.D.defA);
-  resDuel();
+  U11DBG('SSC: decided at the kick · GK '+G.D.defA);
+  gkQteThen(resDuel);
+  return true;
 }
 
 /* ── CPU SUPER SHOT ───────────────────────────────────────────────
@@ -8800,10 +8815,16 @@ function calcDefencePower(def,defA,attackAction){
    It used to fall back to the v1 cine plus the old portrait cut-in, which is
    the "old pre duel match" the author saw on a CPU super shot (2026-09-12).
    Same v2 cinematic as open play: charge -> flight (blockable) -> finish. */
+/* Wind-up hold before the kick. With ult11-cine3 on it is the mockup's
+   run-up + charge (0.9 + 2.4s); the legacy charge keeps its 2.25s. */
+function superHoldMs(){
+  const C=window.U11_CINE3;
+  return (C&&C.on)?Math.round(((C.runUp||0)+(C.charge||2.4))*1000):2250;
+}
 function superCineFromDuel(as,ds,isGoal,onDone){
   if(!(window.P3D&&P3D.on&&P3D.superCine2)) return false;
   if(P3D.cineActive&&P3D.cineActive()) return false;
-  const hold=2250;
+  const hold=superHoldMs();
   if(!P3D.superCine2.start({as,sk:G.ck,ds,dir:dirFor(as),gx:goalXFor(as),holdMs:hold,
       asKey:(as==='h'?selHome:selAway),dsKey:(ds==='h'?selHome:selAway)})) return false;
   const gen=G.goalGen, shooter=sq(as)[G.ck];
@@ -8816,16 +8837,20 @@ function superCineFromDuel(as,ds,isGoal,onDone){
     say((shooter?shooter.name.split('.').pop():'')+' — '+(spec.l||'Super Shot')+'!');
     try{ if(window.SFX){SFX.windupStop&&SFX.windupStop();SFX.ballKick(1);SFX.whoosh&&SFX.whoosh(1.0);} }catch(e){}
     let blk=null; try{ blk=superBlockResolve(as); }catch(e){}
-    P3D.superCine2.fly((how)=>{
-      if(G.goalGen!==gen){ G._cineHold=false; return; }
-      if(how==='blocked'){ superBlockStopped(); return; }      // thrown in front of it: no goal, no save
-      G._ssBlk=null;
-      P3D.superCine2.finish({isGoal:!!isGoal,onDone:()=>{
+    const fin=()=>P3D.superCine2.finish({isGoal:!!isGoal,onDone:()=>{
         G._cineHold=false;
         if(G.goalGen!==gen) return;
         try{ onDone&&onDone(); }catch(e){ console.warn('[superCineFromDuel]',e); }
       }});
-    }, blk?{block:blk}:undefined);
+    // the result is already known here: fly straight through (mockup), unless a block stops it
+    const dec=!(blk&&blk.stop)&&!!(window.U11_CINE3&&U11_CINE3.on);
+    P3D.superCine2.fly((how)=>{
+      if(G.goalGen!==gen){ G._cineHold=false; return; }
+      if(how==='blocked'){ superBlockStopped(); return; }      // thrown in front of it: no goal, no save
+      G._ssBlk=null;
+      if(!dec) fin();
+    }, Object.assign(blk?{block:blk}:{},{decided:dec}));
+    if(dec) fin();                                             // pitch3d holds it until the ball lands
   },hold);
   return true;
 }

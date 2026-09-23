@@ -17,7 +17,10 @@
    ============================================================ */
 (function(){
 'use strict';
-const C3={on:true, built:false, chaseMul:1.0};   // 1.0 = mockup framing exactly
+const C3={on:true, built:false, chaseMul:1.0, veil:0.6,   // chaseMul 1.0 = mockup framing; veil = night-stage darkness
+  /* mockup timeline (s): run-up 0.9 · charge 2.4 · flight 1.35 · goal shot ~1.6.
+     game.js asks superHoldMs() for runUp+charge; pitch3d reads the rest. */
+  runUp:0.9, charge:2.4, flyDur:1.35, goalHold:1.6, saveHold:1.0};
 window.U11_CINE3=C3;
 
 const NOISE=`
@@ -74,7 +77,7 @@ void main(){
   k=mix(k,vec3(1.0),flash);
   gl_FragColor=vec4(k,1.0);
 }`;
-let T=null, scene=null, waves=[], imp=null, body=null, hidSil=null;
+let T=null, scene=null, waves=[], imp=null, body=null, hidSil=null, veil=null;
 let trail=null, strandA=null, strandB=null, shell=null, bglow=null, fl=null, arr=null;
 const TRN=44;
 const RIB_FS=NOISE+`uniform vec3 col; uniform float time,op,core; varying vec2 vUv;
@@ -129,6 +132,7 @@ function placeShooter(g,cam,S,amt,tight,rimAmt,flash,col){
   if(g.sil&&g.sil.visible){ g.sil.visible=false; hidSil=g.sil; }
 }
 function releaseShooter(){ if(body) body.visible=false; if(hidSil){ hidSil.visible=true; hidSil=null; } }
+function setVeil(v){ if(!veil) return; veil.material.uniforms.op.value=v; veil.visible=v>0.001; }
 function setBloom(A,str){ const b=A&&A.bloom; if(!b) return; b.strength=str; b.radius=0.5; b.threshold=0.8; }
 /* the mockup ball: radius 0.2 m on a 1.8 m body -> radius 0.2*S. pitch3d's
    ball geometry is r=0.5, so its scale is the DIAMETER: 0.4*S. (The trail
@@ -182,6 +186,18 @@ function build(A){
     const m=new T.Mesh(flat?new T.PlaneGeometry(1,1).rotateX(-Math.PI/2):new T.PlaneGeometry(1,1),
       new T.ShaderMaterial(mkAdd({uniforms:{rad:{value:0},op:{value:0},w:{value:.08},col:{value:COL.v}},vertexShader:VS,fragmentShader:WAVE_FS})));
     m.visible=false; m.renderOrder=-1; m.frustumCulled=false; scene.add(m); waves.push({m,t:-1,dur:.6,size:1,flat}); }
+  /* NIGHT STAGE. The mockup's FX live on a dark pitch; on the game's floodlit
+     turf the same additive colours clip to white (measured in-engine: the
+     charge + impact frames were blown out). A full-screen veil is drawn
+     FIRST in the transparent pass (renderOrder -10): the opaque world
+     (pitch, stands, crowd) sits under it and darkens; every sprite and every
+     cine3 effect draws after it and stays at full brightness - the mockup's
+     look: bright sprites + FX on a dark stage. */
+  veil=new T.Mesh(new T.PlaneGeometry(2,2),new T.ShaderMaterial({transparent:true,depthTest:false,depthWrite:false,fog:false,
+    uniforms:{op:{value:0}},
+    vertexShader:`void main(){ gl_Position=vec4(position.xy,0.0,1.0); }`,
+    fragmentShader:`uniform float op; void main(){ gl_FragColor=vec4(0.012,0.02,0.06,op); }`}));
+  veil.renderOrder=-10; veil.frustumCulled=false; veil.visible=false; scene.add(veil);
   glow=makePool(700,true); rocks=makePool(140,false);
   trail=new Ribbon(TRN,1.0); strandA=new Ribbon(TRN,0.4); strandB=new Ribbon(TRN,0.4);
   shell=new T.Mesh(new T.SphereGeometry(1,20,14),new T.ShaderMaterial(mkAdd({side:T.FrontSide,uniforms:{col:{value:COL.v},op:{value:0}},
@@ -262,7 +278,11 @@ C3.holdFrame=function(c,rdt,A){
   fxT+=dt;
   COL.v.set(A.col||'#3ec8ff');
   const HM=Math.max(0.24,((c.o&&c.o.holdMs)||2250)/1000);
-  const k=Math.min(1,c.t/HM);
+  /* mockup: RUN-UP first (side-on, 0.9s), then the charge. The run-up
+     only runs when game.js gave the hold room for it (superHoldMs). */
+  const RUN=(HM>(C3.runUp||0)+1)?(C3.runUp||0):0, ct=c.t-RUN;
+  if(ct<0) return runUpFrame(c,A,cam,S);
+  const k=Math.min(1,ct/(HM-RUN));
   const breath=k>=.82&&k<.92, release=k>=.92, tremble=k>=.45&&k<.82;
   const amt=k<.45?0.12+0.33*(k/.45):k<.82?0.45+0.4*((k-.45)/.37):k<.92?0.28:1.15;
   const tight=breath?1:0;
@@ -337,18 +357,41 @@ C3.holdFrame=function(c,rdt,A){
   /* ---- held breath: the whole frame drains of colour ---- */
   setFilter(breath?'saturate(0.2) brightness(0.78) contrast(1.15)':'');
   setBloom(A,0.6);
+  setVeil(C3.veil*Math.min(1,c.t/0.3));
 
-  drawOverlay(c,A,k,breath,release,tremble,S);
+  drawOverlay(c,A,k,breath,release,tremble,S,ct);
   return true;
 };
 
-function drawOverlay(c,A,k,breath,release,tremble,S){
+/* RUN-UP (mockup 0-0.9s): he runs in from ~6.8m behind the ball on the run
+   row, camera side-on and tracking him. pitch3d plays the run frames; here
+   the sprite is pulled back along the shot line (syncPlayers re-places it
+   every frame, so the offset needs no cleanup) and the camera follows. */
+function runUpFrame(c,A,cam,S){
+  let dx=A.gwx-A.swx, dz=A.gwz-A.swz; const L=Math.hypot(dx,dz)||1; dx/=L; dz/=L;
+  const side=c._camSide||(c._camSide=(Math.random()<0.5?1:-1));
+  const px=-dz*side, pz=dx*side;
+  const r=Math.max(0,Math.min(1,c.t/C3.runUp)), back=6.8*S*Math.pow(1-r,1.6);   // x=lerp(-8,PX,1-(1-r)^1.6)
+  const g=A.g, ox=-dx*back, oz=-dz*back;
+  if(g&&g.sprite){ g.sprite.position.x+=ox; g.sprite.position.z+=oz;
+    for(const o of [g.shadow,g.sil]) if(o){ o.position.x+=ox; o.position.z+=oz; } }
+  const hx=A.swx+ox, hz=A.swz+oz;
+  cam.position.set(hx+dx*1.2*S+px*7.2*S, 1.35*S, hz+dz*1.2*S+pz*7.2*S);
+  cam.lookAt(hx+dx*2.6*S, 1.1*S, hz+dz*2.6*S);
+  cam.updateMatrixWorld();
+  mockBall(A,S);
+  setFilter(''); setBloom(A,0.6); setVeil(C3.veil*Math.min(1,c.t/0.3));
+  if(A.cv&&A.ctx) A.ctx.clearRect(0,0,A.cv.width,A.cv.height);
+  return true;
+}
+
+function drawOverlay(c,A,k,breath,release,tremble,S,ct){
   const cv=A.cv, g=A.ctx; if(!cv||!g) return;
   const W=cv.width,H=cv.height,C=COL.v, lw=H/520;
   g.clearRect(0,0,W,H);
   const hp=A.proj(A.swx,1.2*S,A.swz,W,H);
   // letterbox
-  const lb=sm(0,0.1,k);
+  const lb=sm(0,0.25,ct);                       // mockup: slides in over 0.25s from the charge start
   g.fillStyle='#000'; const bh=H*0.085*lb; g.fillRect(0,0,W,bh); g.fillRect(0,H-bh,W,bh);
   // focus vignette
   const vgA=breath?0.75:0.25+0.4*k;
@@ -377,7 +420,7 @@ function drawOverlay(c,A,k,breath,release,tremble,S){
   }
   g.restore();
   // name slash
-  const HM=Math.max(0.24,((c.o&&c.o.holdMs)||2250)/1000), nk=(k*HM)/0.55;
+  const nk=ct/0.55;
   if(nk>0&&nk<1.6){
     const inE=sm(0,.25,nk), outE=sm(1.2,1.6,nk);
     g.save(); g.translate(W*(-0.6+inE*0.6+outE*0.7),H*0.3); g.transform(1,-0.12,0,1,0,0);
@@ -404,7 +447,7 @@ C3.hide=function(){
 };
 /* end = the whole cinematic is over (cineEnd / abort) */
 C3.end=function(){
-  imp=null; C3.hide(); setFilter(''); releaseShooter();
+  imp=null; C3.hide(); setFilter(''); releaseShooter(); setVeil(0);
   if(!C3.built) return;
   glow.life.fill(0); rocks.life.fill(0); glow.pts.visible=rocks.pts.visible=false;
   for(const w of waves){ w.t=-1; w.m.visible=false; }
@@ -462,6 +505,7 @@ C3.flyFrame=function(c,rdt,A){
   if(!C3.on||!C3.built) return;
   const dt=Math.min(0.05,rdt||0), cam=A.camera;
   glc=A.gl||glc;
+  setVeil(C3.veil);
   if(A.cv&&A.ctx){ A.ctx.clearRect(0,0,A.cv.width,A.cv.height); C3._dirty=false; }
   comet(c,dt,A);
   arrival(c,dt,A);
@@ -647,7 +691,9 @@ function arrival(c,dt,A){
    A = {camera,hh,swx,swz,gwx,gwz} */
 C3.flyCam=function(c,rdt,A){
   if(!C3.on) return false;
-  const cam=A.camera, S=A.hh/1.8, dt=Math.min(0.05,rdt||0);
+  /* lag uses the SAME dt that moves the ball (pitch3d's, uncapped): with the
+     mockup's 0.05 cap a slow phone frame let the ball outrun the chase */
+  const cam=A.camera, S=A.hh/1.8, dt=Math.min(0.25,rdt||0);
   let dx=A.gwx-A.swx, dz=A.gwz-A.swz; const L=Math.hypot(dx,dz)||1; dx/=L; dz/=L;
   const side=c._camSide||(c._camSide=1), px=-dz*side, pz=dx*side;
   const b=c._bw||{x:A.swx,y:0.3*S,z:A.swz};
@@ -658,10 +704,15 @@ C3.flyCam=function(c,rdt,A){
     P=[b.x-dx*0.3*S+px*3.7*S, 0.55*S, b.z-dz*0.3*S+pz*3.7*S];
     Lk=[b.x+dx*0.5*S, 0.85*S, b.z+dz*0.5*S]; lag=1;
   } else if(c.mode==='out'){
+    /* mockup goal frame: 7.5m out from where the ball hits the net (1.45m
+       behind the line), 5.4m to the side, drifting in; looking at the hit
+       depth, halfway between the goal's centre line and the ball. The old
+       4.4/3.2 frame put the keeper between lens and net (measured 2026-09-23). */
     const ot=c.ot||0, sz=(c.style&&c.style.kind==='curve')?-1:1;
-    const gl=(A.glat!=null?A.glat:lat*0.3);
-    P=[A.gwx-dx*(4.4-ot*0.3)*S+px*(3.2*sz-ot*0.2)*S, (1.3+ot*0.15)*S, A.gwz-dz*(4.4-ot*0.3)*S+pz*(3.2*sz-ot*0.2)*S];
-    Lk=[A.gwx+px*gl*0.5, 0.7*S, A.gwz+pz*gl*0.5]; lag=1-Math.exp(-dt*4);
+    const hx=A.gwx+dx*1.45*S, hz=A.gwz+dz*1.45*S;
+    const lat=(A.kwx!=null)?(hx-A.kwx)*px+(hz-A.kwz)*pz:0;          // hit's offset from the goal's centre line
+    P=[hx-dx*(7.5-ot*0.6)*S+px*sz*(5.4-ot*0.4)*S, (1.6+ot*0.25)*S, hz-dz*(7.5-ot*0.6)*S+pz*sz*(5.4-ot*0.4)*S];
+    Lk=[hx-px*lat*0.5, 1.2*S, hz-pz*lat*0.5]; lag=1-Math.exp(-dt*4);
   } else {
     if(c.arc==='drive'){
       P=[b.x-dx*6.5*S+px*8.5*S, b.y*0.55+1.0*S, b.z-dz*6.5*S+pz*8.5*S];

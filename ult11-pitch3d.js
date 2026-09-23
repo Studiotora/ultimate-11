@@ -2402,6 +2402,17 @@
       for(const id in sprites){ const vis=seen.has(id);
         sprites[id].sprite.visible=vis; sprites[id].shadow.visible=vis;
         if(sprites[id].sil) sprites[id].sil.visible=vis; }
+      /* cine3 (mockup): the super shot is shooter + keeper only. Measured
+         2026-09-23: a team-mate stood between the charge camera and the
+         shooter for most of the charge. A committed super-block defender
+         stays - he is part of the shot. */
+      if(cine&&cine.v2&&_c3on()){
+        const b=(typeof G!=='undefined'&&G)?G._ssBlk:null;
+        const keep=[cine.o.as+':'+cine.o.sk, cine.o.ds+':GK', (b&&b.committed)?b.ds+':'+b.k:''];
+        for(const id in sprites){ if(keep.indexOf(id)>-1) continue;
+          sprites[id].sprite.visible=false; sprites[id].shadow.visible=false;
+          if(sprites[id].sil) sprites[id].sil.visible=false; }
+      }
     }
 
     /* ════════ SPRITE/SHADOW DEBUG OVERLAY (Camera Lab) ════════
@@ -3048,6 +3059,16 @@
       fxCv.style.display='block';
     }
     function _c3on(){ return !!(window.U11_CINE3&&U11_CINE3.on); }
+    /* cine3 scale: every size in ult11-cine3 is in mockup metres, and the
+       mockup drew this same sheet on a 4.3m cell with a 1.8m body. So the
+       'body' handed to cine3 is the shooter's real CELL height x 1.8/4.3 -
+       not PLEN*spriteFrac, which assumes the measured body share (hRef,
+       clamped at 0.5) and made every effect ~19% too big for him (2026-09-23). */
+    function _c3hh(){
+      const f=(P3D.spriteFrac!=null?P3D.spriteFrac:0.045), sh=cine&&SHEETS[cine.o.as];
+      const hr=(sh&&sh!=='none'&&sh.hRef)||1;
+      return PLEN*f/hr*(1.8/4.3);
+    }
     /* cine3 view: the mockup was framed at fov 42 with no tilt-shift. The game
        camera is fov 30 (1.43x tighter) and tilt-shift blurs everything off the
        focus band - both made the cinematic read "too close". updateCamera()
@@ -3055,19 +3076,43 @@
     function _c3view(){
       if(camera.fov!==42){ camera.fov=42; camera.updateProjectionMatrix(); }
       if(hTilt&&vTilt){ hTilt.uniforms.h.value=0; vTilt.uniforms.v.value=0; }
+      /* The mockup is a NIGHT scene: its additive FX sit on a dark pitch.
+         On the game's lit pitch the same additive colours clip to white and
+         the bloom washes the whole frame. Drop the key/fill for the shot;
+         cineEnd() -> applyLight() puts them back. Sprites are unlit. */
+      const L=P3D.light||{};
+      sun.intensity=(L.key!=null?L.key:1)*P3D._c3dim; hemi.intensity=(L.ambient!=null?L.ambient:1)*P3D._c3dim;
     }
+    P3D._c3dim=0.5;   // cine3 scene light multiplier (tunable with ?debug=1)
     /* world position of the super shot at flight fraction f (0..1) - the SAME
        maths cineStep2 uses, so the comet can be sampled along the real path
        (mockup: tail = last 31% of the flight) instead of from frame history. */
     function cinePathW(c,f){
       f=Math.max(0,Math.min(1,f));
-      const stl=c.style||{curve:0,loft:1,speed:1,kind:'normal'}, fe=f*f*(3-2*f);
+      const stl=c.style||{curve:0,loft:1,speed:1,kind:'normal'}, fe=cineEase(c,f);
       let bx=c.fx+(c.tx-c.fx)*fe, by=c.fy+(c.ty-c.fy)*fe;
       if(c.curveAmt){ const off=Math.sin(Math.PI*fe)*c.curveAmt; bx+=c.perpX*off; by+=c.perpY*off; }
       const bz=shotArc(c.arc,fe,stl), W2=(CV.width||1280);
       const d=PLEN*(P3D.spriteFrac!=null?P3D.spriteFrac:0.045)*0.21;
       const lift=(c.jumpLift||0)*Math.pow(1-f,2);
       return {x:ex2wx(Math.min(Math.max(bx,0.02*W2),0.98*W2)), y:Math.max(d*.5,0.05+bz*.09)+lift, z:ey2wz(by)};
+    }
+    /* flight fraction -> path fraction. The parked flight eases OUT to a stop
+       in front of the keeper (the duel menu opens there); a decided flight
+       uses the mockup's ease - slow off the boot, then whoosh - and arrives
+       at full speed. */
+    function cineEase(c,f){ return (c&&c.decided)?0.32*f+0.68*f*f : f*f*(3-2*f); }
+    /* the out leg (stop point -> net / gloves). Decided: as long as the
+       arrival speed of the flight takes to cover it, so the ball does not
+       brake in front of the keeper. */
+    function cineOutDur(c){
+      if(!c.decided) return 0.55/1.20;
+      if(c._outDur==null){
+        const vEnd=1.68*Math.hypot(c.tx-c.fx,c.ty-c.fy)/(U11_CINE3.flyDur||1.35);   // d(ease)/df at 1 = 1.68
+        const tgt=c.isGoal?{x:c.gx,y:c.gy}:{x:c.kx,y:c.ky};
+        c._outDur=Math.max(0.06,Math.min(0.4,Math.hypot(tgt.x-c.tx,tgt.y-c.ty)/Math.max(1,vEnd)));
+      }
+      return c._outDur;
     }
     function hideHoldFx(){
       try{ if(window.U11_CINE3) U11_CINE3.hide(); }catch(e){}
@@ -3563,7 +3608,11 @@
                  const o=[]; for(let i=0;i<10;i++){ const q=P[Math.round(i*(P.length-1)/9)]; o.push(+q.y.toFixed(2)); } return o; })(),
                ribsVisible:RIBS.filter(function(R){return R.mesh&&R.mesh.visible;}).length,
                hitStop:+(cine._hitStop||0).toFixed(3), chg:+chargeCurve(Math.min(1,_fxT/2.0)).toFixed(3),
-               cam:[+camera.position.x.toFixed(4),+camera.position.y.toFixed(4),+camera.position.z.toFixed(4)]};
+               cam:[+camera.position.x.toFixed(4),+camera.position.y.toFixed(4),+camera.position.z.toFixed(4)],
+               /* world points for framing checks: ball, goal target, keeper spot, shooter */
+               ball:cine._bw?[+cine._bw.x.toFixed(2),+cine._bw.y.toFixed(2),+cine._bw.z.toFixed(2)]:null,
+               goalW:[+ex2wx(cine.gx).toFixed(2),+ey2wz(cine.gy).toFixed(2)], keepW:[+ex2wx(cine.kx).toFixed(2),+ey2wz(cine.ky).toFixed(2)],
+               shotW:[+ex2wx(cine.fx).toFixed(2),+ey2wz(cine.fy).toFixed(2)], decided:!!cine.decided, ot:+(cine.ot||0).toFixed(2)};
       const g=sprites[cine.o.as+':'+cine.o.sk];
       if(g&&g.tex){ const L=g._L||GRID;
         o.sheet=(g._sheetImg&&g._sheetImg.src||'').split('/').pop()+' '+L.cols+'x'+L.rows;
@@ -3575,6 +3624,7 @@
       if(!cine)return;
       try{hideHoldFx();_fxT=0;}catch(e){}
       try{ if(window.U11_CINE3) U11_CINE3.end(); }catch(e){}
+      try{ applyLight(); }catch(e){}
       if(cine.v2)window.U11DBG&&U11DBG('[3D] cine v2 end');
       if(cine.shRestore){ const s2=cine.shRestore;
         if(s2.g&&s2.g.sprite){ s2.g.sprite.material.map=s2.map; s2.g.sprite.material.needsUpdate=true;
@@ -3647,6 +3697,11 @@
       fly(onArrive,opts){
         if(!(cine&&cine.v2&&cine.mode==='hold'))return;
         cine.blk=(opts&&opts.block)?Object.assign({done:false},opts.block):null;
+        /* DECIDED (author 2026-09-23, "decide first, then play"): the keeper's
+           answer is rolled at the kick, so the ball never parks for a menu -
+           it flies the mockup's 1.35s accelerating path straight on into the
+           net or the gloves. finish() may land mid-flight; it is held. */
+        cine.decided=!!(opts&&opts.decided&&_c3on());
         /* Hand the chase the camera we already have. Without this the chase
            branch snaps to its own position on the first frame and the
            frontal-to-behind move reads as a hard cut; seeded, the existing
@@ -3661,7 +3716,7 @@
         let _c3imp=false;
         if(_c3on()){ try{
           const _b=cine._bw||{x:ex2wx(cine.fx),y:0.3,z:ey2wz(cine.fy)};
-          _c3imp=U11_CINE3.impact(cine,{T,scene,camera,hh:PLEN*(P3D.spriteFrac!=null?P3D.spriteFrac:0.045),
+          _c3imp=U11_CINE3.impact(cine,{T,scene,camera,hh:_c3hh(),
             bx:_b.x,by:_b.y,bz:_b.z,swx:ex2wx(cine.fx),swz:ey2wz(cine.fy),gwx:ex2wx(cine.gx),gwz:ey2wz(cine.gy),
             col:((_trailFx&&_trailFx.col)||cine.col||'#ffd24a'),shake:(a,ms)=>shakeCam(a,ms)});
         }catch(e){ console.error('[C3] impact',e); window.U11DBG&&U11DBG('[C3] impact error: '+e.message); } }
@@ -3681,6 +3736,8 @@
       },
       finish(o){
         if(!(cine&&cine.v2)){o&&o.onDone&&o.onDone();return;}
+        if(cine.mode==='hold'||cine.mode==='fly'){   // decided early: play it out on arrival
+          cine._pendOut={onDone:o.onDone}; cine.isGoal=!!o.isGoal; return; }
         cine.mode='out';cine.ot=0;cine.isGoal=!!o.isGoal;cine.o.onDone=o.onDone;
       },
       abort(){ if(cine&&cine.v2){cine.o.onDone=null;cineEnd();} }
@@ -3737,9 +3794,15 @@
         const _sL=(g&&g._L)||GRID;
         if(c._superRow===undefined)
           c._superRow=!!(_sL&&_sL.super&&_sL.rowFor&&!cineWindupIsTeam);
-        if(c._superRow&&g&&g.sprite){
+        const _run=_c3on()?(U11_CINE3.runUp||0):0;    // cine3: the mockup's run-up comes first
+        if(_run&&c.t<_run&&g&&g.sprite){
+          forceAnim(sid,'side','run',Math.floor(c.t*15)%12,cineShooterFlip(c));
+        }
+        else if(c._superRow&&g&&g.sprite){
           const hm=Math.max(240,(c.o&&c.o.holdMs)||2250)/1000;
-          forceAnim(sid,'side','super',Math.min(2,Math.floor(c.t/hm*3)),cineShooterFlip(c));
+          /* cine3 holds the FIRST super frame for the whole charge (mockup:
+             row 6 col 6); cols 7-8 are the strike, played by impact(). */
+          forceAnim(sid,'side','super',_c3on()?0:Math.min(2,Math.floor(c.t/hm*3)),cineShooterFlip(c));
         }
         else if(cineWindupTex&&g&&g.sprite){           // dedicated wind-up sprite
           if(!c.shRestore)c.shRestore={g,map:g.sprite.material.map,silMap:g.sil?g.sil.material.map:null};
@@ -3813,11 +3876,14 @@
         if(c.mode==='fly'){
           // Tsubasa-style ramp: hard off the boot, then slides into slow motion
           // for the middle of the flight so the trail is actually readable.
+          if(c.decided) c.ft+=dt/(U11_CINE3.flyDur||1.35);   // mockup: 1.35s, no slow-mo
+          else{
           const CCs=P3D.cine||{}, smoMax=(CCs.slowMo||2.4), inAt=(CCs.slowInAt||0.12);
           const ramp=Math.min(1,Math.max(0,(c.ft-inAt)/0.22));
           const ease=Math.sin(Math.PI*Math.min(1,c.ft*1.05));
           const smo=1+(smoMax-1)*ramp*ease;
           c.ft+=dt*1.20/(dur*smo); // flight only: 20% faster, charge timing unchanged
+          }
           if(c._superRow){
             /* frames 3,4,5 at ~9fps: contact, then follow-through.
                The mirror is LOCKED to whatever the charge ended on, not
@@ -3826,19 +3892,29 @@
                flips him mid-kick - and it lands on the contact frame, the one
                moment nobody is looking anywhere else. He is off-frame long
                before the swing makes the frozen mirror wrong. */
-            forceAnim(sid,'side','super',3+Math.min(2,Math.floor((c.ft*dur)/0.11)),
+            forceAnim(sid,'side','super',3+Math.min(2,Math.floor((c.ft*(c.decided?(U11_CINE3.flyDur||1.35):dur))/0.11)),
                       !!c._shFlip);
           }else{
             const kf=Math.min(3,Math.floor((c.ft*dur)/0.14));
             forceAnimT(sid,'up','shoot',kf/3,false);  // kick frames, back view
           }
           if(c.ft>=1){
-            c.ft=1;c.mode='wait';
+            c.ft=1;
+            if(c._pendOut){                           // decided: straight on into the net / gloves
+              c.mode='out'; c.ot=0; c.o.onDone=c._pendOut.onDone; c._pendOut=null;
+            } else c.mode='wait';
             if(c.onArrive&&!c.arrived){c.arrived=true;const cb=c.onArrive;c.onArrive=null;setTimeout(cb,0);}
           }
         }
         const ft=Math.min(1,c.ft);
-        const fe=ft*ft*(3-2*ft);
+        const fe=cineEase(c,ft);
+        /* decided: the keeper reads it and goes during the flight, as in the
+           mockup - a goal gets the full-stretch dive (beaten after it passes),
+           a save the whole dive into the ball. */
+        if(c.decided&&c.isGoal!=null&&c.mode==='fly'){
+          const k=Math.max(0,Math.min(1,(fe-0.55)/0.45));
+          c._diveP=(k*k*(3-2*k))*(c.isGoal?0.6:0.85); gkOutcome(c,c._diveP); cineGkNudge(c);
+        }
         bx=c.fx+(c.tx-c.fx)*fe; by=c.fy+(c.ty-c.fy)*fe;
         if(c.curveAmt){ const off=Math.sin(Math.PI*fe)*c.curveAmt; bx+=c.perpX*off; by+=c.perpY*off; }  // banana
         bz=shotArc(c.arc,fe,stl);
@@ -3846,11 +3922,15 @@
         if(c.mode==='wait')bz=4+Math.sin(c.t*6)*0.8;  // hover short of the keeper
       }else if(c.mode==='out'){
         c.ot+=dt;
-        const gt=Math.min(1,c.ot/(0.55/1.20));
-        gkOutcome(c,gt);                             // dive first — the ball meets his gloves
+        const gt=Math.min(1,c.ot/cineOutDur(c));
+        // dive first — the ball meets his gloves (decided: carry on from the in-flight dive)
+        gkOutcome(c,c.decided?(c._diveP||0)+(1-(c._diveP||0))*gt:gt);
         if(c.isGoal){
           // into the corner he was aimed at, at the height he was aimed at
-          bx=c.tx+(c.gx-c.tx)*gt; by=c.ty+(c.gy-c.ty)*gt;
+          /* decided: on into the back of the net like the mockup (hit 1.45 mockup-m
+             behind the line), not stopping dead on the goal line */
+          const netX=c.decided?((c.dir!=null)?c.dir:1)*1.45*(_c3hh()/1.8)*((CV.width||1280)*fbSx)/PLEN:0;
+          bx=c.tx+(c.gx+netX-c.tx)*gt; by=c.ty+(c.gy-c.ty)*gt;
           const gh=(c.aim?c.aim.h:0.5);
           bz=4*(1-gt)+(1.5+gh*11)*gt;
         }
@@ -3863,7 +3943,10 @@
           bz=4*(1-gt)+(2.2+gh*7)*gt;                 // settle into the gloves, at glove height
         }
         cineGkNudge(c);
-        if(c.ot>=0.85&&!c._fired){                    // outcome shown — hand control to game.js,
+        /* decided: hold the goal / save shot as long as the mockup does (net
+           bulge, flash, drifting goal camera) before game.js takes over */
+        const _hand=c.decided?cineOutDur(c)+(c.isGoal?(U11_CINE3.goalHold||1.6):(U11_CINE3.saveHold||1.0)):0.85;
+        if(c.ot>=_hand&&!c._fired){                   // outcome shown — hand control to game.js,
           c._fired=true;                              // keep the frontal camera until it releases us
           const cb=c.o.onDone; c.o.onDone=null;
           if(cb)setTimeout(cb,0);
@@ -3884,12 +3967,12 @@
       c._pbw={x:bwx,z:bwz};
       if(!_c3on()) try{ shotBallFx(c,bwx,bwy,bwz,d,(c.mode==='fly'||(c.mode==='out'&&c.isGoal)),c.mode==='wait'); }catch(e){}
       if(c.mode==='fly'&&!_c3on()){ try{ drawFlyLines(c,dt,bwx,bwy,bwz); }catch(e){} }
-      if(c.mode==='out'&&c.ot>=0.55/1.20&&!c._impact){ c._impact=true;
+      if(c.mode==='out'&&c.ot>=cineOutDur(c)&&!c._impact){ c._impact=true;
         let _c3a=false;
         if(_c3on()){ try{
           const _gwx=ex2wx(c.gx),_gwz=ey2wz(c.gy),_swx=ex2wx(c.fx),_swz=ey2wz(c.fy);
           let _dx=_gwx-_swx,_dz=_gwz-_swz; const _L=Math.hypot(_dx,_dz)||1;
-          _c3a=U11_CINE3.arrive(c,{T,scene,camera,hh:PLEN*frac,bx:bwx,by:bwy,bz:bwz,isGoal:!!c.isGoal,
+          _c3a=U11_CINE3.arrive(c,{T,scene,camera,hh:_c3hh(),bx:bwx,by:bwy,bz:bwz,isGoal:!!c.isGoal,
             gwx:_gwx,gwz:_gwz,dx:_dx/_L,dz:_dz/_L,netHit:()=>netHit(Math.sign(_gwx)||1,bwz,bwy)});
         }catch(e){ console.error('[C3] arrive',e); } }
         if(!_c3a){ try{ impactBurst(c,bwx,bwy,bwz,d); }catch(e){} } }
@@ -3976,7 +4059,7 @@
         try{
           ensureHoldFx();
           _ok=U11_CINE3.holdFrame(c,rdt,{T,scene,camera,renderer,gl,g:sprites[c.o.as+':'+c.o.sk],
-            hh:PLEN*(P3D.spriteFrac!=null?P3D.spriteFrac:0.045),swx,swz,gwx,gwz,
+            hh:_c3hh(),swx,swz,gwx,gwz,
             col:((_trailFx&&_trailFx.col)||c.col||'#ffd24a'),cv:fxCv,ctx:fxCtx,proj:projectToScreen,
             bloom:bloomPass,fxBase:P3D.fx,ballMesh});
         }catch(e){ console.error('[C3] hold',e); window.U11DBG&&U11DBG('[C3] hold error: '+e.message); U11_CINE3.on=false; }
@@ -3984,7 +4067,7 @@
       }
       let _c3cam=false;
       if(c.mode!=='hold'&&_c3on()){
-        try{ _c3cam=U11_CINE3.flyCam(c,rdt,{camera,hh:PLEN*(P3D.spriteFrac!=null?P3D.spriteFrac:0.045),swx,swz,gwx,gwz}); }
+        try{ _c3cam=U11_CINE3.flyCam(c,rdt,{camera,hh:_c3hh(),swx,swz,gwx,gwz,kwx:ex2wx(c.kx),kwz:ey2wz(c.ky)}); }
         catch(e){ console.error('[C3] cam',e); window.U11DBG&&U11DBG('[C3] cam error: '+e.message); }
       }
       if(_c3cam){ /* ult11-cine3 placed the camera */ }
@@ -4039,7 +4122,7 @@
       if(c.mode!=='hold'&&_c3on()){ try{
         const _nc=U11_CINE3.needsCanvas(c); if(_nc) ensureHoldFx();
         _c3view();
-        U11_CINE3.flyFrame(c,rdt,{camera,renderer,gl,hh:PLEN*(P3D.spriteFrac!=null?P3D.spriteFrac:0.045),ballR:c._bd,
+        U11_CINE3.flyFrame(c,rdt,{camera,renderer,gl,hh:_c3hh(),ballR:c._bd,
           g:sprites[c.o.as+':'+c.o.sk],ballMesh,bloom:bloomPass,
           pathAt:(f)=>cinePathW(c,f),
           cv:_nc?fxCv:null,ctx:_nc?fxCtx:null,proj:projectToScreen});
@@ -4192,7 +4275,12 @@
         rayPass.uniforms.lightPos.value.set(_v3.x*0.5+0.5, _v3.y*0.5+0.5);
         rayPass.enabled = (P3D.fx.rays>0.001) && (_v3.z<1) && !(cine&&cine.v2&&cine.mode==='hold') && !(cine&&_c3on());   // off when sun behind camera / during the charge hold
       }
-      if(composer && P3D.fx && P3D.fx.on) composer.render(dt);
+      /* The cine3 look IS bloom (the mockup always rendered through it). The
+         auto quality monitor drops the whole composer on phones (fx.on=false),
+         which left the comet a flat, glow-less band with a square head.
+         Force it for the length of a cine3 shot only. */
+      const _c3fx=!!(cine&&_c3on());
+      if(composer && P3D.fx && (P3D.fx.on||_c3fx)){ if(_c3fx&&bloomPass) bloomPass.enabled=true; composer.render(dt); }
       else renderer.render(scene,camera);
       drawDebug(); drawHUD();
     }
