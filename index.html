@@ -40,7 +40,8 @@ addEventListener('DOMContentLoaded',function(){
   try{
     var v=function(list,name){for(var i=0;i<list.length;i++){if(list[i].indexOf(name)===0)return list[i].replace(name,'').replace('?v=','v');}return '?';};
     var b=document.createElement('div');
-    b.textContent='BUILD  css '+v(css,'style.css')+'  tok '+v(css,'tokens.css')+'  js '+v(js,'game.js');
+    b.textContent='BUILD  css '+v(css,'style.css')+'  tok '+v(css,'tokens.css')+'  js '+v(js,'game.js')
+      +'  '+(typeof groundPassFlight==='function'?'AI READY':'OLD JS');
     b.style.cssText='position:fixed;right:6px;bottom:4px;z-index:99999;pointer-events:none;'
       +'font:700 10px/1 Rajdhani,sans-serif;letter-spacing:.14em;color:#f0c040;'
       +'background:rgba(0,0,0,.55);padding:3px 7px;border:1px solid rgba(240,192,64,.45);border-radius:3px;';
@@ -1662,7 +1663,7 @@ addEventListener('DOMContentLoaded',function(){
 <script src="ult11-input.js?v=9" defer></script>
 <script src="ult11-gkqte.js?v=2" defer></script>
 <script src="ult11-aerial.js?v=2" defer></script>
-<script src="game.js?v=184" defer></script>
+<script src="game.js?v=185" defer></script>
 <!-- ps1-mod.js removed: P3D is the only renderer, its post-FX drew into the hidden 2D canvas.
      Re-add this line to restore it: <script src="ps1-mod.js?v=1" defer></script> -->
 <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js" defer></script>
