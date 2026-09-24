@@ -1963,7 +1963,7 @@ function tick(dt=1){
   if(_carrPl0&&_carrPl0.pos==='GK'){
     if(!G._gkHoldAt){
       G._gkHoldAt=Date.now();
-      if(!isCpuSide(s))say(G._gkGoalKick?'GOAL KICK — PASS short, CROSS long, SHOOT punt.':'Keeper holds it — PASS short, CROSS throw, SHOOT punt.');
+      if(!isCpuSide(s))say(G._gkGoalKick?'GOAL KICK — PASS short, CROSS long, SHOOT punt.':'Keeper holds it — PASS roll, CROSS throw, SHOOT long throw.');
     }
     // The ball is protected in the keeper's hands, but the rest of the match
     // must keep breathing: teammates show for a pass and opponents mark them.
@@ -1977,8 +1977,8 @@ function tick(dt=1){
     clampAllToPitch();
     clampKeeperToArea(s,cp);
     enforcePace(dt);
-    if(isCpuSide(s)&&Date.now()-G._gkHoldAt>1050&&!G._kick)
-      keeperDistribute(s,Math.random()<.68?'ground':'cross');
+    if(isCpuSide(s)&&Date.now()-G._gkHoldAt>1050&&!G._kick&&!G._gkThrow){
+      const r=Math.random(); keeperDistribute(s,r<.6?'ground':r<.88?'cross':'punt'); }
     return;
   }
   G._gkHoldAt=0;
@@ -5151,7 +5151,7 @@ function _updateDpad(show){
   const sw=G_dpadEl.querySelector('[data-a="switch"]');
   if(sw) sw.classList.toggle('dim', atk);
   if(keeperHumanHolding()){
-    const labels=G._gkGoalKick?{pass:'SHORT',cross:'LONG',shoot:'PUNT'}:{pass:'ROLL',cross:'THROW',shoot:'PUNT'};
+    const labels=G._gkGoalKick?{pass:'SHORT',cross:'LONG',shoot:'PUNT'}:{pass:'ROLL',cross:'THROW',shoot:'LONG'};
     for(const key in labels){const b=G_dpadEl.querySelector('[data-a="'+key+'"]');if(b)b.querySelector('span').textContent=labels[key];}
   }
   if(throwInHumanTaking()){
@@ -5461,6 +5461,22 @@ function shotOutfieldBlock(fx,fy,gx,gy,side,pw){
   // it's a block event — mostly deflections (loose), occasional clean block
   return {outcome:Math.random()<0.35?'block':'deflect', key:best, x:bestPt.x, y:bestPt.y};
 }
+/* GK STATE MACHINE (GK roadmap step 4, 2026-09-24) - the 3D keeper's
+   set / dive / catch / parry / beaten states live in ult11-pitch3d.js (GKA).
+   game.js only tells it what the ball really did. */
+function gkAnim(side,name,o){ try{ if(window.P3D&&P3D.gkAnim) P3D.gkAnim(side,name,o); }catch(e){} }
+// Where / how high / when a shot reaches its target - the same loop as
+// tickBallTravel, run ahead on a copy, so the keeper reads the real flight.
+function shotArrival(bt){
+  let x=bt.x,y=bt.y,vx=bt.vx,vy=bt.vy,bz=bt.bz||0,bvz=bt.bvz||0,rolled=0,n=0;
+  while(n<(bt.dur||60)){
+    x+=vx; y+=vy; rolled+=Math.hypot(vx,vy); vx*=bt.fr; vy*=bt.fr; n++;
+    bz+=bvz; bvz-=BALLPHYS.g;
+    if(bz<=0){ bz=0; bvz=(-bvz>BALLPHYS.minBounce)?-bvz*BALLPHYS.rest:0; }
+    if(rolled>=bt.total*0.985) break;
+  }
+  return {x,y,bz,ms:n*1000/60};
+}
 // Fire a NORMAL shot: outfield block check first, then the keeper duel.
 function launchShot(fx,fy,gx,gy,side,ak,dur){
   const isSuper=(ak==='special'||ak==='super'||ak==='super-shot'||ak==='super-pass');
@@ -5473,8 +5489,16 @@ function launchShot(fx,fy,gx,gy,side,ak,dur){
   }
   if(!b) b=isSuper?{outcome:'through'}:shotOutfieldBlock(fx,fy,gx,gy,side,pw);
   if(b.outcome==='through'){
+    /* PLACED (GK roadmap step 4): the shot crosses the keeper's line beside him
+       - or at him, 1 in 4 - inside the goal mouth (half-mouth H*0.052), wider
+       from a better finisher. It used to fly at his chest every time, so there
+       was nothing to dive for. The duel still decides the outcome. */
+    const _ds=side==='h'?'a':'h', _m=H*0.052, _acc=clamp(pw/100,0.4,1);
+    const _off=Math.random()<0.25?0:(Math.random()<0.5?-1:1)*_m*(0.30+0.50*_acc*Math.random());
+    const ty=clamp(gy+_off,H*0.5-_m*0.85,H*0.5+_m*0.85);
     G._shotTrail=true;
-    animateBallTo(fx,fy,gx,gy,()=>{G._shotTrail=false;G.phase='idle';opDuel(true,ak);},dur,true);
+    animateBallTo(fx,fy,gx,ty,()=>{G._shotTrail=false;G.phase='idle';opDuel(true,ak);},dur,true);
+    try{ const a=shotArrival(ballTravel); gkAnim(_ds,'dive',{ty,bz:a.bz,ms:a.ms}); }catch(e){}
     return;
   }
   const blk=sq(side==='h'?'a':'h')[b.key];
@@ -5581,29 +5605,32 @@ function directionalPass(kind='ground'){
   kickOr(s,'pass',()=>launchPass(s,best,kind,_lead||undefined),{tx:_to&&_to.x,ty:_to&&_to.y,wind:kind==='cross'?KICK.crossWind:KICK.passWind});
 }
 
-// PASS rolls short, CROSS throws/kicks long, SHOOT punts. The ball still
-// travels through launchPass, so it can be intercepted or run out of play.
+// PASS rolls short, CROSS throws, SHOOT throws long (author, GK roadmap step 5:
+// every keeper distribution is by hand - 'punt' is now the long overarm throw).
+// Goal kicks stay kicks off the grass. The ball still travels through
+// launchPass, so it can be intercepted or run out of play.
 function keeperHumanHolding(){
   return G.phase==='moving'&&G.poss==='h'&&G.ck==='GK'&&!G.paused;
 }
 function keeperDistribute(side,kind){
   if(G.phase!=='moving'||G.poss!==side||G.ck!=='GK'||G.paused)return;
+  if(G._gkThrow)return;                                   // already winding up
   const from=PP[side]&&PP[side].GK;if(!from)return;
   const input=_manualInputForSide(side)||{x:0,y:0},mag=Math.hypot(input.x,input.y);
   const ax=mag>.15?input.x/mag:dirFor(side),ay=mag>.15?input.y/mag:0;
   const keys=validOutfieldKeys(side).filter(k=>PP[side][k]&&!ocd(side,k));
   let best=null,bestScore=-Infinity;
-  if(kind!=='punt')for(const k of keys){
+  for(const k of keys){
     const p=PP[side][k],dx=p.x-from.x,dy=p.y-from.y,d=Math.hypot(dx,dy)||1;
     if(d<W*.035)continue;
     const align=(dx*ax+dy*ay)/d;
     if(align<.25)continue;
-    const wanted=kind==='ground'?W*.17:W*.38;
+    const wanted=kind==='ground'?W*.17:kind==='cross'?W*.38:W*.55;
     const score=align*3-Math.abs(d-wanted)/W*2+openPassLaneScore(side,'GK',k)*.35;
     if(score>bestScore){bestScore=score;best=k;}
   }
   let point=null;
-  if(!best){const length=kind==='punt'?W*.58:kind==='cross'?W*.38:W*.19;
+  if(!best){const length=kind==='punt'?W*.55:kind==='cross'?W*.38:W*.19;
     point={x:clamp(from.x+ax*length,W*FB.x0,W*FB.x1),y:clamp(from.y+ay*length,H*FB.y0,H*FB.y1)};
   }
   G._gkHoldAt=0;
@@ -5612,11 +5639,31 @@ function keeperDistribute(side,kind){
   // a point pass so launchPass does not reject him before the ball leaves.
   const goalKick=!!G._gkGoalKick;
   if(goalKick&&best)point={x:PP[side][best].x,y:PP[side][best].y};
-  launchPass(side,goalKick?null:best,flight,point);
-  if(goalKick&&ballTravel.active){ballTravel.receiver=best;ballTravel.offside=[];}
-  G._gkGoalKick=false;
-  say(kind==='ground'?(goalKick?'Keeper plays it short!':'Keeper rolls it short!')
-      :kind==='cross'?(goalKick?'Keeper kicks it long!':'Keeper sends a long throw!'):'Keeper punts it long!');
+  const release=()=>{
+    launchPass(side,goalKick?null:best,flight,point);
+    if(goalKick&&ballTravel.active){ballTravel.receiver=best;ballTravel.offside=[];}
+    G._gkGoalKick=false;
+    say(kind==='ground'?(goalKick?'Keeper plays it short!':'Keeper rolls it out!')
+        :kind==='cross'?(goalKick?'Keeper kicks it long!':'Keeper throws it out!')
+        :(goalKick?'Keeper punts it long!':'Keeper hurls it long!'));
+  };
+  if(goalKick){ release(); return; }                      // off the grass: a kick, no wind-up
+  /* HAND THROW (GK roadmap step 5): a wind-up with the ball in his hands
+     (throw row c0 underarm / c1 overhead), then the release frames as it
+     leaves. The wind-up is real time: play, the match clock and pause all
+     carry on, and the throw is dropped if he no longer has the ball. */
+  const wind=kind==='ground'?260:kind==='cross'?380:460;
+  const tgt=best?PP[side][best]:point;
+  gkAnim(side,'throw',{kind,wind,tx:tgt&&tgt.x,ty:tgt&&tgt.y});
+  const gen=G.goalGen, q=G._gkThrow={side,gen};
+  const go=()=>{
+    if(G._gkThrow!==q)return;
+    if(G.paused){setTimeout(go,100);return;}
+    G._gkThrow=null;
+    if(G.goalGen!==gen||G.poss!==side||G.ck!=='GK'||G.phase!=='moving'){ gkAnim(side,'clear'); return; }
+    release();
+  };
+  setTimeout(go,wind);
 }
 
 // ── DEFENSIVE PLAYER SWITCH (✕ while defending) ───────────────────
@@ -9447,6 +9494,7 @@ function resDuel(){
     }
   }
   const win=atkPow>defPow;
+  G.D.lastDefPow=defPow;            // afSave reuses the duel's own verdict (GK roadmap step 2)
   const atkCost=(ATK_ACTIONS[ak]||{}).cost||0;
   const defCost=(DEF_ACTIONS[defA]||{}).cost||0;
   if(carrier&&atkCost>0)carrier.spirit=Math.max(0,(carrier.spirit||1500)-atkCost);
@@ -9572,7 +9620,7 @@ function resDuel(){
         }
         else if(ak==='special'&&superCineFromDuel(as,ds,true,()=>{ flushDuelSay(); afGoal(carrier,as,_gen); })){
           closeDuel();                                          // the v2 cinematic owns it now
-        } else afGoal(carrier,as,_gen);
+        } else { gkAnim(ds,'beaten'); afGoal(carrier,as,_gen); }
       } else {
         // Won a field duel with a shot — animate to GK then open shot duel
         const _ds=as==='h'?'a':'h';
@@ -9688,7 +9736,7 @@ function afGoal(scorer,s,gen){
   showGoalBanner(scorer,s);
   setTimeout(()=>{
     Object.values(hSq).forEach(p=>{if(p)p.cooldownUntil=0;}); Object.values(aSq).forEach(p=>{if(p)p.cooldownUntil=0;});
-    iPos(); const ns=s==='h'?'a':'h',q=sq(ns),kk=['CM2','CM1','ST'].find(k=>q[k])||Object.keys(q).find(k=>q[k]);
+    iPos(); gkAnim('h','clear'); gkAnim('a','clear'); const ns=s==='h'?'a':'h',q=sq(ns),kk=['CM2','CM1','ST'].find(k=>q[k])||Object.keys(q).find(k=>q[k]);
     G.poss=ns; G.ck=kk; G.tP++; if(ns==='h')G.hP++; if(PP[ns][kk]){PP[ns][kk].x=W/2;PP[ns][kk].y=H/2;PT[ns][kk]={x:W/2,y:H/2};}
     try{ kickoffShape(ns,kk); }catch(e){}
     ball.x=W/2;ball.y=H/2;ball.tx=W/2;ball.ty=H/2; updP(); say(((ns==='h'?HT:AT)?.name||'Team')+' to kick off.');
@@ -9713,12 +9761,12 @@ function afSave(ds){
   // Cine v2 flow: the save banner already announced the stop — outcome can't
   // flip to a goal afterwards, and the GK cutscene already played as a video.
   const _cineFlow=!!G._cineSaveLock; G._cineSaveLock=false;
-  const gkPow=gk?calcDefencePower(gk,gkDefA,ak):80;
-  // Deduct GK stamina — GK max is 2000
-  if(gk){
-    const gkCost=(DEF_ACTIONS[gkDefA]||{}).cost||0;
-    if(gkCost>0) gk.spirit=Math.max(0,(gk.spirit||2000)-gkCost);
-  }
+  /* GK ROADMAP step 2 (2026-09-24): the keeper duel already DECIDED this was a
+     save in resDuel. afSave used to roll a fresh keeper power (new rng, the
+     already-drained stamina) and charge his stamina a second time, so a won
+     save could come back as GOAL. Reuse the duel's own numbers: the margin
+     only picks how clean the save is (catch / parry / rebound). */
+  const gkPow=(G.D.lastDefPow!=null)?G.D.lastDefPow:(gk?calcDefencePower(gk,gkDefA,ak):80);
   const diff=(shotPow-gkPow)+(Math.random()-0.5)*18;
   let outcome;
   // Supersave shifts thresholds heavily in GK's favour
@@ -9733,7 +9781,7 @@ function afSave(ds){
     else if(diff<25)outcome='spill';
     else outcome='goal';
   }
-  if(_cineFlow&&outcome==='goal')outcome='parry';
+  if(outcome==='goal')outcome=_cineFlow?'parry':'spill';   // the duel said save: never a goal here
   // A PUNCH never holds the ball — it knocks it back into play (loose rebound).
   if(gkDefA==='punch'&&outcome==='catch')outcome='spill';
   if(outcome==='catch')try{if(window.SFX&&SFX.save)SFX.save();}catch(e){}
@@ -9763,6 +9811,7 @@ function afSave(ds){
       return;
     }
     if(outcome==='catch'){
+      if(!_cineFlow) gkAnim(ds,'catch');
       G.poss=ds;G.ck='GK';G.tP++;if(ds==='h')G.hP++;
       PP[ds]['GK']={x:gkX,y:gkY};PT[ds]['GK']={x:gkX,y:gkY};
       ball.x=gkX;ball.y=gkY;ball.tx=gkX;ball.ty=gkY;ball.bz=GK_HAND_BZ;
@@ -9783,6 +9832,7 @@ function afSave(ds){
       const ddir=dirFor(ds);
       const clearX=ddir>0?clamp(gkX+W*0.12,W*0.10,W*0.35):clamp(gkX-W*0.12,W*0.65,W*0.90);
       const safeY=clamp(gkY+(Math.random()-.5)*H*0.28,H*0.15,H*0.85);
+      if(!_cineFlow) gkAnim(ds,'parry',{ty:safeY});
       let bestKey=null,bestDist=Infinity;
       Object.keys(q).forEach(k=>{
         if(k==='GK'||!q[k]||!PP[ds][k])return;
@@ -9804,6 +9854,7 @@ function afSave(ds){
     // touched it last, so if it rolls over the byline it's a CORNER.
     const spillX=clamp(gkX+(dirFor(ds)>0?W*0.09:-W*0.09)+(Math.random()-.5)*W*0.06,W*0.05,W*0.95);
     const spillY=clamp(gkY+(Math.random()-.5)*H*0.24,H*0.10,H*0.90);
+    if(!_cineFlow) gkAnim(ds,'parry',{ty:spillY});
     G.phase='pass_anim';
     animateBallTo(gkX,gkY,spillX,spillY,()=>{
       ro.classList.remove('show');
@@ -10437,7 +10488,9 @@ function rollFoul(defSide,defSlot,attSide,prob){
       setTimeout(()=>{
         if(G._fkGen!==_fk||!G.mt)return;
         G.phase='idle';
-        opDuel(true); // shooter (human or AI) picks the strike; GK answers
+        // GK roadmap step 6b: the penalty QTE (ult11-penalty.js); the old
+        // keeper duel stays as the fallback when it can't run.
+        if(!penaltyStart(attSide,ak,defSide,_fk)) opDuel(true);
       },900);
       return;
     }
@@ -10446,6 +10499,67 @@ function rollFoul(defSide,defSlot,attSide,prob){
     freeKickBegin(attSide,ak,fkx,fky);
   },isPK?3500:3200);
   return true;
+}
+
+/* ── PENALTY KICK (GK roadmap step 6b, 2026-09-24) ─────────────────
+   The approved lab mockup, played by ult11-penalty.js over the frozen match
+   (G._cineHold stops tick() and the clock; pause still works over it). The
+   human side plays its half: taking = aim + timing ring, keeping = pick a
+   zone + timing ring. The CPU half scales with the taker's SHO and the
+   keeper's REF. The result comes back here:
+     goal         -> afGoal (the normal goal flow + kickoff)
+     save, held   -> the keeper's ball, as after a clean catch
+     save / post  -> a loose rebound in front of goal
+     miss         -> goal kick
+   Returns false if the module can't run; rollFoul then uses the old duel. */
+function penaltyStart(atk,ak,ds,fk){
+  if(!window.U11PEN||!U11PEN.ok()||(U11PEN.active&&U11PEN.active()))return false;
+  const hA=!isCpuSide(atk), hD=!isCpuSide(ds);
+  if(!hA&&!hD)return false;                                // no human in it: the plain duel
+  const taker=sq(atk)[ak], gk=sq(ds).GK;
+  const skill=v=>clamp(((v||70)-50)/50,0,1);
+  const prevPhase=G.phase;
+  closeDuel(); G._cineHold=true; G.phase='penalty';
+  try{ gkAnim('h','clear'); gkAnim('a','clear'); }catch(e){}
+  const started=U11PEN.run({
+    mode:hA?'shoot':'save', side:atk, atk, ak, ds,
+    gx:goalXFor(atk), spotX:ball.x, spotY:ball.y,          // P3D.pen plays it in the real stadium
+    takerName:taker?taker.name:'', keeperName:gk?gk.name:'',
+    takerSkill:skill(gs(taker,'sho')), keeperSkill:skill(gs(gk,'ref')),
+    onDone:res=>penaltyResult(atk,ak,ds,fk,res)
+  });
+  if(!started){ G._cineHold=false; G.phase=prevPhase; return false; }
+  return true;
+}
+function penaltyResult(atk,ak,ds,fk,res){
+  if(!G||!G.mt||G._fkGen!==fk){ if(G)G._cineHold=false; return; }
+  G._cineHold=false;
+  G.shots++; if(atk==='h')G.hShots++; else G.aShots++; updH();
+  const taker=sq(atk)[ak], gk=sq(ds).GK, gp=PP[ds]&&PP[ds].GK;
+  const gx=gp?gp.x:ownGoalXFor(ds), gy=gp?gp.y:H*.5, dir=dirFor(atk);
+  if(res.out==='goal'){ G.phase='idle'; afGoal(taker,atk,G.goalGen); return; }
+  if(res.out==='save'&&res.hold){                           // clean: the keeper's ball
+    try{ if(window.SFX&&SFX.save)SFX.save(); }catch(e){}
+    G.goalGen++;
+    G.poss=ds;G.ck='GK';G.chk=null;G.tP++;if(ds==='h')G.hP++;
+    ball.x=gx;ball.y=gy;ball.tx=gx;ball.ty=gy;ball.bz=GK_HAND_BZ;
+    G._gkHoldAt=0;G._gkGoalKick=false;updP();
+    say((gk?gk.name:'The keeper')+' saves the penalty — and holds it!');
+    G.phase='idle'; G.kickoffUntil=Date.now()+400;
+    setTimeout(()=>liveResume(ds),350);
+    return;
+  }
+  if(res.out==='save'||res.out==='post'){                   // back into play in front of goal
+    G.goalGen++;
+    const bx=clamp(gx-dir*W*.035,W*.05,W*.95), by=clamp(gy+(res.px>=0?1:-1)*H*.07,H*.2,H*.8);
+    say(res.out==='post'?'Off the post!':(gk?gk.name:'The keeper')+' saves the penalty!');
+    G.phase='idle';
+    goLoose(bx,by,-dir*(3+Math.random()*3),(res.px>=0?1:-1)*(1+Math.random()*3), res.out==='save'?ds:atk);
+    return;
+  }
+  G.goalGen++;
+  say((taker?taker.name:'The taker')+' misses the penalty!');
+  goalKickRestart(ds);
 }
 
 // ── FREE KICK PAUSE OVERLAY ──────────────────────────────────────

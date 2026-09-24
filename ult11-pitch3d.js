@@ -104,7 +104,8 @@
     // ---- GFX UPGRADE PACK ----
     pixelPitch:true,     // procedural pixel-art turf instead of assets/stadium/pitch.png
     pitchPx:2048,        // turf texture width in texels (higher = crisper pitch; upscaled)
-    gfx:{ sky:true, masts:true, lamps:true, boards:true, flags:true, flashes:true, floods:true, banners:true, volumetrics:true },
+    gfx:{ sky:true, masts:true, lamps:true, boards:true, flags:true, flashes:true, floods:true, banners:true, volumetrics:true,
+          volRays:true, volPools:true, volDust:true },
     // super-shot cinematic camera (console-tunable): hold = charging aura, chase = ball flight
     cine:{ holdFront:true, holdDist:9.6, holdHeight:1.55, holdSide:1.1, holdLookAhead:20, holdLookY:1.25,
            // chase: sits well back and off to the side so the tail reads in
@@ -1222,21 +1223,20 @@
       halo.scale.set(7*s,7*s,1);
       return [g,halo];
     }
-    /* Astra third-tier lamps: screen-facing shafts simulate suspended dust in
-       the light. One batched ray mesh and one batched grass-pool mesh; no shadow
-       maps, real fog volumes, or extra per-frame light sources. */
+    /* Third-tier corner lamps: broad shafts, suspended dust and grass pools.
+       Four corner sources remain visible as the broadcast camera turns. These
+       are batched presentation effects; the pitch texture is MeshBasic, so
+       adding real SpotLights here would not illuminate it. */
     function buildAstraVolumetrics(){
-      if(!gfxOn('volumetrics')) return;
+      if(!gfxOn('volumetrics')||!gfxOn('lamps')||!gfxOn('floods')) return;
       const k=PLEN/70, w=PWID/44.87, sources=[];
-      for(let i=0;i<5;i++){
-        const x=(-27+i*13.5)*k;
-        const source=new T.Vector3(x,14.35*k,44.5*w);
-        const target=new T.Vector3(x*.70,0.055,8.0*w);
+      for(const sx of [-1,1]) for(const sz of [-1,1]){
+        const source=new T.Vector3(sx*52*k,17.5*k,sz*40*w);
+        const target=new T.Vector3(sx*16*k,0.055,sz*5.5*w);
         sources.push({source,target});
-        if(gfxOn('lamps') && gfxOn('floods')){
-          const [bank,halo]=floodBank(source.x,source.y,source.z,.55*k);
-          extrasGroup.add(bank,halo);
-        }
+        const [bank,halo]=floodBank(source.x,source.y,source.z,.9*k);
+        halo.scale.set(9*k,9*k,1);
+        extrasGroup.add(bank,halo);
       }
       const positions=new Float32Array(sources.length*18),uv=[];
       for(let i=0;i<sources.length;i++)uv.push(0,1,0,0,1,0,0,1,1,0,1,1);
@@ -1245,11 +1245,25 @@
       posAttr.setUsage(T.DynamicDrawUsage);
       rayGeo.setAttribute('position',posAttr);
       rayGeo.setAttribute('uv',new T.Float32BufferAttribute(uv,2));
+      // per-beam "cut" (0..1), set every frame in tickAstraVolumetrics: how much
+      // this beam's foot sits over the middle of the view, where play is
+      const cutAttr=new T.BufferAttribute(new Float32Array(sources.length*6),1);
+      cutAttr.setUsage(T.DynamicDrawUsage); rayGeo.setAttribute('cut',cutAttr);
       const uniforms={time:{value:0},strength:{value:1}};
       const rayMat=new T.ShaderMaterial({uniforms,transparent:true,depthWrite:false,
         depthTest:true,side:T.DoubleSide,blending:T.AdditiveBlending,fog:false,
-        vertexShader:'varying vec2 vUv;void main(){vUv=uv;gl_Position=projectionMatrix*modelViewMatrix*vec4(position,1.0);}',
-        fragmentShader:'varying vec2 vUv;uniform float time;uniform float strength;void main(){float center=pow(max(0.0,1.0-abs(vUv.x*2.0-1.0)),2.4);float fall=smoothstep(0.0,.17,vUv.y)*(1.0-smoothstep(.76,1.0,vUv.y));float dust=.86+.14*sin(vUv.y*34.0-time*.65);float a=.12*center*fall*dust*strength;gl_FragColor=vec4(.70,.82,1.0,a);}' });
+        vertexShader:'attribute float cut;varying vec2 vUv;varying float vCut;void main(){vUv=uv;vCut=cut;gl_Position=projectionMatrix*modelViewMatrix*vec4(position,1.0);}',
+        // vUv.y is 0 at the pitch and 1 at the lamp. Let the shaft fade into
+        // its grass pool before it crosses the broadcast view over play.
+        // Fade range tuned by measurement (Claude, 2026-09-24): Astra's .05-.45
+        // cleaned the grass but removed the beams from the broadcast view (the
+        // lamps sit above that frame); 0-.16 keeps a visible shaft at near-ball
+        // grass L 57 vs 49 off. Frames + table: lab/lighting-tune-v119/.
+        // v121 (Claude): one fade can't suit both ends of the pitch, so each beam
+        // blends from that short fade (foot at the edge of the view: a full
+        // visible shaft) to a long one (foot over the middle of the view, where
+        // play is: the shaft dies out above the players) - vCut per beam.
+        fragmentShader:'varying vec2 vUv;varying float vCut;uniform float time;uniform float strength;void main(){float center=pow(max(0.0,1.0-abs(vUv.x*2.0-1.0)),2.4);float fall=mix(smoothstep(.0,.16,vUv.y),smoothstep(.08,.55,vUv.y),vCut)*(1.0-smoothstep(.82,1.0,vUv.y));float dust=.88+.12*sin(vUv.y*34.0-time*.65);float a=.15*center*fall*dust*strength;gl_FragColor=vec4(.74,.85,1.0,a);}' });
       const rayMesh=new T.Mesh(rayGeo,rayMat);
       rayMesh.frustumCulled=false;rayMesh.renderOrder=8;extrasGroup.add(rayMesh);
       const canvas=document.createElement('canvas');canvas.width=canvas.height=128;
@@ -1272,14 +1286,40 @@
       const poolMat=new T.MeshBasicMaterial({map:tex,transparent:true,depthWrite:false,
         depthTest:true,blending:T.AdditiveBlending,side:T.DoubleSide,fog:false});
       const pools=new T.Mesh(poolGeo,poolMat);pools.renderOrder=2;extrasGroup.add(pools);
-      astraVolume={sources,rayMesh,pools,tex,uniforms};
+      // One tiny particle draw call, with deterministic distribution along all
+      // four shafts. The points drift in the shader; no CPU particle updates.
+      const dustPos=[],dustPhase=[],dustSize=[];
+      sources.forEach(({source,target},si)=>{
+        for(let i=0;i<84;i++){
+          const t=.12+.82*((i+.5)/84),a=i*2.399963+si*1.7;
+          const radius=(.22+t*2.5)*k*Math.sqrt(((i*37+si*19)%83)/83);
+          dustPos.push(source.x+(target.x-source.x)*t+Math.cos(a)*radius,
+                       source.y+(target.y-source.y)*t,
+                       source.z+(target.z-source.z)*t+Math.sin(a)*radius);
+          dustPhase.push(a);dustSize.push(.55+((i*13+si*7)%19)/19);
+        }
+      });
+      const dustGeo=new T.BufferGeometry();
+      dustGeo.setAttribute('position',new T.Float32BufferAttribute(dustPos,3));
+      dustGeo.setAttribute('phase',new T.Float32BufferAttribute(dustPhase,1));
+      dustGeo.setAttribute('size',new T.Float32BufferAttribute(dustSize,1));
+      const dustMat=new T.ShaderMaterial({uniforms,transparent:true,depthWrite:false,
+        depthTest:true,blending:T.AdditiveBlending,fog:false,
+        vertexShader:'attribute float phase;attribute float size;uniform float time;uniform float strength;varying float vAlpha;void main(){vec3 p=position;p.x+=sin(time*.65+phase)*.12;p.z+=cos(time*.52+phase)*.12;vec4 mv=modelViewMatrix*vec4(p,1.0);gl_Position=projectionMatrix*mv;gl_PointSize=clamp((3.0+size*3.0)*48.0/max(1.0,-mv.z),1.0,5.0);vAlpha=(.38+.22*sin(time*.8+phase))*strength;}',
+        fragmentShader:'varying float vAlpha;void main(){float r=length(gl_PointCoord-.5)*2.0;float a=pow(max(0.0,1.0-r),2.0)*vAlpha;gl_FragColor=vec4(.78,.88,1.0,a);}' });
+      const dust=new T.Points(dustGeo,dustMat);dust.frustumCulled=false;
+      dust.renderOrder=9;extrasGroup.add(dust);
+      astraVolume={sources,rayMesh,pools,dust,tex,uniforms};
     }
     function tickAstraVolumetrics(now){
       const v=astraVolume;if(!v)return;
       const tier=P3D._tier||'high';
       v.uniforms.time.value=now*.001;
-      v.uniforms.strength.value=tier==='low'?.38:(tier==='med'?.70:1);
-      v.pools.material.opacity=tier==='low'?.5:1;
+      v.uniforms.strength.value=tier==='low'?.32:(tier==='med'?.65:1);
+      v.pools.material.opacity=tier==='low'?.25:(tier==='med'?.35:.45);
+      v.rayMesh.visible=gfxOn('volRays');
+      v.pools.visible=gfxOn('volPools');
+      v.dust.visible=tier!=='low'&&gfxOn('volDust');
       const arr=v.rayMesh.geometry.attributes.position.array;
       const side=new T.Vector3(),axis=new T.Vector3(),view=new T.Vector3();
       v.sources.forEach(({source,target},i)=>{
@@ -1295,13 +1335,26 @@
         });
       });
       v.rayMesh.geometry.attributes.position.needsUpdate=true;
+      // camera-aware cut: where does each beam's foot land on screen?
+      const cutArr=v.rayMesh.geometry.attributes.cut.array, pr=_beamPr;
+      v.sources.forEach(({target},i)=>{
+        pr.copy(target).project(camera);
+        let c;
+        if(pr.z>1||pr.z<-1) c=0.5;                                   // behind the camera
+        else { const d=Math.hypot(pr.x/0.8,(pr.y+0.15)/0.85);        // 0 = centre of play
+               c=Math.max(0,Math.min(1,(1.15-d)/0.55)); c=c*c*(3-2*c); }
+        for(let j=0;j<6;j++) cutArr[i*6+j]=c;
+      });
+      v.rayMesh.geometry.attributes.cut.needsUpdate=true;
     }
+    const _beamPr=new T.Vector3();
     /* masts, roof lamps, flash spots — rebuilt whenever the bowl is */
     function buildExtras(){
       buildSky();
       if(astraVolume){
         astraVolume.rayMesh.geometry.dispose();astraVolume.rayMesh.material.dispose();
         astraVolume.pools.geometry.dispose();astraVolume.pools.material.dispose();
+        astraVolume.dust.geometry.dispose();astraVolume.dust.material.dispose();
         astraVolume.tex.dispose();astraVolume=null;
       }
       if(extrasGroup){ scene.remove(extrasGroup); extrasGroup=null; }
@@ -2097,6 +2150,147 @@
     // Front-facing art, so every facing maps to the same in-play row.
     const LGK4={cols:4, rows:4, idle:[0,4], run:[0,4], pass:[0,4], shoot:[0,4], idleFps:3, fpsScale:1,
       rowFor:{ idle:{down:0, up:0, side:0}, run:{down:1, up:1, side:1}, act:{down:0, up:0, side:0} }};
+    /* 6x6 keeper sheet (assets/ps1/gk_sheet6.png, author 2026-09-24), 256x280 cells.
+       row 0 set/idle (4) · 1 low dive -> on the ground (6) · 2 high dive -> landed (6)
+       · 3 catch/gather (4) · 4 run (6, faces screen-right) · 5 hand throw (4).
+       Throw cols 0-1 draw the ball in the art, and the real ball is already in
+       flight when the action plays, so distribution uses the release cols 2-3.
+       Author's call: a PUNCH reuses the dives, and every distribution, short or
+       long, is the hand throw (no kick row). rowBase: the dive rows share one
+       ground line, so the airborne frames (row 2 cols 2-3) stay in the air
+       instead of being pinned to the grass by their lowest pixel.
+       grip: glove point per idle/run frame (front glove, measured off the art). */
+    const LGK6={cols:6, rows:6, idle:[0,4], run:[0,6], pass:[2,2], shoot:[2,2], idleFps:3, fpsScale:1, gk6:true,
+      rowBase:[1,2],
+      grip:{0:[[.68,.69],[.68,.71],[.69,.67],[.69,.73]],
+            4:[[.65,.67],[.70,.60],[.68,.63],[.65,.59],[.67,.62],[.63,.64]]},
+      rowFor:{ idle:{down:0, up:0, side:0}, run:{down:4, up:4, side:4}, act:{down:5, up:5, side:5} }};
+    // Cinematic poses on the 6x6 sheet: [col,row] and per-lane ramps (+ the landed cell).
+    const GK6_POSE={ set:[0,0] };
+    const GK6_DIVE={ side    :{row:1, cols:[0,1,2,3], beaten:5},   // low lateral, full stretch on the grass
+                     sideHigh:{row:2, cols:[0,1,2,3], beaten:5},   // lateral into the top corner
+                     high    :{row:2, cols:[0,1,4,4], beaten:5},   // straight up, arm through the bar
+                     low     :{row:1, cols:[0,4,4,5], beaten:5} }; // smother at his feet
+    function gk6On(){ return !!(GK_SHEET&&GK_SHEET.L&&GK_SHEET.L.gk6); }
+    /* -- GK STATE MACHINE (GK roadmap step 4, 2026-09-24) ---------------------
+       Open-play keeper on the 6x6 sheet, driven by game.js (gkAnim):
+         set     ready stance (row 0 c0) the moment a shot is struck
+         dive    {ty,bz,ms} = the REAL shot: where it crosses his line (engine
+                 y), its height there (ball.bz predicted from the shot's own
+                 physics) and when (ms). He reads it at 40% of the flight and is
+                 at full stretch as it arrives: low / high lateral dive, the
+                 straight-up reach, or he stays big for one at his body. The
+                 stretch holds while the duel decides.
+         catch   dove: on the grass with it (low c4 / high c5), then up;
+                 at his body: the gather (row 3). The ball is in his gloves in
+                 that art, so the real ball is hidden until he stands up.
+         parry   dove: landed (c5), up. Not dove: a PUNCH = the dive frames, fast
+                 (author: punches reuse the dives).
+         beaten  dove: landed (c5) and stays down; not dove: a late dive, down.
+         throw   {kind,wind,tx,ty} (step 5): wind-up with the ball in the art
+                 (row 5 c0 underarm roll / c1 overhead), real ball hidden, then
+                 the release c2 -> c3 (roll: c3) as it leaves; faces the target.
+       The cinematic keeper (cine._gkCell) always wins; every state has a
+       lifetime and a duel in progress keeps it alive, so nothing can stick. */
+    const GKA={};
+    function _gkaBody(){ return PLEN*(P3D.spriteFrac!=null?P3D.spriteFrac:.045); }
+    function _gkaSteps(name,cur){
+      const S=[], dove=!!(cur&&cur.name==='dive'&&cur.D), D=dove?cur.D:null;
+      const low=D&&D.row===1;
+      if(name==='catch'){
+        if(dove) S.push({row:D.row,cols:[low?4:5],ms:650,lat:1,hide:1},{row:0,cols:[0],ms:260,lat:0});
+        else     S.push({row:3,cols:[0,1,2,3],ms:560,lat:0,hide:1},{row:0,cols:[0],ms:200,lat:0});
+      } else if(name==='parry'){
+        if(dove) S.push({row:D.row,cols:[5],ms:620,lat:1},{row:0,cols:[0],ms:260,lat:0});
+        else     S.push({row:2,cols:[0,1,2,3],ms:300,lat:1},{row:2,cols:[5],ms:520,lat:1},{row:0,cols:[0],ms:260,lat:0});
+      } else if(name==='beaten'){
+        if(dove) S.push({row:D.row,cols:[5],ms:2600,lat:1});
+        else     S.push({row:1,cols:[0,1,2,3],ms:320,lat:1},{row:1,cols:[5],ms:2400,lat:1});
+      }
+      return S;
+    }
+    P3D.gkAnim=function(side,name,o){
+      if(!gk6On()||(side!=='h'&&side!=='a')) return;
+      o=o||{}; const now=performance.now(), cur=GKA[side];
+      if(name==='clear'){ delete GKA[side]; return; }
+      if(name==='set'){ GKA[side]={name,t0:now,steps:[{row:0,cols:[0],ms:1,lat:0}],life:6000}; return; }
+      const q=(typeof PP!=='undefined'&&PP[side])?PP[side].GK:null, Hc=CV.height||720;
+      if(name==='dive'){
+        const dy=(q&&o.ty!=null)?o.ty-q.y:0, central=Math.abs(dy)<Hc*0.012;
+        const loft=(_os&&_os.st&&_os.st.loft)||1;
+        const hN=Math.max(0,(o.bz||0)*0.09*loft)/_gkaBody();          // arrival height, in body heights
+        const high=hN>0.5, ms=Math.max(260,o.ms||600);
+        const D=central?(high?GK6_DIVE.high:null):(high?GK6_DIVE.sideHigh:GK6_DIVE.side);
+        const steps=[{row:0,cols:[0],ms:ms*0.4,lat:0}];
+        if(D) steps.push({row:D.row,cols:D.cols,ms:ms*0.6,lat:1});
+        GKA[side]={name,t0:now,steps,D,dy:central?0:dy,hN,life:ms+2500};
+        return;
+      }
+      if(name==='throw'){
+        const w=Math.max(150,o.wind||380), roll=o.kind==='ground';
+        const steps=roll?[{row:5,cols:[0],ms:w,lat:0,hide:1},{row:5,cols:[3],ms:320,lat:0}]
+                        :[{row:5,cols:[1],ms:w,lat:0,hide:1},{row:5,cols:[2],ms:150,lat:0},{row:5,cols:[3],ms:230,lat:0}];
+        GKA[side]={name,t0:now,steps,dy:0,tx:o.tx,ty:o.ty,flip:null,life:steps.reduce((a,s)=>a+s.ms,0)+60};
+        return;
+      }
+      const steps=_gkaSteps(name,cur); if(!steps.length) return;
+      const dove=!!(cur&&cur.name==='dive'&&cur.D);
+      let dy=(cur&&cur.dy)||0;
+      if(!dove) dy=(q&&o.ty!=null&&Math.abs(o.ty-q.y)>Hc*0.004)?(o.ty-q.y):((Math.random()<0.5?-1:1)*Hc*0.03);  // punch / late dive: his side now
+      const tot=steps.reduce((a,s)=>a+s.ms,0);
+      GKA[side]={name,t0:now,steps,D:cur&&cur.D,dy,flip:dove?cur.flip:null,life:tot+120,lat0:dove?1:0};
+    };
+    // where in the timeline: the step, the frame inside it, lateral travel 0..1
+    function _gkaAt(a,now){
+      let el=now-a.t0, prevLat=(a.lat0!=null?a.lat0:0);
+      for(let i=0;i<a.steps.length;i++){ const s=a.steps[i];
+        if(el<s.ms||i===a.steps.length-1){
+          const p=Math.max(0,Math.min(1,el/s.ms)), e=p*p*(3-2*p);
+          return {s, idx:Math.min(s.cols.length-1,Math.floor(p*s.cols.length)), lat:prevLat+(s.lat-prevLat)*e};
+        }
+        el-=s.ms; prevLat=s.lat; }
+      return null;
+    }
+    function _gkaLive(side){
+      const a=GKA[side]; if(!a) return null;
+      const now=performance.now();
+      if(typeof G!=='undefined'&&G&&(G.phase==='duel'||G.phase==='duel_result'))
+        a.life=Math.max(a.life,now-a.t0+1500);                      // the duel is deciding: hold
+      // play moved on with no duel (claimed / cut out): up again, don't lie there
+      if(a.name==='dive'&&!a._end&&typeof G!=='undefined'&&G&&G.phase==='moving')
+        { a._end=1; a.life=Math.min(a.life,now-a.t0+350); }
+      const ac=ACT[side+':GK'];                                      // only his own distribution ends it (a throw IS that)
+      const why=(now-a.t0>a.life)?'life':(ac&&(ac.name==='pass'||ac.name==='shoot')&&a.name!=='throw')?'act:'+ac.name:(cine&&cine.o&&cine.o.ds===side)?'cine':'';
+      if(why){ P3D._gkaWhy=side+' '+a.name+' '+why+' ph:'+(typeof G!=='undefined'&&G?G.phase:'?'); delete GKA[side]; return null; }
+      return a;
+    }
+    // cell for syncPlayers (null = normal animation)
+    function gkaCell(side){
+      const a=_gkaLive(side); if(!a) return null;
+      const r=_gkaAt(a,performance.now()); if(!r) return null;
+      if(a.flip==null){                                              // screen side of the ball, decided once
+        const q=PP[side]&&PP[side].GK;
+        if(q&&a.dy){ const w=ex2wx(q.x), z=ey2wz(q.y);
+          _fp.set(w,0.05,z).project(camera); _fp2.set(w,0.05,ey2wz(q.y+a.dy)).project(camera);
+          a.flip=_fp2.x<_fp.x; }
+        else if(q&&a.tx!=null){                                      // a throw faces its target
+          _fp.set(ex2wx(q.x),0.05,ey2wz(q.y)).project(camera); _fp2.set(ex2wx(a.tx),0.05,ey2wz(a.ty)).project(camera);
+          a.flip=_fp2.x<_fp.x; }
+        else a.flip=false;
+      }
+      a._lat=r.lat; a._hide=!!r.s.hide;
+      return {row:r.s.row, col:r.s.cols[r.idx], flip:a.flip};
+    }
+    // world-z travel along his line (engine y), capped at a body length
+    function gkaOffZ(side){
+      const a=GKA[side]; if(!a||!a.dy||!a._lat) return 0;
+      const q=PP[side]&&PP[side].GK; if(!q) return 0;
+      const full=ey2wz(q.y+a.dy)-ey2wz(q.y), cap=_gkaBody()*0.9;
+      return Math.max(-cap,Math.min(cap,full))*0.7*a._lat;
+    }
+    function gkaHidesBall(){ return !!((GKA.h&&GKA.h._hide)||(GKA.a&&GKA.a._hide)); }
+    P3D.gkaState=function(){ const o={}; ['h','a'].forEach(s=>{ const a=GKA[s]; if(a){ const r=_gkaAt(a,performance.now());
+      o[s]={name:a.name,row:r&&r.s.row,col:r&&r.s.cols[r.idx],lat:+(a._lat||0).toFixed(2),flip:a.flip,hN:a.hN!=null?+a.hN.toFixed(2):null,hide:!!a._hide}; } }); return o; };
     // Cinematic keeper poses — [col, gridRow] on the 4x4 gk sheet (rows 2-3).
     // Easy to retune: set = pre-shot stance, save = dive/catch, beaten = goal conceded.
     const GK_POSE={ set:[0,3], save:[3,2], beaten:[2,3] };
@@ -2159,6 +2353,11 @@
           anchor[r*cols+q]=(maxX<0)?{cx:0.5,padB:0,h:1}
             :{cx:(med-x0)/cw, padB:(y1-1-maxY)/ch, h:(maxY-minY+1)/ch};
         }
+        if(L.rowBase) L.rowBase.forEach(r=>{            // one ground line + one x per dive row
+          let pb=1, c0=null;
+          for(let q=0;q<cols;q++){ const a=anchor[r*cols+q]; if(a&&a.h<1){ pb=Math.min(pb,a.padB); if(!c0)c0=a; } }
+          if(c0) for(let q=0;q<cols;q++){ const a=anchor[r*cols+q]; if(a){ a.padB=pb; a.cx=c0.cx; } }
+        });
         sheet.anchor=anchor;
         const i0=cellOf(L,'down','idle',0), ref=anchor[i0.row*cols+i0.col];
         sheet.hRef=Math.max(0.5,Math.min(1,ref?ref.h:1));
@@ -2214,7 +2413,8 @@
         im.onload=()=>{GK_SHEET={img:im,L:(L||layoutFor(im,url)),cw:im.width/((L||layoutFor(im,url)).cols),ch:im.height/((L||layoutFor(im,url)).rows)};measureSheet(GK_SHEET);
           console.log('[P3D] GK sheet '+url+' '+im.width+'x'+im.height+' -> '+GK_SHEET.L.cols+'x'+GK_SHEET.L.rows);};
         im.onerror=onFail||(()=>{}); im.src=url; };
-      tryLoad('assets/ps1/gk_cine.png', LGK4, ()=>tryLoad('assets/ps1/gk.png', null));
+      tryLoad('assets/ps1/gk_sheet6.png', LGK6,
+        ()=>tryLoad('assets/ps1/gk_cine.png', LGK4, ()=>tryLoad('assets/ps1/gk.png', null)));
     })();
     function loadSheet(side,urls){
       let i=0; const next=()=>{ if(i>=urls.length){ if(!SHEETS[side])SHEETS[side]='none'; return; }
@@ -2422,6 +2622,7 @@
           const o=ensureSprite(id,useSheet);
           if(o._sheetImg!==useSheet.img){         // (re)bind texture if the sheet changed
             o.tex.image=useSheet.img; o.tex.needsUpdate=true; o._sheetImg=useSheet.img;
+            o._L=useSheet.L||GRID;                 // a sprite made before the GK sheet loaded kept the team grid
           }
           if(o._gray&&o._gray.u){                  // stunned / slowed -> grey (game.js stunLevel)
             let g=0; try{ g=(typeof stunLevel==='function')?stunLevel(s,k):0; }catch(e){}
@@ -2438,8 +2639,10 @@
           const W=(CV.width||1280), H=(CV.height||720);
           const cx=Math.min(Math.max(p.x,0.07*W),0.93*W);
           const cy=Math.min(Math.max(p.y,0.01*H),0.99*H);
-          const wx=ex2wx(cx), wz=ey2wz(cy);
-          const st=cellState(id,p,wx,wz,(o._L||GRID));
+          const wx=ex2wx(cx), wz=ey2wz(cy)+(k==='GK'?gkaOffZ(s):0);        // + dive travel (GK state machine)
+          let st=cellState(id,p,wx,wz,(o._L||GRID));
+          if(cine&&cine._gkCell&&cine.o&&id===cine.o.ds+':GK') st=cine._gkCell;   // no idle flash mid-dive
+          else if(k==='GK'&&useSheet===GK_SHEET){ const _ga=gkaCell(s); if(_ga) st=_ga; }
           o._frame={row:st.row,col:st.col,flip:st.flip};
           // Mirror via UV, not scale: THREE.Sprite ignores negative scale.x.
           // flip → repeat.x negative + offset shifted one cell to the right edge.
@@ -2831,7 +3034,9 @@
       if(typeof G==='undefined'||!G||(G.phase!=='moving'&&G.phase!=='idle')||G.ck!=='GK'||G._gkGoalKick||!GK_SHEET)return null;
       const o=sprites[G.poss+':GK'];
       if(!o||!o.sprite.visible||o._sheetImg!==GK_SHEET.img||!o._frame)return null;
-      const f=o._frame, uv=(GK_GRIP_UV[f.row]||GK_GRIP_UV[0])[f.col]||GK_GRIP_UV[0][0];
+      const f=o._frame, _gr=GK_SHEET.L&&GK_SHEET.L.grip;
+      const _rw=_gr?(_gr[f.row]||_gr[0]):(GK_GRIP_UV[f.row]||GK_GRIP_UV[0]);
+      const uv=_rw[f.col]||_rw[0];
       const u=f.flip?1-uv[0]:uv[0];
       const right=(u-o.sprite.center.x)*o.sprite.scale.x;
       const up=(1-uv[1]-o.sprite.center.y)*o.sprite.scale.y;
@@ -2918,14 +3123,95 @@
         ballSprite.visible=true;
         ballMesh.visible=false;
       } else if(ballMesh){ ballMesh.visible=true; if(ballSprite) ballSprite.visible=false; }
+      if(gkaHidesBall()){ ballMesh.visible=false; if(ballSprite)ballSprite.visible=false; }  // in his gloves in the art
       _bPrevX=grip?null:wx; _bPrevZ=grip?null:wz;
       // shadow shrinks + fades as the ball climbs
       const shs=d*1.35/(1+hgt*0.55);
       ballShadow.position.set(wx,0.025,wz);
       ballShadow.scale.set(shs,shs*0.55,1);
-      ballShadow.material.opacity=grip?0:0.45/(1+hgt*0.8);
+      ballShadow.material.opacity=(grip||gkaHidesBall())?0:0.45/(1+hgt*0.8);
       // shot energy trail (3D replacement for the 2D _shotTrail glow)
       try{ openPlayBallFx(wx,ballWy,wz,d,!!(typeof G!=='undefined'&&G&&G._shotTrail)); }catch(e){}
+    }
+
+    /* ════════ PENALTY KICK in the real stadium (GK roadmap 6b-2, 2026-09-24) ════════
+       ult11-penalty.js runs the QTE and poses everything in "penalty metres":
+       x across the goal (screen-right from behind the taker), y up, z out from
+       the goal line, spot at z=11, goal 7.32 x 2.44. Mapped onto THIS goal:
+       across and up scale with its mouth and bar, depth scales so z=11 lands
+       on the engine's own spot, and anything behind the spot (run-up, camera)
+       uses the across-scale. While it runs the loop uses penCamera / penApply
+       / penBall instead of the match camera, sprite and ball sync, so it plays
+       in the real stadium - team-coloured crowd, flags, boards, lights. Only
+       the taker and the keeper stay visible (like the super-shot cine). */
+    let PEN=null;
+    // behind-the-taker framing, in penalty metres, [before, after the push-in]; tune live
+    P3D.penCam={side:[2.2,1.8], up:[3.6,3.1], back:[27,24], lookSide:[0.3,0.2], lookUp:[0.9,1.0], fov:[24,22]};
+    function penDepth(z){ return z<=11 ? z*PEN.szL : PEN.depth+(z-11)*PEN.sxL; }
+    function penL2W(x,z){ return {x:PEN.gs*PLEN/2-PEN.gs*penDepth(z), z:PEN.gs*x*PEN.sxL}; }
+    const _penV=new T.Vector3();
+    P3D.pen={
+      begin(o){
+        const gs=Math.sign(ex2wx(o.gx))||1, HW=PWID*0.052, GH=PWID*0.030;
+        const depth=Math.max(1,Math.abs(gs*PLEN/2-ex2wx(o.spotX)));
+        PEN={gs,HW,GH,depth,sxL:HW/3.66,syL:GH/2.44,szL:depth/11,tk:o.atk+':'+o.ak,gk:o.ds+':GK',st:null};
+        try{ clearTrail(); }catch(e){}
+        return true;
+      },
+      set(st){ if(PEN) PEN.st=st; },
+      end(){ PEN=null; },
+      active(){ return !!PEN; },
+      // penalty metres -> window pixels (for the QTE HUD)
+      project(x,y,z){ if(!PEN) return null; const w=penL2W(x,z);
+        _penV.set(w.x,y*PEN.syL,w.z).project(camera);
+        const r=renderer.domElement.getBoundingClientRect();
+        return {x:r.left+(_penV.x+1)/2*r.width, y:r.top+(1-_penV.y)/2*r.height}; },
+      // window pixels -> penalty metres on the goal plane (touch aiming)
+      unproject(cx,cy){ if(!PEN) return null; const r=renderer.domElement.getBoundingClientRect();
+        _penV.set(((cx-r.left)/r.width)*2-1, 1-((cy-r.top)/r.height)*2, 0.5).unproject(camera);
+        const dir=_penV.sub(camera.position).normalize(), gx=PEN.gs*PLEN/2;
+        if(Math.abs(dir.x)<1e-6) return null; const t=(gx-camera.position.x)/dir.x; if(t<=0) return null;
+        return {x:PEN.gs*(camera.position.z+dir.z*t)/PEN.sxL, y:(camera.position.y+dir.y*t)/PEN.syL}; },
+      net(x,y){ if(PEN) try{ netHit(PEN.gs,PEN.gs*x*PEN.sxL,Math.max(0,y)*PEN.syL); }catch(e){} }
+    };
+    function penCamera(){
+      const st=PEN.st||{}, k=st.cam||0, C=P3D.penCam, L=a=>a[0]+(a[1]-a[0])*k;
+      const p=penL2W(L(C.side),L(C.back)), l=penL2W(L(C.lookSide),0);
+      camera.position.set(p.x,L(C.up)*PEN.sxL,p.z);
+      camera.lookAt(l.x,L(C.lookUp)*PEN.syL,l.z);
+      const fov=L(C.fov); if(camera.fov!==fov){ camera.fov=fov; camera.updateProjectionMatrix(); }
+    }
+    function penApply(){
+      const st=PEN.st; if(!st) return;
+      for(const id in sprites){ const o=sprites[id], mine=(id===PEN.tk||id===PEN.gk);
+        if(!mine){ o.sprite.visible=false; o.shadow.visible=false; if(o.sil)o.sil.visible=false; continue; }
+        const ps=(id===PEN.tk)?st.tk:st.gk; if(!ps) continue;
+        o.sprite.visible=true; o.shadow.visible=true; if(o.sil) o.sil.visible=true;
+        forceCell(id,ps.r,ps.c,!!ps.flip);
+        const w=penL2W(ps.x,ps.z), dx=w.x-o.sprite.position.x, dz=w.z-o.sprite.position.z;
+        o.sprite.position.set(w.x,0.05+(P3D.spriteY||0),w.z);
+        o.shadow.position.x+=dx; o.shadow.position.z+=dz; if(o.sil){ o.sil.position.x+=dx; o.sil.position.z+=dz; }
+        if(o.sprite.material) o.sprite.material.rotation=0;
+        o._frame={row:ps.r,col:ps.c,flip:!!ps.flip};
+      }
+    }
+    function penBall(){
+      const bl=PEN.st&&PEN.st.ball, frac=(P3D.spriteFrac!=null?P3D.spriteFrac:0.045);
+      const d=PLEN*frac*0.21, r=d*0.5; ballMesh.scale.setScalar(d);
+      if(!bl){ ballMesh.visible=false; if(ballSprite)ballSprite.visible=false; ballShadow.material.opacity=0; return; }
+      const w=penL2W(bl.x,bl.z), hgt=Math.max(0,bl.y-0.11)*PEN.syL, wy=r+hgt;
+      ballMesh.position.set(w.x,wy,w.z);
+      if(ballSprite&&ballSpriteTex&&P3D.pixelBall!==false){
+        if(_bPrevX!==null&&r>1e-6) _bSpin+=Math.min(Math.hypot(w.x-_bPrevX,w.z-_bPrevZ)/(2*Math.PI*r)*BALL_FRAMES,(P3D.ballSpinMax>0?P3D.ballSpinMax:Infinity));
+        const f=((Math.floor(_bSpin)%BALL_FRAMES)+BALL_FRAMES)%BALL_FRAMES;
+        if(_bUV) ballSpriteTex.offset.set(_bUV[f][0],_bUV[f][1]);
+        else ballSpriteTex.offset.set((f%BALL_COLS)/BALL_COLS,(BALL_ROWS-1-Math.floor(f/BALL_COLS))/BALL_ROWS);
+        const sc=d/_bFill; ballSprite.position.set(w.x,wy,w.z); ballSprite.scale.set(sc,sc,1);
+        ballSprite.visible=!!bl.vis; ballMesh.visible=false;
+      } else { ballMesh.visible=!!bl.vis; if(ballSprite) ballSprite.visible=false; }
+      _bPrevX=w.x; _bPrevZ=w.z;
+      const shs=d*1.35/(1+hgt*0.55); ballShadow.position.set(w.x,0.025,w.z); ballShadow.scale.set(shs,shs*0.55,1);
+      ballShadow.material.opacity=bl.vis?0.45/(1+hgt*0.8):0;
     }
 
     /* ════════ REFEREE ════════
@@ -2950,6 +3236,7 @@
     const REF={x:0.5,y:0.4, gap:0.13, speed:0.55, face:'down', flip:false, moveT:-1e9};
     let refInit=false, _refTexBound=false;
     function syncRef(dt){
+      if(PEN){ refMesh.visible=false; refSh.visible=false; return; }   // penalty: taker + keeper only
       if(!refSheet||!refSheet.img.complete){ refMesh.visible=false; refSh.visible=false; return; }
       if(!_refTexBound){ refTex.image=refSheet.img; refTex.needsUpdate=true; _refTexBound=true; }
       refMesh.visible=true; refSh.visible=true;
@@ -3988,7 +4275,9 @@
             if(r.g.sil&&r.silMap){ r.g.sil.material.map=r.silMap; r.g.sil.material.needsUpdate=true; } }
           c._shBack=true;
         }
-        if(!gkCineCell(c,GK_POSE.set[0],GK_POSE.set[1]))forceAnim(c.o.ds+':GK','down','idle',0,false); // keeper set, facing the ball
+        const _gs=gk6On()?GK6_POSE.set:GK_POSE.set;
+        if(!(c._diveP>0))                              // once he has gone, never snap back to set
+        if(!gkCineCell(c,_gs[0],_gs[1]))forceAnim(c.o.ds+':GK','down','idle',0,false); // keeper set, facing the ball
         cineGkNudge(c);                               // ...a step off his line
         const stl=c.style||{curve:0,loft:1,speed:1,kind:'normal'}, dur=c.dur||1.6;
         if(c.mode==='fly'){
@@ -4099,7 +4388,10 @@
     // Cinematic keeper uses the single 4x4 gk sheet (gk_cine.png); the cinematic
     // dives live on rows 2-3. `col`,`row` are absolute grid cells (0..3).
     function gkCineCell(c,col,row,flip){
-      const g=sprites[c.o.ds+':GK']; if(!g||!g.sprite||!cineGkTex)return false;
+      const g=sprites[c.o.ds+':GK']; if(!g||!g.sprite)return false;
+      if(gk6On()&&g._sheetImg===GK_SHEET.img){ forceCell(c.o.ds+':GK',row,col,!!flip);
+        c._gkCell={row,col,flip:!!flip}; return true; }   // syncPlayers holds it between cine calls
+      if(!cineGkTex)return false;
       if(!c.gkRestore)c.gkRestore={map:g.sprite.material.map};
       if(g.sprite.material.map!==cineGkTex){
         g.sprite.material.map=cineGkTex; g.sprite.material.needsUpdate=true;
@@ -4120,12 +4412,14 @@
       const aim=c.aim||{s:0,h:0.5};
       const isG=(c.isGoal!=null)?c.isGoal:!!(c.o&&c.o.isGoal);
       const lane=aim.s!==0?'side':(aim.h>0.5?'high':'low');
-      const cols=GK_DIVE[lane], row=(lane==='side')?2:3;
+      const _g6=gk6On(), _D=_g6?((lane==='side'&&aim.h>=0.5)?GK6_DIVE.sideHigh:GK6_DIVE[lane]):null;
+      const cols=_g6?_D.cols:GK_DIVE[lane], row=_g6?_D.row:((lane==='side')?2:3);
+      const _bt=_g6?[_D.beaten,_D.row]:GK_POSE.beaten;
       const beat=isG?0.62:1;                         // beaten keepers stop short
       const f=Math.max(0,Math.min(cols.length-1,Math.floor(p/beat*(cols.length-1)+0.001)));
       const capped=isG?Math.min(f,cols.length-2):f;
       // committed the right way but late → he's beaten; show the reaction
-      if(isG&&p>beat){ if(!gkCineCell(c,GK_POSE.beaten[0],GK_POSE.beaten[1])) return gkFallback(c,p); return; }
+      if(isG&&p>beat){ if(!gkCineCell(c,_bt[0],_bt[1],aim.s<0)) return gkFallback(c,p); return; }
       if(!gkCineCell(c,cols[capped],row,aim.s<0)) return gkFallback(c,p);
       // and he travels with it — a dive that doesn't move isn't a dive
       const Hc=(CV.height||720), reach=(lane==='side')?Hc*0.052*0.62:0;
@@ -4134,7 +4428,7 @@
       // one dive pose, every height: lean the sprite toward the ball, so a shot
       // along the ground gets a flat full-stretch dive and a top-corner shot
       // keeps him upright. Sprite rotation is free — no extra art.
-      c.gkTilt=(lane==='side') ? -aim.s*(0.5-aim.h)*1.15*ease : 0;
+      c.gkTilt=(lane==='side'&&!_g6) ? -aim.s*(0.5-aim.h)*1.15*ease : 0;   // 6x6 has real low + high dives
     }
     function gkFallback(c,p){                        // no cine sheet → in-play rows
       forceAnimT(c.o.ds+':GK','down','shoot',Math.min(3,Math.floor(p*0.55/0.18))/3,false);
@@ -4299,7 +4593,7 @@
           const fr=Math.min(DIVE.cols-1,Math.floor(Math.max(0,(c.t-4.6))/0.16));
           const cw=1/DIVE.cols, ch=1/DIVE.rows;
           og.tex.repeat.set(cw,ch); og.tex.offset.set(fr*cw,1-(row+1)*ch);
-        } else if(c.t<4.6){ forceAnim(gid,'down','pass',0,false); }
+        } else if(c.t<4.6){ forceAnim(gid,'down','idle',0,false); }
         else { gkOutcome(c,Math.min(1,(c.t-4.6)/0.7)); }
       }
       if(c.t>=6.4) cineEnd();
@@ -4373,11 +4667,13 @@
       const now=performance.now(); const dt=Math.min(0.05,(now-lastTs)/1000); lastTs=now;
       monitorQuality(now);
       syncSheets(); watchActions();
-      if(!cine){ updateCamera(dt); camera.updateMatrixWorld(); }
+      if(PEN){ penCamera(); camera.updateMatrixWorld(); }
+      else if(!cine){ updateCamera(dt); camera.updateMatrixWorld(); }
       syncPlayers();
+      if(PEN) try{ penApply(); }catch(e){ console.error('[P3D] pen',e); }
       updateSelGlow();
       if(cine){ try{ if(cine.v2){cineStep2(dt);cineCamera2(dt);} else {cineStep(dt);cineCamera();} }catch(e){console.error('[P3D] cine error',e); cineEnd();} }
-      else    { syncBall(); }
+      else    { if(PEN) penBall(); else syncBall(); }
       // near-side sectors hide only while they sit between camera and pitch
       if(P3D.stadium==='classic-upgraded' && window.U11_CLASSIC){
         try{ U11_CLASSIC.update(camera); }catch(e){}
