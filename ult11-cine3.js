@@ -589,7 +589,13 @@ function comet(c,dt,A){
   const vis=fl.op>0.01;
   for(const r of [trail,strandA,strandB]){ r.mesh.visible=vis; r.mat.uniforms.time.value=performance.now()/1000; }
   if(vis){
-    trail.update(A.camera,s=>BR*(1.9*(1-s)+0.25)*(1+0.12*Math.sin(performance.now()/25+s*12)));
+    /* ROUND HEAD (author, 2026-09-24): the ribbon was widest right at the ball
+       and stopped there, so from most angles the comet ended in a flat cut.
+       It now narrows into a rounded cap inside the ball's glow (circle
+       profile over the first 12% of the tail), and the glow is a touch
+       bigger, so the head reads as a round light round the ball at any angle. */
+    trail.update(A.camera,s=>{ const x=Math.min(1,s/0.12), cap=Math.max(0.18,Math.sqrt(Math.max(0,1-(1-x)*(1-x))));
+      return BR*(1.9*(1-s)+0.25)*(1+0.12*Math.sin(performance.now()/25+s*12))*cap; });
     trail.mat.uniforms.op.value=fl.op;
     const curve=(c.style&&c.style.kind==='curve')||c.arc==='drive', tt=performance.now()/1000;
     const tv=new T.Vector3(), up=new T.Vector3(), q=new T.Vector3();
@@ -609,7 +615,7 @@ function comet(c,dt,A){
   shell.position.set(b.x,b.y,b.z); shell.scale.setScalar(bd*(1.45+0.15*Math.sin(performance.now()/33)));
   shell.material.uniforms.op.value=0.9*fl.op;
   if(c.mode==='fly'&&imp&&imp.t<0){ shell.material.uniforms.op.value=0.4; bglow.material.opacity=0.22; bglow.scale.setScalar(1.0*S); }
-  bglow.material.color.copy(C); bglow.position.set(b.x,b.y,b.z); bglow.scale.setScalar(2.4*S); bglow.material.opacity=0.7*fl.op;
+  bglow.material.color.copy(C); bglow.position.set(b.x,b.y,b.z); bglow.scale.setScalar(2.9*S); bglow.material.opacity=0.8*fl.op;
   // sparks off the comet + dust where it skims the turf
   if(c.mode==='fly'&&!(c._hitStop>0)&&dt>0){
     for(let i=0;i<5;i++){ const w=Math.random()<.4;

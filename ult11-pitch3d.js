@@ -1846,7 +1846,10 @@
     const SIGNATURES={
       mancuso:{ trail:'drive',  arc:'drive',  label:'DRIVE SHOT'   },
       vella:  { trail:'nature', arc:'normal', label:'EMERALD SHOT', col:'#19e07a' },
-      frisina:{ trail:'dragon', arc:'normal', label:'DRAGON SHOT'  }
+      frisina:{ trail:'dragon', arc:'normal', label:'DRAGON SHOT'  },
+      // author 2026-09-24: Germany's two - every other player is the generic cyan
+      falkner:{ trail:'flame',  arc:'normal', label:'FLAME SHOT',   col:'#ff6a1e' },
+      margus: { trail:'lightning', arc:'normal', label:'THUNDER SHOT', col:'#ffd21f' }
     };
     function signatureFor(pl){
       if(!pl) return null;
@@ -1890,6 +1893,11 @@
       return {k,st,col};
     }
     let _trailFx=null, _ringT=0, _ghostT=0;
+    /* SUPER-SHOT COLOUR (author, 2026-09-24): the generic super shot is the
+       mockup's cyan. Only a signature shot (SIGNATURES: Vella's emerald, ...)
+       or a Camera-Lab forced trail keeps its own colour. */
+    function superCol(){ const f=_trailFx; return (f&&(f.sig||_trailForce)&&f.col)?f.col:'#3ec8ff'; }
+    P3D.superColFor=function(pl){ const f=trailStyleFor(pl); return (f&&(f.sig||_trailForce)&&f.col)?f.col:'#3ec8ff'; };   // tests / Camera Lab
     let _os={bt:null};   // open-play shot state (style + bend axis for the current ballTravel)
     /* ── ball FX: comet (shots) + resting halo (open play) ── */
     let shotRibbon=null, RIBS=[], ballGlow=null, ballCore=null, ballHalo=null, _lastFxBall=null;
@@ -2223,7 +2231,9 @@
         const D=central?(high?GK6_DIVE.high:null):(high?GK6_DIVE.sideHigh:GK6_DIVE.side);
         const steps=[{row:0,cols:[0],ms:ms*0.4,lat:0}];
         if(D) steps.push({row:D.row,cols:D.cols,ms:ms*0.6,lat:1});
-        GKA[side]={name,t0:now,steps,D,dy:central?0:dy,hN,life:ms+2500};
+        // where the ball really crosses his line, in world space (for the glove)
+        const bw=(q&&o.tx!=null)?{x:ex2wx(o.tx), z:ey2wz(o.ty), y:PLEN*(P3D.spriteFrac!=null?P3D.spriteFrac:.045)*0.105+Math.max(0,(o.bz||0))*0.09*loft}:null;
+        GKA[side]={name,t0:now,steps,D,dy:central?0:dy,hN,life:ms+2500,bw};
         return;
       }
       if(name==='throw'){
@@ -2238,7 +2248,7 @@
       let dy=(cur&&cur.dy)||0;
       if(!dove) dy=(q&&o.ty!=null&&Math.abs(o.ty-q.y)>Hc*0.004)?(o.ty-q.y):((Math.random()<0.5?-1:1)*Hc*0.03);  // punch / late dive: his side now
       const tot=steps.reduce((a,s)=>a+s.ms,0);
-      GKA[side]={name,t0:now,steps,D:cur&&cur.D,dy,flip:dove?cur.flip:null,life:tot+120,lat0:dove?1:0};
+      GKA[side]={name,t0:now,steps,D:cur&&cur.D,dy,flip:dove?cur.flip:null,life:tot+120,lat0:dove?1:0,bw:dove?cur.bw:null};
     };
     // where in the timeline: the step, the frame inside it, lateral travel 0..1
     function _gkaAt(a,now){
@@ -2283,11 +2293,50 @@
     }
     // world-z travel along his line (engine y), capped at a body length
     function gkaOffZ(side){
-      const a=GKA[side]; if(!a||!a.dy||!a._lat) return 0;
+      const a=GKA[side]; if(!a||!a.dy||!a._lat||a.bw) return 0;   // with a real ball point, gkaAlign places him
       const q=PP[side]&&PP[side].GK; if(!q) return 0;
       const full=ey2wz(q.y+a.dy)-ey2wz(q.y), cap=_gkaBody()*0.9;
       return Math.max(-cap,Math.min(cap,full))*0.7*a._lat;
     }
+    /* HANDS ON THE BALL (author, 2026-09-24: "his hands are never where the
+       ball is"). The match camera looks along the pitch, so the goal line runs
+       INTO the screen, while the dive art stretches ACROSS it: moving him along
+       the line never put the glove on the ball. Now, after the normal sprite
+       sync, the diving keeper is moved so that the reaching glove of the frame
+       on screen (measured off the art: GKA_GLOVE, [u,v] from the top-left)
+       lands on the ball's real arrival point, blended in as he stretches. */
+    const GKA_GLOVE={
+      0:[[.5,.7],[.5,.7],[.5,.7],[.5,.7]],
+      1:[[.683,.781],[.817,.814],[.86,.703],[.895,.861],[.56,.893],[.65,.9]],
+      2:[[.637,.681],[.55,.45],[.87,.25],[.86,.16],[.75,.24],[.68,.89]],
+      3:[[.55,.69],[.59,.665],[.55,.65],[.52,.67]] };
+    const _gaR=new T.Vector3(), _gaU=new T.Vector3();
+    function gkaAlign(){
+      if(P3D.gkAlign===false) return;                               // A/B switch for testing
+      ['h','a'].forEach(side=>{
+        const a=GKA[side]; if(!a||!a.bw||!a._lat) return;
+        const o=sprites[side+':GK']; if(!o||!o.sprite||!o.sprite.visible||!o._frame) return;
+        const f=o._frame, row=GKA_GLOVE[f.row]; if(!row) return;
+        const uv=row[f.col]||row[0], u=f.flip?1-uv[0]:uv[0];
+        _gaR.setFromMatrixColumn(camera.matrixWorld,0); _gaU.setFromMatrixColumn(camera.matrixWorld,1);
+        const rx=(u-o.sprite.center.x)*o.sprite.scale.x, uy=(1-uv[1]-o.sprite.center.y)*o.sprite.scale.y;
+        const gx=o.sprite.position.x+_gaR.x*rx+_gaU.x*uy, gz=o.sprite.position.z+_gaR.z*rx+_gaU.z*uy;
+        let dx=(a.bw.x-gx)*a._lat, dz=(a.bw.z-gz)*a._lat;
+        const cap=PLEN*(P3D.spriteFrac!=null?P3D.spriteFrac:.045)*1.4, m=Math.hypot(dx,dz);
+        if(m>cap){ dx*=cap/m; dz*=cap/m; }
+        o.sprite.position.x+=dx; o.sprite.position.z+=dz;
+        if(o.shadow){ o.shadow.position.x+=dx; o.shadow.position.z+=dz; }
+        if(o.sil){ o.sil.position.x+=dx; o.sil.position.z+=dz; }
+      });
+    }
+    P3D.gkaGlove=function(side){ const o=sprites[side+':GK'], a=GKA[side]; if(!o||!o._frame) return null;
+      const f=o._frame, row=GKA_GLOVE[f.row]; if(!row) return null; const uv=row[f.col]||row[0], u=f.flip?1-uv[0]:uv[0];
+      _gaR.setFromMatrixColumn(camera.matrixWorld,0); _gaU.setFromMatrixColumn(camera.matrixWorld,1);
+      const rx=(u-o.sprite.center.x)*o.sprite.scale.x, uy=(1-uv[1]-o.sprite.center.y)*o.sprite.scale.y;
+      const g=o.sprite.position.clone().addScaledVector(_gaR,rx).addScaledVector(_gaU,uy);
+      let px=null; if(a&&a.bw){ const r=renderer.domElement.getBoundingClientRect(), A=g.clone().project(camera), B=new T.Vector3(a.bw.x,a.bw.y,a.bw.z).project(camera);
+        px=Math.round(Math.hypot((A.x-B.x)/2*r.width,(A.y-B.y)/2*r.height)); }
+      return {glove:g, ball:a&&a.bw?a.bw:null, frame:f, lat:a?a._lat:0, screenPx:px}; };
     function gkaHidesBall(){ return !!((GKA.h&&GKA.h._hide)||(GKA.a&&GKA.a._hide)); }
     P3D.gkaState=function(){ const o={}; ['h','a'].forEach(s=>{ const a=GKA[s]; if(a){ const r=_gkaAt(a,performance.now());
       o[s]={name:a.name,row:r&&r.s.row,col:r&&r.s.cols[r.idx],lat:+(a._lat||0).toFixed(2),flip:a.flip,hN:a.hN!=null?+a.hN.toFixed(2):null,hide:!!a._hide}; } }); return o; };
@@ -3134,6 +3183,28 @@
       try{ openPlayBallFx(wx,ballWy,wz,d,!!(typeof G!=='undefined'&&G&&G._shotTrail)); }catch(e){}
     }
 
+    /* SUPER-SHOT BALL FIX (author, 2026-09-24): the cinematic moves ballMesh,
+       but the match draws the pixel-ball SPRITE and hides the mesh - and the
+       main loop skips syncBall while a cine runs, so the sprite stayed frozen
+       where the ball was struck while the trail flew on its own ("the trail
+       carries an invisible ball"). Every cine frame, the sprite (and its
+       shadow) now copy the cine ball's position and size. */
+    function syncCineBall(){
+      const r=ballMesh.scale.x*0.5, p=ballMesh.position;
+      if(ballSprite&&ballSpriteTex&&P3D.pixelBall!==false){
+        if(_bPrevX!==null&&r>1e-6) _bSpin+=Math.min(Math.hypot(p.x-_bPrevX,p.z-_bPrevZ)/(2*Math.PI*r)*BALL_FRAMES,(P3D.ballSpinMax>0?P3D.ballSpinMax:Infinity));
+        const f=((Math.floor(_bSpin)%BALL_FRAMES)+BALL_FRAMES)%BALL_FRAMES;
+        if(_bUV) ballSpriteTex.offset.set(_bUV[f][0],_bUV[f][1]);
+        else ballSpriteTex.offset.set((f%BALL_COLS)/BALL_COLS,(BALL_ROWS-1-Math.floor(f/BALL_COLS))/BALL_ROWS);
+        const sc=ballMesh.scale.x/_bFill;
+        ballSprite.position.copy(p); ballSprite.scale.set(sc,sc,1); ballSprite.visible=true; ballMesh.visible=false;
+      } else { ballMesh.visible=true; if(ballSprite) ballSprite.visible=false; }
+      _bPrevX=p.x; _bPrevZ=p.z;
+      const hgt=Math.max(0,p.y-r), shs=r*2*1.35/(1+hgt*0.55);
+      ballShadow.position.set(p.x,0.025,p.z); ballShadow.scale.set(shs,shs*0.55,1);
+      ballShadow.material.opacity=0.45/(1+hgt*0.8);
+    }
+
     /* ════════ PENALTY KICK in the real stadium (GK roadmap 6b-2, 2026-09-24) ════════
        ult11-penalty.js runs the QTE and poses everything in "penalty metres":
        x across the goal (screen-right from behind the taker), y up, z out from
@@ -3325,11 +3396,26 @@
       let fx=0,fz=0, cx01=0.5;
       const passing = (typeof G!=='undefined'&&G&&(G.phase==='pass_anim'||G.phase==='moving'&&G.pm));
       const cp=carrierPos();
-      if(passing && typeof ball!=='undefined'&&ball){
+      /* SHOT FOCUS (author, 2026-09-24: "the camera follows the net rather than
+         the ball"). From the strike until the save / goal has played out, stay
+         on the BALL, leading it toward where it's going and catching up faster.
+         Before, it lagged a fast shot and then, as the keeper duel began,
+         swung back to the shooter - so the dive and the catch happened at the
+         edge of the frame. */
+      const _g=(typeof G!=='undefined')?G:null;
+      const shotFocus=!!(_g&&(_g._shotTrail||((_g.phase==='duel'||_g.phase==='duel_result')&&_g.D&&_g.D.isShot)||
+                               ((GKA.h&&GKA.h.name!=='throw')||(GKA.a&&GKA.a.name!=='throw'))));
+      let kMul=1;
+      if(shotFocus && typeof ball!=='undefined'&&ball){
+        let bx=ball.x, by=ball.y;
+        if(_g._shotTrail&&typeof ballTravel!=='undefined'&&ballTravel&&ballTravel.active&&!ballTravel.loose){
+          bx+=(ballTravel.tx-bx)*0.45; by+=(ballTravel.ty-by)*0.45; }          // lead toward the goal
+        fx=ex2wx(bx); fz=ey2wz(by); cx01=bx/(CV.width||1280); kMul=2.5;
+      } else if(passing && typeof ball!=='undefined'&&ball){
         fx=ex2wx(ball.x); fz=ey2wz(ball.y); cx01=ball.x/(CV.width||1280);
       } else if(cp){ fx=ex2wx(cp.x); fz=ey2wz(cp.y); cx01=cp.x/(CV.width||1280); }
       else if(typeof ball!=='undefined'&&ball){ fx=ex2wx(ball.x); fz=ey2wz(ball.y); cx01=ball.x/(CV.width||1280); }
-      const k=Math.min(1,dt*C.followLerp);
+      const k=Math.min(1,dt*C.followLerp*kMul);
       camFocus.x+=(fx-camFocus.x)*k;
       camFocus.z+=(fz*C.zFollow-camFocus.z)*k;     // partial Z so view stays sideways
       // AUTO-ZOOM near the SOUTH touchline: as the carrier approaches the near
@@ -4123,7 +4209,7 @@
           const _b=cine._bw||{x:ex2wx(cine.fx),y:0.3,z:ey2wz(cine.fy)};
           _c3imp=U11_CINE3.impact(cine,{T,scene,camera,hh:_c3hh(),
             bx:_b.x,by:_b.y,bz:_b.z,swx:ex2wx(cine.fx),swz:ey2wz(cine.fy),gwx:ex2wx(cine.gx),gwz:ey2wz(cine.gy),
-            col:((_trailFx&&_trailFx.col)||cine.col||'#ffd24a'),shake:(a,ms)=>shakeCam(a,ms)});
+            col:superCol(),shake:(a,ms)=>shakeCam(a,ms)});
         }catch(e){ console.error('[C3] impact',e); window.U11DBG&&U11DBG('[C3] impact error: '+e.message); } }
         if(_c3imp){ try{ clearTrail(); [ballGlow,ballCore,ballHalo].forEach(o=>{ if(o) o.visible=false; }); }catch(e){} }
         if(!_c3imp){
@@ -4472,7 +4558,7 @@
           ensureHoldFx();
           _ok=U11_CINE3.holdFrame(c,rdt,{T,scene,camera,renderer,gl,g:sprites[c.o.as+':'+c.o.sk],
             hh:_c3hh(),swx,swz,gwx,gwz,
-            col:((_trailFx&&_trailFx.col)||c.col||'#ffd24a'),cv:fxCv,ctx:fxCtx,proj:projectToScreen,
+            col:superCol(),cv:fxCv,ctx:fxCtx,proj:projectToScreen,
             bloom:bloomPass,fxBase:P3D.fx,ballMesh});
         }catch(e){ console.error('[C3] hold',e); window.U11DBG&&U11DBG('[C3] hold error: '+e.message); U11_CINE3.on=false; }
         if(_ok){ _c3view(); applyShake(rdt||0); return; }
@@ -4671,8 +4757,10 @@
       else if(!cine){ updateCamera(dt); camera.updateMatrixWorld(); }
       syncPlayers();
       if(PEN) try{ penApply(); }catch(e){ console.error('[P3D] pen',e); }
+      else if(!cine) try{ gkaAlign(); }catch(e){}
       updateSelGlow();
-      if(cine){ try{ if(cine.v2){cineStep2(dt);cineCamera2(dt);} else {cineStep(dt);cineCamera();} }catch(e){console.error('[P3D] cine error',e); cineEnd();} }
+      if(cine){ try{ if(cine.v2){cineStep2(dt);cineCamera2(dt);} else {cineStep(dt);cineCamera();} }catch(e){console.error('[P3D] cine error',e); cineEnd();}
+                if(cine) try{ syncCineBall(); }catch(e){} }
       else    { if(PEN) penBall(); else syncBall(); }
       // near-side sectors hide only while they sit between camera and pitch
       if(P3D.stadium==='classic-upgraded' && window.U11_CLASSIC){
