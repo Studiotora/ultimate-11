@@ -2440,6 +2440,7 @@
           const cy=Math.min(Math.max(p.y,0.01*H),0.99*H);
           const wx=ex2wx(cx), wz=ey2wz(cy);
           const st=cellState(id,p,wx,wz,(o._L||GRID));
+          o._frame={row:st.row,col:st.col,flip:st.flip};
           // Mirror via UV, not scale: THREE.Sprite ignores negative scale.x.
           // flip → repeat.x negative + offset shifted one cell to the right edge.
           const _L=(o._L||GRID);
@@ -2816,6 +2817,28 @@
     })();
     let _bPrevX=null,_bPrevZ=null;
     const _bAxis=new T.Vector3();
+    // Normalized glove centres in the 4x4 keeper sheet. A keeper's hand is a
+    // point on a camera-facing sprite, not a fixed world-space height: project
+    // this point through the actual sprite frame so the held ball stays on the
+    // glove as the camera, sprite frame or facing changes.
+    const GK_GRIP_UV=[
+      [[.76,.44],[.72,.42],[.65,.40],[.63,.40]], // idle
+      [[.59,.58],[.61,.56],[.55,.60],[.55,.59]]  // run
+    ];
+    const _gripRight=new T.Vector3(),_gripUp=new T.Vector3(),_gripPos=new T.Vector3();
+    let _lastHeldGrip=null;
+    function heldKeeperGrip(){
+      if(typeof G==='undefined'||!G||(G.phase!=='moving'&&G.phase!=='idle')||G.ck!=='GK'||G._gkGoalKick||!GK_SHEET)return null;
+      const o=sprites[G.poss+':GK'];
+      if(!o||!o.sprite.visible||o._sheetImg!==GK_SHEET.img||!o._frame)return null;
+      const f=o._frame, uv=(GK_GRIP_UV[f.row]||GK_GRIP_UV[0])[f.col]||GK_GRIP_UV[0][0];
+      const u=f.flip?1-uv[0]:uv[0];
+      const right=(u-o.sprite.center.x)*o.sprite.scale.x;
+      const up=(1-uv[1]-o.sprite.center.y)*o.sprite.scale.y;
+      _gripRight.setFromMatrixColumn(camera.matrixWorld,0);
+      _gripUp.setFromMatrixColumn(camera.matrixWorld,1);
+      return _gripPos.copy(o.sprite.position).addScaledVector(_gripRight,right).addScaledVector(_gripUp,up);
+    }
     function syncBall(){
       if(cine){ if(ballSprite) ballSprite.visible=false; return; }   // cinematic drives the ball directly
       if(typeof ball==='undefined'||!ball) return;
@@ -2853,8 +2876,22 @@
       const r=d*0.5, hgt=Math.max(0,(ball.bz||0)*0.09)*hgtMul;
       const carried=cp&&!passing&&G.phase==='moving'?P3D.getJumpLift(G.poss,G.ck):0;
       const bwy=r+Math.max(hgt,carried);        // ball and carrier share the same lift
-      const wx=ex2wx(bx), wz=ey2wz(by);
-      ballMesh.position.set(wx,bwy,wz);
+      let wx=ex2wx(bx), wz=ey2wz(by), ballWy=bwy;
+      const grip=heldKeeperGrip();
+      if(grip){
+        wx=grip.x;wz=grip.z;ballWy=grip.y;
+        _lastHeldGrip={x:wx,y:ballWy,z:wz,side:G.poss};
+      }else if(_lastHeldGrip&&typeof ballTravel!=='undefined'&&ballTravel&&ballTravel.active&&
+               ballTravel.kicker==='GK'&&ballTravel.side===_lastHeldGrip.side&&G.phase==='pass_anim'){
+        // The physical pass starts at the keeper's pitch coordinate. Blend its
+        // first few rendered frames from the glove so release never teleports.
+        const f=Math.min(1,Math.max(0,(ballTravel.progress||0)/6));
+        wx=_lastHeldGrip.x+(wx-_lastHeldGrip.x)*f;
+        wz=_lastHeldGrip.z+(wz-_lastHeldGrip.z)*f;
+        ballWy=_lastHeldGrip.y+(ballWy-_lastHeldGrip.y)*f;
+        if(f>=1)_lastHeldGrip=null;
+      }else _lastHeldGrip=null;
+      ballMesh.position.set(wx,ballWy,wz);
       // ROLL: rotate about the axis perpendicular to the direction of travel
       if(_bPrevX!==null){
         const ddx=wx-_bPrevX, ddz=wz-_bPrevZ, trav=Math.hypot(ddx,ddz);
@@ -2876,19 +2913,19 @@
         else ballSpriteTex.offset.set((f%BALL_COLS)/BALL_COLS,
                                       (BALL_ROWS-1-Math.floor(f/BALL_COLS))/BALL_ROWS);
         const sc=d/_bFill;                                 // the art has padding round the ball
-        ballSprite.position.set(wx,bwy,wz);
+        ballSprite.position.set(wx,ballWy,wz);
         ballSprite.scale.set(sc,sc,1);
         ballSprite.visible=true;
         ballMesh.visible=false;
       } else if(ballMesh){ ballMesh.visible=true; if(ballSprite) ballSprite.visible=false; }
-      _bPrevX=wx; _bPrevZ=wz;
+      _bPrevX=grip?null:wx; _bPrevZ=grip?null:wz;
       // shadow shrinks + fades as the ball climbs
       const shs=d*1.35/(1+hgt*0.55);
       ballShadow.position.set(wx,0.025,wz);
       ballShadow.scale.set(shs,shs*0.55,1);
-      ballShadow.material.opacity=0.45/(1+hgt*0.8);
+      ballShadow.material.opacity=grip?0:0.45/(1+hgt*0.8);
       // shot energy trail (3D replacement for the 2D _shotTrail glow)
-      try{ openPlayBallFx(wx,bwy,wz,d,!!(typeof G!=='undefined'&&G&&G._shotTrail)); }catch(e){}
+      try{ openPlayBallFx(wx,ballWy,wz,d,!!(typeof G!=='undefined'&&G&&G._shotTrail)); }catch(e){}
     }
 
     /* ════════ REFEREE ════════
@@ -4335,10 +4372,12 @@
       if(_cw&&_ch&&(_cw!==_lastW||_ch!==_lastH)){ _lastW=_cw;_lastH=_ch;resize(); }
       const now=performance.now(); const dt=Math.min(0.05,(now-lastTs)/1000); lastTs=now;
       monitorQuality(now);
-      syncSheets(); watchActions(); syncPlayers();
+      syncSheets(); watchActions();
+      if(!cine){ updateCamera(dt); camera.updateMatrixWorld(); }
+      syncPlayers();
       updateSelGlow();
       if(cine){ try{ if(cine.v2){cineStep2(dt);cineCamera2(dt);} else {cineStep(dt);cineCamera();} }catch(e){console.error('[P3D] cine error',e); cineEnd();} }
-      else    { syncBall(); updateCamera(dt); }
+      else    { syncBall(); }
       // near-side sectors hide only while they sit between camera and pitch
       if(P3D.stadium==='classic-upgraded' && window.U11_CLASSIC){
         try{ U11_CLASSIC.update(camera); }catch(e){}

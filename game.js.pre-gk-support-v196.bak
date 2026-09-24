@@ -922,7 +922,7 @@ function stopMenuMusic(){
 function startMatchMusic(){
   stopMenuMusic();
   stopMatchMusic();
-  const track=1; // only the active match1.mp3 remains; old tracks were archived.
+  const track=Math.floor(Math.random()*3)+1;
   const a=document.getElementById('matchMusic'+track);
   if(!a)return;
   _matchMusicEl=a;
@@ -932,7 +932,8 @@ function startMatchMusic(){
 }
 function stopMatchMusic(){
   if(_matchMusicEl){_matchMusicEl.pause();_matchMusicEl.currentTime=0;_matchMusicEl=null;}
-  const a=document.getElementById('matchMusic1');if(a){a.pause();a.currentTime=0;}
+  // Stop all just in case
+  [1,2,3].forEach(i=>{const a=document.getElementById('matchMusic'+i);if(a){a.pause();a.currentTime=0;}});
 }
 function returnToMenuMusic(){
   stopMatchMusic();
@@ -1586,13 +1587,6 @@ function dist(a,b){return Math.hypot(a.x-b.x,a.y-b.y);}
 function dirFor(side){return ((side==='h')===(G.half===1))?1:-1;}
 function goalXFor(side){return dirFor(side)>0?W*.93:W*.07;}
 function ownGoalXFor(side){return dirFor(side)>0?W*.07:W*.93;}
-// Match the penalty-area lines in ult11-pitch3d.js (depth .16W, y .22-.78H).
-// A tiny inset keeps the keeper's centre and held ball safely inside the line.
-function clampKeeperToArea(side,p){
-  const gx=ownGoalXFor(side), edge=gx+dirFor(side)*W*.158;
-  p.x=clamp(p.x,Math.min(gx,edge),Math.max(gx,edge));
-  p.y=clamp(p.y,H*.224,H*.776);
-}
 function progressFor(side,p){return dirFor(side)>0?(p.x/W):(1-p.x/W);}
 function getBehaviorProfile(pl){return {...DEFAULT_BEHAVIOR_PROFILE,...((pl&&pl.behavior)||{})};}
 // ── TEAM TACTICAL STANCE ──────────────────────────────────────────
@@ -1866,7 +1860,6 @@ function carrierAdvanceVector(side,cp){
 // X: goal line to goal line (.07/.93, = goalXFor). Y: touchline to touchline.
 // Every player is clamped here each frame so nobody runs off the field.
 const FB={x0:0.07,x1:0.93,y0:0.01,y1:0.99};
-const GK_HAND_BZ=8; // 2D fallback / release height; 3D pins the ball to the sprite's glove
 function clampAllToPitch(){
   ['h','a'].forEach(s=>{const q=PP[s];if(!q)return;for(const k in q){const p=q[k];if(!p)continue;p.x=clamp(p.x,W*FB.x0,W*FB.x1);p.y=clamp(p.y,H*FB.y0,H*FB.y1);}});
 }
@@ -1904,7 +1897,9 @@ function tick(dt=1){
   // The CPU chooses after a short read, using the same physical pass flight.
   const _carrPl0=sq(s)[G.ck];
   if(_carrPl0&&_carrPl0.pos==='GK'){
-    clampKeeperToArea(s,cp);
+    const gx=ownGoalXFor(s);
+    cp.x=clamp(cp.x,Math.min(gx,gx+dirFor(s)*W*0.10),Math.max(gx,gx+dirFor(s)*W*0.10));
+    cp.y=clamp(cp.y,H*0.30,H*0.70);
   }
   const mv=carrierAdvanceVector(s,cp);
   // Vector-magnitude clamp: previous per-axis clamp made diagonals ~41% faster
@@ -1924,7 +1919,9 @@ function tick(dt=1){
     cp.y=clamp(cp.y+(mv.y/mvMag)*step,H*.01,H*.99);
   }
   if(_carrPl0&&_carrPl0.pos==='GK'){
-    clampKeeperToArea(s,cp);
+    const gx=ownGoalXFor(s);
+    cp.x=clamp(cp.x,Math.min(gx,gx+dirFor(s)*W*.10),Math.max(gx,gx+dirFor(s)*W*.10));
+    cp.y=clamp(cp.y,H*.30,H*.70);
   }
   if(G_moveTarget&&Math.hypot(cp.x-G_moveTarget.x,cp.y-G_moveTarget.y)<W*.03)G_moveTarget=null;
   ball.tx=cp.x;ball.ty=cp.y;
@@ -1965,18 +1962,6 @@ function tick(dt=1){
       G._gkHoldAt=Date.now();
       if(!isCpuSide(s))say(G._gkGoalKick?'GOAL KICK — PASS short, CROSS long, SHOOT punt.':'Keeper holds it — PASS short, CROSS throw, SHOOT punt.');
     }
-    // The ball is protected in the keeper's hands, but the rest of the match
-    // must keep breathing: teammates show for a pass and opponents mark them.
-    moveOffBall(s,ds,dt);
-    const ek=ROLES.engager, ep=ek&&PP[ds][ek], epl=ek&&sq(ds)[ek];
-    if(ep&&epl&&!ocd(ds,ek)){
-      const home=fp(ek,ds==='h'?'home':'away',G.half);
-      aiMoveTo(ep,home.x*W,home.y*H,'jog',epl,ds,ek,dt);
-    }
-    applyRepulsion(dt);
-    clampAllToPitch();
-    clampKeeperToArea(s,cp);
-    enforcePace(dt);
     if(isCpuSide(s)&&Date.now()-G._gkHoldAt>1050&&!G._kick)
       keeperDistribute(s,Math.random()<.68?'ground':'cross');
     return;
@@ -2997,17 +2982,6 @@ function defensiveTarget(s,ds,k,cp,plan){
   return {x:clamp(x,W*.08,W*.92),y:clamp(y,H*.04,H*.96),gait};
 }
 
-// During a keeper hold, the back line must become passing outlets beyond the
-// penalty area rather than applying the generic near-carrier support offsets.
-function keeperBuildOutTarget(side,key){
-  const home=fp(key,side==='h'?'home':'away',G.half);
-  const role=aiRole(side,key), dir=dirFor(side), goal=ownGoalXFor(side);
-  const homeDepth=(home.x*W-goal)*dir/W;
-  const floor=role==='centreback'?.205:
-    role==='fullback'||role==='wingback'?.245:
-    role==='holding'?.305:role==='midfield'?.355:.48;
-  return {x:goal+dir*W*Math.max(homeDepth,floor),y:home.y*H};
-}
 function moveOffBallV2(s,ds,dt=1){
   const cp=PP[s][G.ck]; if(!cp) return;
   const dir=dirFor(s), ddir=dirFor(ds);
@@ -3046,10 +3020,6 @@ function moveOffBallV2(s,ds,dt=1){
       return;
     }
     if(isStalled(s,k)) return;
-    if(G.ck==='GK'){
-      const t=keeperBuildOutTarget(s,k);
-      aiMoveTo(cur,t.x,t.y,'run',pl,s,k,dt); return;
-    }
     if(ocd(s,k)){ aiMoveTo(cur,p.x*W,p.y*H,'jog',pl,s,k,dt); return; }
     if(flying&&k===G._pfRecv){                                    // attack the ball
       /* step ONTO the ball's line, ahead of it, instead of running at the landing
@@ -3177,10 +3147,6 @@ function moveOffBallV1(s,ds,dt=1){
     }
 
     if(isStalled(s,k))return;                       // stunned: stays down
-    if(G.ck==='GK'){
-      const t=keeperBuildOutTarget(s,k);
-      glide(cur,t.x,t.y,SUPPORT_SPEED*1.4,pl,s,k); return;
-    }
     // Cooling down — return to formation position
     if(ocd(s,k)){glide(cur,p.x*W,p.y*H,DRIFT_SPEED*0.6,pl,s,k);return;}
 
@@ -3656,7 +3622,7 @@ function startAnim(){
       ball.x+=(fx-ball.x)*k; ball.y+=(fy-ball.y)*k;
       ball.tx=ball.x;ball.ty=ball.y;
       // A catch stays in the keeper's hands; outfield possession stays at feet.
-      if(keeperHolding)ball.bz=GK_HAND_BZ;
+      if(keeperHolding)ball.bz=13; // ball visibly held at the keeper's chest
       else if(window.P3D&&P3D.getJumpLift)ball.bz=P3D.getJumpLift(G.poss,G.ck)/.09;
       else if(ball.bz)ball.bz+=(0-ball.bz)*Math.min(.35*dt,1);
     }else{
@@ -6894,7 +6860,7 @@ function launchPass(s,tk,kind='ground',point){
   const ground=groundPassFlight(distp);
   const dur=cross?Math.max(8,distp/(W*.007)):ground.dur,fr=cross?.997:ground.fr;
   const v=distp*(1-fr)/(1-Math.pow(fr,dur));
-  const launchBz=sk==='GK'?(G._gkGoalKick?0:GK_HAND_BZ):(window.P3D&&P3D.getJumpLift?P3D.getJumpLift(s,sk)/.09:Math.max(0,ball.bz||0));
+  const launchBz=sk==='GK'?(G._gkGoalKick?0:13):(window.P3D&&P3D.getJumpLift?P3D.getJumpLift(s,sk)/.09:Math.max(0,ball.bz||0));
   ballTravel={active:true,physicalPass:true,side:s,kicker:sk,receiver:tk,kind,launchBz,
     x:from.x,y:from.y,fx:from.x,fy:from.y,tx,ty,vx:(tx-from.x)/Math.max(distp,1)*v,vy:(ty-from.y)/Math.max(distp,1)*v,
     fr,dur,progress:0,arc:cross?Math.max(crossArcMin,Math.min(40,12+distp/W*55))
@@ -9699,6 +9665,7 @@ function afGoal(scorer,s,gen){
 
 function afSave(ds){
   G._cineHold=false;
+  try{if(window.SFX&&SFX.save)SFX.save();}catch(e){}
   try{if(window.P3D&&P3D.superCine2)P3D.superCine2.abort();}catch(e){}
   G.goalGen++;
   const q=sq(ds);
@@ -9736,7 +9703,6 @@ function afSave(ds){
   if(_cineFlow&&outcome==='goal')outcome='parry';
   // A PUNCH never holds the ball — it knocks it back into play (loose rebound).
   if(gkDefA==='punch'&&outcome==='catch')outcome='spill';
-  if(outcome==='catch')try{if(window.SFX&&SFX.save)SFX.save();}catch(e){}
   const superName=isSuper&&gk?getGKSuper(gk).l:'';
   const outcomeText={catch:'CAUGHT!',parry:'PARRIED!',spill:'REBOUND!',goal:'GOAL!'};
   const outcomeDetail={
@@ -9765,7 +9731,7 @@ function afSave(ds){
     if(outcome==='catch'){
       G.poss=ds;G.ck='GK';G.tP++;if(ds==='h')G.hP++;
       PP[ds]['GK']={x:gkX,y:gkY};PT[ds]['GK']={x:gkX,y:gkY};
-      ball.x=gkX;ball.y=gkY;ball.tx=gkX;ball.ty=gkY;ball.bz=GK_HAND_BZ;
+      ball.x=gkX;ball.y=gkY;ball.tx=gkX;ball.ty=gkY;ball.bz=13;
       G._gkHoldAt=0;G._gkGoalKick=false;updP();
       G.phase='idle';
       const caughtGen=G.goalGen;
@@ -9956,10 +9922,8 @@ function startMT(){
 
 // ── PAUSE ────────────────────────────────────────────────────────
 function togglePause(){
-  if(G._halftime)return; // halftime can only leave through SECOND HALF KICKOFF
   if(!G.mt)return;
   G.paused=!G.paused;
-  try{if(window.SFX)(G.paused?SFX.pauseOpen:SFX.pauseClose)();}catch(e){}
   const btn=document.getElementById('pauseBtn');
   const overlay=document.getElementById('pause-overlay');
   if(G.paused){
@@ -10099,7 +10063,7 @@ function pzPatchTeamMenuButtons(){
   const back=document.getElementById('tmBackBtn');
   const kick=document.getElementById('tmKickBtn');
   if(back) back.textContent='← BACK';
-  if(kick){ kick.textContent=G._halftime?'✓ APPLY & RETURN':'✓ APPLY & RESUME'; kick.onclick=pzCloseSquadEditor; }
+  if(kick){ kick.textContent='✓ APPLY & RESUME'; kick.onclick=pzCloseSquadEditor; }
 }
 function tmBackHandler(){
   if(G_teamEditorOrigin==='pause'){ pzCloseSquadEditor(); return; }
@@ -10362,7 +10326,6 @@ function rollFoul(defSide,defSlot,attSide,prob){
   const defPl=sq(defSide)[defSlot];
   const defPos=PP[defSide]?.[defSlot];
   if(!defPos)return false;
-  try{if(window.SFX&&SFX.whistle)SFX.whistle('foul');}catch(e){}
   // Box is on the X axis (goals at goalXFor) — within 20% of own goal line,
   // central Y band. Same convention as the box-defender duel boost.
   const ownGx=ownGoalXFor(defSide);
@@ -10607,7 +10570,6 @@ function armKickoff(side){
 }
 function doKickoff(){
   if(!G.awaitKickoff)return;
-  try{if(window.SFX&&SFX.whistle)SFX.whistle('kickoff');}catch(e){}
   kickoffShape(G.awaitKickoff,G.ck);resetPhysics();
   G.awaitKickoff=null; hideKickoffPrompt();
   G.chk=null; try{looseBall=null;}catch(e){}      // clear any stale duel/loose state
@@ -10666,17 +10628,22 @@ function updH(){
 }
 
 function goHalf(){
-  try{if(window.SFX&&SFX.whistle)SFX.whistle('half');}catch(e){}
-  clearInterval(G.mt);G.mt=null;clearInterval(G.di);G.di=null;
-  G.phase='idle';G.paused=true;G._halftime=true;G.kickoffUntil=0;
-  G.goalGen++;G._fkGen++;
-  closeDuel();G.awaitKickoff=null;hideKickoffPrompt();
-  {const gb=document.getElementById('goal-banner');if(gb)gb.classList.remove('show');}
-  {const ph=$id('passhint');if(ph)ph.style.display='none';}
+  clearInterval(G.mt);clearInterval(G.di);G.phase='idle';closeDuel();
+  // A half can end while a kick-off is still armed (awaiting the player's tap).
+  // Clear it so the "TAP PASS TO KICK OFF" prompt can't leak onto — and be
+  // mis-tapped over — the Half-Time screen's Second Half button.
+  G.awaitKickoff=null; hideKickoffPrompt();
+  {const _gb=document.getElementById('goal-banner'); if(_gb)_gb.classList.remove('show');}
+  $id('passhint').style.display='none';
+  document.getElementById('hth').textContent=G.hG;document.getElementById('ata').textContent=G.aG;
+  document.getElementById('htd').textContent=G.duels;document.getElementById('hts').textContent=G.shots;
+  const pp=G.tP>0?Math.round(G.hP/G.tP*100):50;document.getElementById('htp').textContent=pp+'%';
+  document.getElementById('hht').textContent=HT?.name||'HOME';document.getElementById('aht').textContent=AT?.name||'AWAY';
+  setTeamEmblem(document.getElementById('hht-flag'),selHome,HT?.flag||'🏳');setTeamEmblem(document.getElementById('aht-flag'),selAway,AT?.flag||'🏳');
+  G.subsUsed=G.subsUsed||0;
+  buildSubPanel();
+  showSc('s-half');
   stopMatchMusic();
-  showSc('s-match');
-  const ov=document.getElementById('pause-overlay');
-  if(ov){ov.classList.add('show');pzBuildAll();}
 }
 
 // ── HALFTIME SUBSTITUTIONS ────────────────────────────────────────
@@ -10735,7 +10702,6 @@ function doSub(outSlot,inPl){
   buildSubPanel();
 }
 function goFull(){
-  try{if(window.SFX&&SFX.whistle)SFX.whistle('full');}catch(e){}
   clearInterval(G.mt);clearInterval(G.di);G.phase='idle';closeDuel();
   G.awaitKickoff=null; hideKickoffPrompt();
   {const _gb=document.getElementById('goal-banner'); if(_gb)_gb.classList.remove('show');}
@@ -10797,22 +10763,7 @@ function ueEndFocusStats(){
   const panel=document.querySelector('#s-end .ue-end-body');
   if(panel)panel.classList.toggle('show-all');
 }
-function secondHalf(){
-  if(!G._halftime)return;
-  G._halftime=false;G.paused=false;G._pendingStun=null;
-  const ov=document.getElementById('pause-overlay');if(ov)ov.classList.remove('show');
-  G.half=2;G.tL=2400;iPos();
-  const q=sq('a'),kk=['CM2','CM1','ST'].find(k=>q[k])||Object.keys(q).find(k=>q[k]);
-  G.poss='a';G.ck=kk;G.tP++;
-  if(PP.a[kk]){PP.a[kk].x=W/2;PP.a[kk].y=H/2;}
-  try{kickoffShape('a',kk);}catch(e){}
-  ball.x=W/2;ball.y=H/2;ball.tx=W/2;ball.ty=H/2;
-  showSc('s-match');updH();updP();startMT();startAnim();startMatchMusic();
-  say((AT?.name||'Away')+' kick off — 2nd half!');showReferee('2ND HALF');
-  G.kickoffUntil=Date.now()+3000;G.phase='idle';
-  const gen=G.goalGen;
-  setTimeout(()=>{if(G.goalGen===gen&&G.mt&&G.half===2&&G.phase==='idle'&&!G._halftime)armKickoff('a');},900);
-}
+function secondHalf(){G._pendingStun=null;G.half=2;G.tL=2400;iPos();const q=sq('a');const kk=['CM2','CM1','ST'].find(k=>q[k])||Object.keys(q).find(k=>q[k]);G.poss='a';G.ck=kk;G.tP++;if(PP.a[kk]){PP.a[kk].x=W/2;PP.a[kk].y=H/2;}try{ kickoffShape('a',kk); }catch(e){}ball.x=W/2;ball.y=H/2;ball.tx=W/2;ball.ty=H/2;showSc('s-match');updH();updP();startMT();startAnim();startMatchMusic();say((AT?.name||'Away')+' kick off — 2nd half!');showReferee('2ND HALF');G.kickoffUntil=Date.now()+3000;G.phase='idle';setTimeout(()=>{armKickoff('a');},900);}
 
 function initMatch(){
   Object.values(hSq).forEach(p=>{if(p){p.spirit=(p.pos==="GK"?2000:1500);p.cooldownUntil=0;}});Object.values(aSq).forEach(p=>{if(p){p.spirit=(p.pos==="GK"?2000:1500);p.cooldownUntil=0;}});

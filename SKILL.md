@@ -30,6 +30,9 @@ football game: vanilla JS + Canvas engine with a permanently-on Three.js layer.
    game files.
 7. **Measure, don't guess.** Every real bug here was found by computing actual
    values — speeds, pixel offsets, cell divisions — not by inspection.
+8. **Fonts: only the three in tokens.css** - Cinzel (display), Rajdhani (UI),
+   Bold Pixel (numerals only). Never load or use any other face - not in the
+   game, not in lab mockups (author's fixed rule, 2026-09-23).
 
 ## Cache busting
 Bump `?v=N` in index.html for every edited JS/CSS file. List them in the delivery.

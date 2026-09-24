@@ -922,7 +922,7 @@ function stopMenuMusic(){
 function startMatchMusic(){
   stopMenuMusic();
   stopMatchMusic();
-  const track=1; // only the active match1.mp3 remains; old tracks were archived.
+  const track=Math.floor(Math.random()*3)+1;
   const a=document.getElementById('matchMusic'+track);
   if(!a)return;
   _matchMusicEl=a;
@@ -932,7 +932,8 @@ function startMatchMusic(){
 }
 function stopMatchMusic(){
   if(_matchMusicEl){_matchMusicEl.pause();_matchMusicEl.currentTime=0;_matchMusicEl=null;}
-  const a=document.getElementById('matchMusic1');if(a){a.pause();a.currentTime=0;}
+  // Stop all just in case
+  [1,2,3].forEach(i=>{const a=document.getElementById('matchMusic'+i);if(a){a.pause();a.currentTime=0;}});
 }
 function returnToMenuMusic(){
   stopMatchMusic();
@@ -9699,6 +9700,7 @@ function afGoal(scorer,s,gen){
 
 function afSave(ds){
   G._cineHold=false;
+  try{if(window.SFX&&SFX.save)SFX.save();}catch(e){}
   try{if(window.P3D&&P3D.superCine2)P3D.superCine2.abort();}catch(e){}
   G.goalGen++;
   const q=sq(ds);
@@ -9736,7 +9738,6 @@ function afSave(ds){
   if(_cineFlow&&outcome==='goal')outcome='parry';
   // A PUNCH never holds the ball — it knocks it back into play (loose rebound).
   if(gkDefA==='punch'&&outcome==='catch')outcome='spill';
-  if(outcome==='catch')try{if(window.SFX&&SFX.save)SFX.save();}catch(e){}
   const superName=isSuper&&gk?getGKSuper(gk).l:'';
   const outcomeText={catch:'CAUGHT!',parry:'PARRIED!',spill:'REBOUND!',goal:'GOAL!'};
   const outcomeDetail={
@@ -9956,10 +9957,8 @@ function startMT(){
 
 // ── PAUSE ────────────────────────────────────────────────────────
 function togglePause(){
-  if(G._halftime)return; // halftime can only leave through SECOND HALF KICKOFF
   if(!G.mt)return;
   G.paused=!G.paused;
-  try{if(window.SFX)(G.paused?SFX.pauseOpen:SFX.pauseClose)();}catch(e){}
   const btn=document.getElementById('pauseBtn');
   const overlay=document.getElementById('pause-overlay');
   if(G.paused){
@@ -10099,7 +10098,7 @@ function pzPatchTeamMenuButtons(){
   const back=document.getElementById('tmBackBtn');
   const kick=document.getElementById('tmKickBtn');
   if(back) back.textContent='← BACK';
-  if(kick){ kick.textContent=G._halftime?'✓ APPLY & RETURN':'✓ APPLY & RESUME'; kick.onclick=pzCloseSquadEditor; }
+  if(kick){ kick.textContent='✓ APPLY & RESUME'; kick.onclick=pzCloseSquadEditor; }
 }
 function tmBackHandler(){
   if(G_teamEditorOrigin==='pause'){ pzCloseSquadEditor(); return; }
@@ -10362,7 +10361,6 @@ function rollFoul(defSide,defSlot,attSide,prob){
   const defPl=sq(defSide)[defSlot];
   const defPos=PP[defSide]?.[defSlot];
   if(!defPos)return false;
-  try{if(window.SFX&&SFX.whistle)SFX.whistle('foul');}catch(e){}
   // Box is on the X axis (goals at goalXFor) — within 20% of own goal line,
   // central Y band. Same convention as the box-defender duel boost.
   const ownGx=ownGoalXFor(defSide);
@@ -10607,7 +10605,6 @@ function armKickoff(side){
 }
 function doKickoff(){
   if(!G.awaitKickoff)return;
-  try{if(window.SFX&&SFX.whistle)SFX.whistle('kickoff');}catch(e){}
   kickoffShape(G.awaitKickoff,G.ck);resetPhysics();
   G.awaitKickoff=null; hideKickoffPrompt();
   G.chk=null; try{looseBall=null;}catch(e){}      // clear any stale duel/loose state
@@ -10666,17 +10663,22 @@ function updH(){
 }
 
 function goHalf(){
-  try{if(window.SFX&&SFX.whistle)SFX.whistle('half');}catch(e){}
-  clearInterval(G.mt);G.mt=null;clearInterval(G.di);G.di=null;
-  G.phase='idle';G.paused=true;G._halftime=true;G.kickoffUntil=0;
-  G.goalGen++;G._fkGen++;
-  closeDuel();G.awaitKickoff=null;hideKickoffPrompt();
-  {const gb=document.getElementById('goal-banner');if(gb)gb.classList.remove('show');}
-  {const ph=$id('passhint');if(ph)ph.style.display='none';}
+  clearInterval(G.mt);clearInterval(G.di);G.phase='idle';closeDuel();
+  // A half can end while a kick-off is still armed (awaiting the player's tap).
+  // Clear it so the "TAP PASS TO KICK OFF" prompt can't leak onto — and be
+  // mis-tapped over — the Half-Time screen's Second Half button.
+  G.awaitKickoff=null; hideKickoffPrompt();
+  {const _gb=document.getElementById('goal-banner'); if(_gb)_gb.classList.remove('show');}
+  $id('passhint').style.display='none';
+  document.getElementById('hth').textContent=G.hG;document.getElementById('ata').textContent=G.aG;
+  document.getElementById('htd').textContent=G.duels;document.getElementById('hts').textContent=G.shots;
+  const pp=G.tP>0?Math.round(G.hP/G.tP*100):50;document.getElementById('htp').textContent=pp+'%';
+  document.getElementById('hht').textContent=HT?.name||'HOME';document.getElementById('aht').textContent=AT?.name||'AWAY';
+  setTeamEmblem(document.getElementById('hht-flag'),selHome,HT?.flag||'🏳');setTeamEmblem(document.getElementById('aht-flag'),selAway,AT?.flag||'🏳');
+  G.subsUsed=G.subsUsed||0;
+  buildSubPanel();
+  showSc('s-half');
   stopMatchMusic();
-  showSc('s-match');
-  const ov=document.getElementById('pause-overlay');
-  if(ov){ov.classList.add('show');pzBuildAll();}
 }
 
 // ── HALFTIME SUBSTITUTIONS ────────────────────────────────────────
@@ -10735,7 +10737,6 @@ function doSub(outSlot,inPl){
   buildSubPanel();
 }
 function goFull(){
-  try{if(window.SFX&&SFX.whistle)SFX.whistle('full');}catch(e){}
   clearInterval(G.mt);clearInterval(G.di);G.phase='idle';closeDuel();
   G.awaitKickoff=null; hideKickoffPrompt();
   {const _gb=document.getElementById('goal-banner'); if(_gb)_gb.classList.remove('show');}
@@ -10797,22 +10798,7 @@ function ueEndFocusStats(){
   const panel=document.querySelector('#s-end .ue-end-body');
   if(panel)panel.classList.toggle('show-all');
 }
-function secondHalf(){
-  if(!G._halftime)return;
-  G._halftime=false;G.paused=false;G._pendingStun=null;
-  const ov=document.getElementById('pause-overlay');if(ov)ov.classList.remove('show');
-  G.half=2;G.tL=2400;iPos();
-  const q=sq('a'),kk=['CM2','CM1','ST'].find(k=>q[k])||Object.keys(q).find(k=>q[k]);
-  G.poss='a';G.ck=kk;G.tP++;
-  if(PP.a[kk]){PP.a[kk].x=W/2;PP.a[kk].y=H/2;}
-  try{kickoffShape('a',kk);}catch(e){}
-  ball.x=W/2;ball.y=H/2;ball.tx=W/2;ball.ty=H/2;
-  showSc('s-match');updH();updP();startMT();startAnim();startMatchMusic();
-  say((AT?.name||'Away')+' kick off — 2nd half!');showReferee('2ND HALF');
-  G.kickoffUntil=Date.now()+3000;G.phase='idle';
-  const gen=G.goalGen;
-  setTimeout(()=>{if(G.goalGen===gen&&G.mt&&G.half===2&&G.phase==='idle'&&!G._halftime)armKickoff('a');},900);
-}
+function secondHalf(){G._pendingStun=null;G.half=2;G.tL=2400;iPos();const q=sq('a');const kk=['CM2','CM1','ST'].find(k=>q[k])||Object.keys(q).find(k=>q[k]);G.poss='a';G.ck=kk;G.tP++;if(PP.a[kk]){PP.a[kk].x=W/2;PP.a[kk].y=H/2;}try{ kickoffShape('a',kk); }catch(e){}ball.x=W/2;ball.y=H/2;ball.tx=W/2;ball.ty=H/2;showSc('s-match');updH();updP();startMT();startAnim();startMatchMusic();say((AT?.name||'Away')+' kick off — 2nd half!');showReferee('2ND HALF');G.kickoffUntil=Date.now()+3000;G.phase='idle';setTimeout(()=>{armKickoff('a');},900);}
 
 function initMatch(){
   Object.values(hSq).forEach(p=>{if(p){p.spirit=(p.pos==="GK"?2000:1500);p.cooldownUntil=0;}});Object.values(aSq).forEach(p=>{if(p){p.spirit=(p.pos==="GK"?2000:1500);p.cooldownUntil=0;}});
