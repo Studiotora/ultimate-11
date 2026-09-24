@@ -206,6 +206,7 @@
     else CV.parentNode.insertBefore(gl, CV.nextSibling);
 
     const renderer=new T.WebGLRenderer({canvas:gl,antialias:true,alpha:true});
+    renderer.shadowMap.enabled=true; renderer.shadowMap.type=T.PCFSoftShadowMap;   // REAL SHADOWS (hero-frame step 1)
     const scene=new T.Scene();
     scene.fog=new T.Fog('#16202e',180,560);
     const camera=new T.PerspectiveCamera(P3D.cam.fov,1,0.1,2000);
@@ -519,6 +520,7 @@
           g.add(new T.LineSegments(sgeo,nm));
           NETS[side]={geo:bgeo,base,t:-1,hy:0,hz:0,HW,DEP,side};
         }
+        g.traverse(m=>{ if(m.isMesh) m.castShadow=true; });      // real shadows: the frame on the grass
         goalGroup.add(g);
       });
     }
@@ -529,6 +531,7 @@
         new T.MeshBasicMaterial({map:tex}));
       pitchMesh.rotation.x=-Math.PI/2; pitchMesh.position.y=0; scene.add(pitchMesh);
       buildApron(); buildGoals(); placeAllStadium();
+      try{ if(LOOK==='night') applyLookMaterials(); }catch(e){}
     }
     /* NOTE: the initial buildPitch() call lives lower down, AFTER the bowl
        consts (crowdTex / bowlGroup / TIER_TEX / CORNER_TEX) are declared —
@@ -1315,8 +1318,9 @@
       const v=astraVolume;if(!v)return;
       const tier=P3D._tier||'high';
       v.uniforms.time.value=now*.001;
-      v.uniforms.strength.value=tier==='low'?.32:(tier==='med'?.65:1);
-      v.pools.material.opacity=tier==='low'?.25:(tier==='med'?.35:.45);
+      const _nt=(typeof LOOK!=='undefined'&&LOOK==='night')?P3D.night:null;       // NIGHT look (Claude): beams read on the dark
+      v.uniforms.strength.value=(tier==='low'?.32:(tier==='med'?.65:1))*(_nt?_nt.beam:1);
+      v.pools.material.opacity=(tier==='low'?.25:(tier==='med'?.35:.45))*(_nt?_nt.beamPools:1);
       v.rayMesh.visible=gfxOn('volRays');
       v.pools.visible=gfxOn('volPools');
       v.dust.visible=tier!=='low'&&gfxOn('volDust');
@@ -2726,7 +2730,7 @@
           o.sil.scale.set(wWorld, projLen, 1);
           _qF.setFromAxisAngle(_AX,-Math.PI/2); _qS.setFromAxisAngle(_AY,az);
           o.sil.quaternion.copy(_qS).multiply(_qF);
-          o.sil.visible = (Lt.castSil!==false);
+          o.sil.visible = (Lt.castSil!==false) && !SH3.on;   // real shadows replace the fake silhouette
           o.sil.material.opacity=Lt.shadow*0.8;
           // (procedural dust puff removed — the 12x6 sprite sheets now draw
           //  their own kick-up dust in the run frames)
@@ -2735,7 +2739,7 @@
       // hide sprites whose players vanished (subs, etc.)
       for(const id in sprites){ const vis=seen.has(id);
         sprites[id].sprite.visible=vis; sprites[id].shadow.visible=vis;
-        if(sprites[id].sil) sprites[id].sil.visible=vis; }
+        if(sprites[id].sil) sprites[id].sil.visible=vis&&(P3D.light.castSil!==false)&&!SH3.on; }
       /* cine3 (mockup): the super shot is shooter + keeper only. Measured
          2026-09-23: a team-mate stood between the charge camera and the
          shooter for most of the charge. A committed super-block defender
@@ -3257,7 +3261,7 @@
       for(const id in sprites){ const o=sprites[id], mine=(id===PEN.tk||id===PEN.gk);
         if(!mine){ o.sprite.visible=false; o.shadow.visible=false; if(o.sil)o.sil.visible=false; continue; }
         const ps=(id===PEN.tk)?st.tk:st.gk; if(!ps) continue;
-        o.sprite.visible=true; o.shadow.visible=true; if(o.sil) o.sil.visible=true;
+        o.sprite.visible=true; o.shadow.visible=true; if(o.sil) o.sil.visible=!SH3.on;
         forceCell(id,ps.r,ps.c,!!ps.flip);
         const w=penL2W(ps.x,ps.z), dx=w.x-o.sprite.position.x, dz=w.z-o.sprite.position.z;
         o.sprite.position.set(w.x,0.05+(P3D.spriteY||0),w.z);
@@ -3283,6 +3287,494 @@
       _bPrevX=w.x; _bPrevZ=w.z;
       const shs=d*1.35/(1+hgt*0.55); ballShadow.position.set(w.x,0.025,w.z); ballShadow.scale.set(shs,shs*0.55,1);
       ballShadow.material.opacity=bl.vis?0.45/(1+hgt*0.8):0;
+    }
+
+    /* ════════ CINEMATIC LOOK: NIGHT (look-dev steps 1-2, 2026-09-24) ════════
+       Author: "PC first", wants the wow of the HD-2D Three.js clips - real
+       light and mood. The pitch is a lit shader now: floodlight POOLS over a
+       cool night base (the same pools light the players, referee and ball),
+       plus a night preset for the bowl lights, fog, sky, crowd and grade.
+       Switchable, off by default until approved:
+         P3D.setLook('night'|'classic')   key N   ?look=night   (remembered)
+       Tune live: P3D.night (pools [x/halfLen, z/halfWid, radius (/70 PLEN), intensity],
+       amb = night base colour, lamp = floodlight colour, max = overbright cap). */
+    // tuned from 3 captures (look-dev 2026-09-24): a dark blue base so the gaps
+    // go dark, near-white LED floodlights (warm read yellow-green on grass),
+    // sprites capped so white kits don't blow out under the pools
+    P3D.night={ amb:[0.14,0.175,0.29], lamp:[1.02,1.00,0.93], max:1.25, spriteMax:1.08,
+      pools:[[-0.46,-0.25,15,1.05],[-0.46,0.25,15,1.05],[0.46,-0.25,15,1.05],[0.46,0.25,15,1.05],
+             [-0.86,0,10.5,0.92],[0.86,0,10.5,0.92],[0,0,12.5,0.78]],
+      light:{ambient:0.16,key:0.62,warmth:0.16,shade:0.9,glow:0,azim:3.25,elev:0.62},
+      fx:{bloom:0.42,bloomRadius:0.45,bloomThresh:0.68,contrast:1.12,sat:0.94,lift:-0.01,split:1.35,vignette:0.95},
+      shadowTint:[0.78,0.90,1.22], highTint:[1.10,1.02,0.90], sky:0.3, apron:[0.19,0.22,0.31],
+      // author 2026-09-24: painted lines must not glow - bright texels stay under the bloom threshold
+      lineMax:0.66,
+      // step 3 ATMOSPHERE: night fog so the far bowl sinks into the dark; the
+      // corner beams read more on a dark ground (their grass overlay less,
+      // the real pools do that job now); lamp heads glow harder
+      fog:{col:[0.035,0.055,0.11], near:55, far:230}, beam:1.9, beamPools:0.45, halo:1.6, haloScale:1.35,
+      // step 4 DOF (HD-2D tilt-shift) and step 5 FINISH (film grain + edge colour fringing)
+      tilt:1.45, grain:0.035, ca:0.010 };
+    let LOOK='classic', _lookSaved=null, _nightMat=null, _lookPending=null, _lookRest=null, _finishPass=null;
+    // lamp heads (floodBank halo sprites) glow harder at night
+    function nightHalos(on){
+      if(!extrasGroup||!haloTex._t) return; const N=P3D.night;
+      extrasGroup.traverse(o=>{ if(!o.isSprite||!o.material||o.material.map!==haloTex._t) return;
+        const u=o.userData; if(u.hOp==null){ u.hOp=o.material.opacity; u.hSx=o.scale.x; u.hSy=o.scale.y; }
+        o.material.opacity=on?Math.min(1,u.hOp*N.halo):u.hOp; o.scale.set(u.hSx*(on?N.haloScale:1),u.hSy*(on?N.haloScale:1),1); });
+    }
+    // step 5: film grain + a faint colour fringe toward the screen edges
+    const FinishShader={
+      uniforms:{ tDiffuse:{value:null}, time:{value:0}, grain:{value:0.035}, ca:{value:0.01} },
+      vertexShader:'varying vec2 vUv; void main(){ vUv=uv; gl_Position=projectionMatrix*modelViewMatrix*vec4(position,1.0); }',
+      fragmentShader:['varying vec2 vUv; uniform sampler2D tDiffuse; uniform float time, grain, ca;',
+        'float rnd(vec2 p){ return fract(sin(dot(p,vec2(12.9898,78.233))+time*7.13)*43758.5453); }',
+        'void main(){ vec2 d=vUv-0.5; vec2 o=d*ca*dot(d,d)*4.0;',
+        ' vec3 c=vec3(texture2D(tDiffuse,vUv+o).r, texture2D(tDiffuse,vUv).g, texture2D(tDiffuse,vUv-o).b);',
+        ' c+=(rnd(floor(vUv*vec2(1280.0,720.0)))-0.5)*grain;',
+        ' gl_FragColor=vec4(c,1.0); }'].join(String.fromCharCode(10)) };
+    function nightFinish(on,P){
+      if(!composer||!T.ShaderPass) return; P=P||P3D.night;
+      if(on&&!_finishPass){ _finishPass=new T.ShaderPass(FinishShader); composer.addPass(_finishPass); }
+      if(_finishPass){ _finishPass.enabled=!!on; _finishPass.uniforms.grain.value=P.grain||0; _finishPass.uniforms.ca.value=P.ca||0; }
+    }
+    // (kept for the Camera Lab; envFrame does this now)
+    function nightFrame(now){
+      const N=P3D.night;
+      if(scene.fog&&N.fog){ scene.fog.color.setRGB(N.fog.col[0],N.fog.col[1],N.fog.col[2]); scene.fog.near=N.fog.near; scene.fog.far=N.fog.far; }
+      if(_finishPass&&_finishPass.enabled) _finishPass.uniforms.time.value=(now||0)*0.001;
+    }
+    const _nightPools=[], _nl={r:1,g:1,b:1};
+    function nightPoolsW(){
+      const hx=PLEN/2, hz=PWID/2, k=PLEN/70; _nightPools.length=0;
+      (P3D.night.pools||[]).slice(0,8).forEach(q=>_nightPools.push([q[0]*hx,q[1]*hz,q[2]*k,q[3]]));
+      return _nightPools;
+    }
+    function nightLightAt(x,z){
+      const N=P3D.night, a=N.amb, l=N.lamp; let s=0;
+      for(const q of _nightPools){ const dx=x-q[0], dz=z-q[1]; s+=q[3]*Math.exp(-(dx*dx+dz*dz)/(q[2]*q[2])); }
+      let sr=0,sg=0,sb=0; for(const q of RIG.spill){ if(!q[3]) continue; const dx=x-q[0], dz=z-q[1], f=q[3]*Math.exp(-(dx*dx+dz*dz)/(q[2]*q[2])); sr+=q[4]*f; sg+=q[5]*f; sb+=q[6]*f; }
+      _nl.r=Math.min(N.max,a[0]+l[0]*s+sr); _nl.g=Math.min(N.max,a[1]+l[1]*s+sg); _nl.b=Math.min(N.max,a[2]+l[2]*s+sb); return _nl;
+    }
+    function makeNightPitchMat(){
+      const pools=[]; for(let i=0;i<8;i++) pools.push(new T.Vector4(0,0,1,0));
+      const u=T.UniformsUtils.merge([T.UniformsLib.fog,{ map:{value:null}, amb:{value:new T.Color()}, lamp:{value:new T.Color()}, maxL:{value:1.3}, lineMax:{value:0.62}, wet:{value:0} }]);
+      u.pools={value:pools};
+      const sp=[], sc=[]; for(let i=0;i<10;i++){ sp.push(new T.Vector4(0,0,1,0)); sc.push(new T.Vector3()); }
+      u.spill={value:sp}; u.spillCol={value:sc};
+      return new T.ShaderMaterial({uniforms:u, fog:true,
+        vertexShader:['varying vec2 vUv; varying vec3 vW;','#include <fog_pars_vertex>',
+          'void main(){ vUv=uv; vec4 w=modelMatrix*vec4(position,1.0); vW=w.xyz; vec4 mvPosition=viewMatrix*w; gl_Position=projectionMatrix*mvPosition;',
+          '#include <fog_vertex>','}'].join(String.fromCharCode(10)),
+        fragmentShader:['uniform sampler2D map; uniform vec4 pools[8]; uniform vec3 amb; uniform vec3 lamp; uniform float maxL; uniform float lineMax; uniform float wet; uniform vec4 spill[10]; uniform vec3 spillCol[10]; varying vec2 vUv; varying vec3 vW;',
+          '#include <fog_pars_fragment>',
+          'void main(){ vec3 c=texture2D(map,vUv).rgb; float s=0.0;',
+          ' for(int i=0;i<8;i++){ vec2 d=vW.xz-pools[i].xy; s+=pools[i].w*exp(-dot(d,d)/(pools[i].z*pools[i].z)); }',
+          ' vec3 sl=vec3(0.0); for(int i=0;i<10;i++){ vec2 e=vW.xz-spill[i].xy; sl+=spillCol[i]*spill[i].w*exp(-dot(e,e)/(spill[i].z*spill[i].z)); }',
+          ' vec3 o=c*min(amb+lamp*s+sl*0.5,vec3(maxL))*(1.0-wet*0.16)+lamp*pow(min(s,1.0),3.0)*wet*0.10+sl*(0.085+wet*0.06);',   // coloured light also glows ON the grass (multiplying red onto green gives nothing)
+          ' float lum=dot(c,vec3(0.299,0.587,0.114)); float m=max(o.r,max(o.g,o.b));',
+          ' if(lum>0.55&&m>lineMax) o*=lineMax/m;',
+          ' gl_FragColor=vec4(o,1.0);',
+          '#include <fog_fragment>','}'].join(String.fromCharCode(10))});
+    }
+    function syncNightUniforms(){
+      if(!_nightMat) return; const N=P3D.night, u=_nightMat.uniforms; nightPoolsW();
+      for(let i=0;i<8;i++){ const q=_nightPools[i]; if(q) u.pools.value[i].set(q[0],q[1],Math.max(0.01,q[2]),q[3]); else u.pools.value[i].set(0,0,1,0); }
+      u.amb.value.setRGB(N.amb[0],N.amb[1],N.amb[2]); u.lamp.value.setRGB(N.lamp[0],N.lamp[1],N.lamp[2]); u.maxL.value=N.max;
+      u.lineMax.value=N.lineMax!=null?N.lineMax:0.62;
+    }
+    function applyLookMaterials(){
+      const night=LOOK==='night', N=P3D.night, P=(typeof envPreset==='function')?envPreset():null;
+      const W=(typeof ENV!=='undefined'&&P3D.weatherFx)?P3D.weatherFx[ENV.weather]:null;
+      if(pitchMesh){
+        if(!pitchMesh.userData.dayMat) pitchMesh.userData.dayMat=pitchMesh.material;
+        const dm=pitchMesh.userData.dayMat;
+        if(night){ _nightMat=_nightMat||makeNightPitchMat(); _nightMat.uniforms.map.value=dm.map; syncNightUniforms();
+                   _nightMat.uniforms.wet.value=W?(W.wet||0):0; pitchMesh.material=_nightMat; }
+        else { pitchMesh.material=dm; if(dm.color) dm.color.setScalar(W?(W.day||1):1); }      // rain darkens the day grass
+      } else nightPoolsW();
+      if(apronMesh&&apronMesh.material&&apronMesh.material.color){
+        const a=night?N.apron:(P&&P.apron?P.apron:[1,1,1]), wk=W?(W.day||1):1;
+        apronMesh.material.color.setRGB(a[0]*wk,a[1]*wk,a[2]*wk); }
+      if(skyMesh&&skyMesh.material&&skyMesh.material.color){
+        const sc=night?[N.sky,N.sky,N.sky]:(P&&P.sky?P.sky:[1,1,1]), wk=W?W.sky:1;
+        skyMesh.material.color.setRGB(sc[0]*wk,sc[1]*wk,sc[2]*wk); }
+      if(!night&&!P&&!W) resetNightTint();
+    }
+    // players, referee and ball take the pitch light where they stand
+    function nightTint(){
+      for(const id in sprites){ const o=sprites[id]; if(!o||!o.sprite||!o.sprite.visible) continue;
+        const L=nightLightAt(o.sprite.position.x,o.sprite.position.z), m=o.sprite.material;
+        const cap=P3D.night.spriteMax||1.1;
+        if(m&&m.color) m.color.setRGB(Math.min(cap,Math.max(.5,L.r)),Math.min(cap,Math.max(.5,L.g)),Math.min(cap,Math.max(.5,L.b))); }
+      try{ if(refMesh&&refMesh.visible&&refMesh.material&&refMesh.material.color){ const L=nightLightAt(refMesh.position.x,refMesh.position.z); refMesh.material.color.setRGB(Math.max(.5,L.r),Math.max(.5,L.g),Math.max(.5,L.b)); } }catch(e){}
+      const bp=(ballSprite&&ballSprite.visible)?ballSprite:ballMesh;
+      if(bp){ const L=nightLightAt(bp.position.x,bp.position.z);
+        [ballSprite,ballMesh].forEach(o=>{ if(o&&o.material&&o.material.color) o.material.color.setRGB(Math.max(.55,L.r),Math.max(.55,L.g),Math.max(.55,L.b)); }); }
+    }
+    function resetNightTint(){
+      for(const id in sprites){ const m=sprites[id]&&sprites[id].sprite&&sprites[id].sprite.material; if(m&&m.color) m.color.setRGB(1,1,1); }
+      try{ if(refMesh&&refMesh.material&&refMesh.material.color) refMesh.material.color.setRGB(1,1,1); }catch(e){}
+      [ballSprite,ballMesh].forEach(o=>{ if(o&&o.material&&o.material.color) o.material.color.setRGB(1,1,1); });
+    }
+    function lookToast(txt){
+      try{ let t=document.getElementById('u11-look-toast');
+        if(!t){ t=document.createElement('div'); t.id='u11-look-toast';
+          t.style.cssText="position:fixed;left:50%;top:14px;transform:translateX(-50%);z-index:9500;padding:8px 18px;background:rgba(2,10,26,.82);border:1px solid rgba(120,170,255,.4);color:#dfe8f5;font:700 14px/1 'Rajdhani',sans-serif;letter-spacing:.3em;pointer-events:none;transition:opacity .4s";
+          document.body.appendChild(t); }
+        t.textContent=txt; t.style.opacity='1'; clearTimeout(t._h); t._h=setTimeout(()=>{ t.style.opacity='0'; },1400); }catch(e){}
+    }
+    /* ════════ ENVIRONMENT: TIME x WEATHER (author 2026-09-24, Settings) ════════
+       TIME    classic (DAY - the original look) | golden (GOLDEN HOUR) | night
+       WEATHER sunny | rain | snow   - applied on top of any time.
+       Every change is recomputed from BASE (the day values captured the first
+       time), so DAY + SUNNY is always exactly the original game.
+       API: P3D.setTime(t), P3D.setWeather(w), P3D.setLook(t) (old name), P3D.env.
+       Saved: localStorage u11.look (time) / u11.weather. URL: ?look= / ?weather=.
+       Key N cycles the time on PC. Presets: P3D.golden, P3D.night, P3D.weatherFx. */
+    P3D.golden={ light:{elev:0.24, key:3.2, ambient:0.46, warmth:0.9, shade:0.45, glow:0.5, shadowLen:3.2},
+      fx:{bloom:0.22,bloomRadius:0.5,bloomThresh:0.62,contrast:1.08,sat:1.04,lift:0.0,split:1.15,vignette:0.8},
+      shadowTint:[0.84,0.90,1.12], highTint:[1.12,1.02,0.86], sky:[1.0,0.82,0.66], sprite:[1.05,0.99,0.9],
+      fog:{col:[0.40,0.28,0.20], near:120, far:430}, tilt:1.2, grain:0.02, ca:0.006, apron:[1.0,0.92,0.78] };
+    P3D.weatherFx={
+      rain:{ sat:0.86, contrast:0.96, lift:-0.01, amb:0.85, sky:0.6, sprite:0.9, fogMix:[0.30,0.34,0.40], fogK:0.7, day:0.84, wet:1.0,
+             count:7000, speed:40, len:2.2, wind:4.0, col:0xdde7f7, op:0.62 },
+      snow:{ sat:0.88, contrast:0.94, lift:0.025, amb:1.05, sky:0.85, sprite:1.0, fogMix:[0.78,0.82,0.88], fogK:0.7, day:1.0, wet:0,
+             count:11000, speed:2.6, size:0.5, sway:0.9, col:0xffffff, op:0.9 } };
+    const ENV={time:'classic', weather:'sunny'}; let BASE=null;
+    function snapBase(){
+      if(BASE) return; const g=gradePass&&gradePass.uniforms;
+      BASE={light:Object.assign({},P3D.light), fx:Object.assign({},P3D.fx),
+            st:g?g.shadowTint.value.clone():null, ht:g?g.highTint.value.clone():null,
+            fog:scene.fog?{near:scene.fog.near,far:scene.fog.far}:null};
+    }
+    function envPreset(){ return ENV.time==='night'?P3D.night:(ENV.time==='golden'?P3D.golden:null); }
+    function applyEnv(){
+      snapBase(); const g=gradePass&&gradePass.uniforms, P=envPreset(), W=P3D.weatherFx[ENV.weather]||null;
+      Object.assign(P3D.light,BASE.light); Object.assign(P3D.fx,BASE.fx);
+      if(g&&BASE.st){ g.shadowTint.value.copy(BASE.st); g.highTint.value.copy(BASE.ht); }
+      if(P){ Object.assign(P3D.light,P.light); Object.assign(P3D.fx,P.fx); if(P.tilt!=null) P3D.fx.tilt=P.tilt;
+             if(g){ g.shadowTint.value.setRGB(P.shadowTint[0],P.shadowTint[1],P.shadowTint[2]); g.highTint.value.setRGB(P.highTint[0],P.highTint[1],P.highTint[2]); } }
+      if(W){ P3D.fx.sat*=W.sat; P3D.fx.contrast*=W.contrast; P3D.fx.lift+=W.lift; P3D.light.ambient*=W.amb; }
+      if(SH3.on&&SH3.dir[ENV.time]) Object.assign(P3D.light,SH3.dir[ENV.time]);   // real shadows: light from behind the play
+      if(scene.fog&&BASE.fog&&!P&&!W){ scene.fog.near=BASE.fog.near; scene.fog.far=BASE.fog.far; }
+      LOOK=ENV.time; applyLookMaterials(); nightHalos(ENV.time==='night'); nightFinish(!!P,P);
+      try{ applyLight(); }catch(e){} try{ if(typeof applyFx==='function') applyFx(); }catch(e){}
+      weatherBuild(ENV.weather);
+      if(!P&&!W) resetNightTint();
+    }
+    function envReady(){ return !!(composer||pitchMesh); }
+    P3D.setTime=function(t){
+      t=(t==='night'||t==='golden')?t:'classic'; ENV.time=t;
+      try{ localStorage.setItem('u11.look',t); }catch(e){}
+      if(!envReady()){ _lookPending='env'; return t; } applyEnv(); return t;
+    };
+    P3D.setLook=P3D.setTime;                                              // old name
+    P3D.setWeather=function(w){
+      w=(w==='rain'||w==='snow')?w:'sunny'; ENV.weather=w;
+      try{ localStorage.setItem('u11.weather',w); }catch(e){}
+      if(!envReady()){ _lookPending='env'; return w; } applyEnv(); return w;
+    };
+    Object.defineProperty(P3D,'look',{get:()=>LOOK,configurable:true});
+    Object.defineProperty(P3D,'env',{get:()=>({time:ENV.time,weather:ENV.weather}),configurable:true});
+    P3D.lookRefresh=function(){ applyEnv(); };                           // after editing a preset
+    (function(){                                                          // start: URL, then remembered
+      let t=null,w=null;
+      try{ const q=new URLSearchParams(location.search); t=q.get('look'); w=q.get('weather'); }catch(e){}
+      if(!t) try{ t=localStorage.getItem('u11.look'); }catch(e){}
+      if(!w) try{ w=localStorage.getItem('u11.weather'); }catch(e){}
+      ENV.time=(t==='night'||t==='golden')?t:'classic'; ENV.weather=(w==='rain'||w==='snow')?w:'sunny';
+      _lookPending='env';                                                  // always: real shadows set the light direction
+    })();
+    window.addEventListener('keydown',e=>{                                // N: cycle the time of day on PC
+      if(e.key!=='n'&&e.key!=='N') return;
+      const t=e.target; if(t&&(t.tagName==='INPUT'||t.tagName==='TEXTAREA'||t.isContentEditable)) return;
+      const nx=P3D.setTime(ENV.time==='classic'?'golden':ENV.time==='golden'?'night':'classic');
+      lookToast(nx==='night'?'NIGHT':nx==='golden'?'GOLDEN HOUR':'DAY');
+    });
+    // per frame: fog (applyLight re-tints it), sprite light, grain clock, weather
+    function envFrame(now,dt){
+      const P=envPreset(), W=P3D.weatherFx[ENV.weather]||null;
+      if(scene.fog&&(P||W)){
+        const f=P&&P.fog; let c=f?f.col:null;
+        if(!c){ const w=warmColor(P3D.light.warmth).multiplyScalar(0.5); c=[w.r,w.g,w.b]; }   // the day fog applyLight would set
+        let near=f?f.near:(BASE&&BASE.fog?BASE.fog.near:180), far=f?f.far:(BASE&&BASE.fog?BASE.fog.far:560);
+        if(W){ const k=ENV.time==='night'?0:0.45; c=[c[0]+(W.fogMix[0]-c[0])*k,c[1]+(W.fogMix[1]-c[1])*k,c[2]+(W.fogMix[2]-c[2])*k];
+               const fk=ENV.time==='night'?Math.max(0.85,W.fogK):W.fogK; near*=fk; far*=fk; }
+        scene.fog.color.setRGB(c[0],c[1],c[2]); scene.fog.near=near; scene.fog.far=far;
+      }
+      if(ENV.time==='night') nightTint();
+      else if(P||W) constTint((P&&P.sprite)||[1,1,1], W?W.sprite:1);
+      if(_finishPass&&_finishPass.enabled) _finishPass.uniforms.time.value=(now||0)*0.001;
+      weatherTick(dt||0.016);
+    }
+    function constTint(c,k){
+      const r=c[0]*k,g=c[1]*k,bb=c[2]*k;
+      for(const id in sprites){ const m=sprites[id]&&sprites[id].sprite&&sprites[id].sprite.material; if(m&&m.color) m.color.setRGB(r,g,bb); }
+      try{ if(refMesh&&refMesh.material&&refMesh.material.color) refMesh.material.color.setRGB(r,g,bb); }catch(e){}
+      [ballSprite,ballMesh].forEach(o=>{ if(o&&o.material&&o.material.color) o.material.color.setRGB(r,g,bb); });
+    }
+    /* weather particles: rain streaks / snow flakes in a box that follows the
+       camera's view; particles keep their world position and wrap at the box
+       edges, so they don't slide with the camera. */
+    let WX=null; const _wxF=new T.Vector3();
+    function roundTex(){ if(roundTex._t) return roundTex._t;
+      const c=document.createElement('canvas'); c.width=c.height=32; const x=c.getContext('2d'), gr=x.createRadialGradient(16,16,0,16,16,16);
+      gr.addColorStop(0,'rgba(255,255,255,1)'); gr.addColorStop(0.5,'rgba(255,255,255,.6)'); gr.addColorStop(1,'rgba(255,255,255,0)');
+      x.fillStyle=gr; x.fillRect(0,0,32,32); roundTex._t=new T.CanvasTexture(c); return roundTex._t; }
+    function weatherBuild(kind){
+      if(WX&&WX.kind===kind) return;
+      if(WX){ scene.remove(WX.obj); WX.obj.geometry.dispose(); WX.obj.material.dispose(); WX=null; }
+      const W=P3D.weatherFx[kind]; if(!W) return;
+      const k=PLEN/70, box={x:90*k,y:26*k,z:90*k}, N=W.count, P=new Float32Array(N*3);
+      for(let i=0;i<N;i++){ P[i*3]=(Math.random()-.5)*box.x; P[i*3+1]=Math.random()*box.y; P[i*3+2]=(Math.random()-.5)*box.z; }
+      const geo=new T.BufferGeometry(); let obj;
+      if(kind==='rain'){
+        const pos=new Float32Array(N*6); geo.setAttribute('position',new T.BufferAttribute(pos,3).setUsage(T.DynamicDrawUsage));
+        obj=new T.LineSegments(geo,new T.LineBasicMaterial({color:W.col,transparent:true,opacity:W.op,depthWrite:false}));
+      } else {
+        const pos=new Float32Array(N*3); geo.setAttribute('position',new T.BufferAttribute(pos,3).setUsage(T.DynamicDrawUsage));
+        obj=new T.Points(geo,new T.PointsMaterial({color:W.col,map:roundTex(),size:W.size*k,sizeAttenuation:true,transparent:true,opacity:W.op,depthWrite:false}));
+      }
+      obj.frustumCulled=false; obj.renderOrder=12; scene.add(obj);
+      WX={kind,W,N,P,box,obj,k,seed:Array.from({length:N},()=>Math.random()*6.28)};
+    }
+    function weatherTick(dt){
+      if(!WX) return; const W=WX.W, P=WX.P, bx=WX.box, k=WX.k, now=performance.now()*0.001;
+      // centre the weather box where the camera looks at the pitch (view ray hits the ground)
+      camera.getWorldDirection(_wxF);
+      let t=_wxF.y<-0.02?Math.min(140*k,Math.max(8*k,-camera.position.y/_wxF.y)):40*k;
+      const cx=camera.position.x+_wxF.x*t*0.8, cz=camera.position.z+_wxF.z*t*0.8;
+      const x0=cx-bx.x/2, z0=cz-bx.z/2, pos=WX.obj.geometry.attributes.position.array, rain=WX.kind==='rain';
+      const vy=W.speed*k*dt, vx=(rain?W.wind:0)*k*dt, L=(W.len||0)*k, near2=(12*k)*(12*k);
+      for(let i=0;i<WX.N;i++){
+        let x=P[i*3], y=P[i*3+1], z=P[i*3+2];
+        y-=vy*(rain?1:(0.7+0.6*((i*37)%10)/10)); x+=vx;
+        if(!rain){ x+=Math.sin(now*1.3+WX.seed[i])*W.sway*k*dt; z+=Math.cos(now*1.1+WX.seed[i])*W.sway*0.6*k*dt; }
+        if(y<0) y+=bx.y;
+        x=x0+((((x-x0)%bx.x)+bx.x)%bx.x); z=z0+((((z-z0)%bx.z)+bx.z)%bx.z);
+        P[i*3]=x; P[i*3+1]=y; P[i*3+2]=z;
+        // nothing right in front of the lens: a flake there turns into a blurry blob
+        const qx=x-camera.position.x, qy=y-camera.position.y, qz=z-camera.position.z;
+        if(qx*qx+qy*qy+qz*qz<near2){ const j=rain?i*6:i*3; pos[j+1]=-50; if(rain) pos[j+4]=-50; continue; }
+        if(rain){ const j=i*6; pos[j]=x; pos[j+1]=y; pos[j+2]=z; pos[j+3]=x-W.wind*0.03*k; pos[j+4]=y+L; pos[j+5]=z; }
+        else { const j=i*3; pos[j]=x; pos[j+1]=y; pos[j+2]=z; }
+      }
+      WX.obj.geometry.attributes.position.needsUpdate=true;
+    }
+
+    /* ════════ LIGHT RIG (hero-frame step 2, 2026-09-24) ════════
+       Night only. The hero frame's lights in the real stadium:
+       - floodlight BANKS on the roof edge (far side + both goal ends): heads,
+         lamp grid, big halos
+       - volumetric CONES from each bank onto its light pool (the pools are the
+         cones' footprints), with dust drifting in them; Astra's corner beams
+         step aside while the rig is on
+       - PRACTICALS: LED board spill along the far touchline (coloured pools
+         cycling with the boards), phone lights twinkling in the crowd,
+         photographers behind both goals with camera flashes (a flash sprite +
+         a spill pool on the grass)
+       Numbers from the GLB (2026-09-24): roof inner edge y~16.8, far z~-38,
+       goal ends x~+-51.5.  P3D.rig.on=false removes it. */
+    const RIG={on:true, built:false, cones:[], banks:[], dust:null, phones:null, photogs:[], flashes:[], spill:[], t:0, nextFlash:1};
+    P3D.rig=RIG;
+    const RIG_BANKS=[   // [bank x,y,z] -> [pool target x,z, cone radius at the ground]
+      [[-18,16.2,-37.2],[-16.1,-5.6,7.5]], [[18,16.2,-37.2],[16.1,-5.6,7.5]], [[0,16.2,-37.2],[0,0,6.5]],
+      [[-36,16.2,-37.2],[-16.1,5.6,7.5]], [[36,16.2,-37.2],[16.1,5.6,7.5]],
+      [[-50.5,16.2,0],[-30.1,0,6]], [[50.5,16.2,0],[30.1,0,6]] ];
+    function rigCanvasTex(w,h,draw,pixel){ const c=document.createElement('canvas'); c.width=w; c.height=h; draw(c.getContext('2d'),w,h);
+      const t=new T.CanvasTexture(c); if(pixel){ t.magFilter=T.NearestFilter; t.minFilter=T.NearestFilter; t.generateMipmaps=false; } return t; }
+    function buildRig(){
+      if(RIG.built) return; RIG.built=true;
+      const k=PLEN/70, g=RIG.group=new T.Group(); scene.add(g);
+      const headTex=rigCanvasTex(96,64,(x,w,h)=>{ x.fillStyle='#10131a'; x.fillRect(0,0,w,h); for(let r=0;r<4;r++) for(let c=0;c<6;c++){ x.fillStyle='#fffaf0'; x.fillRect(4+c*15,4+r*15,11,11); } },true);
+      const headMat=new T.MeshBasicMaterial({map:headTex,fog:false});
+      const coneMat=new T.ShaderMaterial({uniforms:{str:{value:1}},transparent:true,depthWrite:false,blending:T.AdditiveBlending,side:T.DoubleSide,fog:false,
+        vertexShader:'varying float vy;varying vec3 vN;varying vec3 vV;void main(){vy=uv.y;vec4 mv=modelViewMatrix*vec4(position,1.);vN=normalize(normalMatrix*normal);vV=normalize(-mv.xyz);gl_Position=projectionMatrix*mv;}',
+        fragmentShader:'uniform float str;varying float vy;varying vec3 vN;varying vec3 vV;void main(){float edge=pow(abs(dot(vN,vV)),1.3);float along=(.35+.65*vy)*smoothstep(.02,.3,vy);gl_FragColor=vec4(vec3(1.,.95,.85)*edge*along*.36*str,1.);}'});
+      RIG.coneMat=coneMat;
+      const dustP=[];
+      RIG_BANKS.forEach(([bk,tg])=>{
+        const from=new T.Vector3(bk[0]*k,bk[1]*k,bk[2]*PWID/44.87), to=new T.Vector3(tg[0]*k,0,tg[1]*PWID/44.87);
+        const head=new T.Mesh(new T.BoxGeometry(5.2*k,3.2*k,0.45*k),headMat); head.position.copy(from); head.lookAt(to); g.add(head);
+        const halo=new T.Sprite(new T.SpriteMaterial({map:haloTex(),color:0xfff3dc,transparent:true,opacity:.9,depthWrite:false,blending:T.AdditiveBlending,fog:false}));
+        halo.position.copy(from); halo.scale.set(15*k,15*k,1); g.add(halo);
+        const len=from.distanceTo(to), cg=new T.ConeGeometry(tg[2]*k,len,40,1,true); cg.translate(0,-len/2,0);
+        const cone=new T.Mesh(cg,coneMat); cone.position.copy(from); cone.quaternion.setFromUnitVectors(new T.Vector3(0,-1,0),to.clone().sub(from).normalize());
+        cone.frustumCulled=false; cone.renderOrder=9; g.add(cone); RIG.cones.push(cone); RIG.banks.push({from,to,halo});
+        for(let i=0;i<150;i++){ const f=0.18+Math.random()*0.8, a=Math.random()*6.283, r=Math.random()*f*tg[2]*k*0.85, q=from.clone().lerp(to,f);
+          dustP.push(q.x+Math.cos(a)*r, q.y+(Math.random()-.5)*2, q.z+Math.sin(a)*r); }
+      });
+      // dust
+      { const n=dustP.length/3, ph=new Float32Array(n); for(let i=0;i<n;i++) ph[i]=Math.random()*6.283;
+        const dg=new T.BufferGeometry(); dg.setAttribute('position',new T.Float32BufferAttribute(dustP,3)); dg.setAttribute('ph',new T.BufferAttribute(ph,1));
+        const dm=new T.ShaderMaterial({uniforms:{time:{value:0}},transparent:true,depthWrite:false,blending:T.AdditiveBlending,fog:false,
+          vertexShader:'attribute float ph;uniform float time;varying float a;void main(){vec3 q=position;q.x+=sin(time*.3+ph)*.6;q.y+=sin(time*.21+ph*2.)*.5;vec4 mv=modelViewMatrix*vec4(q,1.);gl_Position=projectionMatrix*mv;a=.4+.3*sin(time*.9+ph);gl_PointSize=clamp(70./-mv.z,1.,4.);}',
+          fragmentShader:'varying float a;void main(){float d=length(gl_PointCoord-.5)*2.;gl_FragColor=vec4(vec3(1.,.96,.88)*pow(max(0.,1.-d),2.)*a,1.);}'});
+        RIG.dust=new T.Points(dg,dm); RIG.dust.frustumCulled=false; g.add(RIG.dust); }
+      rigPhones();
+      // photographers behind both goals (hi-vis bibs, lens), with flashes
+      rigPhotogs(k);
+    }
+    // phone lights in the crowd (seat spots from the stadium; retried until the GLB is in)
+    function rigPhones(){
+      const g=RIG.group; if(RIG.phones||!g) return;
+      try{ const fs=(window.U11_CLASSIC&&U11_CLASSIC.flashSpots)?U11_CLASSIC.flashSpots():[]; if(fs.length){
+        const n=900, P=new Float32Array(n*3), ph=new Float32Array(n);
+        for(let i=0;i<n;i++){ const s=fs[(Math.random()*fs.length)|0]; P[i*3]=s[0]+(Math.random()-.5)*3; P[i*3+1]=s[1]+0.4; P[i*3+2]=s[2]+(Math.random()-.5)*1.5; ph[i]=Math.random()*6.283; }
+        const pg=new T.BufferGeometry(); pg.setAttribute('position',new T.BufferAttribute(P,3)); pg.setAttribute('ph',new T.BufferAttribute(ph,1));
+        const pm=new T.ShaderMaterial({uniforms:{time:{value:0}},transparent:true,depthWrite:false,blending:T.AdditiveBlending,fog:false,
+          vertexShader:'attribute float ph;uniform float time;varying float a;void main(){vec4 mv=modelViewMatrix*vec4(position,1.);gl_Position=projectionMatrix*mv;a=.5+.5*sin(time*(1.2+fract(ph*3.1))+ph);gl_PointSize=clamp(110./-mv.z,1.,5.);}',
+          fragmentShader:'varying float a;void main(){float d=length(gl_PointCoord-.5)*2.;gl_FragColor=vec4(vec3(.85,.93,1.)*pow(max(0.,1.-d),1.5)*a,1.);}'});
+        RIG.phones=new T.Points(pg,pm); RIG.phones.frustumCulled=false; g.add(RIG.phones); } }catch(e){}
+    }
+    function rigPhotogs(k){
+      const g=RIG.group;
+      const phT=rigCanvasTex(24,24,(x)=>{ const Rr=(a,b2,w,h,c)=>{x.fillStyle=c;x.fillRect(a,b2,w,h);};
+        Rr(9,4,6,5,'#2a1d18'); Rr(9,3,6,2,'#15110f'); Rr(6,9,12,8,'#d9f24a'); Rr(6,9,12,2,'#b8cf3a');
+        Rr(4,11,3,6,'#1c2230'); Rr(17,10,5,4,'#111'); Rr(20,11,3,2,'#445'); Rr(7,17,10,4,'#161b26'); Rr(6,21,5,2,'#0d0f14'); Rr(13,21,5,2,'#0d0f14'); },true);
+      const hx=PLEN/2, pw=PWID/44.87;
+      [-1,1].forEach(side=>{ [-11,-8.5,-6,6,8.5,11].forEach((zz,i)=>{
+        const m=new T.Sprite(new T.SpriteMaterial({map:phT,transparent:true,alphaTest:.5}));
+        const x=side*(hx+1.6*k+(i%2)*0.6*k); m.position.set(x,0.55*k,zz*pw); m.scale.set((side>0?-1:1)*1.15*k,1.15*k,1); m.center.set(.5,.5);
+        g.add(m); RIG.photogs.push({m,side}); }); });
+      RIG.flashSprite=new T.Sprite(new T.SpriteMaterial({map:haloTex(),color:0xeaf4ff,transparent:true,opacity:0,depthWrite:false,blending:T.AdditiveBlending,fog:false}));
+      RIG.flashSprite.scale.set(4*k,4*k,1); g.add(RIG.flashSprite);
+      // LED board spill along the far touchline + 2 flash slots (spill = [x,z,r,int,r,g,b])
+      const cols=[[0.18,0.55,1.0],[0.94,0.75,0.25],[1,1,1],[1.0,0.3,0.37],[0.24,0.78,1.0]];
+      for(let i=0;i<6;i++) RIG.spill.push([(-28+i*11.2)*k,-(PWID/2-0.4*pw),4.6*k,4.2].concat(cols[i%cols.length]));   // on the grass inside the touchline
+      RIG.spill.push([0,0,3.2*k,0,0.9,0.95,1],[0,0,3.2*k,0,0.9,0.95,1]);
+      RIG.cols=cols;
+    }
+    function rigSyncPools(){
+      // the night pools ARE the cones' footprints
+      const hx=PLEN/2, hz=PWID/2;
+      P3D.night.pools=RIG_BANKS.map(([bk,tg])=>[tg[0]*(PLEN/70)/hx, tg[1]*(PWID/44.87)/hz, tg[2]*2.05, 1.0]);
+      syncNightUniforms();
+    }
+    function rigFrame(now,dt){
+      const on=RIG.on&&LOOK==='night';
+      if(!on){ if(RIG.group) RIG.group.visible=false; if(RIG._astraOff){ RIG._astraOff=false; P3D.gfx.volRays=RIG._ar; P3D.gfx.volPools=RIG._ap; P3D.gfx.volDust=RIG._ad; } return; }
+      if(!RIG.built){ buildRig(); rigSyncPools(); }
+      if(!RIG.phones&&(now-(RIG._phTry||0))>1000){ RIG._phTry=now; rigPhones(); }
+      RIG.group.visible=true;
+      if(!RIG._astraOff){ RIG._astraOff=true; RIG._ar=P3D.gfx.volRays; RIG._ap=P3D.gfx.volPools; RIG._ad=P3D.gfx.volDust; P3D.gfx.volRays=false; P3D.gfx.volPools=false; P3D.gfx.volDust=false; }
+      const t=now*0.001; RIG.t=t;
+      const W=P3D.weatherFx[ENV.weather]; RIG.coneMat.uniforms.str.value=W?1.35:1;          // beams read stronger in rain/snow
+      if(RIG.dust) RIG.dust.material.uniforms.time.value=t;
+      if(RIG.phones) RIG.phones.material.uniforms.time.value=t;
+      // boards cycle their colours; flashes fire one at a time
+      const seg=Math.floor(t*0.9);
+      for(let i=0;i<6;i++){ const c=RIG.cols[(seg+i*2)%RIG.cols.length]; RIG.spill[i][4]=c[0]; RIG.spill[i][5]=c[1]; RIG.spill[i][6]=c[2]; }
+      if(t>RIG.nextFlash){ const p=RIG.photogs[(Math.random()*RIG.photogs.length)|0]; RIG.flashAt=t; RIG.flashPos=p.m.position.clone(); RIG.nextFlash=t+0.5+Math.random()*1.6; }
+      const fk=RIG.flashAt?Math.max(0,1-(t-RIG.flashAt)/0.1):0;
+      if(RIG.flashPos){ RIG.flashSprite.position.copy(RIG.flashPos).y+=0.35*(PLEN/70); RIG.spill[6][0]=RIG.flashPos.x; RIG.spill[6][1]=RIG.flashPos.z; }
+      RIG.flashSprite.material.opacity=fk; RIG.spill[6][3]=fk*9;
+      if(_nightMat){ const u=_nightMat.uniforms; for(let i=0;i<10;i++){ const q=RIG.spill[i];
+        if(q){ u.spill.value[i].set(q[0],q[1],Math.max(.01,q[2]),q[3]); u.spillCol.value[i].set(q[4],q[5],q[6]); } else u.spill.value[i].set(0,0,1,0); } }
+    }
+
+    /* ════════ KICKOFF HERO CAMERA (hero-frame step 2) ════════
+       While a kickoff waits, a low camera behind the kicker looks up the pitch
+       at the goal-end stand, roof rig, beams and crowd, pushing in slowly -
+       the hero frame in the real match. It cuts to the match camera when the
+       ball is played. P3D.heroKick=false turns it off. */
+    P3D.heroKick=true; let _hk=null;
+    function heroKickCam(dt){
+      const g=(typeof G!=='undefined')?G:null;
+      if(!(P3D.heroKick&&g&&g.awaitKickoff&&!g.paused)){ _hk=null; return false; }
+      const s=g.awaitKickoff, kp=PP[s]&&g.ck&&PP[s][g.ck]; if(!kp) return false;
+      if(!_hk) _hk={t:0}; _hk.t+=dt;
+      // from inside the attacking half, low, looking at the goal the kicker
+      // attacks: the opponents lined up, the goal, the stand, the roof rig
+      const k=PLEN/70, gx=ex2wx(goalXFor(s)), d=Math.sign(gx)||1;
+      const push=Math.min(1,_hk.t/7), e=push*push*(3-2*push);
+      camera.fov=38; camera.updateProjectionMatrix();
+      camera.position.set(gx-d*(28-4*e)*k, (1.7+0.12*Math.sin(_hk.t*0.4))*k, (6-1.5*e)*k);
+      camera.lookAt(gx, (2.6+0.2*Math.sin(_hk.t*0.3))*k, 0);
+      return true;
+    }
+
+    /* ════════ REAL SHADOWS (hero-frame step 1, 2026-09-24) ════════
+       The author locked the hero frame (lab/lab-heroframe.html) as the game's
+       look; its foundation is players who CAST REAL SHADOWS. The sun (or the
+       night backlight: P3D.night.light azim/elev) now renders a shadow map.
+       Each player sprite gets an invisible shadow twin - a camera-facing card
+       with the same frame (same texture object, alphaTest) that draws no
+       colour/depth on screen but renders into the shadow map - so the visible sprites and all their
+       features stay untouched. The ball and the goal frames cast too. The
+       pitch receives through a transparent ShadowMaterial catcher, so it works
+       over the day pitch and the night pool shader alike. The old stretched
+       silhouette is switched off while this is on.
+       P3D.realShadows.on=false compares against the old fake shadows. */
+    const SH3={on:true, opacity:{classic:0.55,golden:0.62,night:0.66}, weatherK:0.65,
+      // sun direction per time (the game's own azimuth; lower = longer shadows)
+      dir:{classic:{azim:4.03,elev:0.3}, golden:{azim:4.03,elev:0.08}, night:{azim:4.4,elev:0.24}}};   // the real shadow is physical: a low light makes it long (the fake one was stretched x3)
+    P3D.setRealShadows=function(on){ SH3.on=!!on; try{ applyEnv(); }catch(e){} return SH3.on; };
+    P3D.realShadows=SH3;
+    P3D._sh=()=>({sun,renderer,scene,catcher:shadowCatcher,T,ball:_ballCaster});   // debug
+    let shadowCatcher=null, _ballCaster=null, _sunShadowReady=false;
+    // three tests object layers against the MAIN camera even in the shadow
+    // pass, so the twins can't hide on a layer: they draw no colour and no
+    // depth instead - invisible on screen, still rendered into the shadow map
+    const CASTER_MAT=new T.MeshBasicMaterial({colorWrite:false,depthWrite:false,side:T.DoubleSide});
+    /* The twin's depth: r128's shadow pass did not apply the atlas crop
+       (uvTransform) to a customDepthMaterial map - every twin sampled an empty
+       spot and was discarded (measured: no shadow even at alphaTest .01, a full
+       rectangle without the map). So the crop is explicit: the texture's own
+       uv matrix (texture.matrix - exactly what the sprite draws with; a hand
+       offset/repeat picked the wrong row) copied each frame, depth packed like
+       MeshDepthMaterial. */
+    function twinDepthMat(map){
+      return new T.ShaderMaterial({uniforms:{map:{value:map},uvT:{value:new T.Matrix3()}},side:T.DoubleSide,
+        vertexShader:'varying vec2 vUv; void main(){ vUv=uv; gl_Position=projectionMatrix*modelViewMatrix*vec4(position,1.0); }',
+        fragmentShader:['#include <packing>','uniform sampler2D map; uniform mat3 uvT; varying vec2 vUv;',
+          'void main(){ vec4 t=texture2D(map,(uvT*vec3(vUv,1.0)).xy); if(t.a<0.5) discard; gl_FragColor=packDepthToRGBA(gl_FragCoord.z); }'].join(String.fromCharCode(10))});
+    }
+    function sunShadowSetup(){
+      if(_sunShadowReady) return; _sunShadowReady=true;
+      const s=sun.shadow, c=s.camera, e=PLEN*0.72;
+      s.mapSize.set(4096,4096); c.left=-e; c.right=e; c.top=e; c.bottom=-e; c.near=1; c.far=520; c.updateProjectionMatrix();
+      s.bias=-0.0006; s.normalBias=0.03;
+    }
+    function ensureCatcher(){
+      if(shadowCatcher) return;
+      shadowCatcher=new T.Mesh(new T.PlaneGeometry(PLEN*1.5,PWID*1.8),new T.ShadowMaterial({opacity:0.42,depthWrite:false}));
+      shadowCatcher.rotation.x=-Math.PI/2; shadowCatcher.position.y=0.015; shadowCatcher.receiveShadow=true; shadowCatcher.renderOrder=1;
+      scene.add(shadowCatcher);
+    }
+    function shadowOpacity(){
+      const t=(typeof ENV!=='undefined')?ENV.time:'classic', w=(typeof ENV!=='undefined')?ENV.weather:'sunny';
+      let o=SH3.opacity[t]!=null?SH3.opacity[t]:0.42; if(w==='rain'||w==='snow') o*=SH3.weatherK; return o;
+    }
+    function syncCasters(){
+      const on=!!SH3.on;
+      sun.castShadow=on; if(shadowCatcher) shadowCatcher.visible=on;
+      if(!on){ for(const id in sprites){ const c=sprites[id].caster; if(c) c.visible=false; } if(_ballCaster) _ballCaster.visible=false; return; }
+      sunShadowSetup(); ensureCatcher(); shadowCatcher.material.opacity=shadowOpacity();
+      const list=Object.keys(sprites).map(id=>sprites[id]);
+      try{ if(typeof refMesh!=='undefined'&&refMesh){ if(!syncCasters._ref) syncCasters._ref={sprite:refMesh}; list.push(syncCasters._ref); } }catch(e){}
+      for(const o of list){ if(!o||!o.sprite) continue;
+        let c=o.caster;
+        if(!o.sprite.visible){ if(c) c.visible=false; continue; }
+        const map=o.sprite.material.map;
+        if(!c){ c=o.caster=new T.Mesh(new T.PlaneGeometry(1,1),CASTER_MAT);
+          c.castShadow=true; c.frustumCulled=false;
+          c.customDepthMaterial=twinDepthMat(map);
+          scene.add(c); }
+        const du=c.customDepthMaterial.uniforms; du.map.value=map; map.updateMatrix(); du.uvT.value.copy(map.matrix);
+        /* the twin faces the LIGHT, not the camera: a camera-facing card lit
+           from the side throws a thin sliver (measured); facing the sun it
+           throws the whole silhouette, the classic sprite-shadow trick */
+        const sp=o.sprite, W=sp.scale.x, H=sp.scale.y;
+        const yaw=Math.atan2(sun.position.x-sp.position.x,sun.position.z-sp.position.z), rx=Math.cos(yaw), rz=-Math.sin(yaw);
+        const ox=(0.5-sp.center.x)*W, oy=(0.5-sp.center.y)*H;
+        c.position.set(sp.position.x+rx*ox, sp.position.y+oy, sp.position.z+rz*ox); c.rotation.set(0,yaw,0); c.scale.set(W,H,1); c.visible=true;
+      }
+      if(!_ballCaster){ _ballCaster=new T.Mesh(new T.SphereGeometry(0.5,10,8),CASTER_MAT); _ballCaster.castShadow=true; _ballCaster.frustumCulled=false; scene.add(_ballCaster); }
+      const bp=(ballSprite&&ballSprite.visible)?ballSprite:((ballMesh&&ballMesh.visible)?ballMesh:null);
+      if(bp){ _ballCaster.visible=true; _ballCaster.position.copy(bp.position); _ballCaster.scale.setScalar(PLEN*(P3D.spriteFrac!=null?P3D.spriteFrac:.045)*0.21); }
+      else _ballCaster.visible=false;
     }
 
     /* ════════ REFEREE ════════
@@ -4754,7 +5246,7 @@
       monitorQuality(now);
       syncSheets(); watchActions();
       if(PEN){ penCamera(); camera.updateMatrixWorld(); }
-      else if(!cine){ updateCamera(dt); camera.updateMatrixWorld(); }
+      else if(!cine){ if(!heroKickCam(dt)) updateCamera(dt); camera.updateMatrixWorld(); }
       syncPlayers();
       if(PEN) try{ penApply(); }catch(e){ console.error('[P3D] pen',e); }
       else if(!cine) try{ gkaAlign(); }catch(e){}
@@ -4773,6 +5265,10 @@
       try{ tickGfx(dt,now); }catch(e){}
       try{ tickFlags(now); }catch(e){}
       syncRef(dt);
+      if(_lookPending&&pitchMesh){ _lookPending=null; applyEnv(); }
+      if(ENV.time!=='classic'||ENV.weather!=='sunny') try{ envFrame(now,dt); }catch(e){ console.warn('[P3D] env',e); }
+      try{ rigFrame(now,dt); }catch(e){ console.warn('[P3D] rig',e); }
+      try{ syncCasters(); }catch(e){ console.warn('[P3D] shadows',e); }
       // anchor god rays at the sun's projected screen position
       if(rayPass){
         _v3.copy(sun.position).project(camera);

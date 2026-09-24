@@ -739,6 +739,22 @@ addEventListener('DOMContentLoaded',function(){
             </div>
           </div>
           <div class="ae-set-row">
+            <div class="ae-set-lbl"><div class="ae-set-name">TIME</div><div class="ae-set-desc">MATCH LIGHTING · CHANGES LIVE</div></div>
+            <div class="ae-uisize" id="timeCtl">
+              <button data-tm="classic" onclick="setMatchTime('classic')">DAY</button>
+              <button data-tm="golden" onclick="setMatchTime('golden')">GOLDEN</button>
+              <button data-tm="night" onclick="setMatchTime('night')">NIGHT</button>
+            </div>
+          </div>
+          <div class="ae-set-row">
+            <div class="ae-set-lbl"><div class="ae-set-name">WEATHER</div><div class="ae-set-desc">MATCH WEATHER · CHANGES LIVE</div></div>
+            <div class="ae-uisize" id="weatherCtl">
+              <button data-wx="sunny" onclick="setMatchWeather('sunny')">SUNNY</button>
+              <button data-wx="rain" onclick="setMatchWeather('rain')">RAIN</button>
+              <button data-wx="snow" onclick="setMatchWeather('snow')">SNOW</button>
+            </div>
+          </div>
+          <div class="ae-set-row">
             <div class="ae-set-lbl"><div class="ae-set-name">PERF OVERLAY</div><div class="ae-set-desc">SHOW SPRITE / FPS DEBUG IN MATCHES</div></div>
             <div class="ae-tog" id="togDebug" onclick="toggleDebug()"></div>
           </div>
@@ -786,7 +802,29 @@ addEventListener('DOMContentLoaded',function(){
       if(ctl)ctl.querySelectorAll('button').forEach(function(b){b.classList.toggle('on',b.dataset.sz===(S.uisize||'auto'));});
       var sct=document.getElementById('stadiumCtl');
       if(sct)sct.querySelectorAll('button').forEach(function(b){b.classList.toggle('on',b.dataset.st===curStadium());});
+      var env=curEnv();
+      var tct=document.getElementById('timeCtl');
+      if(tct)tct.querySelectorAll('button').forEach(function(b){b.classList.toggle('on',b.dataset.tm===env.time);});
+      var wct=document.getElementById('weatherCtl');
+      if(wct)wct.querySelectorAll('button').forEach(function(b){b.classList.toggle('on',b.dataset.wx===env.weather);});
     }
+    /* TIME / WEATHER (2026-09-24): like the stadium, the renderer reads these
+       at boot from their own keys (u11.look, u11.weather); P3D.setTime /
+       P3D.setWeather save them and apply live. */
+    function curEnv(){
+      if(window.P3D&&P3D.env) return P3D.env;
+      var t='classic',w='sunny';
+      try{ t=localStorage.getItem('u11.look')||t; w=localStorage.getItem('u11.weather')||w; }catch(e){}
+      return {time:t,weather:w};
+    }
+    window.setMatchTime=function(v){
+      if(window.P3D&&P3D.setTime) P3D.setTime(v); else try{ localStorage.setItem('u11.look',v); }catch(e){}
+      syncUI();
+    };
+    window.setMatchWeather=function(v){
+      if(window.P3D&&P3D.setWeather) P3D.setWeather(v); else try{ localStorage.setItem('u11.weather',v); }catch(e){}
+      syncUI();
+    };
     /* The stadium lives in its own key ('ue_stadium') because ult11-pitch3d.js
        reads it at boot, before this settings block exists. Single source of
        truth - do not mirror it into ue_settings_v1. */
@@ -854,6 +892,7 @@ addEventListener('DOMContentLoaded',function(){
     /* HOW TO PLAY */
     window.openHelp=function(tab){
       var m=document.getElementById('aeHelp'); if(!m) return;
+      try{ if(m.parentElement!==document.body) document.body.appendChild(m); }catch(e){}
       window.helpTab(tab||'controls');
       m.classList.add('show');
       var b=m.querySelector('.ae-modal-body'); if(b) b.scrollTop=0;
@@ -872,7 +911,12 @@ addEventListener('DOMContentLoaded',function(){
       var m=document.getElementById('aeHelp');
       if(m&&m.classList.contains('show')){ e.preventDefault(); e.stopPropagation(); window.closeHelp(); }
     },true);
-    window.openSettings=function(){apply();syncUI();var m=document.getElementById('aeSettings');if(m)m.classList.add('show');};
+    /* The modals live inside #s-home, which is display:none during a match, so
+       SETTINGS / HOW TO PLAY from the pause menu opened invisible panels
+       (found 2026-09-24 while adding TIME / WEATHER). Lift them to <body> on
+       open so they show over any screen. */
+    function liftModal(m){ try{ if(m&&m.parentElement!==document.body) document.body.appendChild(m); }catch(e){} }
+    window.openSettings=function(){apply();syncUI();var m=document.getElementById('aeSettings');liftModal(m);if(m)m.classList.add('show');};
     window.closeSettings=function(){var m=document.getElementById('aeSettings');if(m)m.classList.remove('show');};
     window.setMasterVol=function(v){S.vol=+v;save();apply();};
     window.toggleMenuMusic=function(){S.menuMusic=!S.menuMusic;save();apply();syncUI();
@@ -1689,7 +1733,7 @@ addEventListener('DOMContentLoaded',function(){
 <script src="ult11-fx-flame.js?v=7" defer></script>
 <script src="assets/stadium/GLTFLoader-r128.js?v=1" defer></script>
 <script src="ult11-stadium-classic.js?v=5" defer></script>
-<script src="ult11-pitch3d.js?v=123" defer></script>
+<script src="ult11-pitch3d.js?v=128" defer></script>
 <script src="ult11-cine3.js?v=8" defer></script>
 <script src="ult11-sfx-samples.js?v=2" defer></script>
 <script src="ult11-camlab.js?v=6" defer></script>
