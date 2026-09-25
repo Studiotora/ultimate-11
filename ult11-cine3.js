@@ -34,25 +34,28 @@ const VS=`varying vec2 vUv; void main(){ vUv=uv; gl_Position=projectionMatrix*mo
    cell. off/rep are copied from the live sprite texture every frame, so a
    mirrored sprite (negative repeat.x) mirrors the aura for free. */
 const FS_AURA=NOISE+`
-uniform sampler2D map; uniform vec2 off,rep; uniform float time,amt,tight,front; uniform vec3 col;
+uniform sampler2D map; uniform vec2 off,rep; uniform float time,amt,tight,front,lick,spd,zap,dark; uniform vec3 col;
 varying vec2 vUv;
 float A(vec2 p){ p=clamp(p,0.002,0.998); return texture2D(map,off+p*rep).a; }
 void main(){
   vec2 p=vUv;
-  float n =fbm(vec2(p.x*7.0,p.y*3.2-time*2.8));
-  float n2=fbm(vec2(p.x*13.0+3.1,p.y*6.0-time*4.6));
-  float r=mix(0.018+0.02*amt,0.008,tight);
+  float n =fbm(vec2(p.x*7.0,p.y*3.2-time*2.8*spd));
+  float n2=fbm(vec2(p.x*13.0+3.1,p.y*6.0-time*4.6*spd));
+  float r=mix(0.018+0.02*amt,0.008,tight)*(1.0+dark*0.9);
+  vec2 jz=zap*vec2((h21(vec2(floor(time*26.0),floor(p.y*30.0)))-0.5)*0.03,0.0);
   float d=0.0;
-  for(int i=0;i<8;i++){ float a=float(i)*0.7853982; d=max(d,A(p+vec2(cos(a),sin(a)*0.71)*r)); }
+  for(int i=0;i<8;i++){ float a=float(i)*0.7853982; d=max(d,A(p+jz+vec2(cos(a),sin(a)*0.71)*r)); }
   float up=0.0;
   for(int j=1;j<=7;j++){ float fj=float(j);
-    vec2 q=p-vec2((n-0.5)*0.06*fj,0.026*fj*(0.55+0.7*amt));
+    vec2 q=p-vec2((n-0.5)*0.06*fj,0.026*fj*(0.55+0.7*amt)*lick)-jz*fj*0.5;
     up=max(up,A(q)*(1.0-fj/8.0)); }
   up*=(1.0-tight)*smoothstep(0.25,0.7,n2+0.15);
   float core=A(p);
   float edge=max(d,up)*(1.0-core*mix(0.9,0.55,front));
   float flick=0.78+0.22*sin(time*27.0+p.y*38.0+n*6.0);
+  flick=mix(flick,0.35+1.1*step(0.45,h21(vec2(floor(time*20.0),floor(p.y*14.0+n*3.0)))),zap*0.7);
   float I=edge*amt*flick*(0.45+1.0*n)*mix(1.0,0.35,front);
+  if(dark>0.5){ gl_FragColor=vec4(0.0,0.0,0.0,clamp(max(d,up)*amt*(0.6+0.6*n)*(1.0-core),0.0,0.92)); return; }
   vec3 c=mix(col,vec3(1.0),smoothstep(0.5,1.1,I));
   gl_FragColor=vec4(c*I*0.95,1.0);
 }`;
@@ -87,13 +90,13 @@ const RIB_FS=NOISE+`uniform vec3 col; uniform float time,op,core; varying vec2 v
     float I=pow(e,1.4)*(0.45+0.9*n)*tail*op;
     vec3 c=mix(col,vec3(1.0),pow(e,3.0)*tail*core);
     gl_FragColor=vec4(c*I*1.5,1.0); }`;
-function Ribbon(n,core){
+function Ribbon(n,core,fs,ro){
   this.n=n; const g2=new T.BufferGeometry(); this.pos=new Float32Array(n*6); const uv=new Float32Array(n*4), idx=[];
   for(let i=0;i<n;i++){ uv[i*4]=i/(n-1); uv[i*4+1]=0; uv[i*4+2]=i/(n-1); uv[i*4+3]=1;
     if(i<n-1){ const a=i*2; idx.push(a,a+1,a+2,a+1,a+3,a+2); } }
   g2.setAttribute('position',new T.BufferAttribute(this.pos,3)); g2.setAttribute('uv',new T.BufferAttribute(uv,2)); g2.setIndex(idx);
-  this.mat=new T.ShaderMaterial(mkAdd({uniforms:{col:{value:COL.v},time:{value:0},op:{value:0},core:{value:core}},vertexShader:VS,fragmentShader:RIB_FS}));
-  this.mesh=new T.Mesh(g2,this.mat); this.mesh.frustumCulled=false; this.mesh.visible=false; this.mesh.renderOrder=14; scene.add(this.mesh); this.g=g2;
+  this.mat=new T.ShaderMaterial(mkAdd({uniforms:{col:{value:COL.v},time:{value:0},op:{value:0},core:{value:core}},vertexShader:VS,fragmentShader:fs||RIB_FS}));
+  this.mesh=new T.Mesh(g2,this.mat); this.mesh.frustumCulled=false; this.mesh.visible=false; this.mesh.renderOrder=ro||14; scene.add(this.mesh); this.g=g2;
   this.pts=[]; for(let i=0;i<n;i++) this.pts.push(new T.Vector3());
 }
 Ribbon.prototype.update=function(cam,wf){ const n=this.n,P=this.pts,tv=new T.Vector3(),vv=new T.Vector3(),sd=new T.Vector3();
@@ -106,13 +109,211 @@ let auraB=null, auraF=null, pillar=null, seal=null, glow=null, rocks=null;
 const COL={v:null};
 let fxT=0, filterStr='', glc=null, fontOK=false;
 
+/* ═══ AURA PROFILES (2026-09-25 · from the approved Aura Charge Lab) ═══
+   The shot's trail style picks a profile; the profile only changes the
+   CHARGE (aura knobs, pillar mode, veil) and adds that aura's own meshes.
+   Colour still comes from superCol() and every trail stays pitch3d's.
+   'base' reproduces the pre-profile cine3 exactly. */
+const AURA_P={
+  base   :{lick:1.0,spd:1.0,zap:0,pillar:1,veil:1.0},
+  thunder:{lick:0.8,spd:1.6,zap:1,pillar:1,veil:1.0},
+  flame  :{lick:1.9,spd:1.5,zap:0,pillar:2,veil:1.0},
+  shadow :{lick:1.2,spd:0.7,zap:0,pillar:3,veil:1.4,dark:1},
+  dragon :{lick:1.3,spd:1.2,zap:0,pillar:1,veil:1.0},
+  seraph :{lick:0.6,spd:0.6,zap:0,pillar:4,veil:0.9}};
+const STYLE2AURA={lightning:'thunder',flame:'flame',tiger:'flame',shadow:'shadow',dragon:'dragon',aura:'seraph',galaxy:'seraph'};
+C3.forceAura=null;                        // e.g. U11_CINE3.forceAura='seraph'
+C3.auraFor=function(k){ return STYLE2AURA[k]||'base'; };
+let AP=AURA_P.base, AID='base', auraD=null, AX=null;
+function setAura(k){ AID=C3.forceAura||C3.auraFor(k); AP=AURA_P[AID]||AURA_P.base; }
+const rn=(a,b)=>a+Math.random()*(b-a);
+
+const PILLAR_FS=NOISE+`uniform float time,amt,mode; uniform vec3 col; varying vec2 vUv;
+  void main(){ float a=vUv.x*6.2831853; float y=vUv.y; float I=0.0; vec3 c=col;
+    if(mode<1.5){ float n=fbm(vec2(cos(a)*2.5+sin(a)*1.7, y*2.2-time*3.4)+vec2(sin(a)*3.0,0.0));
+      float s=smoothstep(0.48,0.92,n); float f=smoothstep(0.0,0.12,y)*(1.0-smoothstep(0.3,1.0,y));
+      I=s*f*amt*0.6; c=mix(col,vec3(1.0),s*0.25); }
+    else if(mode<2.5){ float n=fbm(vec2(cos(a)*2.0+sin(a)*1.3, y*3.0-time*4.8)+vec2(sin(a)*2.0,0.0));
+      float fl=smoothstep(0.0,0.45,n*1.35-y*1.05+0.22);
+      I=fl*smoothstep(0.0,0.06,y)*amt*0.38; c=mix(col,vec3(1.0,0.9,0.7),smoothstep(0.7,1.0,fl)*(1.0-y)*0.6); }
+    else if(mode<3.5){ float n=fbm(vec2(cos(a)*2.5+sin(a)*1.7, y*2.0+time*2.2)+vec2(sin(a)*3.0,0.0));
+      float s=smoothstep(0.52,0.95,n); float f=smoothstep(0.0,0.1,y)*(1.0-smoothstep(0.25,0.9,y));
+      I=s*f*amt*0.55; c=col*0.8; }
+    else { float n=fbm(vec2(a*1.5,y*1.4-time*0.7));
+      I=amt*(0.22+0.3*n)*smoothstep(0.0,0.04,y)*(1.0-smoothstep(0.45,1.0,y)); c=mix(col,vec3(1.0),0.45); }
+    gl_FragColor=vec4(c*I,1.0); }`;
+const BOLT_FS=`uniform vec3 col; uniform float op,time,core; varying vec2 vUv;
+  void main(){ float e=1.0-abs(vUv.y*2.0-1.0); float I=pow(e,1.1)*op;
+    gl_FragColor=vec4(mix(col,vec3(1.0),pow(e,2.5)*core)*I*2.2,1.0); }`;
+const DRAGON_FS=NOISE+`uniform vec3 col; uniform float time,op,core; varying vec2 vUv;
+  void main(){ float e=1.0-abs(vUv.y*2.0-1.0); float u=vUv.x;
+    float body=smoothstep(0.0,0.18,e);
+    float sc=fract(vUv.x*70.0+abs(vUv.y-0.5)*1.6);
+    float scales=smoothstep(0.62,0.95,sc)*smoothstep(0.15,0.7,e);
+    float rimL=smoothstep(0.32,0.05,e)*body; float spine=smoothstep(0.93,1.0,e);
+    float n=fbm(vec2(u*16.0+time*3.0,vUv.y*4.0)); float tail=smoothstep(1.0,0.86,u);
+    float I=(body*0.28+scales*0.6+rimL*1.1+spine*0.5)*(0.55+0.8*n)*op*tail;
+    gl_FragColor=vec4(mix(col,vec3(1.0),scales*0.3+rimL*0.35+spine*0.4)*I*1.5,1.0); }`;
+const MAGIC_FS=NOISE+`uniform float time,amt,rev; uniform vec3 col; varying vec2 vUv;
+  float rl(float r,float R,float w){ return smoothstep(w,0.0,abs(r-R)); }
+  float seg(vec2 p,vec2 a,vec2 b){ vec2 pa=p-a,ba=b-a; float h=clamp(dot(pa,ba)/dot(ba,ba),0.0,1.0); return smoothstep(0.012,0.0,length(pa-ba*h)); }
+  void main(){ vec2 p=vUv*2.0-1.0; float r=length(p), a=atan(p.y,p.x); float A=(a+3.14159)/6.28318;
+    float I=rl(r,0.95,0.012)+rl(r,0.885,0.007)+rl(r,0.66,0.01)+rl(r,0.6,0.006)+rl(r,0.27,0.008);
+    float ra=(a+time*0.3)/6.28318*40.0; float cell=floor(ra);
+    float band=step(0.895,r)*step(r,0.94);
+    I+=band*step(0.2,fract(ra))*step(fract(ra),0.8)*step(0.45,h21(vec2(cell,floor(r*140.0)+floor(fract(ra)*4.0))));
+    for(int t=0;t<2;t++){ for(int j=0;j<3;j++){ float g=float(t)*1.0472+float(j)*2.0944+time*0.45-1.5708;
+      I+=seg(p,vec2(cos(g),sin(g))*0.66,vec2(cos(g+2.0944),sin(g+2.0944))*0.66); } }
+    I+=step(0.29,r)*step(r,0.4)*step(0.8,fract((a-time*0.6)/6.28318*48.0))*0.7;
+    float I2=(min(I,1.6)*step(A,rev)+exp(-r*r*4.0)*0.25)*amt*smoothstep(1.0,0.97,r);
+    gl_FragColor=vec4(mix(col,vec3(1.0),0.4)*I2,1.0); }`;
+const CORONA_FS=NOISE+`uniform float time,amt; uniform vec3 col; varying vec2 vUv;
+  void main(){ vec2 p=vUv*2.0-1.0; float r=length(p), a=atan(p.y,p.x);
+    float rays=fbm(vec2(a*5.0+time*0.3,r*3.0-time*1.4));
+    float I=(exp(-(r-0.38)*7.0)*step(0.38,r)*(0.4+1.0*rays)+smoothstep(0.014,0.0,abs(r-0.385))*1.6)*amt*smoothstep(1.0,0.75,r);
+    gl_FragColor=vec4(mix(col,vec3(1.0),smoothstep(0.02,0.0,abs(r-0.385))*0.6)*I,1.0); }`;
+const POOL_FS=`uniform float amt; varying vec2 vUv; void main(){ float r=length(vUv*2.0-1.0); gl_FragColor=vec4(0.0,0.0,0.0,smoothstep(1.0,0.25,r)*amt*0.85); }`;
+
+function headTexture(flip){
+  const c=document.createElement('canvas'); c.width=256; c.height=160; const g=c.getContext('2d');
+  g.translate(128,86); if(flip) g.scale(1,-1); g.scale(2.4,2.4); g.lineJoin='round'; g.lineCap='round';
+  g.fillStyle='rgba(255,255,255,.35)'; g.beginPath(); for(let k=0;k<6;k++){ const bx=-4-k*5; g.moveTo(bx,-6); g.lineTo(bx-14-k*2,-18-k*2); g.lineTo(bx-6,-2); } g.fill();
+  g.strokeStyle='#fff'; g.lineWidth=2.2; g.beginPath(); g.moveTo(2,-10); g.quadraticCurveTo(-14,-22,-34,-24); g.moveTo(8,-10); g.quadraticCurveTo(-4,-28,-20,-35); g.stroke();
+  g.fillStyle='rgba(255,255,255,.55)'; g.lineWidth=1.3; g.beginPath(); g.moveTo(-8,-6); g.quadraticCurveTo(0,-14,14,-11); g.lineTo(30,-8); g.quadraticCurveTo(42,-7,46,-2); g.lineTo(44,2); g.lineTo(10,3); g.quadraticCurveTo(0,6,-8,6); g.closePath(); g.fill(); g.stroke();
+  g.fillStyle='#fff'; g.beginPath(); for(let k=0;k<5;k++){ const tx=16+k*5.5; g.moveTo(tx,2.5); g.lineTo(tx+1.8,6.5); g.lineTo(tx+3.5,2.5); } g.fill();
+  g.save(); g.translate(6,4); g.rotate(.45); g.fillStyle='rgba(255,255,255,.5)'; g.beginPath(); g.moveTo(0,0); g.lineTo(34,0); g.quadraticCurveTo(38,3,33,6); g.lineTo(4,8); g.closePath(); g.fill(); g.stroke();
+  g.fillStyle='#fff'; g.beginPath(); for(let k=0;k<4;k++){ const tx=12+k*5.5; g.moveTo(tx,0); g.lineTo(tx+1.8,-3.8); g.lineTo(tx+3.5,0); } g.fill(); g.restore();
+  g.fillStyle='#fff'; g.beginPath(); g.ellipse(19,-8.5,3.6,1.5,-.2,0,Math.PI*2); g.fill();
+  g.lineWidth=1; g.beginPath(); g.moveTo(42,-1); g.bezierCurveTo(30,14,0,24,-40,18); g.moveTo(38,-5); g.bezierCurveTo(26,-24,-6,-30,-44,-20); g.stroke();
+  const t=new T.CanvasTexture(c); t.minFilter=T.LinearFilter; t.generateMipmaps=false; return t;
+}
+function buildAuras(){
+  const geo=new T.PlaneGeometry(1,1), u=(o)=>Object.assign({time:{value:0},amt:{value:0},col:{value:COL.v}},o||{});
+  AX={bolts:[],smoke:makePool(260,false,true)};
+  for(let i=0;i<16;i++) AX.bolts.push({r:new Ribbon(16,1.0,BOLT_FS,15),l:0,m:1,w:.02});
+  AX.dragon=new Ribbon(64,1.0,DRAGON_FS,-2.5);
+  AX.headTex=[headTexture(false),headTexture(true)];
+  AX.head=new T.Sprite(new T.SpriteMaterial({map:AX.headTex[0],transparent:true,depthWrite:false,blending:T.AdditiveBlending,fog:false}));
+  AX.core=new T.Mesh(new T.CylinderGeometry(.32,.32,9,24,1,true).translate(0,4.5,0),new T.ShaderMaterial(mkAdd({uniforms:u({mode:{value:4}}),vertexShader:VS,fragmentShader:PILLAR_FS})));
+  AX.magicG=new T.Mesh(new T.PlaneGeometry(6,6).rotateX(-Math.PI/2),new T.ShaderMaterial(mkAdd({uniforms:u({rev:{value:0}}),vertexShader:VS,fragmentShader:MAGIC_FS})));
+  AX.magicV=new T.Mesh(geo,new T.ShaderMaterial(mkAdd({uniforms:u({rev:{value:0}}),vertexShader:VS,fragmentShader:MAGIC_FS})));
+  AX.halo=new T.Mesh(new T.RingGeometry(.15,.19,48).rotateX(-Math.PI/2),new T.MeshBasicMaterial({transparent:true,opacity:0,blending:T.AdditiveBlending,depthWrite:false,side:T.DoubleSide,fog:false}));
+  AX.pool=new T.Mesh(new T.PlaneGeometry(1,1).rotateX(-Math.PI/2),new T.ShaderMaterial({transparent:true,depthWrite:false,fog:false,uniforms:{amt:{value:0}},vertexShader:VS,fragmentShader:POOL_FS}));
+  AX.corona=new T.Mesh(geo,new T.ShaderMaterial(mkAdd({uniforms:u(),vertexShader:VS,fragmentShader:CORONA_FS})));
+  AX.disk=new T.Mesh(new T.CircleGeometry(1,48),new T.MeshBasicMaterial({color:0,transparent:true,opacity:0,depthWrite:false,fog:false}));
+  const ro={head:15,core:-4,magicG:-5,magicV:-4.2,halo:13,pool:-5.5,corona:-3.9,disk:-3.8};
+  for(const k in ro){ const o=AX[k]; o.renderOrder=ro[k]; o.frustumCulled=false; o.visible=false; scene.add(o); }
+}
+function spawnBolt(a,b,w,life,rough){
+  const bo=AX.bolts.find(q=>q.l<=0)||AX.bolts[(Math.random()*AX.bolts.length)|0], P=bo.r.pts, n=P.length;
+  const d=new T.Vector3().subVectors(b,a), L=d.length();
+  const px=new T.Vector3(rn(-1,1),rn(-1,1),rn(-1,1)).cross(d).normalize(), py=new T.Vector3().crossVectors(d,px).normalize();
+  for(let i=0;i<n;i++){ const t=i/(n-1), e=(i===0||i===n-1)?0:(rough||1)*L*Math.sin(Math.PI*t)*.35;
+    P[i].copy(a).lerp(b,t).addScaledVector(px,rn(-e,e)).addScaledVector(py,rn(-e,e)); }
+  bo.l=bo.m=life; bo.w=w; bo.r.mesh.visible=true;
+}
+let _bcam=null;
+function updBolts(dt){ if(!AX||!_bcam) return;
+  for(const bo of AX.bolts){ if(bo.l>0){ bo.l-=dt; bo.r.mat.uniforms.op.value=(bo.l/bo.m)*(.6+.4*Math.random()); bo.r.update(_bcam,()=>bo.w); } else bo.r.mesh.visible=false; } }
+function hideAuraExtras(keepBolts){ if(!AX) return;
+  for(const k of ['head','core','magicG','magicV','halo','pool','corona','disk']) AX[k].visible=false;
+  AX.dragon.mesh.visible=false;
+  if(!keepBolts) for(const bo of AX.bolts){ bo.l=0; bo.r.mesh.visible=false; }
+  AX.smoke.life.fill(0); AX.smoke.pts.visible=false;
+}
+let _a3=null,_b3=null;
+/* one charge frame of the active profile's own meshes + particles.
+   Shooter at (A.swx,0,A.swz); sizes in mockup metres x S, like the rest of cine3. */
+function auraExtras(A,cam,S,k,amt,breath,release,tremble,dt,pdt,kS){
+  if(!AX) return; _bcam=cam; if(!_a3){ _a3=new T.Vector3(); _b3=new T.Vector3(); }
+  const sx=A.swx, sz=A.swz, C=COL.v, e=cam.matrixWorld.elements, fx=e[8], fy=e[9], fz=e[10];
+  const id=AID;
+  /* thunder: 3D bolts off the body + sky strikes */
+  if(id==='thunder'&&!breath&&dt>0){
+    if(k>.3){ const n=k>.82?3:1+(k>.6); for(let i=0;i<n;i++){ if(Math.random()<.55) continue;
+      _a3.set(sx+rn(-.25,.35)*S,rn(.3,1.9)*S,sz+rn(-.2,.2)*S); _b3.set(rn(-1,1),rn(-.4,1),rn(-1,1)).normalize();
+      spawnBolt(_a3.clone(),_a3.clone().addScaledVector(_b3,rn(.4,1.2)*S*(.5+k)),rn(.012,.024)*S,rn(.06,.13),1); } }
+    if(k>.6&&Math.random()<dt*(1.5+3*(k-.6))){ const gx=sx+rn(-3,3)*S, gz=sz+rn(-3,3)*S;
+      spawnBolt(new T.Vector3(gx+rn(-3,3)*S,16*S,gz+rn(-3,3)*S),new T.Vector3(gx,0,gz),.045*S,.2,1.2);
+      fireWave(waves[2],gx,.04*S,gz,2.5*S,.4,.1);
+      for(let i=0;i<14;i++) spawn(glow,2,gx,.05*S,gz,rn(-3,3)*S,rn(1,5)*S,rn(-3,3)*S,rn(.3,.6),.035*S,1,1,1); }
+  }
+  updBolts(dt);
+  /* flame: fire volume + embers */
+  if(id==='flame'&&k>.15&&!breath&&dt>0){
+    for(let i=0;i<Math.round(3+7*k);i++){ const an=rn(0,6.2832), r=rn(.1,.45)*S, w=Math.random()<.3;
+      spawn(glow,4,sx+Math.cos(an)*r,rn(.05,1.5)*S,sz+Math.sin(an)*r,rn(-.3,.3)*S,rn(1.5,3.5)*S,rn(-.3,.3)*S,rn(.35,.7),rn(.12,.3)*S,
+        w?1:lerp(C.r,1,.3),w?.9:lerp(C.g,1,.2),w?.6:C.b); }
+    for(let i=0;i<3;i++){ const an=rn(0,6.2832), r=rn(.2,1.2)*S;
+      spawn(glow,1,sx+Math.cos(an)*r,.05*S,sz+Math.sin(an)*r,rn(-.5,.5)*S,rn(2,5)*S,rn(-.5,.5)*S,rn(.8,1.6),.03*S,1,lerp(C.g,1,.5),.4); }
+  }
+  /* shadow: black smoke, inward gather, ground pool, eclipse behind the head */
+  const dk=id==='shadow'?Math.min(1,amt):0;
+  if(dk>0&&!breath&&dt>0){
+    for(let i=0;i<4;i++){ const an=rn(0,6.2832), r=rn(.1,.7)*S*(.6+k);
+      spawn(AX.smoke,4,sx+Math.cos(an)*r,rn(0,1.6)*S,sz+Math.sin(an)*r,rn(-.2,.2)*S,rn(.3,.9)*S,rn(-.2,.2)*S,rn(1,1.8),rn(.25,.55)*S,.015,.008,.03); }
+    for(let i=0;i<Math.round(2+5*k);i++){ const an=rn(0,6.2832), r=rn(3,6)*S;
+      spawn(glow,0,sx+Math.cos(an)*r,rn(.2,3)*S,sz+Math.sin(an)*r,-Math.sin(an)*2*S,0,Math.cos(an)*2*S,1.6,.04*S,C.r,C.g,C.b); }
+  }
+  AX.smoke.mat.uniforms.kS.value=kS; updatePool(AX.smoke,pdt,S,sx,1.1*S,sz,0); AX.smoke.pts.visible=id==='shadow';
+  AX.pool.visible=dk>0; AX.pool.position.set(sx,.02*S,sz); AX.pool.scale.setScalar((1.5+2.5*k)*S); AX.pool.material.uniforms.amt.value=dk;
+  AX.corona.visible=AX.disk.visible=dk>0;
+  if(dk>0){ const er=(.25+.45*k)*S, cx=sx-fx*.35*S, cy=1.55*S-fy*.35*S, cz=sz-fz*.35*S;
+    AX.corona.position.set(cx,cy,cz); AX.corona.quaternion.copy(cam.quaternion); AX.corona.scale.setScalar(er/.38*2);
+    AX.corona.material.uniforms.amt.value=dk; AX.corona.material.uniforms.time.value=fxT;
+    AX.disk.position.set(cx+fx*.01,cy+fy*.01,cz+fz*.01); AX.disk.quaternion.copy(cam.quaternion); AX.disk.scale.setScalar(er); AX.disk.material.opacity=dk; }
+  /* dragon: spectral body coiling up around him (charge only - no trail) */
+  const dOn=id==='dragon'&&k>0;
+  AX.dragon.mesh.visible=dOn; AX.head.visible=dOn;
+  if(dOn){ const P=AX.dragon.pts, n=P.length, rev=Math.min(1,.12+k*1.05), Hh=(.5+2.9*k)*S;
+    for(let i=0;i<n;i++){ const v=(1-i/(n-1))*rev, th=v*Math.PI*3.4-fxT*1.7, R=(.95+.45*v)*S*(1+.05*Math.sin(v*14+fxT*3));
+      P[i].set(sx+Math.cos(th)*R,.12*S+v*Hh+Math.sin(v*10-fxT*4)*.05*S,sz+Math.sin(th)*R); }
+    const op=Math.min(1,.2+k)*(breath?.35:1), wmax=(.13+.07*k)*S;
+    AX.dragon.mat.uniforms.op.value=op; AX.dragon.mat.uniforms.time.value=fxT;
+    AX.dragon.update(cam,t=>wmax*(.25+.75*Math.sin(Math.PI*Math.min(1,(1-t)*.62+.3)))*(t>.9?(1-t)*10:1));
+    _a3.copy(P[0]).project(cam); _b3.copy(P[3]).project(cam);
+    const ang=Math.atan2(_a3.y-_b3.y,(_a3.x-_b3.x)*cam.aspect), sc=(.45+.35*k)*S;
+    AX.head.material.map=AX.headTex[Math.cos(ang)<0?1:0]; AX.head.material.rotation=ang; AX.head.material.color.copy(C); AX.head.material.opacity=op;
+    AX.head.position.copy(P[0]); AX.head.scale.set(sc*1.6,sc,1);
+    if(!breath&&dt>0) for(let i=0;i<3;i++){ const an=rn(0,6.2832), r=rn(.6,1.8)*S;
+      spawn(glow,6,sx+Math.cos(an)*r,rn(0,.3)*S,sz+Math.sin(an)*r,0,0,0,rn(.8,1.6),rn(.02,.05)*S,lerp(C.r,1,.3),lerp(C.g,1,.3),lerp(C.b,1,.3)); }
+  }
+  /* seraph: summoning circles, light beam, halo, rising + falling motes */
+  const sr=id==='seraph';
+  const sAmt=k<.92?sm(0,.3,k)*(breath?.35:1):1;
+  seal.visible=seal.visible&&!sr;
+  AX.magicG.visible=AX.core.visible=AX.magicV.visible=AX.halo.visible=false;
+  if(sr){ const mg=AX.magicG.material.uniforms; AX.magicG.visible=true; AX.magicG.position.set(sx,.03*S,sz); AX.magicG.scale.setScalar(S*(.8+.25*sm(0,.5,k)));
+    mg.amt.value=sAmt; mg.rev.value=sm(0,.45,k); mg.time.value=fxT;
+    const pa=pillar.material.uniforms.amt.value; AX.core.visible=pa>0; AX.core.position.set(sx,0,sz); AX.core.scale.setScalar(S);
+    AX.core.material.uniforms.amt.value=pa*1.3; AX.core.material.uniforms.time.value=fxT;
+    const mv=sm(.35,.7,k)*(breath?.4:1); AX.magicV.visible=mv>0; const mu=AX.magicV.material.uniforms;
+    mu.amt.value=mv*.8; mu.rev.value=sm(.35,.8,k); mu.time.value=-fxT*.8;
+    AX.magicV.position.set(sx-fx*.6*S,1.15*S-fy*.6*S,sz-fz*.6*S); AX.magicV.quaternion.copy(cam.quaternion); AX.magicV.scale.setScalar(3.4*S);
+    AX.halo.visible=k>.3; AX.halo.material.color.copy(C); AX.halo.material.opacity=sm(.3,.6,k)*Math.min(1,amt);
+    AX.halo.position.set(sx,1.98*S+Math.sin(fxT*2)*.02*S,sz); AX.halo.scale.setScalar(S);
+    if(!breath&&dt>0){ for(let i=0;i<3;i++){ const an=rn(0,6.2832), r=Math.sqrt(Math.random())*2.4*S;
+        spawn(glow,1,sx+Math.cos(an)*r,.05*S,sz+Math.sin(an)*r,0,rn(.3,1.4)*S,0,rn(1.2,2.4),rn(.025,.05)*S,lerp(C.r,1,.6),lerp(C.g,1,.6),lerp(C.b,1,.6)); }
+      if(k>.55&&Math.random()<.5) spawn(glow,7,sx+rn(-3,3)*S,rn(3.5,5)*S,sz+rn(-3,3)*S,0,0,0,rn(3,5),rn(.04,.07)*S,1,1,.95); }
+  }
+}
+/* contact frame extras (called from fireImpact) */
+function auraImpact(A,S,bx,by,bz){
+  if(!AX) return;
+  if(AID==='thunder') for(let i=0;i<3;i++){ const gx=bx+rn(-2,2)*S, gz=bz+rn(-2,2)*S;
+    spawnBolt(new T.Vector3(gx+rn(-3,3)*S,16*S,gz+rn(-3,3)*S),new T.Vector3(gx,0,gz),.05*S,.2,1.2); }
+  if(AID==='shadow') fireWave(waves[2],A.swx,.05*S,A.swz,4*S,.4,.14);
+  for(const k of ['head','core','magicG','magicV','halo','pool','corona','disk']) AX[k].visible=false;
+  AX.dragon.mesh.visible=false; AX.smoke.pts.visible=false;
+}
+
 /* Draw the shooter OURSELVES (mockup body shader: aura rim light + white
    flash) on a plane registered exactly on the game sprite, and hide the
    sprite for the frame (syncPlayers re-shows it every frame). col>=0 forces
    a column of the same sheet row - the strike frames before contact. */
 function placeShooter(g,cam,S,amt,tight,rimAmt,flash,col){
   const sp=g&&g.sprite;
-  if(!(sp&&sp.material&&sp.material.map)){ auraB.visible=auraF.visible=body.visible=false; return; }
+  if(!(sp&&sp.material&&sp.material.map)){ auraB.visible=auraF.visible=body.visible=false; if(auraD) auraD.visible=false; return; }
   const map=sp.material.map, AU=C3._AU, BU=body.material.uniforms;
   AU.map.value=map; AU.off.value.copy(map.offset); AU.rep.value.copy(map.repeat);
   if(col>=0){ const rx=map.repeat.x; AU.off.value.x=rx<0?(col+1)*Math.abs(rx):col*rx; }
@@ -124,6 +325,7 @@ function placeShooter(g,cam,S,amt,tight,rimAmt,flash,col){
   const ox=(0.5-cx)*sx, oy=(0.5-cy)*sy, bz=0.02*S;
   const bx=sp.position.x+e[0]*ox+e[4]*oy, by=sp.position.y+e[1]*ox+e[5]*oy, bzz=sp.position.z+e[2]*ox+e[6]*oy;
   auraB.position.set(bx-e[8]*bz,by-e[9]*bz,bzz-e[10]*bz);
+  if(auraD){ auraD.position.set(bx-e[8]*bz*1.5,by-e[9]*bz*1.5,bzz-e[10]*bz*1.5); auraD.quaternion.copy(cam.quaternion); auraD.scale.set(sx,sy,1); auraD.visible=amt>0.001&&!!AP.dark; }
   auraF.position.set(bx+e[8]*bz,by+e[9]*bz,bzz+e[10]*bz);
   body.position.set(bx,by,bzz);
   for(const m of [auraB,auraF,body]){ m.quaternion.copy(cam.quaternion); m.scale.set(sx,sy,1); m.visible=true; }
@@ -145,27 +347,24 @@ function build(A){
   if(C3.built) return;
   T=A.T; scene=A.scene; COL.v=new T.Color('#3ec8ff');
   const AU={map:{value:null},off:{value:new T.Vector2()},rep:{value:new T.Vector2(1,1)},
-            time:{value:0},amt:{value:0},tight:{value:0},col:{value:COL.v}};
+            time:{value:0},amt:{value:0},tight:{value:0},col:{value:COL.v},
+            lick:{value:1},spd:{value:1},zap:{value:0},dark:{value:0}};
   const geo=new T.PlaneGeometry(1,1);
   auraB=new T.Mesh(geo,new T.ShaderMaterial(mkAdd({uniforms:Object.assign({},AU,{front:{value:0}}),vertexShader:VS,fragmentShader:FS_AURA})));
   auraF=new T.Mesh(geo,new T.ShaderMaterial(mkAdd({uniforms:Object.assign({},AU,{front:{value:1}}),vertexShader:VS,fragmentShader:FS_AURA})));
   /* everything that must NOT be clipped by the sprite's transparent quad
      (it writes depth) draws BEFORE the sprites: negative renderOrder */
   auraB.renderOrder=-3; auraF.renderOrder=12; auraB.frustumCulled=auraF.frustumCulled=false;
+  auraD=new T.Mesh(geo,new T.ShaderMaterial({transparent:true,depthWrite:false,side:T.DoubleSide,fog:false,
+    uniforms:Object.assign({},AU,{front:{value:0},dark:{value:1}}),vertexShader:VS,fragmentShader:FS_AURA}));
+  auraD.renderOrder=-3.5; auraD.frustumCulled=false; auraD.visible=false; scene.add(auraD);
   C3._AU=AU;
   body=new T.Mesh(geo,new T.ShaderMaterial({uniforms:{map:{value:null},off:{value:new T.Vector2()},rep:{value:new T.Vector2(1,1)},
     flash:{value:0},rimAmt:{value:0},rim:{value:COL.v}},vertexShader:VS,fragmentShader:FS_BODY,transparent:true,fog:false}));
   body.renderOrder=10; body.frustumCulled=false;
 
   pillar=new T.Mesh(new T.CylinderGeometry(1.25,0.75,7,40,1,true).translate(0,3.5,0),
-    new T.ShaderMaterial(mkAdd({uniforms:{time:{value:0},amt:{value:0},col:{value:COL.v}},vertexShader:VS,
-    fragmentShader:NOISE+`uniform float time,amt; uniform vec3 col; varying vec2 vUv;
-    void main(){ float a=vUv.x*6.2831853;
-      float n=fbm(vec2(cos(a)*2.5+sin(a)*1.7, vUv.y*2.2-time*3.4)+vec2(sin(a)*3.0,0.0));
-      float s=smoothstep(0.48,0.92,n);
-      float f=smoothstep(0.0,0.12,vUv.y)*(1.0-smoothstep(0.3,1.0,vUv.y));
-      float I=s*f*amt;
-      gl_FragColor=vec4(mix(col,vec3(1.0),s*0.25)*I*0.6,1.0); }`})));
+    new T.ShaderMaterial(mkAdd({uniforms:{time:{value:0},amt:{value:0},mode:{value:1},col:{value:COL.v}},vertexShader:VS,fragmentShader:PILLAR_FS})));
   pillar.renderOrder=-4;
 
   seal=new T.Mesh(new T.PlaneGeometry(7,7).rotateX(-Math.PI/2),new T.ShaderMaterial(mkAdd({
@@ -199,6 +398,7 @@ function build(A){
     fragmentShader:`uniform float op; void main(){ gl_FragColor=vec4(0.012,0.02,0.06,op); }`}));
   veil.renderOrder=-10; veil.frustumCulled=false; veil.visible=false; scene.add(veil);
   glow=makePool(700,true); rocks=makePool(140,false);
+  buildAuras();
   trail=new Ribbon(TRN,1.0); strandA=new Ribbon(TRN,0.4); strandB=new Ribbon(TRN,0.4);
   shell=new T.Mesh(new T.SphereGeometry(1,20,14),new T.ShaderMaterial(mkAdd({side:T.FrontSide,uniforms:{col:{value:COL.v},op:{value:0}},
     vertexShader:`varying vec3 vN,vV; void main(){ vec4 mv=modelViewMatrix*vec4(position,1.0); vN=normalize(normalMatrix*normal); vV=normalize(-mv.xyz); gl_Position=projectionMatrix*mv; }`,
@@ -214,18 +414,19 @@ function build(A){
 }
 
 /* ── particles: sizes are WORLD diameters (kS converts to pixels) ── */
-function makePool(N,additive){
+function makePool(N,additive,soft){
   const geo=new T.BufferGeometry(), P=new Float32Array(N*3), C=new Float32Array(N*4), Sz=new Float32Array(N);
   geo.setAttribute('position',new T.BufferAttribute(P,3)); geo.setAttribute('pc',new T.BufferAttribute(C,4)); geo.setAttribute('ps',new T.BufferAttribute(Sz,1));
   const mat=new T.ShaderMaterial({transparent:true,depthWrite:false,fog:false,
     blending:additive?T.AdditiveBlending:T.NormalBlending,
-    uniforms:{kS:{value:600},hard:{value:additive?0:1}},
+    uniforms:{kS:{value:600},hard:{value:additive?0:1},soft:{value:soft?1:0}},
     vertexShader:`attribute vec4 pc; attribute float ps; uniform float kS; varying vec4 vC;
       void main(){ vC=pc; vec4 mv=modelViewMatrix*vec4(position,1.0); gl_PointSize=max(1.0,ps*kS/max(0.1,-mv.z)); gl_Position=projectionMatrix*mv; }`,
-    fragmentShader:`uniform float hard; varying vec4 vC; void main(){ vec2 q=gl_PointCoord*2.0-1.0; float r=dot(q,q); if(r>1.0) discard;
+    fragmentShader:`uniform float hard,soft; varying vec4 vC; void main(){ vec2 q=gl_PointCoord*2.0-1.0; float r=dot(q,q); if(r>1.0) discard;
+      if(soft>0.5){ gl_FragColor=vec4(vC.rgb,pow(1.0-r,1.3)*vC.a); return; }
       float a=hard>0.5?1.0:pow(1.0-r,1.6); gl_FragColor=hard>0.5?vec4(vC.rgb,vC.a):vec4(vC.rgb*a*vC.a,1.0); }`});
-  const pts=new T.Points(geo,mat); pts.frustumCulled=false; pts.renderOrder=-2;
-  return {N,P,C,S:Sz,geo,pts,mat,v:new Float32Array(N*3),life:new Float32Array(N),max:new Float32Array(N),
+  const pts=new T.Points(geo,mat); pts.frustumCulled=false; pts.renderOrder=soft?-3.7:-2;
+  return {N,soft:!!soft,P,C,S:Sz,geo,pts,mat,v:new Float32Array(N*3),life:new Float32Array(N),max:new Float32Array(N),
     sz:new Float32Array(N),kind:new Uint8Array(N),rgb:new Float32Array(N*3),hover:new Float32Array(N),next:0};
 }
 function spawn(pl,kind,x,y,z,vx,vy,vz,life,size,r,g,b,hover){
@@ -248,12 +449,14 @@ function updatePool(pl,dt,S,cx,cy,cz,y0){
     else if(k===2){ vy-=9*S*dt; vx*=1-1.6*dt; vy*=1-.6*dt; vz*=1-1.6*dt; if(y<y0+0.03*S&&vy<0) vy*=-.3; }
     else if(k===4){ vy+=.6*S*dt; vx*=1-2.5*dt; vz*=1-2.5*dt; }
     else if(k===5){ vy-=9.8*S*dt; if(y<y0+0.03*S&&vy<0){ vy*=-.25; vx*=.6; vz*=.6; } }
+    else if(k===6){ const ox=x-cx, oz=z-cz; vx=-oz*2.4-ox*.25; vz=ox*2.4-oz*.25; vy=1.1*S; }
+    else if(k===7){ vy+=(-.35*S-vy)*2*dt; vx=Math.sin(fxT*2.2+i)*.35*S; vz=Math.cos(fxT*1.7+i)*.2*S; }
     else if(k===3){ const ty=y0+pl.hover[i]; vy+=((ty-y)*3.2-vy*2.2)*dt; vx*=1-3*dt; vz*=1-3*dt;
       vx+=(Math.random()-.5)*dt*1.2*S; vz+=(Math.random()-.5)*dt*1.2*S; }
     pl.v[i*3]=vx; pl.v[i*3+1]=vy; pl.v[i*3+2]=vz;
     pl.P[i*3]=x+vx*dt; pl.P[i*3+1]=Math.max(y0+0.02*S,y+vy*dt); pl.P[i*3+2]=z+vz*dt;
     const lf=pl.life[i]/pl.max[i];
-    const fade=k===3?Math.min(1,lf*4):k===4?lf*0.35:Math.min(1,lf*2.2)*(k===0?Math.min(1,(1-lf)*4):1);
+    const fade=pl.soft?Math.sin(Math.PI*(1-lf))*0.8:k===3?Math.min(1,lf*4):k===4?lf*0.35:Math.min(1,lf*2.2)*(k===0?Math.min(1,(1-lf)*4):1);
     pl.C[i*4]=pl.rgb[i*3]; pl.C[i*4+1]=pl.rgb[i*3+1]; pl.C[i*4+2]=pl.rgb[i*3+2]; pl.C[i*4+3]=fade;
     pl.S[i]=pl.sz[i]*(k===4?(1.6-lf):1);
   }
@@ -277,6 +480,7 @@ C3.holdFrame=function(c,rdt,A){
   glc=A.gl||glc;
   fxT+=dt;
   COL.v.set(A.col||'#3ec8ff');
+  setAura(A.aura);
   const HM=Math.max(0.24,((c.o&&c.o.holdMs)||2250)/1000);
   /* mockup: RUN-UP first (side-on, 0.9s), then the charge. The run-up
      only runs when game.js gave the hold room for it (superHoldMs). */
@@ -311,6 +515,7 @@ C3.holdFrame=function(c,rdt,A){
   }
 
   /* ---- shooter: mockup body (rim light + release flash) + aura ---- */
+  C3._AU.lick.value=AP.lick; C3._AU.spd.value=AP.spd; C3._AU.zap.value=AP.zap;
   placeShooter(g,cam,S,amt,tight,Math.min(1,amt),release?(k-.92)/.08*0.3:0,-1);
   /* ---- charged ball (mockup: shell 0.4, glow 0.22 x charge) ---- */
   mockBall(A,S);
@@ -325,7 +530,8 @@ C3.holdFrame=function(c,rdt,A){
   const y0=0;
   pillar.visible=true; pillar.position.set(A.swx,y0,A.swz); pillar.scale.setScalar(S);
   pillar.material.uniforms.time.value=fxT;
-  pillar.material.uniforms.amt.value=k<.45?0:k<.82?sm(.45,.6,k)*0.7:k<.92?0.1:1.0;
+  pillar.material.uniforms.amt.value=(k<.45?0:k<.82?sm(.45,.6,k)*0.7:k<.92?0.1:1.0)*(AP.pillar===4?0.5:1);
+  pillar.material.uniforms.mode.value=AP.pillar; if(AP.pillar!==1) pillar.scale.setScalar(S*(AP.pillar===2?0.8:AP.pillar===4?0.75:1));
   seal.visible=true; seal.position.set(A.swx+dx*0.3*S,y0+0.05*S,A.swz+dz*0.3*S);
   seal.scale.setScalar(S*(release?1+(k-.92)/.08*0.4:0.7+0.3*sm(0,.4,k)));
   const su=seal.material.uniforms; su.time.value=fxT;
@@ -351,13 +557,14 @@ C3.holdFrame=function(c,rdt,A){
   const kS=(A.renderer?A.renderer.getDrawingBufferSize(new T.Vector2()).y:720)/(2*Math.tan(cam.fov*Math.PI/360));
   glow.mat.uniforms.kS.value=rocks.mat.uniforms.kS.value=kS;
   const pdt=breath?dt*0.06:dt;
+  auraExtras(A,cam,S,k,amt,breath,release,tremble,dt,pdt,kS);
   updatePool(glow,pdt,S,cX,cY,cZ,y0); updatePool(rocks,pdt,S,cX,cY,cZ,y0);
   glow.pts.visible=rocks.pts.visible=true;
 
   /* ---- held breath: the whole frame drains of colour ---- */
   setFilter(breath?'saturate(0.2) brightness(0.78) contrast(1.15)':'');
   setBloom(A,0.6);
-  setVeil(C3.veil*Math.min(1,c.t/0.3));
+  setVeil(C3.veil*(AP.veil||1)*(AP.dark?lerp(.75,1,k):1)*Math.min(1,c.t/0.3));
 
   drawOverlay(c,A,k,breath,release,tremble,S,ct);
   return true;
@@ -409,7 +616,7 @@ function drawOverlay(c,A,k,breath,release,tremble,S,ct){
       lg.addColorStop(0,rgba(C,0)); lg.addColorStop(1,'rgba(255,255,255,'+Math.min(1,(0.08+0.22*k)*lp).toFixed(3)+')');
       g.strokeStyle=lg; g.lineWidth=(1.2+(i%3===0?2:0))*lw; g.beginPath(); g.moveTo(x1,y1); g.lineTo(x0,y0); g.stroke(); }
   }
-  if((tremble||release)&&Math.random()<0.55){
+  if((tremble||release)&&(AID==='base'||AID==='thunder')&&Math.random()<0.55){
     const bodyR=Math.max(24,Math.abs(A.proj(A.swx,1.9*S,A.swz,W,H).y-A.proj(A.swx,0,A.swz,W,H).y));
     const nb=1+(Math.random()*3|0);
     for(let b=0;b<nb;b++){ const a=Math.random()*Math.PI*2, ox=hp.x+Math.cos(a)*bodyR*0.2, oy=hp.y+(Math.random()-.5)*bodyR*0.8;
@@ -440,8 +647,9 @@ function drawOverlay(c,A,k,breath,release,tremble,S,ct){
 C3.hide=function(){
   fxT=0; if(!imp) setFilter('');
   if(!C3.built) return;
-  if(!imp){ for(const o of [auraB,auraF,pillar,seal]) o.visible=false; releaseShooter(); }
+  if(!imp){ for(const o of [auraB,auraF,pillar,seal]) o.visible=false; if(auraD) auraD.visible=false; releaseShooter(); }
   else pillar.visible=false;
+  hideAuraExtras(!!imp);
   for(const pl of [glow,rocks]) for(let i=0;i<pl.N;i++){ const k=pl.kind[i]; if(k===0||k===1||(k===3&&!imp)) pl.life[i]=0; }
   if(!imp){ glow.pts.visible=rocks.pts.visible=false; }
 };
@@ -452,6 +660,7 @@ C3.end=function(){
   glow.life.fill(0); rocks.life.fill(0); glow.pts.visible=rocks.pts.visible=false;
   for(const w of waves){ w.t=-1; w.m.visible=false; }
   for(const r of [trail,strandA,strandB]) r.mesh.visible=false;
+  hideAuraExtras(false); if(auraD) auraD.visible=false;
   shell.visible=bglow.visible=false; fl=null; arr=null; C3._dirty=false;
 };
 
@@ -493,6 +702,7 @@ function fireImpact(c,imp){
     rocks.kind[i]=5; rocks.v[i*3]=ex/d*7*S; rocks.v[i*3+1]=(2+Math.random()*3)*S; rocks.v[i*3+2]=ez/d*7*S;
     rocks.life[i]=1.2; rocks.max[i]=1.2; } }
   glow.pts.visible=rocks.pts.visible=true;
+  auraImpact(A,S,bx,by,bz);
   window.U11DBG&&U11DBG('[C3] impact');
 }
 C3.needsCanvas=function(c){ return !!((imp&&imp.t<0.4)||(c&&c.mode==='fly')||(arr&&arr.t<0.7)||C3._dirty); };
@@ -520,7 +730,8 @@ C3.flyFrame=function(c,rdt,A){
   const sa=Math.max(0,0.9-(e+0.2)*3.2);
   if(e<0.6&&A.g){ placeShooter(A.g,cam,S,sa,0,sa*0.6,0,e<-0.1?7:e<0?8:-1);
     seal.material.uniforms.amt.value=Math.max(0,0.8-(e+0.2)*4); seal.material.uniforms.crack.value=Math.max(0,.8-(e+0.2)*2); seal.material.uniforms.time.value+=dt; }
-  else { releaseShooter(); auraB.visible=auraF.visible=seal.visible=false; }
+  else { releaseShooter(); auraB.visible=auraF.visible=seal.visible=false; if(auraD) auraD.visible=false; }
+  updBolts(dt);
   if(e<0){
     if(A.cv&&A.ctx){ C3._dirty=true; const g=A.ctx,W=A.cv.width,H=A.cv.height,bh=H*0.085; g.fillStyle='#000'; g.fillRect(0,0,W,bh); g.fillRect(0,H-bh,W,bh); }
     return; }

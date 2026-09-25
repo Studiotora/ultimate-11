@@ -5198,7 +5198,7 @@
           ensureHoldFx();
           _ok=U11_CINE3.holdFrame(c,rdt,{T,scene,camera,renderer,gl,g:sprites[c.o.as+':'+c.o.sk],
             hh:_c3hh(),swx,swz,gwx,gwz,
-            col:superCol(),cv:fxCv,ctx:fxCtx,proj:projectToScreen,
+            col:superCol(),aura:(_trailFx&&_trailFx.k)||null,cv:fxCv,ctx:fxCtx,proj:projectToScreen,
             bloom:bloomPass,fxBase:P3D.fx,ballMesh});
         }catch(e){ console.error('[C3] hold',e); window.U11DBG&&U11DBG('[C3] hold error: '+e.message); U11_CINE3.on=false; }
         if(_ok){ _c3view(); applyShake(rdt||0); return; }
