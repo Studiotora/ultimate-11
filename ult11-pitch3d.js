@@ -4688,6 +4688,18 @@
       return k;
     };
     P3D.trailList=function(){ return Object.keys(TRAIL_STYLES); };
+    /* ?debug=1&trail=<style|aura|cycle> (2026-09-25). Android has no console,
+       so the forced trail is set from the URL. Aura names map to their trail
+       style; 'cycle' steps to the next aura on every super shot. */
+    const _AURA_TRAIL={thunder:'lightning',flame:'flame',shadow:'shadow',dragon:'dragon',seraph:'galaxy'};
+    const _CYCLE=['lightning','flame','shadow','dragon','galaxy'];
+    let _cycleOn=false,_cycleI=-1,_cycleLast=null;
+    try{ const q=new URLSearchParams(location.search);
+      if(q.get('debug')==='1'&&q.get('trail')){ const v=q.get('trail').toLowerCase();
+        if(v==='cycle') _cycleOn=true; else P3D.forceTrail(_AURA_TRAIL[v]||v); } }
+    catch(e){ window.U11DBG&&U11DBG('[P3D] trail param: '+e.message); }
+    function _cycleStep(c){ if(!_cycleOn||c===_cycleLast) return; _cycleLast=c; _cycleI=(_cycleI+1)%_CYCLE.length;
+      P3D.forceTrail(_CYCLE[_cycleI]); _trailFx=trailStyleFor(null); window.U11DBG&&U11DBG('[AURA] '+_CYCLE[_cycleI]); }
     /* P3D.shake(amp, ms) - fire the cine camera shake by hand. Exists to make
        it tunable, and because during a real strike the frontal-to-chase swing
        moves the camera far more than the shake does, so the shake cannot be
@@ -5195,6 +5207,7 @@
       if(c.mode==='hold'&&_c3on()){
         let _ok=false;
         try{
+          _cycleStep(c);
           ensureHoldFx();
           _ok=U11_CINE3.holdFrame(c,rdt,{T,scene,camera,renderer,gl,g:sprites[c.o.as+':'+c.o.sk],
             hh:_c3hh(),swx,swz,gwx,gwz,
