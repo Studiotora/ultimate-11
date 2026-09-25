@@ -3,9 +3,155 @@
 Handoff for a fresh Claude Code session. Everything below is already applied to
 the files in this delivery.
 
-## Final versions (in index.html)
-- `game.js?v=108`
-- `style.css?v=57`
+## Current versions (in index.html, 2026-09-24)
+- `game.js?v=206` · `style.css?v=99` · `tokens.css?v=8` · `ult11-kitrun.js?v=4`
+- `ult11-pitch3d.js?v=136` · `ult11-cine3.js?v=8` · `ult11-stadium-classic.js?v=5`
+- `ult11-penalty.js?v=3` · `ult11-input.js?v=9` · `ult11-gkqte.js?v=2` · `ult11-aerial.js?v=2` · `ult11-fx-flame.js?v=7` · `ult11-ribbon.js?v=2`
+- NOTE: entries below v108 are older history. ROADMAP.md is the running handoff and has the full per-change records since then.
+
+## 2026-09-25 — Author's night look + camera as defaults (pitch3d v136)
+- The night lighting/post-FX values the author tuned in the Camera Lab next to the hero frame are now the night defaults; their broadcast camera values are the default camera.
+
+## 2026-09-25 — Field mist removed (pitch3d v135, Claude)
+- The flat grey mist layer on the pitch is gone; the stadium fog and dust stay.
+
+## 2026-09-25 — Night look matched to the hero frame (pitch3d v134, Claude)
+- Bloom only on the lamps (players no longer glow), depth of field blurs the crowd above the play, muted cooler turf, ground mist and drifting dust around the play.
+
+## 2026-09-25 — Camera Lab scenarios (pitch3d v132, camlab v7, Claude)
+- Camera Lab → SCENARIO: HERO FRAME / CORNER / GK THROW freezes the match (no clock, no AI), poses the players and holds a fixed camera for side-by-side look tuning with the lab hero frame. OFF resumes.
+
+## 2026-09-25 — Hero-frame film grade available on key G (pitch3d v131, Claude)
+- The lab's filmic grade is ported; at night press G on PC to switch between it and the game grade. The game grade stays the default.
+
+## 2026-09-24 — Kickoff panorama, Cinematic camera, non-glowing goals (pitch3d v130, Claude)
+- Before kickoff the camera slowly circles the stadium at pitch level until KICK-OFF is pressed.
+- New Settings row CAMERA: BROADCAST / CINEMATIC (closer and lower).
+- Goals and net stay white at night without glowing; the lens colour fringe is halved.
+
+## 2026-09-24 — Night: white goals, softer stand lights (pitch3d v129, Claude)
+- Goal posts and net read white under the floodlights at night; the far-stand floodlight flares are toned down.
+
+## 2026-09-24 — Night light rig + kickoff hero camera (pitch3d v128, Claude)
+- Night: floodlight banks on the roof edges with light beams onto the pitch, dust in the beams, LED boards spilling coloured light on the grass, phone lights twinkling in the crowd, photographers with flashes behind both goals.
+- Before every kickoff a low hero camera looks at the goal end under the lights, then cuts to play.
+
+## 2026-09-24 — Players cast real shadows (pitch3d v127, Claude)
+- Every player, the referee, the ball and the goal frames now cast real shadows in the exact shape of their current sprite frame, in every time of day and weather (long at golden hour). They replace the old stretched fake shadows (`P3D.setRealShadows(false)` shows the old ones for comparison).
+
+## 2026-09-24 — Look-dev hero frame (lab, Claude)
+- New `lab/lab-heroframe.html`: one art-directed night frame near the box showing what HD-2D needs (lit sprites casting real shadows, backlight key, roof floodlights, practical lights, crowd with phone lights, shafts, fog, bloom, tilt-shift DOF, film grade), with a layers panel. Images in `lab/heroframe/`. Lab only; no game files changed.
+
+## 2026-09-24 — Settings: Time (day/golden/night) + Weather (sunny/rain/snow) (pitch3d v126, Claude)
+- Two new Settings rows that change the match look live: golden hour (low warm sun, long shadows), night (floodlight pools), rain (streaks, wet sheen at night), snow. Day + sunny is exactly the original look.
+- Fixed: Settings and How to Play opened from the pause menu were invisible (the panels lived inside the home screen).
+
+## 2026-09-24 — Night look: atmosphere, depth of field, film finish; pitch lines no longer glow (pitch3d v125, Claude)
+- Night fog swallows the far stands, the floodlight heads glow, the corner beams read on the dark, a stronger HD-2D blur, subtle film grain and lens fringing. The painted lines stay matte. All only in the night look (key N).
+
+## 2026-09-24 — NIGHT look (look-dev 1-2), switchable (pitch3d v124, Claude)
+- A new night look: the pitch is lit by real floodlight pools over a dark blue base, players/referee/ball are lit by where they stand, the stands and sky go dark, the ad boards glow, and a night colour grade. Off by default: press N on PC (or ?look=night) to switch; it is remembered.
+
+## 2026-09-24 — Super-shot trail: round head, cyan, player colours (pitch3d v123, cine3 v8, Claude)
+- The comet now ends in a round glow around the ball at every angle (it used to end in a flat cut).
+- Generic super shot = the mockup cyan. Signature colours: Mancuso blue, Vella green, Frisina red, Falkner flame, Margus yellow.
+
+## 2026-09-24 — Playtest fixes: super-shot ball, keeper hands, shot camera (game v206, pitch3d v122, Claude)
+- Super shot: the pixel ball now travels with the trail (it used to stay at the kick spot while the trail flew).
+- Keeper: during a dive his reaching glove is placed on the ball's real arrival point (screen error 0-1 px, was 24-80 px).
+- Camera: follows the ball from the strike through the keeper's dive, catch or goal, instead of swinging back to the shooter.
+
+## 2026-09-24 — Corner lighting finished: camera-aware beams (pitch3d v121, Claude)
+- Each light beam now fades out before the players when its foot sits over the middle of the view, and stays a full shaft when it enters from the side. Grass near play: forward L 55.5 (off 49, v119 63), reverse 42 (off 35, v119 51). Beams still visible; penalty and super shot unchanged. Images in `lab/lighting-v121/`.
+
+## 2026-09-24 — Corner lighting v120 applied with a measured fade (pitch3d v120, Astra + Claude)
+- Astra's v120 (narrower beams fading into the grass pool) validated in the real 3D game. Its fade removed the beams from the match camera entirely, so the fade range was tuned to 0-.16: near-ball grass L 57 (off 49, v119 63), beams still visible. Reverse view still somewhat pale: open for Astra. Images in `lab/lighting-tune-v120/`.
+
+## 2026-09-24 — Corner lighting tune applied (pitch3d v119, Astra + Claude)
+- Astra's v119 tune validated in the real 3D game and applied: beams and grass pools toned down, plus live switches `P3D.gfx.volRays/volPools/volDust`. It halves the washed-out look near play; what remains comes from the beams (measured), next step proposed to Astra. Comparison images in `lab/lighting-tune-v119/`.
+
+## 2026-09-24 — Astra corner lighting applied (pitch3d v118)
+- Applied Astra's `corner-lighting-v117-to-v118.patch` on top of the penalty renderer (base hashes matched, result identical to Astra's candidate): four corner lamps with broad light shafts, grass pools and drifting dust (dust off on the low tier). Visible in a headless high-tier check; it brightens the mid-pitch noticeably, tune if it washes out. Backups `*.pre-corner-lighting*.bak`.
+
+## 2026-09-24 — Penalty in the real stadium (game v205, pitch3d v117, penalty v3, Claude)
+- The penalty QTE now plays inside the match's own 3D stadium (team-coloured crowd, flags, boards, lights, real taker and keeper sprites, the match ball, the real net bulging) through a new `P3D.pen` camera/pose mode in pitch3d. Other players, the referee and the leftover match HUD are hidden while it runs. The lab scene stays only as the fallback when 3D is off.
+
+## 2026-09-24 — GK roadmap 6b: penalties play the QTE (game v204, ult11-penalty.js v2, Claude)
+- A penalty in a match now plays the approved penalty mockup full-screen: you take it (aim + timing ring) or you keep (pick a zone + timing ring); the CPU half scales with the taker's shooting and the keeper's reflexes. The result goes back into the match (goal, keeper's ball, rebound, goal kick). Engine and clock frozen meanwhile; pause works. Old keeper duel kept as a fallback.
+
+## 2026-09-24 — GK roadmap 6a: penalty lab mockup (Claude)
+- New `lab/lab-penalty.html`: behind-the-shooter camera, QTE penalty (YOU SHOOT: aim + timing ring; YOU SAVE: pick a zone + timing ring, early dive tells), real taker and keeper sprites, GOAL / SAVED / POST / MISSED. Lab only; no game files changed.
+
+## 2026-09-24 — GK roadmap 5: hand-throw distribution (game v203, pitch3d v116, Claude)
+- Keeper distribution is all by hand: PASS roll, CROSS throw, SHOOT long throw (was a punt). Real wind-up with the ball in his hands, then the release frames as it leaves; CPU keeper the same. Pause-safe, double press ignored. Goal kicks unchanged. Backups `*.pre-gkthrow-*.bak`.
+
+## 2026-09-24 — GK roadmap 4: keeper state machine (game v202, pitch3d v115, Claude)
+- Normal shots are placed beside or at the keeper, and he reads the real flight: set → low/high dive or reach, full stretch as the ball arrives → catch on the grass / gather / parry landing / beaten → up → throw. Punch = the dive frames. Mirrored per camera side.
+- Verified in headless Chrome with the 3D scene (the preview pane was hidden). Open-play shots arrive low with today's ball physics, so they get the low dive; the high dive is used by super shots. Backups `*.pre-gkstate-*.bak`.
+
+## 2026-09-24 — GK roadmap 3: new 6x6 keeper sheet live (pitch3d v114, Claude)
+- Keeper uses `assets/ps1/gk_sheet6.png`: idle row 0, run row 4, throw release frames for every distribution, real low and high dives in the super-shot cinematic (mirrored for the left; landed frame when beaten). Punch reuses the dives (author).
+- Held ball placed on the new sheet's glove; airborne dive frames no longer pinned to the grass; one-frame idle flash at the save handoff removed; sheet-rebind grid bug fixed. Backup `ult11-pitch3d.js.pre-gk6-v113.bak`.
+
+## 2026-09-24 — GK roadmap 1-2: audit + afSave fix (game v201, Claude)
+- Audit of the GK sheet, render and save path (ROADMAP entry). The author's new 6x6 keeper sheet saved as `assets/ps1/gk_sheet6.png`; it divides cleanly (256x280 cells) and is not wired yet.
+- `afSave()` no longer re-rolls a save the keeper duel already won: it reuses `G.D.lastDefPow` from `resDuel`, can't produce a goal, and no longer charges keeper stamina twice. Backup `game.js.pre-gk-save-v200.bak`.
+
+## 2026-09-24 — GK glove attachment + moving teams (game v197, pitch3d v113, Codex)
+- Fixed the keeper-hold early return that froze both teams: support/marking movement and bounds now update while the goalkeeper carries the ball.
+- Held 3D ball follows the active keeper sprite's glove across idle/run frames and mirrored facing; release blends into the real ball flight. Lower 2D fallback height; goal kicks stay on the grass.
+- `index.html` loads the new cache versions. v196/v112 backups saved. Syntax and mechanics tests passed; a headless match measured 10 home and 9 away outfielders moving during a clean catch. Full 3D grip alignment remains to check in the normal CDN-served game. ROADMAP.md has the exact files, risks and next checks.
+
+## 2026-09-24 — GK catch handoff + CPU throw timing (game v196, Codex)
+- Fixed the separate `afSave()` clean-catch path that still auto-transferred the GK's ball to an outfielder. The keeper now holds it visibly at chest height until a distribution button is pressed; its release starts from that height. Goal kicks remain on the grass with short/long kick labels.
+- CPU throw-in setup extended from 1 to 3 seconds. `index.html` loads game v196; v195 backup saved as `game.js.pre-gk-catch-v195.bak`.
+- Headless match verified a clean catch remains with GK beyond 2 seconds, PASS then releases; CPU throw-in remains staged after 1.45 seconds and releases after 3. Node syntax passed. Details and remaining 3D/controller check: ROADMAP.md.
+
+## 2026-09-24 — Throw-ins + goalkeeper choice (game v195, Codex)
+- Touchline out-of-play now starts a proper dead-ball throw-in: PASS short, CROSS/SHOOT long, directional aim, airborne physical flight, CPU choice and offside exemption. The taker waits at the touchline rather than receiving automatic possession.
+- Human keeper possession waits for PASS short roll, CROSS long distribution or SHOOT punt. The former 650 ms forced throw is removed; CPU keeper still distributes automatically after a short read. Goal kicks ignore offside.
+- `index.html` loads game v195; `game.js.pre-throwin-gk-v194.bak` preserves the original. Roadmap entry has details, validation and open checks. Node syntax and targeted mechanics tests passed; a local headless Chrome match confirmed throw-in and keeper transitions (CDN THREE unavailable under file URL, so 3D view remains to check).
+
+## 2026-09-23 — matchday UI integration finish (game v189 / css v99 / kitrun v4)
+- Preserved today's reference-based Team Select, Team Management, Match Menu and Full Time work already present in `game.js?v=188`, `style.css?v=98` and `index.html`; added a catch-up record in ROADMAP.md because those edits had not been logged.
+- Retired the `ult11-team.js?v=5` script tag from the friendly flow. Its legacy `openTeamMenu()` interception was hiding the new native `#s-team` screen behind the older TEAM FORMATION overlay. The file remains on disk as history/fallback.
+- Loading now uses the stadium artwork instead of a black/gradient-only field. `loading-runner.png` and `loading-ball.png` are true-alpha versions of today's JPG sheets, removing the black boxes around both animations; the runner uses the side-run row and stays behind the rolling ball.
+- Team Select's kit preview is now transparent over the pitch art, with both runners grouped around a centre ball rather than an opaque bright-green strip. Canvas height increased to 90 for readability.
+- Validation: syntax checks passed for `game.js` and `ult11-kitrun.js`. Live local-browser flow passed title → home → team select → loading → native team management → match → pause. Loading art/alpha, the native management board and the three-column pause screen were visually inspected; build stamp showed css v99 / js v189. Full Time markup/data wiring was source-checked but a 90-minute live completion was not replayed.
+
+## 2026-09-24 — Full-time screen rebuilt (game v194 + ult11-fulltime.js v2)
+- Winner / loser captains, FULL TIME board with flags, score, scorers + minutes and 9 stats; tiles REMATCH / CHANGE TEAMS / MAIN MENU.
+- New engine counters: passes attempted/completed (-> pass accuracy), tackles, corners, goal log (scorer + minute). Pause Match Facts PASSES fixed.
+- Details: ROADMAP.md "2026-09-24 — FULL-TIME SCREEN rebuilt".
+
+## 2026-09-24 — Pause menu rebuilt (game v192 + ult11-pausemenu.js v2, teamselect v2)
+- Both teams on the Team Management board (CPU formation, mirrored faces), captains behind, scoreboard + stopped clock, ladder menu with every old action + RESUME MATCH.
+- Pad navigation now works in the pause menu (it had none). Kick-off prompt / bust HUD hidden while paused.
+- v3: kick-off prompt no longer shows on the loading screen or in Team Management before kick-off.
+- game v193: kick-off button text is just KICK-OFF, in Rajdhani.
+- Details: ROADMAP.md "2026-09-24 — PAUSE MENU rebuilt".
+
+## 2026-09-24 — Team Management rebuilt (game v191 + ult11-teammanage.js v1)
+- New screen from the approved `lab/lab-teammanagement.html`: head-crop cards with role colours, 4-man bench, player panel with face + radar, ladder menu (formation / tactics / marking / auto-choose), confirm on every swap, marking board, glowing KICK OFF.
+- Uses the engine's own lineup globals; KICK OFF / APPLY & RESUME and BACK keep every route (friendly, pause, career, story, cup).
+- Tactics + marking are saved (HT._tm) but not yet read by the match AI.
+- Details: ROADMAP.md "2026-09-24 — TEAM MANAGEMENT rebuilt".
+
+## 2026-09-23 — Team Select rebuilt (game v190 + ult11-teamselect.js v1)
+- New screen from the approved `lab/lab-teamselect.html`: stadium bg (`assets/wallpaper/teamselect2.jpg`), waving flags, captain art, Cinzel names, OVR + ATT/MID/DEF/SPD, 2 kits (away N/A), idle sprites, Nationals/Clubs/Special tabs, flag carousel.
+- game.js: 3 nav hooks only; the old FIFA-style team select block is now dead code.
+- Details: ROADMAP.md "2026-09-23 — TEAM SELECT rebuilt".
+
+## 2026-09-23 — super shot plays like the mockup (game v184 / pitch3d v111 / cine3 v7)
+- Decide first (author's choice): vs an AI keeper the save is rolled at the kick; the flight goes straight into the net / gloves. A human keeper keeps the duel menu + QTE.
+- Added the 0.9s run-up (hold now 3.3s = run-up + 2.4s charge), shooter + keeper only on screen, 1.35s accelerating flight, keeper dives in flight, ball carries into the back of the net, goal shot held 1.6s (save 1.0s) with the mockup's goal camera.
+- cine3 scale now comes from the sprite cell height (effects were ~19% too big).
+- Details, validation and open risks: ROADMAP.md "2026-09-23 — SUPER SHOT CINE3: now plays like the mockup".
+
+## 2026-09-23 — super shot cine3 (catch-up entry)
+- `ult11-cine3.js?v=6` + `ult11-pitch3d.js?v=110` were changed without a log entry. Documented in ROADMAP.md, "2026-09-23 — SUPER SHOT CINE3".
+- Approved mockup copied to `lab/lab-supershot-mockup.html` as the reference.
+- Measured gaps vs the mockup: no run-up; other players block the charge; flight ~2.4s vs 1.35s with an overexposed trail; ball parks for the GK duel; outcome barely shown.
 
 ## v108 / css v57 — duel fixes round 2
 - **Action buttons**: removed the big `.duelbar` box behind them — buttons now
@@ -1131,3 +1277,44 @@ When probing, read the shorthand or the computed value, not the longhand.
 **Validation:** `node --check` passes; jsdom tests execute current game code and the actual `rollFoul` delayed callback, stationary taker, four-man walls in both halves, all three free-kick releases, CPU choices/execution, corner short/cross/shot paths, offside exemption, pause guard, stale restart cleanup and visible PASS/CROSS/SHOOT controls. Existing `lab/test-aerial.js`: 31/31 passed. Evidence in Codex workspace `outputs/set-pieces/tests.json`; reproducible harness `work/ai-test/set-pieces.cjs`; original backups in `outputs/set-pieces/before/`.
 
 **Next checks:** real phone and physical controller aiming/button feel, shot balance against walls and keeper, wide free-kick receiver positioning, and corner direct-shot difficulty. No live visual or hardware playtest claimed for this pass; no deployment. PvP set-piece device routing was not extended in this single-player patch.
+
+## 2026-09-24 — Keeper boundary and build-out shape (Codex)
+
+**Intent/files:** fix the author's new keeper-hold screenshots. `game.js?v=198`, `index.html` cache tag v198; no renderer or art changes. The current original v197 game was edited in place so the glove and simultaneous work remain intact.
+
+**Change:** the keeper's three repeated movement caps (0.10W deep, 0.30–0.70H wide) are now one `clampKeeperToArea()` matching the pitch's 0.16W, 0.22–0.78H penalty box with a slight inset. Keeper-possession AI now gives outfielders formation- and role-based build-out targets outside the box instead of treating the GK as a generic carrier and clustering near him. Applied in both AI v2 and fallback v1; defenders of the other team still mark normally.
+
+**Validation:** syntax check passed. In a five-second headless match, all four initially box-bound home backs moved beyond the x=0.23W penalty-area line (x=0.268–0.325W) while spreading across four lateral lanes. Simulated keeper input stopped at x=0.228W near the drawn line. Both left/right keeper-area clamps returned their matching boundary. The file-based browser still reports missing CDN `THREE`, so these were gameplay checks, not full 3D visual checks.
+
+**Next:** real served-game visual check in both halves, short/long passing from the new shape, controller/phone movement feel. Reproducible smoke harness: Codex workspace `smoke_keeper_buildout.cjs`.
+
+## 2026-09-24 — Real audio assets wired (Codex)
+
+**Intent/files:** replace the active WebAudio placeholder synthesis with the author's `assets/audio` clips. New `ult11-sfx-samples.js?v=1`, `game.js?v=199`, `index.html` script/cache tags. `ult11-sfx.js?v=5` is no longer loaded; its pre-edit copy and pre-edit game/index backups are `ult11-sfx.js.pre-sampled-audio-v5.bak`, `game.js.pre-sampled-audio-v198.bak`, `index.html.pre-sampled-audio.bak`.
+
+**Behavior:** crowd1–4 rotate during matches, running loops only while the carrier moves, and sampled tackle/catch/kick/special-charge, all five referee whistles, pause open/close and cursor/confirm/cancel play on their matching events. `afSave` plays the keeper-catch recording only for a clean catch. The existing master-volume slider now also sets `SFX.master`. The active music remains `menu.mp3` and `match1.mp3`; match2/3 were moved to `old` and are no longer selected or referenced. The alternative `cursor1.wav` remains unused.
+
+**Validation:** JS syntax checks passed. Browser smoke test `smoke_audio.cjs` in the Codex workspace recorded all mapped sound file requests and, in a live match, `match1.mp3`, start whistle, crowd1 and running. Volume slider 35 -> sample master 0.35. No unexpected page errors; file-based test still cannot load CDN THREE. Auditory balance, mobile autoplay and controller-specific navigation remain to be checked on the target device.
+
+## 2026-09-24 — Halftime uses PM2; gameplay stays frozen (Codex)
+
+**Files/cache:** `game.js?v=200`, `ult11-pausemenu.js?v=4`, `index.html` tags. Backups: `game.js.pre-halftime-v199.bak`, `ult11-pausemenu.js.pre-halftime-v3.bak`, `index.html.pre-halftime.bak`.
+
+**Fix:** old `goHalf()` sent the game to `s-half` after clearing, but not nulling, `G.mt`; with `G.paused=false` and stale `kickoffUntil`, the idle watchdog could resume gameplay behind that old UI. Halftime now becomes a locked pause using the same PM2 pause-menu layout. PM2 changes the heading/clock to HALF TIME and the final action to SECOND HALF KICKOFF; the virtual controls and commentary strip are hidden. Team Management returns to halftime with APPLY & RETURN. The second-half action alone clears the lock, restores the match clock/music and arms kick-off. The old `s-half` markup is inactive, retained for later cleanup.
+
+**Validation:** syntax checks and `smoke_halftime.cjs` passed. Natural clock expiry opened halftime; browser held positions and clock unchanged for 3.4 seconds; menu, substitutions round-trip and second-half transition/away kick-off arm all worked. Local file-based browser could not load CDN THREE, so normal served-game 3D framing and physical pad/touch feel still need checking. ROADMAP.md has the full intent, exact behavior and next checks.
+
+## 2026-09-24 — Short pass and cross audio corrected (Codex)
+
+**Files/cache:** `ult11-sfx-samples.js?v=2` and `index.html` audio cache tag; `game.js` remains v200. Backups: `ult11-sfx-samples.js.pre-pass-cross-v1.bak`, `index.html.pre-pass-cross.bak`. Supplied audio was not edited.
+
+**Change:** `pass_anim` audio dispatch now follows the physical ball's `ground`/`cross`/`throw` kind. Ground passes use `assets/audio/short-pass.mp3`; crosses use `assets/audio/cross.mp3`; throw-ins play no kick. Actual `_shotTrail` shots retain `aerial_shoot.wav`. A stale `_shotZone` no longer makes a pass sound like a shot, and jump/tackle `whoosh()` no longer reuses the aerial-shot recording.
+
+**Validation/next:** JS syntax passed; browser smoke test `smoke_pass_cross_audio.cjs` observed the correct five cases (ground, cross, throw, shot, whoosh) without unexpected page errors. Listen and tune levels/timing in the normal served game on keyboard, pad and touch. Header-shot audio without `_shotTrail` may need a later explicit event. ROADMAP.md contains the full handoff.
+
+## 2026-09-25 — Marassi Square added to main menu (Codex / Astra)
+
+- Added `marassi-square/` as an isolated playable 3D Road to Glory/trailer slice and one home-menu link in `index.html` to `marassi-square/index.html?v=1`. Backed up the prior index as `index.html.pre-marassi-square.bak`; no match gameplay or renderer files changed.
+- Bundled the 1,039,356-byte Blender GLB, local Three.js r128/GLTFLoader, Italy sprite, and author's short-pass/block audio. The square supports walk, sprint, jump, kick, ball rebound, touch/gamepad input and trailer camera.
+- Chrome smoke test from the main-game HTTP root loaded the real GLB and verified movement, jump, kick/rebound and trailer mode with no page errors. Physical controller/touch and phone performance still need target-device checks.
+- Full intent, exact files/cache, validation and next checks are in the new ROADMAP.md entry; development source/screenshots are in the Codex workspace `marassi-square-prototype/`.

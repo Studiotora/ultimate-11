@@ -39,14 +39,14 @@
        Was: cam height 26 dist 46 fov 38 followLerp 11 zFollow 0.45 inwardYaw 0.55
        lift 2 - bowl gap 0 rake 50 tierH 30 - spriteFrac 0.045. Anyone with their
        own Camera Lab save still gets theirs; this is only what a NEW player sees. */
-    cam:{ height:6, dist:20, fov:30, zoomIn:0.5,
+    cam:{ height:6, dist:21, fov:26, zoomIn:0.5,   // dist/fov/phi/lookY/followLerp: the author's Camera Lab values 2026-09-25
           phiMin:0.34, phiMax:0.82, thetaLimit:0.20,
           // ---- Camera Lab tunables ----
-          phi:0.55,          // fixed elevation when not dragging
-          followLerp:16.5,   // how fast focus chases the carrier (higher = snappier)
+          phi:0.66,          // fixed elevation when not dragging
+          followLerp:9,      // how fast focus chases the carrier (higher = snappier)
           zFollow:1,         // 0=stay sideways at midline, 1=fully follow Z
           inwardYaw:0,       // how much the camera turns inward near the goals
-          lookY:1.0,         // height of the look-at point
+          lookY:0.5,         // height of the look-at point
           lift:0 },          // extra camera height offset
     bowl:{ yOff:0, gap:16, rake:64, tierH:29, sharp:false, roof:true,
            openFront:true, mode:'crowd', tiers:{1:true,2:true,3:true} },
@@ -3301,20 +3301,24 @@
     // tuned from 3 captures (look-dev 2026-09-24): a dark blue base so the gaps
     // go dark, near-white LED floodlights (warm read yellow-green on grass),
     // sprites capped so white kits don't blow out under the pools
-    P3D.night={ amb:[0.14,0.175,0.29], lamp:[1.02,1.00,0.93], max:1.25, spriteMax:1.08,
+    P3D.night={ amb:[0.19,0.23,0.35], lamp:[1.08,1.04,0.96], max:1.3, spriteMax:0.96, turf:1,
       pools:[[-0.46,-0.25,15,1.05],[-0.46,0.25,15,1.05],[0.46,-0.25,15,1.05],[0.46,0.25,15,1.05],
              [-0.86,0,10.5,0.92],[0.86,0,10.5,0.92],[0,0,12.5,0.78]],
-      light:{ambient:0.16,key:0.62,warmth:0.16,shade:0.9,glow:0,azim:3.25,elev:0.62},
-      fx:{bloom:0.42,bloomRadius:0.45,bloomThresh:0.68,contrast:1.12,sat:0.94,lift:-0.01,split:1.35,vignette:0.95},
+      // the author's Camera Lab values, tuned side by side with the hero frame (2026-09-25)
+      light:{ambient:0.05,key:0.05,warmth:0.31,shade:0.47,glow:0.15,shadow:0.33,shadowLen:0,azim:2.07,elev:0.07},
+      fx:{bloom:0.8,bloomRadius:1,bloomThresh:0.86,contrast:1.07,sat:0.96,lift:-0.01,split:1.35,vignette:0.74,rays:0},   // author 2026-09-25: bloom was glowing the players - only the lamps pass .86
+      hero:null,   // key G (PC) A/Bs the lab hero-frame grade (heroGrade below) - author to judge
+      heroGrade:{ hero:{exposure:0.72,vig:0.55,lift:[0.002,0.004,0.012],gain:[1.04,1.0,0.95],shadowTint:[0.84,0.93,1.14],highTint:[1.08,1.02,0.92]},
+                  fx:{contrast:1.12,sat:1.2,lift:-0.02,split:0.4,vignette:0.2} },
       shadowTint:[0.78,0.90,1.22], highTint:[1.10,1.02,0.90], sky:0.3, apron:[0.19,0.22,0.31],
       // author 2026-09-24: painted lines must not glow - bright texels stay under the bloom threshold
       lineMax:0.66,
       // step 3 ATMOSPHERE: night fog so the far bowl sinks into the dark; the
       // corner beams read more on a dark ground (their grass overlay less,
       // the real pools do that job now); lamp heads glow harder
-      fog:{col:[0.035,0.055,0.11], near:55, far:230}, beam:1.9, beamPools:0.45, halo:1.6, haloScale:1.35,
+      fog:{col:[0.035,0.055,0.11], near:55, far:230}, beam:1.9, beamPools:0.45, halo:1.6, haloScale:1.5,
       // step 4 DOF (HD-2D tilt-shift) and step 5 FINISH (film grain + edge colour fringing)
-      tilt:1.45, grain:0.035, ca:0.010 };
+      tilt:0.44, grain:0.035, ca:0.005 };
     let LOOK='classic', _lookSaved=null, _nightMat=null, _lookPending=null, _lookRest=null, _finishPass=null;
     // lamp heads (floodBank halo sprites) glow harder at night
     function nightHalos(on){
@@ -3325,18 +3329,31 @@
     }
     // step 5: film grain + a faint colour fringe toward the screen edges
     const FinishShader={
-      uniforms:{ tDiffuse:{value:null}, time:{value:0}, grain:{value:0.035}, ca:{value:0.01} },
+      /* + the HERO FRAME GRADE (lab/lab-heroframe.html, author 2026-09-25: "the
+         film grade is still not the hero frame"): ACES filmic curve, split
+         tone (cool shadows / warm highlights), lift + gain, vignette - one
+         pass, the lab's exact math. amount 0 = grain + fringe only. */
+      uniforms:{ tDiffuse:{value:null}, time:{value:0}, grain:{value:0.035}, ca:{value:0.01}, amount:{value:0}, exposure:{value:1.12},
+        lift:{value:new T.Vector3(0.008,0.010,0.022)}, gain:{value:new T.Vector3(1.06,1.0,0.92)},
+        shadowTint:{value:new T.Vector3(0.84,0.93,1.14)}, highTint:{value:new T.Vector3(1.14,1.02,0.86)}, vig:{value:0.62} },
       vertexShader:'varying vec2 vUv; void main(){ vUv=uv; gl_Position=projectionMatrix*modelViewMatrix*vec4(position,1.0); }',
-      fragmentShader:['varying vec2 vUv; uniform sampler2D tDiffuse; uniform float time, grain, ca;',
+      fragmentShader:['varying vec2 vUv; uniform sampler2D tDiffuse; uniform float time, grain, ca, amount, exposure, vig; uniform vec3 lift, gain, shadowTint, highTint;',
         'float rnd(vec2 p){ return fract(sin(dot(p,vec2(12.9898,78.233))+time*7.13)*43758.5453); }',
+        'vec3 aces(vec3 x){ return clamp((x*(2.51*x+.03))/(x*(2.43*x+.59)+.14),0.,1.); }',
         'void main(){ vec2 d=vUv-0.5; vec2 o=d*ca*dot(d,d)*4.0;',
         ' vec3 c=vec3(texture2D(tDiffuse,vUv+o).r, texture2D(tDiffuse,vUv).g, texture2D(tDiffuse,vUv-o).b);',
+        ' vec3 g=aces(c*exposure); float l=dot(g,vec3(.299,.587,.114));',
+        ' g*=mix(shadowTint,highTint,smoothstep(.15,.7,l)); g=g*gain+lift;',
+        ' g*=1.-vig*smoothstep(.2,.95,length(d*vec2(1.25,1.)));',
+        ' c=mix(c,g,amount);',
         ' c+=(rnd(floor(vUv*vec2(1280.0,720.0)))-0.5)*grain;',
         ' gl_FragColor=vec4(c,1.0); }'].join(String.fromCharCode(10)) };
     function nightFinish(on,P){
       if(!composer||!T.ShaderPass) return; P=P||P3D.night;
       if(on&&!_finishPass){ _finishPass=new T.ShaderPass(FinishShader); composer.addPass(_finishPass); }
-      if(_finishPass){ _finishPass.enabled=!!on; _finishPass.uniforms.grain.value=P.grain||0; _finishPass.uniforms.ca.value=P.ca||0; }
+      if(_finishPass){ const u=_finishPass.uniforms; _finishPass.enabled=!!on; u.grain.value=P.grain||0; u.ca.value=P.ca||0;
+        const H=P.hero; u.amount.value=H?1:0; if(H){ u.exposure.value=H.exposure; u.vig.value=H.vig;
+          u.lift.value.fromArray(H.lift); u.gain.value.fromArray(H.gain); u.shadowTint.value.fromArray(H.shadowTint); u.highTint.value.fromArray(H.highTint); } }
     }
     // (kept for the Camera Lab; envFrame does this now)
     function nightFrame(now){
@@ -3358,7 +3375,7 @@
     }
     function makeNightPitchMat(){
       const pools=[]; for(let i=0;i<8;i++) pools.push(new T.Vector4(0,0,1,0));
-      const u=T.UniformsUtils.merge([T.UniformsLib.fog,{ map:{value:null}, amb:{value:new T.Color()}, lamp:{value:new T.Color()}, maxL:{value:1.3}, lineMax:{value:0.62}, wet:{value:0} }]);
+      const u=T.UniformsUtils.merge([T.UniformsLib.fog,{ map:{value:null}, amb:{value:new T.Color()}, lamp:{value:new T.Color()}, maxL:{value:1.3}, lineMax:{value:0.62}, wet:{value:0}, turf:{value:0} }]);
       u.pools={value:pools};
       const sp=[], sc=[]; for(let i=0;i<10;i++){ sp.push(new T.Vector4(0,0,1,0)); sc.push(new T.Vector3()); }
       u.spill={value:sp}; u.spillCol={value:sc};
@@ -3366,9 +3383,10 @@
         vertexShader:['varying vec2 vUv; varying vec3 vW;','#include <fog_pars_vertex>',
           'void main(){ vUv=uv; vec4 w=modelMatrix*vec4(position,1.0); vW=w.xyz; vec4 mvPosition=viewMatrix*w; gl_Position=projectionMatrix*mvPosition;',
           '#include <fog_vertex>','}'].join(String.fromCharCode(10)),
-        fragmentShader:['uniform sampler2D map; uniform vec4 pools[8]; uniform vec3 amb; uniform vec3 lamp; uniform float maxL; uniform float lineMax; uniform float wet; uniform vec4 spill[10]; uniform vec3 spillCol[10]; varying vec2 vUv; varying vec3 vW;',
+        fragmentShader:['uniform sampler2D map; uniform vec4 pools[8]; uniform vec3 amb; uniform vec3 lamp; uniform float maxL; uniform float lineMax; uniform float wet; uniform float turf; uniform vec4 spill[10]; uniform vec3 spillCol[10]; varying vec2 vUv; varying vec3 vW;',
           '#include <fog_pars_fragment>',
           'void main(){ vec3 c=texture2D(map,vUv).rgb; float s=0.0;',
+          ' c=mix(c,vec3(dot(c,vec3(.299,.587,.114))),turf*0.32)*mix(vec3(1.0),vec3(.84,.95,1.02),turf);',   // the lab's muted cool turf
           ' for(int i=0;i<8;i++){ vec2 d=vW.xz-pools[i].xy; s+=pools[i].w*exp(-dot(d,d)/(pools[i].z*pools[i].z)); }',
           ' vec3 sl=vec3(0.0); for(int i=0;i<10;i++){ vec2 e=vW.xz-spill[i].xy; sl+=spillCol[i]*spill[i].w*exp(-dot(e,e)/(spill[i].z*spill[i].z)); }',
           ' vec3 o=c*min(amb+lamp*s+sl*0.5,vec3(maxL))*(1.0-wet*0.16)+lamp*pow(min(s,1.0),3.0)*wet*0.10+sl*(0.085+wet*0.06);',   // coloured light also glows ON the grass (multiplying red onto green gives nothing)
@@ -3381,9 +3399,21 @@
       if(!_nightMat) return; const N=P3D.night, u=_nightMat.uniforms; nightPoolsW();
       for(let i=0;i<8;i++){ const q=_nightPools[i]; if(q) u.pools.value[i].set(q[0],q[1],Math.max(0.01,q[2]),q[3]); else u.pools.value[i].set(0,0,1,0); }
       u.amb.value.setRGB(N.amb[0],N.amb[1],N.amb[2]); u.lamp.value.setRGB(N.lamp[0],N.lamp[1],N.lamp[2]); u.maxL.value=N.max;
-      u.lineMax.value=N.lineMax!=null?N.lineMax:0.62;
+      u.lineMax.value=N.lineMax!=null?N.lineMax:0.62; u.turf.value=N.turf!=null?N.turf:0;
+    }
+    /* author 2026-09-24 (phone test): at night the goal "disappears" - the
+       Lambert posts go dark grey and the net is faint. Floodlit white paint:
+       emissive posts, a stronger net. */
+    function nightGoals(on){
+      goalGroup.traverse(o=>{ const m=o.material; if(!m) return;
+        if(o.isMesh&&m.emissive){ if(m.userData.em0==null) m.userData.em0=m.emissive.getHex();
+          if(on) m.emissive.setRGB(0.40,0.41,0.44); else m.emissive.setHex(m.userData.em0); }   // white, but below the .68 bloom threshold
+        else if(o.isLineSegments&&m.opacity!=null){ if(m.userData.op0==null){ m.userData.op0=m.opacity; m.userData.c0=m.color.getHex(); }
+          m.opacity=on?0.6:m.userData.op0; if(on) m.color.setRGB(0.86,0.89,0.93); else m.color.setHex(m.userData.c0); }
+      });
     }
     function applyLookMaterials(){
+      try{ nightGoals(LOOK==='night'); }catch(e){}
       const night=LOOK==='night', N=P3D.night, P=(typeof envPreset==='function')?envPreset():null;
       const W=(typeof ENV!=='undefined'&&P3D.weatherFx)?P3D.weatherFx[ENV.weather]:null;
       if(pitchMesh){
@@ -3435,7 +3465,7 @@
     P3D.golden={ light:{elev:0.24, key:3.2, ambient:0.46, warmth:0.9, shade:0.45, glow:0.5, shadowLen:3.2},
       fx:{bloom:0.22,bloomRadius:0.5,bloomThresh:0.62,contrast:1.08,sat:1.04,lift:0.0,split:1.15,vignette:0.8},
       shadowTint:[0.84,0.90,1.12], highTint:[1.12,1.02,0.86], sky:[1.0,0.82,0.66], sprite:[1.05,0.99,0.9],
-      fog:{col:[0.40,0.28,0.20], near:120, far:430}, tilt:1.2, grain:0.02, ca:0.006, apron:[1.0,0.92,0.78] };
+      fog:{col:[0.40,0.28,0.20], near:120, far:430}, tilt:1.2, grain:0.02, ca:0.003, apron:[1.0,0.92,0.78] };
     P3D.weatherFx={
       rain:{ sat:0.86, contrast:0.96, lift:-0.01, amb:0.85, sky:0.6, sprite:0.9, fogMix:[0.30,0.34,0.40], fogK:0.7, day:0.84, wet:1.0,
              count:7000, speed:40, len:2.2, wind:4.0, col:0xdde7f7, op:0.62 },
@@ -3486,6 +3516,13 @@
       ENV.time=(t==='night'||t==='golden')?t:'classic'; ENV.weather=(w==='rain'||w==='snow')?w:'sunny';
       _lookPending='env';                                                  // always: real shadows set the light direction
     })();
+    window.addEventListener('keydown',e=>{                                // G: A/B the hero-frame grade at night
+      if(e.key!=='g'&&e.key!=='G') return;
+      const t=e.target; if(t&&(t.tagName==='INPUT'||t.tagName==='TEXTAREA'||t.isContentEditable)) return;
+      const N=P3D.night, HG=N.heroGrade; if(!N._fxOld) N._fxOld=Object.assign({},N.fx);
+      if(N.hero){ N.hero=null; Object.assign(N.fx,N._fxOld); } else { N.hero=HG.hero; Object.assign(N.fx,N._fxOld,HG.fx); }
+      applyEnv(); lookToast(N.hero?'HERO GRADE':'GAME GRADE');
+    });
     window.addEventListener('keydown',e=>{                                // N: cycle the time of day on PC
       if(e.key!=='n'&&e.key!=='N') return;
       const t=e.target; if(t&&(t.tagName==='INPUT'||t.tagName==='TEXTAREA'||t.isContentEditable)) return;
@@ -3598,7 +3635,7 @@
         const from=new T.Vector3(bk[0]*k,bk[1]*k,bk[2]*PWID/44.87), to=new T.Vector3(tg[0]*k,0,tg[1]*PWID/44.87);
         const head=new T.Mesh(new T.BoxGeometry(5.2*k,3.2*k,0.45*k),headMat); head.position.copy(from); head.lookAt(to); g.add(head);
         const halo=new T.Sprite(new T.SpriteMaterial({map:haloTex(),color:0xfff3dc,transparent:true,opacity:.9,depthWrite:false,blending:T.AdditiveBlending,fog:false}));
-        halo.position.copy(from); halo.scale.set(15*k,15*k,1); g.add(halo);
+        halo.position.copy(from); halo.scale.set(13*k,13*k,1); halo.material.opacity=.95; g.add(halo);   // softer: they blew out with bloom (author)
         const len=from.distanceTo(to), cg=new T.ConeGeometry(tg[2]*k,len,40,1,true); cg.translate(0,-len/2,0);
         const cone=new T.Mesh(cg,coneMat); cone.position.copy(from); cone.quaternion.setFromUnitVectors(new T.Vector3(0,-1,0),to.clone().sub(from).normalize());
         cone.frustumCulled=false; cone.renderOrder=9; g.add(cone); RIG.cones.push(cone); RIG.banks.push({from,to,halo});
@@ -3645,6 +3682,31 @@
       for(let i=0;i<6;i++) RIG.spill.push([(-28+i*11.2)*k,-(PWID/2-0.4*pw),4.6*k,4.2].concat(cols[i%cols.length]));   // on the grass inside the touchline
       RIG.spill.push([0,0,3.2*k,0,0.9,0.95,1],[0,0,3.2*k,0,0.9,0.95,1]);
       RIG.cols=cols;
+      rigAtmos(k);
+    }
+    /* the lab's field atmosphere (author 2026-09-25): low mist along both goal
+       ends and across the pitch, and dust motes drifting around the play -
+       close enough to the camera to read, catching the bloom */
+    function rigAtmos(k){
+      const g=RIG.group, mc=document.createElement('canvas'); mc.width=mc.height=256; const x=mc.getContext('2d');
+      for(let i=0;i<70;i++){ const px=Math.random()*256, py=Math.random()*256, r=30+Math.random()*60, gr=x.createRadialGradient(px,py,0,px,py,r);
+        gr.addColorStop(0,'rgba(170,190,225,.16)'); gr.addColorStop(1,'rgba(170,190,225,0)'); x.fillStyle=gr; x.fillRect(0,0,256,256); }
+      const mt=new T.CanvasTexture(mc); mt.wrapS=mt.wrapT=T.RepeatWrapping;
+      RIG.mists=[];
+      const hx=PLEN/2, pw=PWID;
+      // field mist sheets removed (author 2026-09-25: a sharp grey layer cutting the players at chest height);
+      // the stadium fog keeps the crowd feeling
+      [].forEach(([mx,my,mz,w,d],i)=>{
+        const t=mt.clone(); t.needsUpdate=true; t.repeat.set(w/(20*k),d/(20*k));
+        const m=new T.Mesh(new T.PlaneGeometry(w,d),new T.MeshBasicMaterial({map:t,transparent:true,opacity:i<2?.6:.32,depthWrite:false,blending:T.AdditiveBlending,fog:false}));
+        m.rotation.x=-Math.PI/2; m.position.set(mx,my,mz); m.renderOrder=3; g.add(m); RIG.mists.push(m); });
+      const n=2600, P=new Float32Array(n*3), ph=new Float32Array(n);
+      for(let i=0;i<n;i++){ P[i*3]=(Math.random()-.5)*PLEN*1.05; P[i*3+1]=(0.3+Math.random()*7)*k; P[i*3+2]=(Math.random()-.5)*PWID*1.05; ph[i]=Math.random()*6.283; }
+      const dg=new T.BufferGeometry(); dg.setAttribute('position',new T.BufferAttribute(P,3)); dg.setAttribute('ph',new T.BufferAttribute(ph,1));
+      const dm=new T.ShaderMaterial({uniforms:{time:{value:0}},transparent:true,depthWrite:false,blending:T.AdditiveBlending,fog:false,
+        vertexShader:'attribute float ph;uniform float time;varying float a;void main(){vec3 q=position;q.x+=sin(time*.3+ph)*.6;q.y+=sin(time*.21+ph*2.)*.4;vec4 mv=modelViewMatrix*vec4(q,1.);gl_Position=projectionMatrix*mv;a=(.45+.35*sin(time*.9+ph))*smoothstep(60.,8.,-mv.z);gl_PointSize=clamp(110./-mv.z,1.,5.);}',
+        fragmentShader:'varying float a;void main(){float d=length(gl_PointCoord-.5)*2.;gl_FragColor=vec4(vec3(1.,.96,.88)*pow(max(0.,1.-d),2.)*a,1.);}'});
+      RIG.nearDust=new T.Points(dg,dm); RIG.nearDust.frustumCulled=false; g.add(RIG.nearDust);
     }
     function rigSyncPools(){
       // the night pools ARE the cones' footprints
@@ -3654,7 +3716,8 @@
     }
     function rigFrame(now,dt){
       const on=RIG.on&&LOOK==='night';
-      if(!on){ if(RIG.group) RIG.group.visible=false; if(RIG._astraOff){ RIG._astraOff=false; P3D.gfx.volRays=RIG._ar; P3D.gfx.volPools=RIG._ap; P3D.gfx.volDust=RIG._ad; } return; }
+      if(!on){ if(RIG._tiltSet&&hTilt&&vTilt){ RIG._tiltSet=false; hTilt.uniforms.r.value=0.5; vTilt.uniforms.r.value=0.5; try{ applyFx(); }catch(e){} }
+        if(RIG.group) RIG.group.visible=false; if(RIG._astraOff){ RIG._astraOff=false; P3D.gfx.volRays=RIG._ar; P3D.gfx.volPools=RIG._ap; P3D.gfx.volDust=RIG._ad; } return; }
       if(!RIG.built){ buildRig(); rigSyncPools(); }
       if(!RIG.phones&&(now-(RIG._phTry||0))>1000){ RIG._phTry=now; rigPhones(); }
       RIG.group.visible=true;
@@ -3662,6 +3725,16 @@
       const t=now*0.001; RIG.t=t;
       const W=P3D.weatherFx[ENV.weather]; RIG.coneMat.uniforms.str.value=W?1.35:1;          // beams read stronger in rain/snow
       if(RIG.dust) RIG.dust.material.uniforms.time.value=t;
+      if(RIG.nearDust) RIG.nearDust.material.uniforms.time.value=t;
+      if(RIG.mists) RIG.mists.forEach((m,i)=>{ m.material.map.offset.x=t*0.004*(i%2?1:-1); m.material.map.offset.y=t*0.002; });
+      /* depth of field like the lab: the sharp band sits on the play (the
+         carrier's feet), so the crowd above falls out of focus; stronger in a
+         Camera Lab scenario */
+      if(hTilt&&vTilt){ let fy=0.42;
+        try{ const cp=(typeof G!=='undefined'&&G&&G.poss&&G.ck&&PP[G.poss])?PP[G.poss][G.ck]:null;
+          if(cp){ _v3.set(ex2wx(cp.x),0.3,ey2wz(cp.y)).project(camera); if(_v3.z<1) fy=Math.max(0.12,Math.min(0.6,_v3.y*0.5+0.5)); } }catch(e){}
+        hTilt.uniforms.r.value=fy; vTilt.uniforms.r.value=fy;
+        const tb=P3D.fx.tilt*0.0035*(SCN?1.7:1.25); hTilt.uniforms.h.value=tb; vTilt.uniforms.v.value=tb; RIG._tiltSet=true; }
       if(RIG.phones) RIG.phones.material.uniforms.time.value=t;
       // boards cycle their colours; flashes fire one at a time
       const seg=Math.floor(t*0.9);
@@ -3679,19 +3752,94 @@
        at the goal-end stand, roof rig, beams and crowd, pushing in slowly -
        the hero frame in the real match. It cuts to the match camera when the
        ball is played. P3D.heroKick=false turns it off. */
+    /* ════════ SCENARIOS (Camera Lab, author 2026-09-25) ════════
+       A frozen "photo studio" in the real match: the clock and the AI stop
+       (G._cineHold), players + ball are posed and a fixed camera frames it,
+       so a scene can be tuned side by side with lab/lab-heroframe.html.
+       Coordinates are the lab's: METRES, x across the goal, z out from the
+       goal line, y up. P3D.setScenario('hero'|'corner'|'gkthrow'|null). */
+    const SCENARIOS={
+      hero:{ goal:'attack', side:'h', fov:40, cam:{p:[9.8,1.55,25.5], l:[-0.4,4.6,0]},
+        ball:[2.35,17.7], carrier:'ST',
+        h:[['ST',3.4,18.2],['CM1',-7.8,15.6],['RW',11.2,13.8]],
+        a:[['CB1',2.2,12.4],['CB2',-2.6,10.2],['RB',7.4,9.0],['LB',-9.5,8.4],['GK',0.3,0.9]] },
+      corner:{ goal:'attack', side:'h', fov:40, cam:{p:[29,2.6,3.5], l:[0,1.4,7]},
+        ball:[33.6,0.6], carrier:'LW',
+        h:[['LW',34,0.9],['ST',-1.5,6.5],['CM1',2.5,9],['RW',0,12],['CM2',5,5.5]],
+        a:[['CB1',-0.5,5.2],['CB2',2,7.6],['CM1',4,9.8],['LB',-3.5,8],['GK',0.6,0.8]] },
+      gkthrow:{ goal:'own', side:'h', fov:40, cam:{p:[9,1.9,-3.2], l:[-2,2.2,22]},
+        ball:[0,4.5], carrier:'GK',
+        h:[['GK',0,4.5],['CB1',-9,17],['CB2',8,16],['LB',-22,26],['RB',21,25],['CM1',0,30]],
+        a:[['ST',4,26],['LW',-12,30],['RW',15,32]] } };
+    let SCN=null;
+    const m2w=()=>PLEN/105;
+    function wx2ex(wx){ return (wx/PLEN*fbSx+fbCx)*(CV.width||1280); }
+    function wz2ey(wz){ return (wz/PWID*fbSy+fbCy)*(CV.height||720); }
+    function scnW(s,x,z){ return {x:s.gs*(PLEN/2)-s.gs*z*m2w(), z:s.gs*x*m2w()}; }
+    P3D.setScenario=function(name){
+      const g=(typeof G!=='undefined')?G:null; if(!g) return null;
+      scnHud(!!(name&&SCENARIOS[name]));
+      if(!name||!SCENARIOS[name]){ if(SCN){ SCN=null; g._cineHold=false; g.phase='moving'; } return null; }
+      const S=SCENARIOS[name], side=S.side, ds=side==='h'?'a':'h';
+      const gxE=S.goal==='own'?ownGoalXFor(side):goalXFor(side);
+      SCN={name,S,gs:Math.sign(ex2wx(gxE))||1,t:0};
+      g.awaitKickoff=null; g.kickoffUntil=0; g._cineHold=true; g.phase='idle'; g.paused=false;
+      const posed=new Set();
+      const put=(s2,k,x,z)=>{ if(!PP[s2]||!sq(s2)[k]) return; const w=scnW(SCN,x,z), ex=wx2ex(w.x), ey=wz2ey(w.z);
+        PP[s2][k]={x:ex,y:ey}; if(PT[s2]) PT[s2][k]={x:ex,y:ey}; posed.add(s2+':'+k); };
+      (S.h||[]).forEach(q=>put(side,q[0],q[1],q[2])); (S.a||[]).forEach(q=>put(ds,q[0],q[1],q[2]));
+      // everyone else out of the shot, far up the pitch behind the camera
+      let n=0; ['h','a'].forEach(s2=>Object.keys(sq(s2)).forEach(k=>{ if(posed.has(s2+':'+k)||!PP[s2]) return;
+        put(s2,k,-30+(n%8)*8.5,60+Math.floor(n/8)*6); n++; }));
+      const bw=scnW(SCN,S.ball[0],S.ball[1]); ball.x=wx2ex(bw.x); ball.y=wz2ey(bw.z); ball.tx=ball.x; ball.ty=ball.y; ball.bz=S.carrier==='GK'?GK_HAND_BZ_P3D:0;
+      g.poss=side; g.ck=S.carrier; try{ if(typeof updP==='function') updP(); }catch(e){}
+      return name;
+    };
+    const GK_HAND_BZ_P3D=8;
+    // a clean frame: the match HUD hides while a scenario is posed (scoreboard + lab panel stay)
+    function scnHud(on){
+      if(!document.getElementById('u11-scn-css')){ const st=document.createElement('style'); st.id='u11-scn-css';
+        st.textContent='body.u11-scn #dpad,body.u11-scn #bust-h,body.u11-scn #bust-a,body.u11-scn #hud-chips,body.u11-scn #kickoff-prompt,body.u11-scn #vjoy-base,body.u11-scn #passhint,body.u11-scn #pass-banner,body.u11-scn #s-match .mcomm{visibility:hidden!important}body.u11-scn #s-match .mviews > :not(.u11-lab){opacity:0!important;pointer-events:none!important}';   /* the Camera Lab panel lives in .mviews - keep it */
+        document.head.appendChild(st); }
+      document.body.classList.toggle('u11-scn',!!on);
+    }
+    Object.defineProperty(P3D,'scenario',{get:()=>SCN&&SCN.name,configurable:true});
+    P3D.scenarios=SCENARIOS;
+    function scnCam(dt){
+      if(!SCN) return false; const g=(typeof G!=='undefined')?G:null;
+      if(!g||!g._cineHold){ SCN=null; scnHud(false); return false; }   // match moved on / left
+      SCN.t+=dt; const S=SCN.S, m=m2w(), t=SCN.t;
+      const p=scnW(SCN,S.cam.p[0]+Math.sin(t*0.13)*0.35,S.cam.p[2]+Math.cos(t*0.11)*0.25), l=scnW(SCN,S.cam.l[0],S.cam.l[2]);
+      camera.fov=S.fov; camera.updateProjectionMatrix();
+      camera.position.set(p.x,(S.cam.p[1]+Math.sin(t*0.17)*0.08)*m,p.z); camera.lookAt(l.x,S.cam.l[1]*m,l.z);
+      return true;
+    }
     P3D.heroKick=true; let _hk=null;
+    const CAM_MODES={ cinematic:{height:4.4, dist:14.5, fov:33, lookY:1.3} };
+    let _camBase=null, _camMode='broadcast';
+    P3D.setCamMode=function(m){
+      m=(m==='cinematic')?'cinematic':'broadcast';
+      if(!_camBase) _camBase={height:P3D.cam.height,dist:P3D.cam.dist,fov:P3D.cam.fov,lookY:P3D.cam.lookY};
+      Object.assign(P3D.cam,_camBase); if(m!=='broadcast') Object.assign(P3D.cam,CAM_MODES[m]);
+      _camMode=m; try{ localStorage.setItem('u11.cam',m); }catch(e){} return m;
+    };
+    Object.defineProperty(P3D,'camMode',{get:()=>_camMode,configurable:true});
+    try{ if(localStorage.getItem('u11.cam')==='cinematic') setTimeout(()=>P3D.setCamMode('cinematic'),0); }catch(e){}
     function heroKickCam(dt){
       const g=(typeof G!=='undefined')?G:null;
       if(!(P3D.heroKick&&g&&g.awaitKickoff&&!g.paused)){ _hk=null; return false; }
       const s=g.awaitKickoff, kp=PP[s]&&g.ck&&PP[s][g.ck]; if(!kp) return false;
       if(!_hk) _hk={t:0}; _hk.t+=dt;
-      // from inside the attacking half, low, looking at the goal the kicker
-      // attacks: the opponents lined up, the goal, the stand, the roof rig
-      const k=PLEN/70, gx=ex2wx(goalXFor(s)), d=Math.sign(gx)||1;
-      const push=Math.min(1,_hk.t/7), e=push*push*(3-2*push);
-      camera.fov=38; camera.updateProjectionMatrix();
-      camera.position.set(gx-d*(28-4*e)*k, (1.7+0.12*Math.sin(_hk.t*0.4))*k, (6-1.5*e)*k);
-      camera.lookAt(gx, (2.6+0.2*Math.sin(_hk.t*0.3))*k, 0);
+      /* PANORAMA (author 2026-09-24): pointing at one goal favoured the CPU's
+         end. A slow orbit inside the bowl instead - both goals, all four
+         stands, the roof rig - until KICK-OFF is pressed. Starts behind the
+         near touchline so the cut to the match camera is short. */
+      const k=PLEN/70, a=Math.PI*0.5+_hk.t*0.14, rx=PLEN*0.52, rz=PWID*0.62;
+      const e=Math.min(1,_hk.t/1.2);
+      camera.fov=36; camera.updateProjectionMatrix();
+      // low, looking ACROSS the pitch at the opposite stand + roof rig
+      camera.position.set(Math.cos(a)*rx, (3.2+0.5*Math.sin(_hk.t*0.35))*k, Math.sin(a)*rz);
+      camera.lookAt(-Math.cos(a+0.35)*rx*0.55, (4.2+0.6*e)*k, -Math.sin(a+0.35)*rz*0.55);
       return true;
     }
 
@@ -3709,7 +3857,7 @@
        P3D.realShadows.on=false compares against the old fake shadows. */
     const SH3={on:true, opacity:{classic:0.55,golden:0.62,night:0.66}, weatherK:0.65,
       // sun direction per time (the game's own azimuth; lower = longer shadows)
-      dir:{classic:{azim:4.03,elev:0.3}, golden:{azim:4.03,elev:0.08}, night:{azim:4.4,elev:0.24}}};   // the real shadow is physical: a low light makes it long (the fake one was stretched x3)
+      dir:{classic:{azim:4.03,elev:0.3}, golden:{azim:4.03,elev:0.08}, night:{azim:2.07,elev:0.07}}};   // the real shadow is physical: a low light makes it long (the fake one was stretched x3)
     P3D.setRealShadows=function(on){ SH3.on=!!on; try{ applyEnv(); }catch(e){} return SH3.on; };
     P3D.realShadows=SH3;
     P3D._sh=()=>({sun,renderer,scene,catcher:shadowCatcher,T,ball:_ballCaster});   // debug
@@ -5246,7 +5394,7 @@
       monitorQuality(now);
       syncSheets(); watchActions();
       if(PEN){ penCamera(); camera.updateMatrixWorld(); }
-      else if(!cine){ if(!heroKickCam(dt)) updateCamera(dt); camera.updateMatrixWorld(); }
+      else if(!cine){ if(!scnCam(dt)&&!heroKickCam(dt)) updateCamera(dt); camera.updateMatrixWorld(); }
       syncPlayers();
       if(PEN) try{ penApply(); }catch(e){ console.error('[P3D] pen',e); }
       else if(!cine) try{ gkaAlign(); }catch(e){}

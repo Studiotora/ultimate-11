@@ -193,18 +193,6 @@
     panel.appendChild(row('Pad X',      -200,200,1,  ()=>PD.dx,   v=>{PD.dx=v;   ac();}));
     panel.appendChild(row('Pad Y',      -200,200,1,  ()=>PD.dy,   v=>{PD.dy=v;   ac();}));
 
-    // SCENARIOS (2026-09-25): a frozen posed scene for look-dev next to the lab
-    panel.appendChild(section('SCENARIO — FROZEN MATCH'));
-    const sg=document.createElement('div'); sg.style.cssText='display:flex;flex-wrap:wrap;margin-top:4px';
-    [['OFF',null],['HERO FRAME','hero'],['CORNER','corner'],['GK THROW','gkthrow']].forEach(([l,v])=>{
-      const b=document.createElement('button'); b.textContent=l;
-      b.style.cssText='font:700 10px system-ui;letter-spacing:.05em;color:#cfd8e3;background:rgba(18,28,46,.92);'
-        +'border:1px solid rgba(240,192,64,.3);border-radius:6px;padding:5px 8px;cursor:pointer;margin:2px';
-      b.onclick=()=>{ if(window.P3D&&P3D.setScenario) P3D.setScenario(v);
-        sg.querySelectorAll('button').forEach(x=>x.style.borderColor='rgba(240,192,64,.3)'); b.style.borderColor='#f0c040'; };
-      sg.appendChild(b); });
-    panel.appendChild(sg);
-
     panel.appendChild(section('LIGHTING'));
     const L=P3D.light, al=()=>{ if(P3D._applyLight) P3D._applyLight(); };
     panel.appendChild(row('Sun angle',  0,6.28,0.01, ()=>L.azim,      v=>{L.azim=v; al();}));
@@ -278,7 +266,6 @@
     exit.onclick=()=>{ if(typeof exitToMenu==='function') exitToMenu(); else showSc('s-home'); };
     panel.appendChild(exit);
 
-    panel.classList.add('u11-lab');   // scenarios hide the rest of .mviews, never the lab
     (document.querySelector('.mviews')||document.body).appendChild(panel);
   }
   let reopenBtn=null;
@@ -289,7 +276,6 @@
       reopenBtn.style.cssText='position:absolute;right:8px;top:8px;z-index:201;font:800 11px system-ui;'
         +'letter-spacing:.08em;color:#04140c;background:#f0c040;border:0;border-radius:7px;padding:7px 10px;cursor:pointer';
       reopenBtn.onclick=()=>{ reopenBtn.style.display='none'; if(panel)panel.style.display='block'; };
-      reopenBtn.classList.add('u11-lab');
       (document.querySelector('.mviews')||document.body).appendChild(reopenBtn);
     }
     reopenBtn.style.display='block';
