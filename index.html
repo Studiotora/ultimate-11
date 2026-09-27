@@ -625,6 +625,14 @@ addEventListener('DOMContentLoaded',function(){
           <span><span class="ue-item-l">FRIENDLY MATCH</span><span class="ue-item-s" style="display:block">PLAY NOW · 11 v 11</span></span>
           <span class="ue-play">&#9654;</span>
         </button>
+        <button class="ue-item" onclick="setStadium('santa-fede');showSc('s-ts')">
+          <svg viewBox="0 0 24 24"><path d="M3 20V10l5-3 5 3v10M15 20V7l3-3 3 3v13M18 1v4M16 3h4M6 20v-5h4v5"></path></svg>
+          <span><span class="ue-item-l">SANTA FEDE</span><span class="ue-item-s" style="display:block">IL CAMPETTO · 5 v 5</span></span>
+        </button>
+        <button class="ue-item" onclick="location.href='marassi-square/index.html?v=1'">
+          <svg viewBox="0 0 24 24"><path d="M3 20V8l6-4 6 4v12M15 10l6-3v13M7 20v-5h4v5M5 11h1M11 11h1M17 12h1M17 16h1"></path></svg>
+          <span><span class="ue-item-l">MARASSI SQUARE</span><span class="ue-item-s" style="display:block">WALK · JUMP · PRACTICE</span></span>
+        </button>
 
         <button class="ue-item" onclick="aeToast('Create Player — coming soon')">
           <svg viewBox="0 0 24 24"><circle cx="10" cy="7" r="3.4"></circle><path d="M3 20v-1.5A4.5 4.5 0 017.5 14h5a4.5 4.5 0 014.5 4.5V20M19 5v6M22 8h-6"></path></svg>
@@ -736,6 +744,7 @@ addEventListener('DOMContentLoaded',function(){
               <button data-st="classic-upgraded" onclick="setStadium('classic-upgraded')">ASTRA</button>
               <button data-st="classic" onclick="setStadium('classic')">CLASSIC</button>
               <button data-st="oval" onclick="setStadium('oval')">OVAL</button>
+              <button data-st="santa-fede" onclick="setStadium('santa-fede')">SANTA FEDE · 5 v 5</button>
             </div>
           </div>
           <div class="ae-set-row">
@@ -744,6 +753,13 @@ addEventListener('DOMContentLoaded',function(){
               <button data-tm="classic" onclick="setMatchTime('classic')">DAY</button>
               <button data-tm="golden" onclick="setMatchTime('golden')">GOLDEN</button>
               <button data-tm="night" onclick="setMatchTime('night')">NIGHT</button>
+            </div>
+          </div>
+          <div class="ae-set-row">
+            <div class="ae-set-lbl"><div class="ae-set-name">CAMERA</div><div class="ae-set-desc">MATCH CAMERA · CINEMATIC IS CLOSER AND LOWER</div></div>
+            <div class="ae-uisize" id="camCtl">
+              <button data-cm="broadcast" onclick="setMatchCam('broadcast')">BROADCAST</button>
+              <button data-cm="cinematic" onclick="setMatchCam('cinematic')">CINEMATIC</button>
             </div>
           </div>
           <div class="ae-set-row">
@@ -807,7 +823,13 @@ addEventListener('DOMContentLoaded',function(){
       if(tct)tct.querySelectorAll('button').forEach(function(b){b.classList.toggle('on',b.dataset.tm===env.time);});
       var wct=document.getElementById('weatherCtl');
       if(wct)wct.querySelectorAll('button').forEach(function(b){b.classList.toggle('on',b.dataset.wx===env.weather);});
+      var cct=document.getElementById('camCtl'), cm=(window.P3D&&P3D.camMode)||(function(){try{return localStorage.getItem('u11.cam')||'broadcast';}catch(e){return 'broadcast';}})();
+      if(cct)cct.querySelectorAll('button').forEach(function(b){b.classList.toggle('on',b.dataset.cm===cm);});
     }
+    window.setMatchCam=function(v){
+      if(window.P3D&&P3D.setCamMode) P3D.setCamMode(v); else try{ localStorage.setItem('u11.cam',v); }catch(e){}
+      syncUI();
+    };
     /* TIME / WEATHER (2026-09-24): like the stadium, the renderer reads these
        at boot from their own keys (u11.look, u11.weather); P3D.setTime /
        P3D.setWeather save them and apply live. */
@@ -830,7 +852,7 @@ addEventListener('DOMContentLoaded',function(){
        truth - do not mirror it into ue_settings_v1. */
     function curStadium(){
       try{ var s=localStorage.getItem('ue_stadium');
-        if(s==='classic'||s==='oval'||s==='classic-upgraded') return s; }catch(e){}
+        if(s==='classic'||s==='oval'||s==='classic-upgraded'||s==='santa-fede') return s; }catch(e){}
       return (window.P3D&&P3D.stadium)||'classic-upgraded';   // Astra Stadium is the default
     }
     window.setStadium=function(v){
@@ -1713,7 +1735,7 @@ addEventListener('DOMContentLoaded',function(){
 <script src="ult11-input.js?v=9" defer></script>
 <script src="ult11-gkqte.js?v=2" defer></script>
 <script src="ult11-aerial.js?v=2" defer></script>
-<script src="game.js?v=206" defer></script>
+<script src="game.js?v=212" defer></script>
 <!-- ps1-mod.js removed: P3D is the only renderer, its post-FX drew into the hidden 2D canvas.
      Re-add this line to restore it: <script src="ps1-mod.js?v=1" defer></script> -->
 <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js" defer></script>
@@ -1733,10 +1755,15 @@ addEventListener('DOMContentLoaded',function(){
 <script src="ult11-fx-flame.js?v=7" defer></script>
 <script src="assets/stadium/GLTFLoader-r128.js?v=1" defer></script>
 <script src="ult11-stadium-classic.js?v=5" defer></script>
-<script src="ult11-pitch3d.js?v=130" defer></script>
-<script src="ult11-cine3.js?v=9" defer></script>
+<script src="ult11-sky.js?v=3" defer></script>
+<script src="ult11-santafede-art.js?v=8" defer></script>
+<script src="ult11-stadium-santafede.js?v=6" defer></script>
+<script src="ult11-santafede-city.js?v=8" defer></script>
+<script src="ult11-pitch3d.js?v=146" defer></script>
+<script src="ult11-cine3.js?v=10" defer></script>
+<script src="ult11-goaltitle.js?v=2" defer></script>
 <script src="ult11-sfx-samples.js?v=2" defer></script>
-<script src="ult11-camlab.js?v=6" defer></script>
+<script src="ult11-camlab.js?v=8" defer></script>
 <!-- Legacy glass formation overlay intentionally retired: the native #s-team
      screen below is the current reference-based team-management flow. -->
 <script src="ult11-custom.js?v=6" defer></script>

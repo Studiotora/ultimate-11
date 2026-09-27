@@ -62,7 +62,7 @@
     // The internal key stays 'classic-upgraded' - saved settings, the .glb file
     // name and a dozen code paths use it; 'astra' is accepted as an alias.
     stadium:(function(){
-      const OK=['oval','classic','classic-upgraded'];
+      const OK=['oval','classic','classic-upgraded','santa-fede'];
       try{
         let q=new URLSearchParams(location.search).get('stadium');
         if(q==='astra') q='classic-upgraded';
@@ -239,6 +239,12 @@
       const fogCol=new T.Color().copy(warmColor(Lt.warmth)).multiplyScalar(0.5);
       if(scene.fog) scene.fog.color.copy(fogCol);
       if(typeof updatePitchGlow==='function') updatePitchGlow();
+      if(SKY2&&SKY2.mesh.visible){
+        SKY2.setSun(sun.position);
+        // outdoors the shadow side is lit by the BLUE sky, not a warm fill
+        const zc=new T.Color(SKY2.params.mid||'#5f9ad6'); hemi.color.lerp(zc,P3D.skyTint||0);
+        if(scene.fog){ const hc=SKY2.horizon(); scene.fog.color.copy(hc).multiplyScalar(0.8); }
+      }
       // live stand darkening (Stand shade slider)
       try{
         const sh=Math.max(0.05,1-(Lt.shade!=null?Lt.shade:0.45));
@@ -425,7 +431,8 @@
       if(apronMesh) scene.remove(apronMesh);
       const aL=PLEN*2.4, aW=PWID*2.4;
       let mat;
-      if(P3D.pixelPitch!==false){ const t=makeApronTex(); t.repeat.set(aL/24,aW/24); mat=new T.MeshBasicMaterial({map:t}); }
+      if(P3D.stadium==='santa-fede'){ mat=new T.MeshLambertMaterial({color:0x696960}); }
+      else if(P3D.pixelPitch!==false){ const t=makeApronTex(); t.repeat.set(aL/24,aW/24); mat=new T.MeshBasicMaterial({map:t}); }
       else mat=new T.MeshBasicMaterial({color:0x4c8c3f});
       apronMesh=new T.Mesh(new T.PlaneGeometry(aL,aW),mat);
       apronMesh.rotation.x=-Math.PI/2; apronMesh.position.y=-0.05;
@@ -526,9 +533,15 @@
     }
     function buildPitch(tex,aspect){
       PWID=PLEN*0.641;                              // engine playable-rect aspect
-      if(pitchMesh) scene.remove(pitchMesh);
-      pitchMesh=new T.Mesh(new T.PlaneGeometry(PLEN,PWID),
-        new T.MeshBasicMaterial({map:tex}));
+      if(pitchMesh){ scene.remove(pitchMesh); pitchMesh.geometry.dispose();
+        const mats=new Set([pitchMesh.material,pitchMesh.userData.dayMat]);
+        mats.forEach(m=>{if(!m||m===_nightMat)return;if(m.map)m.map.dispose();if(m.bumpMap)m.bumpMap.dispose();m.dispose()}); }
+      const santa=P3D.stadium==='santa-fede'&&window.U11_SANTA ? U11_SANTA.makePitch(T,tex,PLEN,PWID):null;
+      if(santa) tex.dispose();
+      pitchMesh=new T.Mesh(santa?santa.geometry:new T.PlaneGeometry(PLEN,PWID),
+        santa?santa.material:new T.MeshBasicMaterial({map:tex}));
+      pitchMesh.receiveShadow=true;
+      pitchMesh.userData.surface=santa?'asphalt':'grass';
       pitchMesh.rotation.x=-Math.PI/2; pitchMesh.position.y=0; scene.add(pitchMesh);
       buildApron(); buildGoals(); placeAllStadium();
       try{ if(LOOK==='night') applyLookMaterials(); }catch(e){}
@@ -678,6 +691,10 @@
     // master bowl build — reads P3D.bowl live. Re-callable any time (Camera Lab).
     function placeAllStadium(){
       if(!pitchMesh) return;
+      if(_bowlInfo&&_bowlInfo.type==='santa-fede'){
+        const seen=new Set();bowlGroup.traverse(o=>{if(o.geometry)o.geometry.dispose();if(o.isLight&&o.shadow&&o.shadow.map)o.shadow.map.dispose();
+          if(o.material)for(const m of (Array.isArray(o.material)?o.material:[o.material])){if(seen.has(m))continue;seen.add(m);if(m.map)m.map.dispose();m.dispose()}});
+      }
       scene.remove(bowlGroup); bowlGroup=new T.Group(); scene.add(bowlGroup);
       if(window.U11_CLASSIC) window.U11_CLASSIC.dispose();
       /* ---- CLASSIC UPGRADE: Blender bowl GLB (ult11-stadium-classic.js) ----
@@ -709,6 +726,11 @@
             if(typeof say==='function') say(msg);
           }catch(_){}
         });
+      }
+      if(P3D.stadium==='santa-fede'&&window.U11_SANTA){
+        U11_SANTA.build(T,bowlGroup,PLEN,PWID); _bowlInfo={type:'santa-fede'};
+        try{ if(window.U11_SANTA_CITY) U11_SANTA_CITY.build(T,bowlGroup,PLEN,PWID); }catch(e){ console.warn('[P3D] santa city',e); }   // the neighbourhood around it (no more island)
+        try{buildExtras();}catch(e){console.warn('[P3D] Santa Fede extras',e)} return;
       }
       // ---- OVAL secondary stadium (ult11-bowl2.js) ----
       if(P3D.stadium==='oval' && window.U11_OVAL){
@@ -773,7 +795,14 @@
                  roofY:(S.roof!==false)?yB+th*0.35:null,topHL:ihl,topHW:ihw,yTop:yB};
       try{ buildExtras(); }catch(e){ console.warn('[P3D] extras failed',e); }
     }
-    P3D._rebuildBowl=function(){placeAllStadium();placeFlags();};   // Camera Lab calls this
+    P3D._rebuildBowl=function(){
+      const finish=()=>{placeFlags();try{applyLookMaterials();if(window.U11_SANTA)U11_SANTA.setTime(LOOK); if(window.U11_SANTA_CITY) U11_SANTA_CITY.setTime(LOOK);}catch(e){}};
+      if(P3D.stadium==='santa-fede'||pitchMesh&&pitchMesh.userData.surface==='asphalt'){
+        if(P3D.stadium!=='santa-fede'&&P3D.pixelPitch===false){
+          loader.load('assets/stadium/pitch.png',t=>{buildPitch(t,1.56);finish()},undefined,()=>{buildPitch(makePixelPitchTex(),1.56);finish()});
+        }else{buildPitch(makePixelPitchTex(),1.56);finish()}
+      }else{placeAllStadium();finish()}
+    };   // Camera Lab calls this
 
     /* ── SUPPORTER FLAGS in the stands ─────────────────────────────
        Big banner quads leaning against the lower tier: home crest ×3
@@ -894,6 +923,7 @@
     function placeFlags(){
       scene.remove(flagGroup); flagGroup=new T.Group(); scene.add(flagGroup);
       animFlags.length=0;
+      if(P3D.stadium==='santa-fede') return;
       const OV=(P3D.stadium==='oval'&&window.U11_OVAL&&window.U11_OVAL._last)
                ? window.U11_OVAL._last : null;
       if(P3D.stadium==='oval'&&!OV) return;   // oval selected but not built yet
@@ -1021,11 +1051,22 @@
        aura and the ball comet. Toggles: P3D.gfx.*  Rebuilt with the bowl.
        ════════════════════════════════════════════════════════════════ */
     let _bowlInfo=null, extrasGroup=null, boardGroup=null, cornerGroup=null, astraVolume=null;
-    let boardTex=null, flashPts=null, skyMesh=null;
+    let boardTex=null, flashPts=null, skyMesh=null, SKY2=null;
+    P3D.skyTint=0.6;                     // how much of the sky's blue goes into the shadow-side fill (day)
     const MASTS=[], CFLAGS=[];
     function gfxOn(k){ return !(P3D.gfx&&P3D.gfx[k]===false); }
+    /* Lamp halos.
+       NIGHTLIGHTRIG v1 (2026-09-27): the old core was rgba(255,255,255,1) out to
+       18% of the sprite radius, so every floodlight read as a flat white DISC,
+       not a fixture - and the rig adds .95 opacity x N.halo 1.6 = 1.52 over an
+       already-white core, which pushed it far past the .86 bloom threshold.
+       Measured: the whole 13wu bank sprite (0.03) sat under the threshold, so
+       bloom never fired on the lamp itself - the white we saw was a blown
+       sprite, not a lit source.
+       Now the core falls off from a small hot centre, so the additive value
+       ramps through the bloom knee and only the centre blooms. */
     function haloTex(){
-      if(!haloTex._t) haloTex._t=makeRadialTex([[0,'rgba(255,255,255,1)'],[0.18,'rgba(255,244,214,0.55)'],[0.5,'rgba(255,225,170,0.14)'],[1,'rgba(255,215,150,0)']]);
+      if(!haloTex._t) haloTex._t=makeRadialTex([[0,'rgba(255,252,242,0.95)'],[0.05,'rgba(255,247,226,0.72)'],[0.12,'rgba(255,240,209,0.34)'],[0.26,'rgba(255,231,183,0.13)'],[0.55,'rgba(255,224,168,0.05)'],[1,'rgba(255,215,150,0)']]);
       return haloTex._t;
     }
     function ringTex(){
@@ -1092,6 +1133,23 @@
       const t=new T.CanvasTexture(c); t.minFilter=T.LinearFilter; t.magFilter=T.LinearFilter;
       skyMesh=new T.Mesh(new T.SphereGeometry(900,32,16),new T.MeshBasicMaterial({map:t,side:T.BackSide,fog:false,depthWrite:false}));
       skyMesh.renderOrder=-10; scene.add(skyMesh);
+      /* REAL SKY (author 2026-09-26: daytime "like an IKEA room"). The canvas
+         dome above is a dusk-with-stars painting and was shown at noon too.
+         Day and golden hour now get ult11-sky.js (gradient, sun where the
+         shadows say it is, pixel clouds); night keeps the tuned old dome. */
+      if(window.U11Sky&&P3D.skyV2!==false&&!SKY2){
+        SKY2=U11Sky.create(T,{radius:880,encode:false,mode:'day',storageKey:'u11.sky.match'});
+        scene.add(SKY2.mesh);
+        try{ U11Sky.panel({title:'SKY LAB · MATCH',sky:SKY2,extrasTitle:'DAYLIGHT',extras:[
+          {key:'ambient',label:'Sky fill',min:0,max:1.2,step:0.01,get:()=>P3D.light.ambient,set:v=>{P3D.light.ambient=v;applyLight();}},
+          {key:'key',label:'Sun',min:0,max:3,step:0.01,get:()=>P3D.light.key,set:v=>{P3D.light.key=v;applyLight();}},
+          {key:'warmth',label:'Sun warmth',min:0,max:1,step:0.01,get:()=>P3D.light.warmth,set:v=>{P3D.light.warmth=v;applyLight();}},
+          {key:'azim',label:'Sun angle',min:0,max:6.283,step:0.01,get:()=>P3D.light.azim,set:v=>{P3D.light.azim=v;applyLight();}},
+          {key:'elev',label:'Sun height',min:0.05,max:1,step:0.01,get:()=>P3D.light.elev,set:v=>{P3D.light.elev=v;applyLight();}},
+          {key:'skyTint',label:'Cool shadows',min:0,max:1,step:0.01,get:()=>P3D.skyTint,set:v=>{P3D.skyTint=v;applyLight();}},
+          {key:'dayFill',label:'Santa fill',min:0,max:1.5,step:0.01,get:()=>window.U11_SANTA_ART?U11_SANTA_ART.dayFill:0,set:v=>{ if(window.U11_SANTA_ART) U11_SANTA_ART.setDayFill(v); }}]}); }catch(e){}
+        try{ applyLookMaterials(); applyLight(); }catch(e){}
+      }
     }
     /* crowd camera flashes — one Points draw call, per-point phase, strobe in the shader */
     function buildFlashes(spots){
@@ -1172,7 +1230,7 @@
     }
     function buildBanners(){
       if(bannerGroup){ scene.remove(bannerGroup); bannerGroup=null; }
-      if(!gfxOn('banners')||!_bowlInfo) return;
+      if(!gfxOn('banners')||!_bowlInfo||_bowlInfo.type==='santa-fede') return;
       bannerGroup=new T.Group(); scene.add(bannerGroup);
       const B=_bowlInfo;
       if(B.type==='classic'){
@@ -1365,6 +1423,7 @@
       extrasGroup=new T.Group(); scene.add(extrasGroup); MASTS.length=0;
       const B=_bowlInfo; if(!B) return;
       const spots=[];
+      if(B.type==='santa-fede'){buildFlashes([]);buildBoards();placeCornerFlags();buildBanners();return;}
       if(B.type==='classic-upgraded'&&window.U11_CLASSIC){
         spots.push(...U11_CLASSIC.flashSpots());
         if(gfxOn('floods')){
@@ -1502,7 +1561,7 @@
     function buildBoards(){
       ensureCrests();
       if(boardGroup){ scene.remove(boardGroup); boardGroup=null; }
-      if(!gfxOn('boards')||!_bowlInfo) return;
+      if(!gfxOn('boards')||!_bowlInfo||_bowlInfo.type==='santa-fede') return;
       let hl,hw,r,y0;
       if(_bowlInfo.type==='classic-upgraded'){ hl=PLEN/2+2.4; hw=PWID/2+1.5; r=2.8; y0=0; }
       else if(_bowlInfo.type==='classic'){ hl=_bowlInfo.baseHL-0.35; hw=_bowlInfo.baseHW-0.35; r=_bowlInfo.r; y0=(P3D.bowl.yOff||0)*_bowlInfo.U; }
@@ -1847,14 +1906,26 @@
        returns a generic 'SUPER SHOT' for everyone ("Named skills removed from
        screen"). That was a decision, so it is left alone - turning it back on
        is one line in getSpecial(). */
+    /* aura (2026-09-26): the CHARGE profile in ult11-cine3.js AURA_P
+       (base / thunder / flame / shadow / dragon / seraph). Only signatures
+       carry one - everyone else charges with the plain 'base' aura, the same
+       way everyone else gets the generic cyan. Before this the aura came from
+       the hashed trail, and since a super shot needs SHO 85+ (which is also
+       the "strong striker" roll) nearly every shooter got a cyan FLAME aura
+       and thunder / shadow / seraph never showed up. */
     const SIGNATURES={
-      mancuso:{ trail:'drive',  arc:'drive',  label:'DRIVE SHOT'   },
-      vella:  { trail:'nature', arc:'normal', label:'EMERALD SHOT', col:'#19e07a' },
-      frisina:{ trail:'dragon', arc:'normal', label:'DRAGON SHOT'  },
+      mancuso:{ trail:'drive',  arc:'drive',  label:'DRIVE SHOT',   aura:'base'    },
+      vella:  { trail:'nature', arc:'normal', label:'EMERALD SHOT', col:'#19e07a', aura:'base' },
+      frisina:{ trail:'dragon', arc:'normal', label:'DRAGON SHOT',  aura:'dragon'  },
       // author 2026-09-24: Germany's two - every other player is the generic cyan
-      falkner:{ trail:'flame',  arc:'normal', label:'FLAME SHOT',   col:'#ff6a1e' },
-      margus: { trail:'lightning', arc:'normal', label:'THUNDER SHOT', col:'#ffd21f' }
+      falkner:{ trail:'flame',  arc:'normal', label:'FLAME SHOT',   col:'#ff6a1e', aura:'flame' },
+      margus: { trail:'lightning', arc:'normal', label:'THUNDER SHOT', col:'#ffd21f', aura:'thunder' }
     };
+    /* which charge aura a shot plays: a signature's own, a Camera-Lab /
+       ?trail= forced style's, otherwise the plain base aura */
+    function auraKey(){ const f=_trailFx; if(!f) return null;
+      if(f.sig) return f.sig.aura||f.k;
+      return _trailForce?f.k:'base'; }
     function signatureFor(pl){
       if(!pl) return null;
       const nm=String(pl.origName||pl.name||'').toLowerCase();
@@ -1897,6 +1968,63 @@
       return {k,st,col};
     }
     let _trailFx=null, _ringT=0, _ghostT=0;
+    /* PASS GHOST (author 2026-09-26): on a cross or a long pass, 4 ghost
+       balls follow right behind the ball - see-through copies of the ball
+       itself (the pixel ball sheet), tinted soft blue-green, each one further
+       back and fainter than the last. Not a glowing trail: normal blending,
+       no bloom. Ghost i sits (i+1)*gap ball-diameters back along the path
+       the ball actually flew, so the spacing is the same at any frame rate.
+       P3D.passGhost=false turns it off; P3D.passGhostCfg tunes it. */
+    P3D.passGhost=true;
+    P3D.passGhostCfg={n:4, gap:1.5, col:'#7fe8dc', op:[0.55,0.38,0.24,0.12], shrink:0.06, longFrac:0.3};
+    const PG={spr:[], hist:[], btex:null, dtex:null, bt:null};
+    function pgDiscTex(){ if(PG.dtex) return PG.dtex;
+      const c=document.createElement('canvas'); c.width=c.height=32; const x=c.getContext('2d');
+      x.fillStyle='#fff'; x.beginPath(); x.arc(16,16,14,0,6.2832); x.fill();
+      PG.dtex=new T.CanvasTexture(c); return PG.dtex; }
+    // one texture per ghost, each frozen on a different spin frame of the ball
+    function pgBallTex(){ if(PG.btex) return PG.btex;
+      if(!ballSpriteTex||!ballSpriteTex.image||P3D.pixelBall===false) return null;
+      PG.btex=[0,1,2,3,4,5].map(i=>{ const t=ballSpriteTex.clone(); t.needsUpdate=true;
+        const f=Math.floor(i*BALL_FRAMES/6)%BALL_FRAMES;
+        if(_bUV) t.offset.set(_bUV[f][0],_bUV[f][1]);
+        else t.offset.set((f%BALL_COLS)/BALL_COLS,(BALL_ROWS-1-Math.floor(f/BALL_COLS))/BALL_ROWS);
+        return t; });
+      return PG.btex; }
+    function pgSprite(i){ if(PG.spr[i]) return PG.spr[i];
+      const m=new T.SpriteMaterial({map:pgDiscTex(),transparent:true,depthWrite:false,alphaTest:0.02,fog:false});
+      const sp=new T.Sprite(m); sp.renderOrder=4; sp.visible=false; scene.add(sp); PG.spr[i]=sp; return sp; }
+    function pgHide(){ PG.spr.forEach(s=>{ if(s) s.visible=false; }); PG.hist.length=0; PG.bt=null; }
+    // is the ball in flight on a cross / long pass right now?
+    function pgWanted(){
+      if(!P3D.passGhost||typeof G==='undefined'||!G||G._shotTrail||G._cineHold) return null;
+      const bt=(typeof ballTravel!=='undefined')?ballTravel:null;
+      if(!bt||!bt.active||!bt.physicalPass||bt.loose||G.phase!=='pass_anim') return null;
+      if(bt.kind==='cross') return bt;
+      const W=CV.width||1280; return Math.hypot(bt.tx-bt.fx,bt.ty-bt.fy)>W*P3D.passGhostCfg.longFrac?bt:null; }
+    function passGhostStep(x,y,z,d){
+      const bt=pgWanted(); if(!bt){ if(PG.bt||PG.hist.length) pgHide(); return; }
+      const C=P3D.passGhostCfg;
+      if(PG.bt!==bt){ pgHide(); PG.bt=bt; }
+      const H=PG.hist, Lp=H[H.length-1];
+      if(!Lp||Math.hypot(x-Lp.x,y-Lp.y,z-Lp.z)>d*0.05) H.push({x,y,z});
+      const span=d*C.gap*(C.n+1); let acc=0;             // keep just enough path behind the ball
+      for(let j=H.length-1;j>0;j--){ acc+=Math.hypot(H[j].x-H[j-1].x,H[j].y-H[j-1].y,H[j].z-H[j-1].z);
+        if(acc>span){ H.splice(0,j-1); break; } }
+      const bt6=pgBallTex(), sz=bt6?d/_bFill:d;
+      for(let i=0;i<C.n;i++){
+        const sp=pgSprite(i), want=d*C.gap*(i+1);
+        // walk back along the flown path until `want` distance is covered
+        let px=null,py,pz, walked=0, cx=x,cy=y,cz=z;
+        for(let j=H.length-1;j>=0;j--){ const q=H[j], seg=Math.hypot(cx-q.x,cy-q.y,cz-q.z);
+          if(walked+seg>=want){ const k=seg>0?(want-walked)/seg:0; px=cx+(q.x-cx)*k; py=cy+(q.y-cy)*k; pz=cz+(q.z-cz)*k; break; }
+          walked+=seg; cx=q.x; cy=q.y; cz=q.z; }
+        if(px===null){ sp.visible=false; continue; }          // just kicked: not that far back yet
+        const m=sp.material, tx=bt6?bt6[i%6]:pgDiscTex();
+        if(m.map!==tx){ m.map=tx; m.needsUpdate=true; }
+        m.color.set(C.col); m.opacity=C.op[i]!=null?C.op[i]:0.1;
+        const s=sz*(1-C.shrink*(i+1)); sp.scale.set(s,s,1); sp.position.set(px,py,pz); sp.visible=true;
+      } }
     /* SUPER-SHOT COLOUR (author, 2026-09-24): the generic super shot is the
        mockup's cyan. Only a signature shot (SIGNATURES: Vella's emerald, ...)
        or a Camera-Lab forced trail keeps its own colour. */
@@ -2215,16 +2343,18 @@
       } else if(name==='parry'){
         if(dove) S.push({row:D.row,cols:[5],ms:620,lat:1},{row:0,cols:[0],ms:260,lat:0});
         else     S.push({row:2,cols:[0,1,2,3],ms:300,lat:1},{row:2,cols:[5],ms:520,lat:1},{row:0,cols:[0],ms:260,lat:0});
+      } else if(name==='down'){
+        S.push({row:1,cols:[5],ms:4200,lat:1});   // down through the goal orbit
       } else if(name==='beaten'){
-        if(dove) S.push({row:D.row,cols:[5],ms:2600,lat:1});
-        else     S.push({row:1,cols:[0,1,2,3],ms:320,lat:1},{row:1,cols:[5],ms:2400,lat:1});
+        if(dove) S.push({row:D.row,cols:[5],ms:4000,lat:1});     // stays down through the goal orbit
+        else     S.push({row:1,cols:[0,1,2,3],ms:320,lat:1},{row:1,cols:[5],ms:3700,lat:1});
       }
       return S;
     }
     P3D.gkAnim=function(side,name,o){
       if(!gk6On()||(side!=='h'&&side!=='a')) return;
       o=o||{}; const now=performance.now(), cur=GKA[side];
-      if(name==='clear'){ delete GKA[side]; return; }
+      if(name==='clear'){ delete GKA[side]; GB.on=false; return; }   // also the kickoff reset after a goal
       if(name==='set'){ GKA[side]={name,t0:now,steps:[{row:0,cols:[0],ms:1,lat:0}],life:6000}; return; }
       const q=(typeof PP!=='undefined'&&PP[side])?PP[side].GK:null, Hc=CV.height||720;
       if(name==='dive'){
@@ -2342,6 +2472,18 @@
         px=Math.round(Math.hypot((A.x-B.x)/2*r.width,(A.y-B.y)/2*r.height)); }
       return {glove:g, ball:a&&a.bw?a.bw:null, frame:f, lat:a?a._lat:0, screenPx:px}; };
     function gkaHidesBall(){ return !!((GKA.h&&GKA.h._hide)||(GKA.a&&GKA.a._hide)); }
+    /* GK PROBE (debug, 2026-09-26): where the ball is DRAWN vs the keeper's
+       gloves, on screen (0..1), plus what the camera looks at. For tests. */
+    P3D.gkProbe=function(side){
+      const scr=v=>{ if(!v) return null; const p=v.clone().project(camera); return p.z<1?[+(p.x*.5+.5).toFixed(3),+(.5-p.y*.5).toFixed(3)]:null; };
+      const o=sprites[side+':GK'], bv=(ballSprite&&ballSprite.visible)?ballSprite:(ballMesh&&ballMesh.visible?ballMesh:null);
+      const g=P3D.gkaGlove(side), grip=(typeof heldKeeperGrip==='function')?heldKeeperGrip():null;
+      const _l=new T.Vector3(); camera.getWorldDirection(_l);
+      return { ball:bv?scr(bv.position):null, ballVis:!!bv, gk:o&&o.sprite?scr(o.sprite.position):null,
+        gkH:o&&o.sprite?+o.sprite.scale.y.toFixed(3):null, glove:g?scr(g.glove):null, grip:grip?scr(grip.clone()):null,
+        frame:o&&o._frame?[o._frame.row,o._frame.col]:null, gka:(GKA[side]&&GKA[side].name)||null, hide:gkaHidesBall(),
+        cine:!!cine, cineMode:cine?cine.mode:null, cam:[+camera.position.x.toFixed(1),+camera.position.y.toFixed(1),+camera.position.z.toFixed(1)],
+        look:[+_l.x.toFixed(2),+_l.y.toFixed(2),+_l.z.toFixed(2)] }; };
     P3D.gkaState=function(){ const o={}; ['h','a'].forEach(s=>{ const a=GKA[s]; if(a){ const r=_gkaAt(a,performance.now());
       o[s]={name:a.name,row:r&&r.s.row,col:r&&r.s.cols[r.idx],lat:+(a._lat||0).toFixed(2),flip:a.flip,hN:a.hN!=null?+a.hN.toFixed(2):null,hide:!!a._hide}; } }); return o; };
     // Cinematic keeper poses — [col, gridRow] on the 4x4 gk sheet (rows 2-3).
@@ -3097,6 +3239,80 @@
       _gripUp.setFromMatrixColumn(camera.matrixWorld,1);
       return _gripPos.copy(o.sprite.position).addScaledVector(_gripRight,right).addScaledVector(_gripUp,up);
     }
+    /* GOAL BALL (author 2026-09-26: "the ball ... not [in his hands] if it's a
+       goal"). An open-play goal is decided while the ball waits in front of
+       the keeper, and afGoal never moved it: the ball just sat there under
+       the GOAL banner. P3D.goalBall(scorerSide) - called by afGoal - carries
+       the drawn ball on through the goal line to where the shot was going
+       (the keeper's dive read it: GKA.bw), bulges the net, and lets it drop
+       and settle inside. Render-only: the engine resets the ball at kickoff.
+       The match camera follows it (updateCamera, shotFocus). */
+    const GB={on:false};
+    P3D.goalBall=function(ss){
+      try{
+        if(typeof goalXFor!=='function'||!ballMesh) return false;
+        const gs=Math.sign(ex2wx(goalXFor(ss)))||1, ds=ss==='h'?'a':'h';
+        const HW=PWID*0.052, GH=PWID*0.030, DEP=PWID*0.030, gl=gs*PLEN/2;
+        const d=PLEN*(P3D.spriteFrac!=null?P3D.spriteFrac:0.045)*0.21, r=d*0.5;
+        const from=ballMesh.position.clone();
+        const bw=GKA[ds]&&GKA[ds].bw;
+        const z=Math.max(-HW*0.85,Math.min(HW*0.85,bw?bw.z:from.z));
+        const y=Math.max(r,Math.min(GH*0.8,bw?bw.y:from.y));
+        const inNet=(from.x-gl)*gs>0;                       // already over the line (a cinematic put it there)
+        const to=new T.Vector3(gl+gs*DEP*0.62,y,z);
+        GB.on=true; GB.t=0; GB.from=inNet?to.clone():from; GB.to=inNet?from.clone():to; GB.gs=gs; GB.r=r;
+        GB.dur=inNet?0.01:Math.max(0.18,Math.min(0.42,from.distanceTo(to)/(PLEN*0.9)));
+        GB.hit=inNet; GB.pos=GB.from.clone(); GB.back=gl+gs*DEP*0.8; GB.t0=performance.now();
+        window.U11DBG&&U11DBG('[3D] goal ball -> net z'+z.toFixed(2)+' y'+y.toFixed(2)+(bw?' (dive read)':''));
+        return true;
+      }catch(e){ GB.on=false; return false; }
+    };
+    P3D.sideColor=function(s){ try{ return sideColor(s); }catch(e){ return null; } };
+    /* GOAL ORBIT (author 2026-09-26: "a few seconds of camera orbiting around
+       the goal net if there's a goal"). Once the ball has hit the net the
+       match camera hands over to a slow low arc round the goal mouth - net,
+       ball and the beaten keeper in frame - blended in from wherever the
+       match camera was, until the kickoff reset clears the goal ball. The
+       title sits in the lower third, so the net stays in the top of frame. */
+    const _goC=new T.Vector3(), _goP=new T.Vector3(), _goL=new T.Vector3();
+    function goalCam(dt){
+      if(!GB.on||!GB.pos||P3D.goalOrbit===false){ GB.cam=null; return false; }
+      if(GB.t<0.28) return false;
+      const gs=GB.gs, gl=gs*PLEN/2, GH=PWID*0.030;
+      if(!GB.cam){
+        const dir=new T.Vector3(); camera.getWorldDirection(dir);
+        const a0=Math.atan2(camera.position.z-GB.to.z*0.4, -gs*(camera.position.x-gl));   // where we stand now, round the goal
+        GB.cam={t0:GB.t, p0:camera.position.clone(), l0:camera.position.clone().addScaledVector(dir,20),
+                a0:Math.max(-1.25,Math.min(1.25,a0)), fov0:camera.fov};
+      }
+      const u=GB.t-GB.cam.t0, bl=Math.min(1,u/0.9), e=bl*bl*(3-2*bl);
+      const sgn=GB.cam.a0>=0?-1:1;                                   // sweep across the front of the goal
+      const a=GB.cam.a0*0.85+sgn*u*0.30;
+      const R=PWID*(0.21-0.035*Math.min(1,u/3)), h=PWID*(0.055+0.012*Math.sin(u*0.9));
+      _goC.set(gl-gs*PWID*0.012, GH*0.42, GB.to.z*0.45);             // just in front of the goal mouth, toward the ball
+      _goP.set(_goC.x-gs*Math.cos(a)*R, h, _goC.z+Math.sin(a)*R);
+      camera.position.lerpVectors(GB.cam.p0,_goP,e);
+      _goL.lerpVectors(GB.cam.l0,_goC,e);
+      camera.fov=GB.cam.fov0+(34-GB.cam.fov0)*e; camera.updateProjectionMatrix();
+      camera.lookAt(_goL);
+      return true;
+    }
+    P3D.goalBallState=function(){ return GB.on?{t:+GB.t.toFixed(2),hit:!!GB.hit,pos:GB.pos&&[+GB.pos.x.toFixed(2),+GB.pos.y.toFixed(2),+GB.pos.z.toFixed(2)]}:null; };
+    function goalBallStep(){
+      if(!GB.on) return null;
+      if(typeof G==='undefined'||!G||!G._scoringGoal||cine){ GB.on=false; return null; }
+      const now=performance.now(); GB.t=(now-GB.t0)/1000;
+      const P=GB.pos, A=GB.from, B=GB.to, r=GB.r;
+      if(GB.t<GB.dur){ const k=GB.t/GB.dur; P.lerpVectors(A,B,k); }
+      else {
+        if(!GB.hit){ GB.hit=true; try{ netHit(GB.gs,B.z,B.y); }catch(e){} }
+        // the net gives, the ball drops and bounces once on the grass inside
+        const u=GB.t-GB.dur, fall=Math.min(1,u/0.34);
+        const bounce=u>0.34?Math.abs(Math.sin(Math.min(1,(u-0.34)/0.32)*Math.PI))*r*1.6*Math.max(0,1-(u-0.34)/0.32):0;
+        P.set(B.x+(GB.back-B.x)*Math.min(1,u/0.5), Math.max(r,B.y+(r-B.y)*fall*fall)+bounce, B.z);
+      }
+      return P;
+    }
     function syncBall(){
       if(cine){ if(ballSprite) ballSprite.visible=false; return; }   // cinematic drives the ball directly
       if(typeof ball==='undefined'||!ball) return;
@@ -3149,7 +3365,9 @@
         ballWy=_lastHeldGrip.y+(ballWy-_lastHeldGrip.y)*f;
         if(f>=1)_lastHeldGrip=null;
       }else _lastHeldGrip=null;
+      const _gbp=goalBallStep(); if(_gbp){ wx=_gbp.x; ballWy=_gbp.y; wz=_gbp.z; }
       ballMesh.position.set(wx,ballWy,wz);
+      try{ passGhostStep(wx,ballWy,wz,r*2); }catch(e){}
       // ROLL: rotate about the axis perpendicular to the direction of travel
       if(_bPrevX!==null){
         const ddx=wx-_bPrevX, ddz=wz-_bPrevZ, trav=Math.hypot(ddx,ddz);
@@ -3416,10 +3634,12 @@
       try{ nightGoals(LOOK==='night'); }catch(e){}
       const night=LOOK==='night', N=P3D.night, P=(typeof envPreset==='function')?envPreset():null;
       const W=(typeof ENV!=='undefined'&&P3D.weatherFx)?P3D.weatherFx[ENV.weather]:null;
+      if(window.U11_SANTA)U11_SANTA.setTime(LOOK); if(window.U11_SANTA_CITY) U11_SANTA_CITY.setTime(LOOK);
       if(pitchMesh){
         if(!pitchMesh.userData.dayMat) pitchMesh.userData.dayMat=pitchMesh.material;
         const dm=pitchMesh.userData.dayMat;
         if(night){ _nightMat=_nightMat||makeNightPitchMat(); _nightMat.uniforms.map.value=dm.map; syncNightUniforms();
+          if(P3D.stadium==='santa-fede'&&_nightMat.uniforms.spill){_nightMat.uniforms.spill.value.forEach(v=>v.set(0,0,1,0));}
                    _nightMat.uniforms.wet.value=W?(W.wet||0):0; pitchMesh.material=_nightMat; }
         else { pitchMesh.material=dm; if(dm.color) dm.color.setScalar(W?(W.day||1):1); }      // rain darkens the day grass
       } else nightPoolsW();
@@ -3429,6 +3649,10 @@
       if(skyMesh&&skyMesh.material&&skyMesh.material.color){
         const sc=night?[N.sky,N.sky,N.sky]:(P&&P.sky?P.sky:[1,1,1]), wk=W?W.sky:1;
         skyMesh.material.color.setRGB(sc[0]*wk,sc[1]*wk,sc[2]*wk); }
+      if(SKY2){ SKY2.mesh.visible=!night; if(skyMesh) skyMesh.visible=night;
+        if(!night){ const m=LOOK==='golden'?'golden':'day'; if(SKY2.mode!==m){ SKY2.setMode(m); if(SKY2._panelRebuild) SKY2._panelRebuild(); }
+          const wx=(typeof ENV!=='undefined')?ENV.weather:'sunny'; SKY2.set({overcast:wx==='rain'?0.8:wx==='snow'?0.65:(SKY2._saved[m]&&SKY2._saved[m].overcast)||0});
+          const sv=SKY2._saved[m]&&SKY2._saved[m].soft; SKY2.set({soft:sv!=null?sv:(P3D.stadium==='santa-fede'?0.8:0)}); } }   // Santa Fede: soft clouds
       if(!night&&!P&&!W) resetNightTint();
     }
     // players, referee and ball take the pitch light where they stand
@@ -3624,11 +3848,70 @@
     function buildRig(){
       if(RIG.built) return; RIG.built=true;
       const k=PLEN/70, g=RIG.group=new T.Group(); scene.add(g);
-      const headTex=rigCanvasTex(96,64,(x,w,h)=>{ x.fillStyle='#10131a'; x.fillRect(0,0,w,h); for(let r=0;r<4;r++) for(let c=0;c<6;c++){ x.fillStyle='#fffaf0'; x.fillRect(4+c*15,4+r*15,11,11); } },true);
-      const headMat=new T.MeshBasicMaterial({map:headTex,fog:false});
-      const coneMat=new T.ShaderMaterial({uniforms:{str:{value:1}},transparent:true,depthWrite:false,blending:T.AdditiveBlending,side:T.DoubleSide,fog:false,
-        vertexShader:'varying float vy;varying vec3 vN;varying vec3 vV;void main(){vy=uv.y;vec4 mv=modelViewMatrix*vec4(position,1.);vN=normalize(normalMatrix*normal);vV=normalize(-mv.xyz);gl_Position=projectionMatrix*mv;}',
-        fragmentShader:'uniform float str;varying float vy;varying vec3 vN;varying vec3 vV;void main(){float edge=pow(abs(dot(vN,vV)),1.3);float along=(.35+.65*vy)*smoothstep(.02,.3,vy);gl_FragColor=vec4(vec3(1.,.95,.85)*edge*along*.36*str,1.);}'});
+      /* Bank head. v1: the lamps were #fffaf0 on a #10131a chassis at full
+         emissive strength, so the 11px lamp cells all summed to ~1.0 and the
+         whole head blew into one white rectangle - the head read as a bar of
+         light, not a fixture. Cells are now warm-white but under the bloom
+         knee, the gaps stay visibly dark, and a dim steel gradient replaces
+         the flat #10131a so the chassis has some form. */
+      const headTex=rigCanvasTex(96,64,(x,w,h)=>{
+        const bg=x.createLinearGradient(0,0,0,h);
+        bg.addColorStop(0,'#2a3040'); bg.addColorStop(1,'#141821');
+        x.fillStyle=bg; x.fillRect(0,0,w,h);
+        for(let r=0;r<4;r++) for(let c=0;c<6;c++){
+          const lx=4+c*15, ly=4+r*15;
+          const lg=x.createLinearGradient(lx,ly,lx,ly+11);
+          lg.addColorStop(0,'#f3ecd8'); lg.addColorStop(1,'#c9bd9c');
+          x.fillStyle=lg; x.fillRect(lx,ly,11,11);
+        }
+      },true);
+      /* Emissive ON (MeshBasic ignores scene lights, so the head stays readable
+         at night) but scaled well under the .86 bloom threshold - the halo and
+         the cone now carry the glow, the head only carries the shape. */
+      const headMat=new T.MeshBasicMaterial({map:headTex,color:0xb9ae94,fog:false});
+      /* NIGHTLIGHTRIG v1 (2026-09-27) - real light shafts.
+         The old shader was `pow(abs(dot(N,V)),1.3)`, a flat fresnel rim term.
+         Measured against the broadcast + hero captures: that makes the shaft
+         BRIGHTEST exactly when the camera looks along the cone wall and
+         BLACK when it looks down the axis - i.e. from the hero/broadcast
+         camera the beams were invisible, and the floodlights did not motivate
+         the light at all. On top of that the whole cone was multiplied by .36
+         and then pushed through a .86-threshold bloom, so nothing survived.
+
+         This is now an approximate single-scatter integral instead of a rim:
+           - path length through the cone  -> soft edge ON the silhouette
+           - 1/r falloff down the beam       -> hot at the lamp, gone at the grass
+           - 3D value noise                  -> drifting dust striations (haze
+                                              breakup, so it is not a clean gel)
+           - height gate on the grass end   -> kills the hard cone rim on the turf
+         Tuned so a beam reads clearly at 1920x1080 without touching the bloom. */
+      const coneMat=new T.ShaderMaterial({uniforms:{str:{value:1},time:{value:0},tint:{value:new T.Color(1.0,0.95,0.85)}},transparent:true,depthWrite:false,blending:T.AdditiveBlending,side:T.DoubleSide,fog:false,
+        vertexShader:['varying float vy;varying vec3 vN;varying vec3 vV;varying vec3 vW;',
+          'void main(){vy=uv.y;vec4 mv=modelViewMatrix*vec4(position,1.);',
+          'vN=normalize(normalMatrix*normal);vV=normalize(-mv.xyz);vW=(modelMatrix*vec4(position,1.)).xyz;',
+          'gl_Position=projectionMatrix*mv;}'].join(String.fromCharCode(10)),
+        fragmentShader:['varying float vy;varying vec3 vN;varying vec3 vV;varying vec3 vW;',
+          'uniform float str;uniform float time;uniform vec3 tint;',
+          // cheap 3D hash noise - the striations that make it read as air
+          'float h(vec3 p){return fract(sin(dot(p,vec3(127.1,311.7,74.7)))*43758.5453);}',
+          'float n3(vec3 p){vec3 i=floor(p),f=fract(p);f=f*f*(3.-2.*f);',
+          ' float a=mix(mix(h(i),h(i+vec3(1,0,0)),f.x),mix(h(i+vec3(0,1,0)),h(i+vec3(1,1,0)),f.x),f.y);',
+          ' float b=mix(mix(h(i+vec3(0,0,1)),h(i+vec3(1,0,1)),f.x),mix(h(i+vec3(0,1,1)),h(i+vec3(1,1,1)),f.x),f.y);',
+          ' return mix(a,b,f.z);}',
+          'void main(){',
+          // 1/r: brightest at the lamp head, dies out toward the grass
+          ' float fall=1.0/(1.0+vy*7.0);',
+          // body mask - no hard rim where the cone meets the turf
+          ' float body=smoothstep(0.02,0.30,vy);',
+          // grazing = thin air = dimmer, face-on = thick = brighter
+          ' float graze=1.0-abs(dot(vN,vV));',
+          ' float thick=mix(0.34,1.0,pow(graze,1.6));',
+          // drifting striations
+          ' float d=n3(vW*0.09+vec3(0.0,-time*0.09,time*0.04));',
+          ' float d2=n3(vW*0.26+vec3(time*0.05,-time*0.16,0.0));',
+          ' float haze=0.52+0.30*d+0.18*d2;',
+          ' float a=fall*body*thick*haze*0.40*str;',
+          ' gl_FragColor=vec4(tint*a,1.0);}'].join(String.fromCharCode(10))});
       RIG.coneMat=coneMat;
       const dustP=[];
       RIG_BANKS.forEach(([bk,tg])=>{
@@ -3715,7 +3998,7 @@
       syncNightUniforms();
     }
     function rigFrame(now,dt){
-      const on=RIG.on&&LOOK==='night';
+      const on=RIG.on&&LOOK==='night'&&P3D.stadium!=='santa-fede';
       if(!on){ if(RIG._tiltSet&&hTilt&&vTilt){ RIG._tiltSet=false; hTilt.uniforms.r.value=0.5; vTilt.uniforms.r.value=0.5; try{ applyFx(); }catch(e){} }
         if(RIG.group) RIG.group.visible=false; if(RIG._astraOff){ RIG._astraOff=false; P3D.gfx.volRays=RIG._ar; P3D.gfx.volPools=RIG._ap; P3D.gfx.volDust=RIG._ad; } return; }
       if(!RIG.built){ buildRig(); rigSyncPools(); }
@@ -3724,6 +4007,7 @@
       if(!RIG._astraOff){ RIG._astraOff=true; RIG._ar=P3D.gfx.volRays; RIG._ap=P3D.gfx.volPools; RIG._ad=P3D.gfx.volDust; P3D.gfx.volRays=false; P3D.gfx.volPools=false; P3D.gfx.volDust=false; }
       const t=now*0.001; RIG.t=t;
       const W=P3D.weatherFx[ENV.weather]; RIG.coneMat.uniforms.str.value=W?1.35:1;          // beams read stronger in rain/snow
+      RIG.coneMat.uniforms.time.value=t;                                                    // drifting dust striations (v1)
       if(RIG.dust) RIG.dust.material.uniforms.time.value=t;
       if(RIG.nearDust) RIG.nearDust.material.uniforms.time.value=t;
       if(RIG.mists) RIG.mists.forEach((m,i)=>{ m.material.map.offset.x=t*0.004*(i%2?1:-1); m.material.map.offset.y=t*0.002; });
@@ -3834,7 +4118,7 @@
          end. A slow orbit inside the bowl instead - both goals, all four
          stands, the roof rig - until KICK-OFF is pressed. Starts behind the
          near touchline so the cut to the match camera is short. */
-      const k=PLEN/70, a=Math.PI*0.5+_hk.t*0.14, rx=PLEN*0.52, rz=PWID*0.62;
+      const k=PLEN/70, a=Math.PI*0.5+_hk.t*0.14, _sf=P3D.stadium==='santa-fede', rx=PLEN*(_sf?0.40:0.52), rz=PWID*(_sf?0.44:0.62);   // the campetto is walled in close
       const e=Math.min(1,_hk.t/1.2);
       camera.fov=36; camera.updateProjectionMatrix();
       // low, looking ACROSS the pitch at the opposite stand + roof rig
@@ -4004,6 +4288,7 @@
     /* ════════ CAMERA (broadcast, follows carrier, constrained) ════════ */
     const orbit={theta:0, phi:0.55};
     const camFocus={x:0,z:0,dist:P3D.cam.dist};
+    let _camSnap=false;                          // next updateCamera jumps to its target (after a cinematic)
     // optional light user look (kept tiny so HD-2D never breaks)
     let drag=false,lx=0,ly=0;
     gl.style.pointerEvents='none';   // canvas itself ignores; we listen on #C's parent for drag
@@ -4044,18 +4329,19 @@
          edge of the frame. */
       const _g=(typeof G!=='undefined')?G:null;
       const shotFocus=!!(_g&&(_g._shotTrail||((_g.phase==='duel'||_g.phase==='duel_result')&&_g.D&&_g.D.isShot)||
-                               ((GKA.h&&GKA.h.name!=='throw')||(GKA.a&&GKA.a.name!=='throw'))));
+                               ((GKA.h&&GKA.h.name!=='throw')||(GKA.a&&GKA.a.name!=='throw'))||GB.on));
       let kMul=1;
       if(shotFocus && typeof ball!=='undefined'&&ball){
         let bx=ball.x, by=ball.y;
         if(_g._shotTrail&&typeof ballTravel!=='undefined'&&ballTravel&&ballTravel.active&&!ballTravel.loose){
           bx+=(ballTravel.tx-bx)*0.45; by+=(ballTravel.ty-by)*0.45; }          // lead toward the goal
         fx=ex2wx(bx); fz=ey2wz(by); cx01=bx/(CV.width||1280); kMul=2.5;
+        if(GB.on&&GB.pos){ fx=GB.pos.x; fz=GB.pos.z; cx01=wx2ex(fx)/(CV.width||1280); }   // a goal: stay on the ball in the net
       } else if(passing && typeof ball!=='undefined'&&ball){
         fx=ex2wx(ball.x); fz=ey2wz(ball.y); cx01=ball.x/(CV.width||1280);
       } else if(cp){ fx=ex2wx(cp.x); fz=ey2wz(cp.y); cx01=cp.x/(CV.width||1280); }
       else if(typeof ball!=='undefined'&&ball){ fx=ex2wx(ball.x); fz=ey2wz(ball.y); cx01=ball.x/(CV.width||1280); }
-      const k=Math.min(1,dt*C.followLerp*kMul);
+      const k=_camSnap?1:Math.min(1,dt*C.followLerp*kMul); _camSnap=false;
       camFocus.x+=(fx-camFocus.x)*k;
       camFocus.z+=(fz*C.zFollow-camFocus.z)*k;     // partial Z so view stays sideways
       // AUTO-ZOOM near the SOUTH touchline: as the carrier approaches the near
@@ -4734,7 +5020,7 @@
       const o={mode:cine.mode,t:+cine.t.toFixed(2),ft:+cine.ft.toFixed(2),
                superRow:!!cine._superRow,flip:!!cine._shFlip,holdMs:(cine.o&&cine.o.holdMs)||null,
                windupIsTeam:cineWindupIsTeam,
-               trail:(_trailFx?_trailFx.k:null), trailCol:(_trailFx?_trailFx.col:null),
+               trail:(_trailFx?_trailFx.k:null), trailCol:(_trailFx?_trailFx.col:null), aura:auraKey(),
                trailForced:_trailForce, ribbonPts:(RIBS[0]?RIBS[0].pts.length:0),
                arc:(cine.arc||'normal'), strands:(_trailFx&&_trailFx.st?_trailFx.st.strands:null),
                scorchPts:(SCORCH?SCORCH.pts.length:0), scorchVis:!!(SCORCH&&SCORCH.ch.visible),
@@ -4779,8 +5065,15 @@
                if(r){ og.sprite.material.map=r.map; og.tex=r.map; og.sil.material.map=r.map;
                       r.map.needsUpdate=true; } }}
       clearTrail();
+      const _ds=cine.o.ds, _goal=!!cine.isGoal;
       const cb=cine.o.onDone; cine=null;
+      /* back to the match camera (2026-09-26): cut straight to the keeper /
+         ball instead of panning over from where the camera was before the
+         cinematic (it swept across from the shooter for ~2 s) */
+      _camSnap=true;
       if(cb)cb();
+      // a cinematic goal: the keeper stays down, beaten, not stood up at once
+      if(_goal) try{ P3D.gkAnim(_ds,'down',{ty:(typeof ball!=='undefined'&&ball)?ball.y:null}); }catch(e){}
     }
     /* ════════ SUPER-SHOT CINEMATIC v2 — behind-the-shooter flow ════════
        Phase-driven from game.js:
@@ -5067,7 +5360,7 @@
         if(c.mode==='wait')bz=4+Math.sin(c.t*6)*0.8;  // hover short of the keeper
       }else if(c.mode==='out'){
         c.ot+=dt;
-        const gt=Math.min(1,c.ot/cineOutDur(c));
+        const gt=Math.min(1,c.ot/cineOutDur(c)); c._gt=gt;
         // dive first — the ball meets his gloves (decided: carry on from the in-flight dive)
         gkOutcome(c,c.decided?(c._diveP||0)+(1-(c._diveP||0))*gt:gt);
         if(c.isGoal){
@@ -5100,9 +5393,21 @@
       }
       if(typeof ball!=='undefined'&&ball){ball.x=bx;ball.y=by;ball.bz=0;}
       const W2=(CV.width||1280);
-      const bwx=ex2wx(Math.min(Math.max(bx,0.02*W2),0.98*W2)),bwz=ey2wz(by);
+      let bwx=ex2wx(Math.min(Math.max(bx,0.02*W2),0.98*W2)),bwz=ey2wz(by);
       const launchLift=c.mode==='hold'?(c.jumpLift||0):c.mode==='fly'?(c.jumpLift||0)*Math.pow(1-Math.min(1,c.ft),2):0;
-      const bwy=Math.max(d*.5,0.05+bz*.09)+launchLift;
+      let bwy=Math.max(d*.5,0.05+bz*.09)+launchLift;
+      /* SAVE: INTO HIS HANDS (author 2026-09-26: "the ball was never at the
+         height of the hands" - it settled at his stomach). The save target
+         above is his spot at a guessed height; now the ball is steered onto
+         the reaching GLOVE of the dive frame actually on screen (GKA_GLOVE,
+         the same measured art points open play uses) and kept a hair in
+         front of the sprite so the glove is over it, not behind it. */
+      if(c.mode==='out'&&!c.isGoal){ try{
+        const gl=P3D.gkaGlove(c.o.ds);
+        if(gl&&gl.glove){ const k=Math.pow(Math.min(1,(c._gt||0)*1.15),1.5);
+          _v3.subVectors(camera.position,gl.glove).normalize().multiplyScalar(d*0.35);
+          bwx+=(gl.glove.x+_v3.x-bwx)*k; bwy+=(gl.glove.y+_v3.y-bwy)*k; bwz+=(gl.glove.z+_v3.z-bwz)*k;
+          c._onGlove=k; } }catch(e){} }
       ballMesh.scale.setScalar(d); ballMesh.position.set(bwx,bwy,bwz);
       if(c.mode==='fly'&&c.style){
         if(c.style.kind==='curve') ballMesh.rotateOnWorldAxis(_AY,dt*26);                 // side-spin
@@ -5211,7 +5516,7 @@
           ensureHoldFx();
           _ok=U11_CINE3.holdFrame(c,rdt,{T,scene,camera,renderer,gl,g:sprites[c.o.as+':'+c.o.sk],
             hh:_c3hh(),swx,swz,gwx,gwz,
-            col:superCol(),aura:(_trailFx&&_trailFx.k)||null,cv:fxCv,ctx:fxCtx,proj:projectToScreen,
+            col:superCol(),aura:auraKey(),cv:fxCv,ctx:fxCtx,proj:projectToScreen,
             bloom:bloomPass,fxBase:P3D.fx,ballMesh});
         }catch(e){ console.error('[C3] hold',e); window.U11DBG&&U11DBG('[C3] hold error: '+e.message); U11_CINE3.on=false; }
         if(_ok){ _c3view(); applyShake(rdt||0); return; }
@@ -5407,7 +5712,7 @@
       monitorQuality(now);
       syncSheets(); watchActions();
       if(PEN){ penCamera(); camera.updateMatrixWorld(); }
-      else if(!cine){ if(!scnCam(dt)&&!heroKickCam(dt)) updateCamera(dt); camera.updateMatrixWorld(); }
+      else if(!cine){ if(!scnCam(dt)&&!goalCam(dt)&&!heroKickCam(dt)) updateCamera(dt); camera.updateMatrixWorld(); }
       syncPlayers();
       if(PEN) try{ penApply(); }catch(e){ console.error('[P3D] pen',e); }
       else if(!cine) try{ gkaAlign(); }catch(e){}
@@ -5421,6 +5726,7 @@
       }
       tickTrail(dt);
       try{ tickNets(dt); }catch(e){}
+      if(SKY2&&SKY2.mesh.visible) SKY2.update(performance.now()/1000,camera.position);
       try{ scorchUpdate(dt,now); }catch(e){}
       try{ tickTele(); }catch(e){}
       try{ tickGfx(dt,now); }catch(e){}
@@ -5580,7 +5886,13 @@
     
       if(!composer) return;
       if(bloomPass){ bloomPass.strength=P3D.fx.bloom; bloomPass.radius=P3D.fx.bloomRadius; bloomPass.threshold=P3D.fx.bloomThresh; }
-      if(hTilt&&vTilt){ const b=P3D.fx.tilt*0.0035; hTilt.uniforms.h.value=b; vTilt.uniforms.v.value=b; }
+      if(hTilt&&vTilt){
+        /* SANTA FEDE DEPTH OF FIELD (author 2026-09-26: "soft clouds and depth of
+           field, it will look premium"): the focus band drops onto the court and
+           the blur is stronger, so the terraced city and the valley go soft. */
+        const sfd=P3D.stadium==='santa-fede'&&LOOK!=='night';
+        const b=P3D.fx.tilt*0.0035*(sfd?(P3D.santaDof||1.25):1); hTilt.uniforms.h.value=b; vTilt.uniforms.v.value=b;
+        if(!(RIG&&RIG._tiltSet)){ const fr=sfd?0.42:0.5; hTilt.uniforms.r.value=fr; vTilt.uniforms.r.value=fr; } }
       if(vignettePass){ vignettePass.uniforms.offset.value=1.0; vignettePass.uniforms.darkness.value=1.0+P3D.fx.vignette*0.9; }
       if(gradePass){ const g=gradePass.uniforms;
         g.sat.value=P3D.fx.sat; g.contrast.value=P3D.fx.contrast;

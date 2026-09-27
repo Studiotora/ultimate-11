@@ -125,7 +125,9 @@ const STYLE2AURA={lightning:'thunder',flame:'flame',tiger:'flame',shadow:'shadow
 C3.forceAura=null;                        // e.g. U11_CINE3.forceAura='seraph'
 C3.auraFor=function(k){ return STYLE2AURA[k]||'base'; };
 let AP=AURA_P.base, AID='base', auraD=null, AX=null;
-function setAura(k){ AID=C3.forceAura||C3.auraFor(k); AP=AURA_P[AID]||AURA_P.base; }
+// k is an aura id (a signature's own, from pitch3d) or a trail style (forced trail)
+function setAura(k){ AID=C3.forceAura||(AURA_P[k]?k:C3.auraFor(k)); AP=AURA_P[AID]||AURA_P.base; }
+Object.defineProperty(C3,'aura',{get:()=>AID,configurable:true});   // the aura of the last charge
 const rn=(a,b)=>a+Math.random()*(b-a);
 
 const PILLAR_FS=NOISE+`uniform float time,amt,mode; uniform vec3 col; varying vec2 vUv;

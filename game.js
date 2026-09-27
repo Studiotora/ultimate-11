@@ -69,8 +69,8 @@ const T={
     {id:108,name:'M.Goethe',pos:'LW',spd:84,pwr:80,tec:82,def:56,rar:2},
     {id:109,name:'K.H.Falkner',pos:'ST',spd:86,pwr:96,tec:84,def:50,rar:2,jersey:11},
     {id:110,name:'Margus',pos:'RW',spd:84,pwr:82,tec:80,def:54,rar:1,jersey:9},
-    {id:111,name:'Meyer',pos:'CB1',spd:68,pwr:78,tec:66,def:82,rar:1,jersey:4},
-  ],reserves:[111]},
+    {id:111,name:'Meyer',pos:'CM3',spd:68,pwr:78,tec:66,def:82,rar:1,jersey:4},   // author 2026-09-26: starts as the holding midfielder - Germany had no CM3 and played away games with 10
+  ]},
   brazil:{name:'Brazil',flag:'🇧🇷',p:[
     {id:1101,name:'Salinas',pos:'GK',spd:68,pwr:74,tec:72,def:94,rar:2,jersey:1,sav:90,ref:82},
     {id:1102,name:'R.Carolus',pos:'LB',spd:78,pwr:72,tec:74,def:80,rar:1,jersey:2},
@@ -494,6 +494,12 @@ const STAR_STAT_OVERRIDES={
   'S.Aoi':         {spd:78,dri:84,pas:80,sho:84,def:68,pow:74},
   'K.H.Schneider': {spd:87,dri:84,pas:76,sho:96,def:52,pow:95},
   'K.H.Falkner'  : {spd:87,dri:84,pas:76,sho:96,def:52,pow:95},
+  // author 2026-09-26: Germany's other super shooters. Falkner stays the top
+  // striker (SHO 96); these three are the technical ones - SHO 86-88 unlocks
+  // the super shot (85+), high DRI/PAS on the technical side.
+  'Shester'      : {spd:80,dri:88,pas:90,sho:86,def:64,pow:82},
+  'M.Goethe'     : {spd:85,dri:89,pas:82,sho:86,def:56,pow:80},
+  'Margus'       : {spd:85,dri:86,pas:80,sho:88,def:54,pow:83},
   'Natureza':      {spd:94,dri:98,pas:90,sho:96,def:52,pow:93},
   'Rivaul':        {spd:84,dri:94,pas:95,sho:90,def:60,pow:86},
   'C.Santana':     {spd:85,dri:89,pas:80,sho:92,def:54,pow:90},
@@ -578,6 +584,7 @@ function awayFormationFor(key,team){
   return opts[Math.floor(h/4294967296*opts.length)];
 }
 function formationCoordsFor(side,key){
+  if(window.U11_SANTA&&U11_SANTA.isFive())return U11_SANTA.coords[key]||BF[key];
   const fm=(side==='h'?(FORMATIONS[activeHomeFormation]||FORMATIONS['4-3-3']):(FORMATIONS[activeAwayFormation]||FORMATIONS['4-3-3'])).coords;
   return fm[key]||BF[key];
 }
@@ -587,7 +594,7 @@ function zo(k){return(POS.find(p=>p.k===k)||{z:'mid'}).z;}
 function aiRole(side,k){
   const name=side==='h'?activeHomeFormation:activeAwayFormation;
   const fm=FORMATIONS[name]||FORMATIONS['4-3-3'];
-  const label=(fm.labels&&fm.labels[k])||k;
+  const label=(window.U11_SANTA&&U11_SANTA.isFive()?U11_SANTA.labels[k]:null)||(fm.labels&&fm.labels[k])||k;
   if(k==='GK') return 'keeper';
   if(/^(L?CB|RCB)$/.test(label)) return 'centreback';
   if(/^[LR]WB$/.test(label)) return 'wingback';
@@ -1320,7 +1327,7 @@ function startGame(){
   setTeamEmblem(document.getElementById('h-flag-hud'), selHome, HT.flag);
   setTeamEmblem(document.getElementById('a-flag-hud'), selAway, AT.flag);
   UELoader.run('PREPARING THE MATCH',[
-    {name:'Loading the starting elevens',load:progress=>UELoader.portraits([...Object.values(hSq),...Object.values(aSq)],progress)},
+    {name:window.P3D&&P3D.stadium==='santa-fede'?'Loading the starting five':'Loading the starting elevens',load:progress=>UELoader.portraits([...Object.values(hSq),...Object.values(aSq)],progress)},
     {name:'Warming up the stadium',load:()=>new Promise(resolve=>{
       if(window.P3D&&P3D.ready){resolve();return;}
       const since=Date.now();
@@ -5498,7 +5505,7 @@ function launchShot(fx,fy,gx,gy,side,ak,dur){
     const ty=clamp(gy+_off,H*0.5-_m*0.85,H*0.5+_m*0.85);
     G._shotTrail=true;
     animateBallTo(fx,fy,gx,ty,()=>{G._shotTrail=false;G.phase='idle';opDuel(true,ak);},dur,true);
-    try{ const a=shotArrival(ballTravel); gkAnim(_ds,'dive',{ty,bz:a.bz,ms:a.ms}); }catch(e){}
+    try{ const a=shotArrival(ballTravel); gkAnim(_ds,'dive',{tx:gx,ty,bz:a.bz,ms:a.ms}); }catch(e){}
     return;
   }
   const blk=sq(side==='h'?'a':'h')[b.key];
@@ -6502,6 +6509,7 @@ CV.addEventListener('touchstart',e=>{
 })();
 
 function isOffside(side,receiverKey){
+  if(G.matchSize===5)return false;
   const defSide=side==='h'?'a':'h';
   const receiver=PP[side][receiverKey], carrier=PP[side][G.ck]; if(!receiver||!carrier) return false;
   const dir=dirFor(side);
@@ -9721,19 +9729,36 @@ function afGoal(scorer,s,gen){
   G._scoringGoal=true;
   G._pendingStun=null;                             // nobody stays stunned through a goal
   G.goalGen++; // invalidate any other queued afGoal for this sequence
+  const _gen2=G.goalGen;
   try{ const _t=(document.getElementById('htime')||{}).textContent||'', _m=/(\d+):(\d+)/.exec(_t);
        const _min=_m?Math.max(1,(+_m[1])+((+_m[2])>0?1:0)):0;
        (G.goals||(G.goals=[])).push({s:s,name:scorer?scorer.name:'',min:_min}); }catch(e){}
   closeDuel(); G.phase='idle'; G.pressing=false;
   const pb=document.getElementById('pressBtn');if(pb){pb.classList.remove('active');pb.textContent='PRESS';} if(s==='h')G.hG++; else G.aG++; if(s==='h')G.mom=Math.min(100,G.mom+16); else G.mom=Math.max(0,G.mom-16); updH();
   const tn=(s==='h'?HT:AT)?.name||''; document.getElementById('gscr').textContent=(scorer?scorer.name.toUpperCase():'')+' — '+tn;
-  const gf=document.getElementById('gfl'); gf.classList.remove('show'); void gf.offsetWidth; gf.classList.add('show'); G_moveTarget=null;G_laneTarget=null;
-  showReferee('GOAL!');
-  goalZoom();
-  shakeScreen(12, 200);
+  const gf=document.getElementById('gfl'); gf.classList.remove('show'); G_moveTarget=null;G_laneTarget=null;
+  /* GOAL BALL (2026-09-26): the 3D ball carries on into the net first
+     (P3D.goalBall), so the banner waits until it has hit the net - it used
+     to cover the goal the moment the duel ended, ball and keeper unseen. */
+  let _gb=false; try{ _gb=!!(window.P3D&&P3D.on&&P3D.goalBall&&P3D.goalBall(s)); }catch(e){}
+  const _gbDelay=_gb?900:0;
+  setTimeout(()=>{ if(G.goalGen!==_gen2) return; goalZoom(); shakeScreen(12, 200); },_gb?330:0);
   // (removed impactText('⚽ GOAL!!!') — it stacked a 2nd big "GOAL" over the goal
   //  banner's title. showGoalBanner already shows GOAL! + net art + scorer/team.)
-  showGoalBanner(scorer,s);
+  /* ONE goal title (author 2026-09-26: "remove the double goal title ... 10
+     times better"): ult11-goaltitle.js, in the lower third so the orbit
+     camera around the net stays in view. The old #gfl + #goal-banner +
+     referee card stack is only the fallback when that module is missing. */
+  setTimeout(()=>{ if(G.goalGen!==_gen2) return;
+    if(window.U11GoalTitle){
+      let min=''; try{ const gl=G.goals&&G.goals[G.goals.length-1]; if(gl&&gl.min) min=gl.min; }catch(e){}
+      const code=t=>String((t&&(t.short||t.code||t.name))||'').replace(/[^A-Za-z]/g,'').slice(0,3).toUpperCase();
+      let col=null; try{ col=window.P3D&&P3D.sideColor&&P3D.sideColor(s); }catch(e){}
+      let chain=[]; try{ chain=scorer?_portraitChainFor(scorer,s):[]; }catch(e){}
+      U11GoalTitle.show({name:scorer?(scorer.name||''):'', team:tn, side:s, col:col||(s==='h'?'#1e72dc':'#c22020'),
+        minute:min, score:[G.hG,G.aG], codes:[code(HT)||'HOM',code(AT)||'AWY'], portrait:chain, dur:_gb?2900:2100});
+    } else { void gf.offsetWidth; gf.classList.add('show'); showReferee('GOAL!'); showGoalBanner(scorer,s); }
+  },_gbDelay);
   setTimeout(()=>{
     Object.values(hSq).forEach(p=>{if(p)p.cooldownUntil=0;}); Object.values(aSq).forEach(p=>{if(p)p.cooldownUntil=0;});
     iPos(); gkAnim('h','clear'); gkAnim('a','clear'); const ns=s==='h'?'a':'h',q=sq(ns),kk=['CM2','CM1','ST'].find(k=>q[k])||Object.keys(q).find(k=>q[k]);
@@ -9742,7 +9767,7 @@ function afGoal(scorer,s,gen){
     ball.x=W/2;ball.y=H/2;ball.tx=W/2;ball.ty=H/2; updP(); say(((ns==='h'?HT:AT)?.name||'Team')+' to kick off.');
     showReferee('KICK OFF');
     setTimeout(()=>{ G._scoringGoal=false; armKickoff(ns); },1000);
-  },2100);
+  },(_gb?2900:2100)+_gbDelay);             // with the goal ball: ~3 s of orbit round the net
 }
 
 function afSave(ds){
@@ -10040,8 +10065,8 @@ function pzBuildHeader(){
   document.getElementById('pz-time').textContent=document.getElementById('htime').textContent;
   setTeamEmblem(document.getElementById('pz-hcrest'),selHome,HT?.flag||'🏳');
   setTeamEmblem(document.getElementById('pz-acrest'),selAway,AT?.flag||'🏳');
-  document.getElementById('pz-hfm').textContent=activeHomeFormation||'4-3-3';
-  const _afm=document.getElementById('pz-afm'); if(_afm)_afm.textContent=activeAwayFormation||'4-3-3';
+  document.getElementById('pz-hfm').textContent=G.matchSize===5?'1-2-1 · 5 v 5':activeHomeFormation||'4-3-3';
+  const _afm=document.getElementById('pz-afm'); if(_afm)_afm.textContent=G.matchSize===5?'1-2-1 · 5 v 5':activeAwayFormation||'4-3-3';
 }
 
 /* ---- one team's square pitch + bench, built from hSq/aSq ---- */
@@ -10051,7 +10076,7 @@ function pzBuildSide(side){
   const teamKey = side==='h' ? selHome : selAway;
   const mirrored = side==='a';
   const fmKey = side==='h' ? activeHomeFormation : activeAwayFormation;
-  const coords = (FORMATIONS[fmKey]||FORMATIONS['4-3-3']).coords;
+  const coords = G.matchSize===5&&window.U11_SANTA?U11_SANTA.coords:(FORMATIONS[fmKey]||FORMATIONS['4-3-3']).coords;
   const cardsEl = document.getElementById(side==='h'?'pz-home-cards':'pz-away-cards');
   cardsEl.innerHTML='';
   Object.keys(coords).forEach(slot=>{
@@ -10175,6 +10200,7 @@ function pzCloseSquadEditor(){
       }
     });
     hSq=fresh;
+    if(window.U11_SANTA&&U11_SANTA.isFive())U11_SANTA.trimSquad(hSq);
   }
   G_teamEditorOrigin=null;
   const _uts=document.getElementById('uts'); if(_uts)_uts.style.display='none';
@@ -10929,8 +10955,10 @@ function secondHalf(){
 }
 
 function initMatch(){
+  const matchSize=window.P3D&&P3D.stadium==='santa-fede'&&window.U11_SANTA?5:11;
+  if(matchSize===5){U11_SANTA.trimSquad(hSq);U11_SANTA.trimSquad(aSq);}
   Object.values(hSq).forEach(p=>{if(p){p.spirit=(p.pos==="GK"?2000:1500);p.cooldownUntil=0;}});Object.values(aSq).forEach(p=>{if(p){p.spirit=(p.pos==="GK"?2000:1500);p.cooldownUntil=0;}});
-  G=makeG();
+  G=makeG(); G.matchSize=matchSize;
   Object.values(hSq).forEach(p=>{if(p){p._yc=0;p._sent=false;}});Object.values(aSq).forEach(p=>{if(p){p._yc=0;p._sent=false;}});
   if(typeof updateRedBadges==='function')updateRedBadges();
   preloadSquadImages(); // start loading all player face images
