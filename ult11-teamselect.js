@@ -85,14 +85,20 @@ function flagSpec(key){ if(FLAGS[key]) return FLAGS[key]; const p=palette(key); 
 function flagInner(f){ return Array.isArray(f)?stripes(f):(DRAW[f]||''); }
 function flagSVG(f){ return '<svg class="fl" viewBox="0 0 90 60" preserveAspectRatio="none">'+flagInner(f)+'</svg>'; }
 function flagBG(f){ return 'url("data:image/svg+xml;utf8,'+encodeURIComponent('<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 90 60" preserveAspectRatio="none">'+flagInner(f)+'</svg>')+'") center/100% 100%'; }
-function shirtSVG(key){ const p=palette(key), body=p[0], trim=p[1], num=lum(body)>0.6?'#1b1b1b':'#ffffff';
+/* the shirt icon wears the SAME kit as the 2D sprite (2026-09-29): shirt / collar / sleeve
+   cuffs from art/pixel_players/pipeline2d/kits2d.json; clubs keep their own colours */
+const KIT2D={"japan":["#1b2c6b","#d0202c","#3f78e0"],"italy":["#1d44c4","#f4f4f2","#f4f4f2"],"germany":["#f4f4f2","#1c1c22","#1c1c22"],"brazil":["#f7d117","#1a8a3a","#1a8a3a"],"spain":["#c8102e","#f2c200","#f2c200"],"france":["#1d3f8f","#c8102e","#f4f4f2"],"ireland":["#169b62","#ff8a1a","#f4f4f2"],"scotland":["#1c2a5a","#f4f4f2","#f4f4f2"],"belgium":["#d0102a","#1c1c22","#f2c200"],"austria":["#d0102a","#f4f4f2","#f4f4f2"],"croatia":["#e03a3e","#f4f4f2","#f4f4f2"],"wales":["#d0102a","#169b62","#169b62"],"switzerland":["#d0102a","#f4f4f2","#f4f4f2"],"uruguay":["#5eb6e4","#f4f4f2","#f4f4f2"],"china":["#d0102a","#f2c200","#f2c200"],"sweden":["#fecc02","#005293","#005293"],"northkorea":["#d0102a","#f4f4f2","#f4f4f2"],"usa":["#f4f4f2","#1c2a5a","#c8102e"],"morocco":["#c1272d","#006233","#006233"],"argentina":["#8cc4ea","#f4f4f2","#f4f4f2"],"holland":["#f36c21","#1c1c22","#f4f4f2"],"england":["#f4f4f2","#1c2a5a","#1c2a5a"],"portugal":["#c8102e","#046a38","#046a38"],"allstar":["#1c1c24","#d4af37","#d4af37"]};
+function shirtSVG(key){ const k=KIT2D[key], p=palette(key), body=k?k[0]:p[0], trim=k?k[1]:p[1], cuff=k?k[2]:p[1], num=lum(body)>0.6?'#1b1b1b':'#ffffff';
   return '<svg viewBox="0 0 120 120"><path d="M38 10 L22 16 L4 38 L18 52 L28 44 L28 112 L92 112 L92 44 L102 52 L116 38 L98 16 L82 10 C78 20 70 24 60 24 C50 24 42 20 38 10 Z" fill="'+body+'" stroke="rgba(0,0,0,.35)" stroke-width="2"/>'+
     '<path d="M38 10 C42 20 50 24 60 24 C70 24 78 20 82 10 L76 8 C72 16 66 18 60 18 C54 18 48 16 44 8 Z" fill="'+trim+'"/>'+
-    '<path d="M4 38 L18 52 L21 49 L7 35 Z M116 38 L102 52 L99 49 L113 35 Z" fill="'+trim+'"/>'+
+    '<path d="M4 38 L18 52 L21 49 L7 35 Z M116 38 L102 52 L99 49 L113 35 Z" fill="'+cuff+'"/>'+
     '<text x="60" y="84" text-anchor="middle" font-family="Rajdhani,sans-serif" font-weight="700" font-size="40" fill="'+num+'">10</text></svg>'; }
 
-/* ── sprites: the same sheet pitch3d uses (assets/ps1/{key}.png, else the
-   home / away sheet), row 0 = idle, 12 frames. Content box measured once. ── */
+/* ── sprites: the same sheet pitch3d uses - the 2D nation kit
+   (assets/ps1/2d/{key}.png, 2026-09-29), else the old per-team sheet
+   (assets/ps1/{key}.png), else the home / away sheet - row 0 = idle, 12 frames.
+   P3D.kits2d===false skips the 2D kits, like the match does. Content box
+   measured once. ── */
 const SW=12, SH=8, SHEETS={};
 function sheetFor(key,side){
   const id=key+':'+side; if(SHEETS[id]) return SHEETS[id];
@@ -107,9 +113,12 @@ function sheetFor(key,side){
       if(x1<0) throw 0;
       o.box={x:Math.max(0,x0-6),y:Math.max(0,y0-6),w:(x1-x0)+12,h:(y1-y0)+12,cw:cw}; o.ok=true;
     }catch(e){ const cw=o.img.width/SW; o.box={x:0,y:0,w:cw,h:o.img.height/SH,cw:cw}; o.ok=true; } };
-  let tried=false;
-  o.img.onerror=function(){ if(tried) return; tried=true; o.img.src='assets/ps1/'+(side==='h'?'home':'away')+'.png'; };
-  o.img.src='assets/ps1/'+key+'.png';
+  const chain=[];
+  if(!(window.P3D&&P3D.kits2d===false)) chain.push('assets/ps1/2d/'+key+'.png');
+  chain.push('assets/ps1/'+key+'.png','assets/ps1/'+(side==='h'?'home':'away')+'.png');
+  let at=0;
+  o.img.onerror=function(){ if(++at<chain.length) o.img.src=chain[at]; };
+  o.img.src=chain[0];
   return o;
 }
 function drawSprite(cv,key,side,frame,flip){

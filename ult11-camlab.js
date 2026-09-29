@@ -88,7 +88,7 @@
         syncTeamSelections();
       }
     }catch(e){ console.warn('[CamLab] team default failed', e); }
-    if(typeof startGame!=='function'){ alert('Engine not ready'); return; }
+    if(typeof startGame!=='function'){ if(window.ueTell) ueTell('The engine is not ready yet.',{title:'CAMERA LAB'}); return; }
     // force 2.5D on, with the lab camera + bowl defaults
     if(window.P3D){ P3D.on=true; }
     startGame();

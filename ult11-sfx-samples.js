@@ -5,7 +5,7 @@
     kick:'aerial_shoot.wav',pass:'short-pass.mp3',cross:'cross.mp3',
     catch:'ball_catch GK.wav',tackle:'Tackle.wav',
     charge:'Pre Special Move Sound.wav',run:'running.mp3',
-    cursor:'cursor.mp3',confirm:'confim.mp3',cancel:'Cancel.ogg',
+    cursor:'cursor.mp3',confirm:'confim.mp3',cancel:'Cancel.ogg',error:'Cancel.ogg',
     pauseOpen:'pause_open.wav',pauseClose:'pause_closed.wav',
     start:'whstl_start.wav',goal:'whstl_goal.wav',foul:'whstl_foul.wav',
     half:'whstl_halftime.wav',full:'whstl_final_whstl.wav'
@@ -18,23 +18,50 @@
     unduck(){duck=1;}
   };
   function volume(base){return Math.max(0,Math.min(1,base*SFX.master));}
-  function play(name,gain=1,spacing=0){
+  /* ONE-SHOTS ON WEB AUDIO (2026-09-28, author: "the pass sound is a few
+     beats after the ball is kicked"). short-pass.mp3 opens with 289 ms of
+     silence and cross.mp3 with 247 ms, and an <audio> element adds its own
+     start latency on top. Every one-shot is now decoded once, its leading
+     silence measured and skipped, and played through Web Audio (near-zero
+     latency). The crowd / running beds stay on <audio> loops. Fallback: the
+     old <audio> pool, which also skips the measured (or known) silence. */
+  const PRE={pass:.275,cross:.233};                 // measured onsets, used until decoding finishes
+  let ctx=null; const bufs={},trim={},live1={};
+  function ensureCtx(){ if(ctx) return ctx; const AC=window.AudioContext||window.webkitAudioContext; if(!AC) return null;
+    try{ ctx=new AC(); }catch(e){ ctx=null; } return ctx; }
+  function onset(buf){ const d=buf.getChannelData(0); let pk=0; for(let i=0;i<d.length;i++){ const v=Math.abs(d[i]); if(v>pk) pk=v; }
+    const th=pk*.12; for(let i=0;i<d.length;i++) if(Math.abs(d[i])>th) return Math.max(0,i/buf.sampleRate-.012); return 0; }
+  (function decodeAll(){ const c=ensureCtx(); if(!c||!window.fetch) return;
+    Object.keys(files).forEach(name=>{ if(name==='run') return;
+      fetch(A+encodeURIComponent(files[name])).then(r=>r.arrayBuffer()).then(ab=>new Promise((res,rej)=>c.decodeAudioData(ab,res,rej)))
+        .then(buf=>{ bufs[name]=buf; trim[name]=onset(buf); }).catch(()=>{}); }); })();
+  function play(name,gain=1,spacing=0,rate=1){
     if(!SFX.on||!unlocked||!files[name])return null;
     const now=performance.now();if(spacing&&now-(last[name]||0)<spacing)return null;
     last[name]=now;
+    if(ctx&&bufs[name]&&ctx.state!=='closed'){
+      try{ if(ctx.state==='suspended') ctx.resume();
+        const src=ctx.createBufferSource(), g=ctx.createGain(); src.buffer=bufs[name]; g.gain.value=volume(gain);
+        if(rate!==1) src.playbackRate.value=rate;
+        src.connect(g); g.connect(ctx.destination); src.start(0,trim[name]||0);
+        (live1[name]=live1[name]||[]).push(src); src.onended=()=>{ const l=live1[name]; const i=l?l.indexOf(src):-1; if(i>=0) l.splice(i,1); };
+        return src; }catch(e){}
+    }
     let pool=pools[name];if(!pool)pool=pools[name]=Array.from({length:3},()=>make(name));
     const a=pool.find(x=>x.paused||x.ended)||pool[0];
-    try{a.pause();a.currentTime=0;a.volume=volume(gain);const p=a.play();if(p&&p.catch)p.catch(()=>{});}catch(e){}
+    try{a.pause();a.currentTime=trim[name]!=null?trim[name]:(PRE[name]||0);a.volume=volume(gain);const p=a.play();if(p&&p.catch)p.catch(()=>{});}catch(e){}
     return a;
   }
-  function stop(name){(pools[name]||[]).forEach(a=>{a.pause();try{a.currentTime=0;}catch(e){}});}
+  SFX._audio=()=>({ctx:ctx?ctx.state:'none',decoded:Object.keys(bufs).length,trimMs:Object.fromEntries(Object.entries(trim).map(([k,v])=>[k,Math.round(v*1000)]))});
+  function stop(name){(live1[name]||[]).splice(0).forEach(s=>{try{s.stop();}catch(e){}});
+    (pools[name]||[]).forEach(a=>{a.pause();try{a.currentTime=0;}catch(e){}});}
   function stopBeds(){crowdBed.pause();runBed.pause();live=false;}
   const crowds=['crowd1.mp3','crowd2.mp3','crowd3.mp3','crowd4.mp3'];
   let crowdIndex=0,runLastMove=0,cheerUntil=0;
   const crowdBed=new Audio(A+crowds[crowdIndex]);crowdBed.preload='auto';
   crowdBed.addEventListener('ended',()=>{crowdIndex=(crowdIndex+1)%crowds.length;crowdBed.src=A+crowds[crowdIndex];if(live&&SFX.on)crowdBed.play().catch(()=>{});});
   const runBed=make('run');runBed.loop=true;
-  function unlock(){unlocked=true;}
+  function unlock(){unlocked=true;try{if(ctx&&ctx.state==='suspended')ctx.resume();}catch(e){}}
   ['pointerdown','touchstart','keydown'].forEach(type=>addEventListener(type,unlock,{passive:true}));
 
   SFX.cheer=function(intensity=1){
@@ -57,6 +84,12 @@
   SFX.cursor=function(){play('cursor',.28,65);};
   SFX.confirm=function(){play('confirm',.48,90);};
   SFX.cancel=function(){play('cancel',.5,90);};
+  /* ERROR (2026-09-29): a move refused for stamina, field or duel. No error
+     recording exists yet, so it is the Cancel sample played lower and a
+     little louder - distinct from the menu's cancel. Own name + spacing, so
+     it never swallows a menu cancel. For a real sample, change error: in
+     `files` at the top. */
+  SFX.error=function(){play('error',.62,260,.74);};
   SFX.pauseOpen=function(){play('pauseOpen',.56,150);};
   SFX.pauseClose=function(){play('pauseClose',.55,150);};
 

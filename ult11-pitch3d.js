@@ -62,7 +62,7 @@
     // The internal key stays 'classic-upgraded' - saved settings, the .glb file
     // name and a dozen code paths use it; 'astra' is accepted as an alias.
     stadium:(function(){
-      const OK=['oval','classic','classic-upgraded','santa-fede'];
+      const OK=['oval','classic','classic-upgraded','santa-fede','highschool'];
       try{
         let q=new URLSearchParams(location.search).get('stadium');
         if(q==='astra') q='classic-upgraded';
@@ -691,7 +691,7 @@
     // master bowl build — reads P3D.bowl live. Re-callable any time (Camera Lab).
     function placeAllStadium(){
       if(!pitchMesh) return;
-      if(_bowlInfo&&_bowlInfo.type==='santa-fede'){
+      if(_bowlInfo&&(_bowlInfo.type==='santa-fede'||_bowlInfo.type==='highschool')){   // modules that own their resources
         const seen=new Set();bowlGroup.traverse(o=>{if(o.geometry)o.geometry.dispose();if(o.isLight&&o.shadow&&o.shadow.map)o.shadow.map.dispose();
           if(o.material)for(const m of (Array.isArray(o.material)?o.material:[o.material])){if(seen.has(m))continue;seen.add(m);if(m.map)m.map.dispose();m.dispose()}});
       }
@@ -732,14 +732,23 @@
         try{ if(window.U11_SANTA_CITY) U11_SANTA_CITY.build(T,bowlGroup,PLEN,PWID); }catch(e){ console.warn('[P3D] santa city',e); }   // the neighbourhood around it (no more island)
         try{buildExtras();}catch(e){console.warn('[P3D] Santa Fede extras',e)} return;
       }
+      /* HIGH SCHOOL ground (Astra, ult11-highschool.js - ported 2026-09-28):
+         school stand with a roof, classroom blocks, gym, changing rooms,
+         parking, roads, tree belts and its own painted afternoon sky. */
+      if(P3D.stadium==='highschool'&&window.U11_HIGHSCHOOL){
+        try{ U11_HIGHSCHOOL.build(T,bowlGroup,PLEN,PWID); }catch(e){ console.warn('[P3D] highschool',e); }
+        _bowlInfo={type:'highschool'};
+        try{buildExtras();}catch(e){console.warn('[P3D] highschool extras',e)}
+        try{ applyLookMaterials(); }catch(e){} return;
+      }
       // ---- OVAL secondary stadium (ult11-bowl2.js) ----
       if(P3D.stadium==='oval' && window.U11_OVAL){
         try{ window.U11_OVAL.build(T,bowlGroup,PLEN,PWID); }
-        catch(e){ if(/[?&]debug=1/.test(location.search)) alert('OVAL build failed: '+e.message); }
+        catch(e){ console.warn('[P3D] OVAL build failed',e); if(/[?&]debug=1/.test(location.search)&&window.ueTell) ueTell('OVAL build failed: '+e.message,{title:'DEBUG'}); }
         if(bowlGroup.children.length){ _bowlInfo={type:'oval'}; try{buildExtras();}catch(e){console.warn('[P3D] extras',e);} return; }
       }
       if(P3D.stadium==='oval' && !window.U11_OVAL && /[?&]debug=1/.test(location.search)){
-        alert('OVAL selected but ult11-bowl2.js not loaded — check index.html script tag');
+        console.warn('[P3D] OVAL selected but ult11-bowl2.js not loaded'); if(window.ueTell) ueTell('OVAL selected but ult11-bowl2.js is not loaded - check the index.html script tag.',{title:'DEBUG'});
       }
       const S=P3D.bowl;
       // The sandbox was tuned at pitch 300x190. The live pitch is ~70x43, so
@@ -923,7 +932,7 @@
     function placeFlags(){
       scene.remove(flagGroup); flagGroup=new T.Group(); scene.add(flagGroup);
       animFlags.length=0;
-      if(P3D.stadium==='santa-fede') return;
+      if(P3D.stadium==='santa-fede'||P3D.stadium==='highschool') return;
       const OV=(P3D.stadium==='oval'&&window.U11_OVAL&&window.U11_OVAL._last)
                ? window.U11_OVAL._last : null;
       if(P3D.stadium==='oval'&&!OV) return;   // oval selected but not built yet
@@ -1201,7 +1210,7 @@
         g.addColorStop(0.55,'rgba(0,0,0,0)');
         g.addColorStop(1,'rgba(0,0,0,0.42)');
         x.fillStyle=g; x.fillRect(i*pw,0,pw,128);
-        x.font='bold 62px "Bebas Neue",Impact,sans-serif'; x.fillStyle=p.fg;
+        x.font='bold 62px "Cinzel",serif'; x.fillStyle=p.fg;
         x.fillText(p.txt,i*pw+pw/2,68,pw-40);
         x.fillStyle='rgba(0,0,0,0.5)'; x.fillRect(i*pw-2,0,4,128);
       }
@@ -1230,7 +1239,7 @@
     }
     function buildBanners(){
       if(bannerGroup){ scene.remove(bannerGroup); bannerGroup=null; }
-      if(!gfxOn('banners')||!_bowlInfo||_bowlInfo.type==='santa-fede') return;
+      if(!gfxOn('banners')||!_bowlInfo||_bowlInfo.type==='santa-fede'||_bowlInfo.type==='highschool') return;
       bannerGroup=new T.Group(); scene.add(bannerGroup);
       const B=_bowlInfo;
       if(B.type==='classic'){
@@ -1423,7 +1432,7 @@
       extrasGroup=new T.Group(); scene.add(extrasGroup); MASTS.length=0;
       const B=_bowlInfo; if(!B) return;
       const spots=[];
-      if(B.type==='santa-fede'){buildFlashes([]);buildBoards();placeCornerFlags();buildBanners();return;}
+      if(B.type==='santa-fede'||B.type==='highschool'){buildFlashes([]);buildBoards();placeCornerFlags();buildBanners();return;}
       if(B.type==='classic-upgraded'&&window.U11_CLASSIC){
         spots.push(...U11_CLASSIC.flashSpots());
         if(gfxOn('floods')){
@@ -1538,7 +1547,7 @@
           x.shadowColor='rgba(0,0,0,.6)'; x.shadowBlur=10;
           x.fillText(p.emoji, i*pw+pw/2, 68); x.shadowBlur=0;
         } else {
-          x.font='bold 64px "Bebas Neue",Impact,sans-serif'; x.fillStyle=p.fg;
+          x.font='bold 64px "Cinzel",serif'; x.fillStyle=p.fg;
           x.shadowColor=p.fg; x.shadowBlur=16; x.fillText(p.txt,i*pw+pw/2,66,pw-30); x.shadowBlur=0;
         }
         x.fillStyle='rgba(0,0,0,0.55)'; x.fillRect(i*pw-3,0,6,128);
@@ -1561,7 +1570,7 @@
     function buildBoards(){
       ensureCrests();
       if(boardGroup){ scene.remove(boardGroup); boardGroup=null; }
-      if(!gfxOn('boards')||!_bowlInfo||_bowlInfo.type==='santa-fede') return;
+      if(!gfxOn('boards')||!_bowlInfo||_bowlInfo.type==='santa-fede'||_bowlInfo.type==='highschool') return;
       let hl,hw,r,y0;
       if(_bowlInfo.type==='classic-upgraded'){ hl=PLEN/2+2.4; hw=PWID/2+1.5; r=2.8; y0=0; }
       else if(_bowlInfo.type==='classic'){ hl=_bowlInfo.baseHL-0.35; hw=_bowlInfo.baseHW-0.35; r=_bowlInfo.r; y0=(P3D.bowl.yOff||0)*_bowlInfo.U; }
@@ -2599,6 +2608,81 @@
     const ROW={down:{run:0,act:3}, up:{run:1,act:4}, side:{run:2,act:5}};
     const COL={idle:0, run:[1,6], pass:[0,3], shoot:[3,4]};
     const SHEETS={h:null,a:null}; const _sk={h:undefined,a:undefined};
+    P3D.players3d=(function(){ try{ const q=new URLSearchParams(location.search).get('players3d');
+      if(q==='1'||q==='0') localStorage.setItem('u11.players3d',q); return localStorage.getItem('u11.players3d')==='1'; }catch(e){ return false; } })();
+    /* HAIR LAYER (3D players, 2026-09-29). The 3D team sheets are baked WITHOUT
+       hair (art/player_factory, layer "body"); each hairstyle is one shared
+       grey sheet (hair_<style>.png, same 12x8 cells) drawn as a second sprite
+       over the body and tinted per player, so one team sheet serves blond,
+       dark, ginger, shaved and bald players - the point of Astra's Meshy
+       factory. Styles now: 'spiky' (Astra's LayeredSpikes) and 'buzz' (the
+       fitted scalp cap; with a skin tint it is a bald head). Colours for the
+       players with front portraits were sampled from those portraits; the rest
+       draw from a per-nation palette, stable per player. */
+    const HAIR_SHEETS={};
+    function hairSheet(style){
+      let h=HAIR_SHEETS[style]; if(h) return h.ok?h:null;
+      h=HAIR_SHEETS[style]={img:new Image(),ok:false};
+      h.img.onload=()=>{ h.ok=true; }; h.img.onerror=()=>{ h.err=true; console.warn('[P3D] missing hair sheet '+style); };
+      h.img.src=(style==='home'?'assets/ps1/2d/hair_home.png':'assets/ps1/3d/hair_'+style+'.png'); return null;
+    }
+    const HAIR_LOOK={                                  // assets/players/front/<name>.png, sampled
+      aldini:['spiky','#eeb75b'], bertoldi:['buzz','#8e6a52'], conti:['spiky','#522c1b'], corsaro:['spiky','#2a1d18'],
+      falkner:['spiky','#e6a84a'], feo:['buzz','#e2a47a'], ferlora:['buzz','#5d3c2a'], frisina:['spiky','#573b28'],
+      goethe:['spiky','#f7db90'], mancuso:['buzz','#241f24'], manzini:['spiky','#43291e'], margus:['spiky','#5c2d16'],
+      meyer:['spiky','#e5a661'], reinhardt:['spiky','#fac160'], schmidt:['spiky','#fb8621'], shester:['spiky','#c48c56'],
+      vella:['spiky','#593927']};
+    const HC={black:'#1e1a1e',dark:'#2e2420',dbrown:'#4a2e1e',brown:'#6a4228',lbrown:'#8a6038',
+              dblond:'#b88a52',blond:'#e0b860',plat:'#f0dc98',ginger:'#d0682a'};
+    const HAIR_NATION={
+      north:['blond','blond','dblond','dblond','lbrown','brown','brown','plat','dbrown'],
+      isles:['brown','dbrown','lbrown','dblond','ginger','ginger','blond','dark'],
+      latin:['dark','dark','dbrown','dbrown','black','brown','brown','lbrown'],
+      east:['black','black','black','dark'], africa:['black','black','dark']};
+    const NATION_OF={germany:'north',sweden:'north',holland:'north',switzerland:'north',austria:'north',belgium:'north',
+      england:'north',usa:'north',scotland:'isles',ireland:'isles',wales:'isles',japan:'east',china:'east',northkorea:'east',
+      morocco:'africa'};
+    function hairLookOf(team,pl){
+      const nm=String((pl&&(pl.origName||pl.name))||'').split('.').pop().toLowerCase().trim();
+      if(pl&&pl.hair&&pl.hair.col) return {style:pl.hair.style||'spiky',col:pl.hair.col};   // data wins when present
+      const f=HAIR_LOOK[nm]; if(f) return {style:f[0],col:f[1]};
+      let h=2166136261; const key=nm+'|'+(team||''); for(let i=0;i<key.length;i++){ h^=key.charCodeAt(i); h=Math.imul(h,16777619); }
+      h>>>=0;
+      const pal=HAIR_NATION[NATION_OF[team]||'latin'];
+      const r=h%100, style=r<14?'buzz':'spiky';
+      return {style, col:HC[pal[(h>>>8)%pal.length]]};
+    }
+    function hairOf(o,style){
+      const hs=hairSheet(style); if(!hs) return null;
+      if(!o.hair){
+        const tex=new T.Texture(hs.img); tex.magFilter=T.NearestFilter; tex.minFilter=T.NearestFilter; tex.needsUpdate=true;
+        const sp=new T.Sprite(new T.SpriteMaterial({map:tex,transparent:true,alphaTest:0.5}));
+        scene.add(sp); o.hair={sprite:sp,tex,img:hs.img,col:new T.Color()}; shareTex(tex,hs.img);
+      } else if(o.hair.img!==hs.img){ o.hair.tex.image=hs.img; o.hair.tex.needsUpdate=true; shareTex(o.hair.tex,hs.img); o.hair.img=hs.img; }
+      return o.hair;
+    }
+    const _hv=new T.Vector3(), _hg=new T.Color();
+    // runs right before the render: copies the body sprite's FINAL frame (after
+    // the cinematics' forceCell etc.) so the hair can never lag a frame
+    function syncHair(){
+      if(_pruneAt&&performance.now()>_pruneAt){ _pruneAt=0; try{ pruneShared(); }catch(e){} }
+      for(const id in sprites){ const o=sprites[id], lk=o._look;
+        const on=lk&&o.sprite.visible&&o.sprite.material.map===o.tex;
+        const h=on?hairOf(o,lk.style):null;
+        if(!h){ if(o.hair) o.hair.sprite.visible=false; continue; }
+        h.tex.offset.copy(o.tex.offset); h.tex.repeat.copy(o.tex.repeat);
+        h.sprite.center.copy(o.sprite.center); h.sprite.scale.copy(o.sprite.scale);
+        h.sprite.material.rotation=o.sprite.material.rotation||0;
+        h.sprite.material.opacity=o.sprite.material.opacity;
+        _hv.subVectors(camera.position,o.sprite.position).normalize().multiplyScalar(0.03);   // a hair in front: no z-fight
+        h.sprite.position.copy(o.sprite.position).add(_hv);
+        const g=(o._gray&&o._gray.u)?o._gray.u.value:0;
+        h.col.set(lk.col); if(g>0){ const l=(h.col.r*0.299+h.col.g*0.587+h.col.b*0.114)*0.82; _hg.setRGB(l,l,l); h.col.lerp(_hg,g); }
+        h.sprite.material.color.copy(h.col);
+        h.sprite.visible=true;
+      }
+    }
+    P3D.hairState=function(){ const r={}; for(const id in sprites){ const o=sprites[id]; if(o._look) r[id]=o._look.style+' '+o._look.col+(o.hair&&o.hair.sprite.visible?' shown':' hidden'); } return r; };
     let GK_SHEET=null;                                 // shared keeper sheet for BOTH teams
     // Single 4x4 keeper sheet (gk_cine.png): row0 idle, row1 run, rows2-3 cinematic.
     // Forced to LGK4 (its 1:1 aspect would otherwise mis-detect). Falls back to the
@@ -2615,7 +2699,8 @@
       let i=0; const next=()=>{ if(i>=urls.length){ if(!SHEETS[side])SHEETS[side]='none'; return; }
         const im=new Image(), u=urls[i++];
         im.onload=()=>{const L=layoutFor(im,u);
-          SHEETS[side]={img:im,L,cw:im.width/L.cols,ch:im.height/L.rows};
+          SHEETS[side]={img:im,L,cw:im.width/L.cols,ch:im.height/L.rows,url:u,is3d:/\/3d\//.test(u),
+                        layer:/\/3d\//.test(u)?'3d':/\/2d\//.test(u)?'2d':null};
           measureSheet(SHEETS[side]);
           console.log('[P3D] '+side+' sheet '+u+' '+im.width+'x'+im.height+
             ' -> '+L.cols+' cols x '+L.rows+' rows, cell '+
@@ -2626,19 +2711,62 @@
     function syncSheets(){
       const hk=(typeof selHome!=='undefined'&&selHome)?String(selHome).toLowerCase():null;
       const ak=(typeof selAway!=='undefined'&&selAway)?String(selAway).toLowerCase():null;
-      if(hk!==_sk.h){ _sk.h=hk; loadSheet('h', hk?['assets/ps1/'+hk+'.png','assets/ps1/home.png']:['assets/ps1/home.png']); }
-      if(ak!==_sk.a){ _sk.a=ak; loadSheet('a', ak?['assets/ps1/'+ak+'.png','assets/ps1/away.png']:['assets/ps1/away.png']); }
+      /* 3D-BAKED PLAYERS (2026-09-29, Astra's Meshy factory -> art/player_factory/
+         scripts/bake_game_sheet.py): same 12x8 layout, so they drop in. Opt-in
+         for review: ?players3d=1 (remembered) / ?players3d=0, or P3D.players3d. */
+      /* 2D KITS (2026-09-29): pixel-exact nation kits baked from home.png (art/pixel_players,
+         scratchpad px/bake2d.py) - every pixel of the master kept, only colours changed; the hair is
+         a shared grey layer tinted per player. P3D.kits2d=false -> the old per-team sheets. */
+      const p3=P3D.players3d?(k=>['assets/ps1/3d/'+k+'.png']):(P3D.kits2d===false?(()=>[]):(k=>['assets/ps1/2d/'+k+'.png']));
+      if(hk!==_sk.h){ _sk.h=hk; loadSheet('h', hk?[...p3(hk),'assets/ps1/'+hk+'.png','assets/ps1/home.png']:['assets/ps1/home.png']); }
+      if(ak!==_sk.a){ _sk.a=ak; loadSheet('a', ak?[...p3(ak),'assets/ps1/'+ak+'.png','assets/ps1/away.png']:['assets/ps1/away.png']); }
     }
     syncSheets();
+    // Settings > Match View > PLAYERS: swap live (the next frame rebinds every sprite)
+    P3D.setPlayers3d=function(on){ P3D.players3d=!!on; try{ localStorage.setItem('u11.players3d',on?'1':'0'); }catch(e){}
+      _sk.h=_sk.a=undefined; syncSheets(); };
 
     const sprites={};   // id -> {sprite, shadow, tex}
     const stt={};       // id -> facing/flip/ref state (mirrors ps1-mod.state)
+    /* SHARED SHEET TEXTURE (2026-09-29). Every player sprite made its own
+       THREE.Texture of the team sheet, and r128 uploads one GL texture per
+       Texture object: 22 copies of a 3492x3264 sheet = ~890 MB of VRAM for
+       what is really 3 images (measured with P3D.memState()). Each sprite
+       still keeps its OWN Texture - it carries that player's frame
+       offset/repeat, which the cinematics, aura silhouette and shadow casters
+       all read - but it now points at ONE uploaded GL texture per sheet image.
+       No __webglInit on the linked Texture, so a later needsUpdate gives it a
+       private copy (never overwrites the shared one) and dispose() never
+       deletes the shared one. P3D.shareSheetTex=false restores the old path. */
+    const _shTex=new Map();                              // sheet img -> uploaded master Texture
+    function shareTex(tex,img){
+      try{
+        if(P3D.shareSheetTex===false||!renderer.properties||!renderer.initTexture||!img||!img.complete) return false;
+        let m=_shTex.get(img);
+        if(!m){ m=new T.Texture(img); m.magFilter=T.NearestFilter; m.minFilter=T.NearestFilter;
+          m.generateMipmaps=false; m.needsUpdate=true; renderer.initTexture(m); _shTex.set(img,m); }
+        const mp=renderer.properties.get(m); if(!mp.__webglTexture) return false;
+        if(renderer.properties.get(tex).__webglInit!==undefined) tex.dispose();   // drop a private copy first
+        const tp=renderer.properties.get(tex);
+        tp.__webglTexture=mp.__webglTexture; tp.__version=tex.version;
+        return true;
+      }catch(e){ return false; }
+    }
+    // a sheet swap (Settings > PLAYERS, team change) leaves the old master
+    // uploaded; once no sprite shows that image any more, free it
+    let _pruneAt=0;
+    function pruneShared(){
+      const keep=new Set();
+      for(const id in sprites){ const o=sprites[id]; if(o.tex&&o.tex.image) keep.add(o.tex.image); if(o.hair) keep.add(o.hair.img); }
+      ['h','a'].forEach(s=>{ const S=SHEETS[s]; if(S&&S.img) keep.add(S.img); }); if(GK_SHEET&&GK_SHEET.img) keep.add(GK_SHEET.img);
+      for(const [img,m] of _shTex){ if(!keep.has(img)){ m.dispose(); _shTex.delete(img); } }
+    }
     function ensureSprite(id, sheet){
       if(sprites[id]) return sprites[id];
       const tex=new T.Texture(sheet.img);
       tex.magFilter=T.NearestFilter; tex.minFilter=T.NearestFilter;
       const _L=sheet.L||GRID;
-      tex.repeat.set(1/_L.cols,1/_L.rows); tex.needsUpdate=true;
+      tex.repeat.set(1/_L.cols,1/_L.rows); tex.needsUpdate=true; shareTex(tex,sheet.img);
       const sp=new T.Sprite(new T.SpriteMaterial({map:tex,transparent:true,alphaTest:0.5}));
       /* STUN GREY - desaturate this one player after the texture is read.
          uGray is per-material (onBeforeCompile runs for every material, and the
@@ -2668,9 +2796,15 @@
       sil.renderOrder=2; scene.add(sil);
       return sprites[id]={sprite:sp,shadow:sh,sil,tex,_sheetImg:sheet.img,_L:(sheet.L||GRID),_gray};
     }
+    /* SLOW MOTION (cross QTE, 2026-09-29): sprite cadence and one-shot actions
+       run on a clock that game.js can scale (P3D.timeScale, 1 = normal). It
+       starts equal to performance.now() and only falls behind while slowed. */
+    let _anR=0,_anV=0;
+    function animNow(){ const r=performance.now(); if(!_anR){ _anR=r; _anV=r; }
+      _anV+=(r-_anR)*(P3D.timeScale==null?1:P3D.timeScale); _anR=r; return _anV; }
     function cellState(id,p,wx,wz,L){
       L=L||GRID;
-      const now=performance.now();
+      const now=animNow();
       const prev=stt[id]||{rx:p.x,ry:p.y,face:'side',flip:false,moveT:-1e9,
                            spd:0,lx:p.x,ly:p.y,lt:now,phase:Math.random()*1000,aph:Math.random()*100,apt:now};
       // smoothed speed drives run cadence (jog vs sprint)
@@ -2783,7 +2917,7 @@
        the tackles so the impact frame plays exactly when its hit window opens,
        instead of frames being spread evenly across the whole animation. */
     P3D.action=function(s,k,name,opts){ if(COL[name]||ONE_SHOT[name])
-      ACT[s+':'+k]={name,t0:performance.now(),frames:(opts&&opts.frames)||null,dx:opts&&opts.dx,dy:opts&&opts.dy}; };
+      ACT[s+':'+k]={name,t0:animNow(),frames:(opts&&opts.frames)||null,dx:opts&&opts.dx,dy:opts&&opts.dy}; };
     P3D.clearAction=function(s,k){ delete ACT[s+':'+k]; };   // snap back to run/idle (lunge end)
     let _lastCarrier=null,_prevKick=false;
     function watchActions(){
@@ -2815,8 +2949,12 @@
           const id=s+':'+k; seen.add(id);
           const useSheet=(k==='GK'&&GK_SHEET&&GK_SHEET.img.complete)?GK_SHEET:sheet;
           const o=ensureSprite(id,useSheet);
+          if(useSheet===sheet&&sheet.layer){ if(o._lookKey!==pl||!o._look){ o._look=hairLookOf(s==='h'?selHome:selAway,pl);
+              if(sheet.layer==='2d') o._look={style:'home',col:(o._look.style==='buzz'&&/^#e|^#f/.test(o._look.col))?'#3a2a20':o._look.col};
+              o._lookKey=pl; } } else o._look=null;
           if(o._sheetImg!==useSheet.img){         // (re)bind texture if the sheet changed
-            o.tex.image=useSheet.img; o.tex.needsUpdate=true; o._sheetImg=useSheet.img;
+            o.tex.image=useSheet.img; o.tex.needsUpdate=true; shareTex(o.tex,useSheet.img); o._sheetImg=useSheet.img;
+            _pruneAt=performance.now()+1500;
             o._L=useSheet.L||GRID;                 // a sprite made before the GK sheet loaded kept the team grid
           }
           if(o._gray&&o._gray.u){                  // stunned / slowed -> grey (game.js stunLevel)
@@ -3019,7 +3157,7 @@
       return (best && bestD<70) ? best : best;                // nearest wins; tolerance generous
     };
     function tag(ctx,sx,sy,txt,col){
-      ctx.font='700 12px Orbitron, system-ui';
+      ctx.font='700 12px Rajdhani,sans-serif';
       const w=ctx.measureText(txt).width+16;
       ctx.fillStyle='rgba(2,4,10,.82)'; ctx.fillRect(sx-w/2,sy-58,w,18);
       ctx.fillStyle=col; ctx.fillRect(sx-w/2,sy-58,3,18);
@@ -3210,7 +3348,7 @@
         console.log('[P3D] pixel ball sheet loaded ('+BALL_COLS+'x'+BALL_ROWS+
                     ', fills '+_bFill.toFixed(3)+' of a cell)');
       };
-      im.onerror=()=>{ console.warn('[P3D] assets/ball-sprite.png missing - keeping the 3D ball'); };
+      im.onerror=()=>{ P3D._ballErr=true; console.warn('[P3D] assets/ball-sprite.png missing - keeping the 3D ball'); };
       im.src='assets/ball-sprite.png';
     })();
     let _bPrevX=null,_bPrevZ=null;
@@ -3275,6 +3413,63 @@
        match camera was, until the kickoff reset clears the goal ball. The
        title sits in the lower third, so the net stays in the top of frame. */
     const _goC=new T.Vector3(), _goP=new T.Vector3(), _goL=new T.Vector3();
+    /* SAVE MOMENT (2026-09-28, author: "when the CPU saves the camera still
+       shows the net rather than following the ball - the keeper dives and
+       saves and the camera looks at an empty net" / "the player's keeper never
+       gets a cinematic camera for a save"). The dive happened behind the duel
+       card, then play resumed with the keeper already standing in his goal.
+       Now, once the duel says SAVE (normal shots, either keeper): the card goes,
+       the camera cuts low and close on the keeper, the ball flies on from its
+       hold point into the glove at the point his dive read (GKA.bw), he plays
+       the catch / parry frames on contact, and the camera stays with the ball
+       for the rest. game.js afSave drives it and resolves at the contact.
+       P3D.saveMoments=false turns it off. */
+    const SM={on:false};
+    P3D.saveMoment=function(o){
+      if(P3D.saveMoments===false||!ballMesh) return null;
+      const ds=o.ds, gs=Math.sign(ex2wx(ownGoalXFor(ds)))||1;
+      const a=GKA[ds], spr=sprites[ds+':GK'];
+      const from=ballMesh.position.clone();
+      let to=null;
+      if(a&&a.bw) to=new T.Vector3(a.bw.x,a.bw.y,a.bw.z);
+      else if(spr&&spr.sprite){ const g=P3D.gkaGlove(ds); to=g&&g.glove?g.glove.clone():spr.sprite.position.clone().add(new T.Vector3(0,_gkaBody()*0.55,0)); }
+      if(!to) return null;
+      const fly=Math.max(260,Math.min(520,from.distanceTo(to)/(PLEN*0.9)*1000*2.2));
+      Object.assign(SM,{on:true,t0:performance.now(),fly,dur:fly+1150,from,to,ds,gs,outcome:o.outcome,hit:false,cam:null,pos:from.clone()});
+      return {impactMs:fly, ms:SM.dur, ex:wx2ex(to.x), ey:wz2ey(to.z)};
+    };
+    P3D.saveMomentState=function(){ return SM.on?{t:Math.round(performance.now()-SM.t0),hit:SM.hit,outcome:SM.outcome}:null; };
+    function saveBallStep(){
+      if(!SM.on) return null;
+      const t=performance.now()-SM.t0;
+      if(t>SM.dur||typeof G==='undefined'||!G||G._scoringGoal||cine){ SM.on=false; _camSnap=true; return null; }
+      if(t<SM.fly){ const k=t/SM.fly, e=k*(2-k);
+        SM.pos.lerpVectors(SM.from,SM.to,e); SM.pos.y+=Math.sin(Math.PI*k)*_gkaBody()*0.08; return SM.pos; }
+      if(!SM.hit){ SM.hit=true;
+        try{ P3D.gkAnim(SM.ds,SM.outcome==='catch'?'catch':'parry',{ty:wz2ey(SM.to.z)}); }catch(e){}
+        try{ shakeCam(SM.outcome==='catch'?0.05:0.09,160); }catch(e){} }
+      return null;                        // after contact the engine owns the ball again (grip / parry flight)
+    }
+    const _smL=new T.Vector3(), _smP=new T.Vector3();
+    function saveCam(dt){
+      if(!SM.on) return false;
+      const t=(performance.now()-SM.t0)/1000, gs=SM.gs, gl=gs*PLEN/2;
+      if(!SM.cam){ const d=new T.Vector3(); camera.getWorldDirection(d);
+        // stand on the side the shot came from, low, a few metres off the keeper
+        const side=Math.sign(SM.from.z-SM.to.z)||(SM.to.z>=0?1:-1);
+        SM.cam={p0:camera.position.clone(),l0:camera.position.clone().addScaledVector(d,20),fov0:camera.fov,side}; }
+      const bl=Math.min(1,t/0.22), e=bl*bl*(3-2*bl);                       // a quick cut, not a pan
+      const push=Math.min(1,t/1.6), R=PWID*(0.17-0.03*push);
+      const ang=0.62+0.08*Math.sin(t*0.6);
+      _smP.set(gl-gs*Math.cos(ang)*R, PWID*(0.028+0.006*push), SM.to.z+SM.cam.side*Math.sin(ang)*R);
+      const ballNow=(typeof ball!=='undefined'&&ballMesh)?ballMesh.position:SM.to;
+      _smL.lerpVectors(SM.to,ballNow,0.45); _smL.y=Math.max(_smL.y,_gkaBody()*0.45);
+      camera.position.lerpVectors(SM.cam.p0,_smP,e);
+      const lk=new T.Vector3().lerpVectors(SM.cam.l0,_smL,e);
+      camera.fov=SM.cam.fov0+(32-SM.cam.fov0)*e; camera.updateProjectionMatrix();
+      camera.lookAt(lk);
+      return true;
+    }
     function goalCam(dt){
       if(!GB.on||!GB.pos||P3D.goalOrbit===false){ GB.cam=null; return false; }
       if(GB.t<0.28) return false;
@@ -3365,7 +3560,7 @@
         ballWy=_lastHeldGrip.y+(ballWy-_lastHeldGrip.y)*f;
         if(f>=1)_lastHeldGrip=null;
       }else _lastHeldGrip=null;
-      const _gbp=goalBallStep(); if(_gbp){ wx=_gbp.x; ballWy=_gbp.y; wz=_gbp.z; }
+      const _gbp=goalBallStep()||saveBallStep(); if(_gbp){ wx=_gbp.x; ballWy=_gbp.y; wz=_gbp.z; }
       ballMesh.position.set(wx,ballWy,wz);
       try{ passGhostStep(wx,ballWy,wz,r*2); }catch(e){}
       // ROLL: rotate about the axis perpendicular to the direction of travel
@@ -3574,11 +3769,6 @@
           u.lift.value.fromArray(H.lift); u.gain.value.fromArray(H.gain); u.shadowTint.value.fromArray(H.shadowTint); u.highTint.value.fromArray(H.highTint); } }
     }
     // (kept for the Camera Lab; envFrame does this now)
-    function nightFrame(now){
-      const N=P3D.night;
-      if(scene.fog&&N.fog){ scene.fog.color.setRGB(N.fog.col[0],N.fog.col[1],N.fog.col[2]); scene.fog.near=N.fog.near; scene.fog.far=N.fog.far; }
-      if(_finishPass&&_finishPass.enabled) _finishPass.uniforms.time.value=(now||0)*0.001;
-    }
     const _nightPools=[], _nl={r:1,g:1,b:1};
     function nightPoolsW(){
       const hx=PLEN/2, hz=PWID/2, k=PLEN/70; _nightPools.length=0;
@@ -3635,6 +3825,10 @@
       const night=LOOK==='night', N=P3D.night, P=(typeof envPreset==='function')?envPreset():null;
       const W=(typeof ENV!=='undefined'&&P3D.weatherFx)?P3D.weatherFx[ENV.weather]:null;
       if(window.U11_SANTA)U11_SANTA.setTime(LOOK); if(window.U11_SANTA_CITY) U11_SANTA_CITY.setTime(LOOK);
+      if(_bowlInfo&&_bowlInfo.type==='highschool') bowlGroup.traverse(o=>{   // the school's own sky + lights follow the time of day
+        if(o.name==='U11HS_sky'){ o.visible=!night; if(o.material&&o.material.color) o.material.color.setHex(LOOK==='golden'?0xffd2a8:0xffffff); }
+        else if(o.name==='U11HS_amb') o.intensity=night?.14:LOOK==='golden'?.48:.62;
+        else if(o.name==='U11HS_fill') o.intensity=night?.05:LOOK==='golden'?.55:.70; });
       if(pitchMesh){
         if(!pitchMesh.userData.dayMat) pitchMesh.userData.dayMat=pitchMesh.material;
         const dm=pitchMesh.userData.dayMat;
@@ -3998,7 +4192,7 @@
       syncNightUniforms();
     }
     function rigFrame(now,dt){
-      const on=RIG.on&&LOOK==='night'&&P3D.stadium!=='santa-fede';
+      const on=RIG.on&&LOOK==='night'&&P3D.stadium!=='santa-fede'&&P3D.stadium!=='highschool';   // no stadium roof rig at the school
       if(!on){ if(RIG._tiltSet&&hTilt&&vTilt){ RIG._tiltSet=false; hTilt.uniforms.r.value=0.5; vTilt.uniforms.r.value=0.5; try{ applyFx(); }catch(e){} }
         if(RIG.group) RIG.group.visible=false; if(RIG._astraOff){ RIG._astraOff=false; P3D.gfx.volRays=RIG._ar; P3D.gfx.volPools=RIG._ap; P3D.gfx.volDust=RIG._ad; } return; }
       if(!RIG.built){ buildRig(); rigSyncPools(); }
@@ -4014,9 +4208,7 @@
       /* depth of field like the lab: the sharp band sits on the play (the
          carrier's feet), so the crowd above falls out of focus; stronger in a
          Camera Lab scenario */
-      if(hTilt&&vTilt){ let fy=0.42;
-        try{ const cp=(typeof G!=='undefined'&&G&&G.poss&&G.ck&&PP[G.poss])?PP[G.poss][G.ck]:null;
-          if(cp){ _v3.set(ex2wx(cp.x),0.3,ey2wz(cp.y)).project(camera); if(_v3.z<1) fy=Math.max(0.12,Math.min(0.6,_v3.y*0.5+0.5)); } }catch(e){}
+      if(hTilt&&vTilt){ const fy=tiltFocusY(0.42,0.12,0.6);    // on the ACTION, not only the carrier (actionFocusPoint)
         hTilt.uniforms.r.value=fy; vTilt.uniforms.r.value=fy;
         const tb=P3D.fx.tilt*0.0035*(SCN?1.7:1.25); hTilt.uniforms.h.value=tb; vTilt.uniforms.v.value=tb; RIG._tiltSet=true; }
       if(RIG.phones) RIG.phones.material.uniforms.time.value=t;
@@ -4215,12 +4407,21 @@
        stays on the field and may fall outside the camera frame — that's fine.
        Sheet: 5 cols × 3 rows. col0 = idle, cols1-4 = run cycle.
        rows: 0=down(toward cam), 1=up(away), 2=side(faces right; mirror=left). */
-    const REFG={cols:5,rows:3};
-    const REFROW={down:0,up:1,side:2};
+    /* NEW REFEREE (author 2026-09-28, assets/ps1/referee-new.png, 717x717 4x4, in
+       the players' chibi style): row0 run side (faces right), row1 run toward
+       the camera, row2 run away, row3 idle facing the camera (4-frame breath).
+       foot = where the boots sit in each row's cell (measured), so every row
+       stands on the grass; scale 1.03 keeps his height equal to the old sheet.
+       Falls back to the old 5x3 sheet if the new file is missing. */
+    const REF_LAYOUTS={
+      v2:{url:'assets/ps1/referee-new.png',cols:4,rows:4,run:{side:0,down:1,up:2},idle:{down:[3,4],side:[0,1],up:[2,1]},foot:[.962,.97,.925,.90],scale:1.03},
+      v1:{url:'assets/ps1/referee.png',cols:5,rows:3,run:{down:0,up:1,side:2},idle:null,foot:[.97,.99,.975],scale:1}};
+    let REFG=REF_LAYOUTS.v2;
     let refSheet=null;
-    (function(){ const im=new Image();
-      im.onload=()=>refSheet={img:im, cw:im.width/REFG.cols, ch:im.height/REFG.rows};
-      im.onerror=()=>{}; im.src='assets/ps1/referee.png'; })();
+    (function(){ const load=(L,fail)=>{ const im=new Image();
+        im.onload=()=>{ REFG=L; refSheet={img:im, cw:im.width/L.cols, ch:im.height/L.rows}; };
+        im.onerror=fail||(()=>{}); im.src=L.url; };
+      load(REF_LAYOUTS.v2,()=>load(REF_LAYOUTS.v1)); })();
     const refTex=new T.Texture(); refTex.magFilter=T.NearestFilter; refTex.minFilter=T.NearestFilter;
     const refMesh=new T.Sprite(new T.SpriteMaterial({map:refTex,transparent:true,alphaTest:0.5}));
     refMesh.center.set(0.5,0); refMesh.visible=false; scene.add(refMesh);
@@ -4270,16 +4471,23 @@
       const wx=ex2wx(cx), wz=ey2wz(cy);
       const frac=(P3D.spriteFrac!=null?P3D.spriteFrac:0.045);
       const hWorld=PLEN*frac;
-      const wWorld=hWorld*(refSheet.cw/refSheet.ch);
+      const hRef=hWorld*(REFG.scale||1), wWorld=hRef*(refSheet.cw/refSheet.ch);
       // cell: row by facing, col idle/run
       const running=(now-REF.moveT)<160;
-      const row=REFROW[REF.face]!=null?REFROW[REF.face]:REFROW.down;
-      const col=running?(1+(Math.floor(now/1000*9)%4)):0;
+      let row,col;
+      if(REFG.idle){                                    // v2: 4-frame runs, idle row for facing the camera
+        if(running){ row=REFG.run[REF.face]!=null?REFG.run[REF.face]:REFG.run.down; col=Math.floor(now/1000*9)%4; }
+        else { const id=REFG.idle[REF.face]||REFG.idle.down; row=id[0]; col=id[1]===4?(Math.floor(now/1000*2.4)%4):id[1]; }
+      } else {
+        row=REFG.run[REF.face]!=null?REFG.run[REF.face]:REFG.run.down;
+        col=running?(1+(Math.floor(now/1000*9)%4)):0;
+      }
+      refMesh.center.set(0.5,1-(REFG.foot[row]||1));   // boots on the grass
       const cw=1/REFG.cols, chh=1/REFG.rows;
       const ox=col*cw, oy=1-(row+1)*chh;
       if(REF.flip && REF.face==='side'){ refTex.repeat.set(-cw,chh); refTex.offset.set(ox+cw,oy); }
       else                             { refTex.repeat.set( cw,chh); refTex.offset.set(ox,   oy); }
-      refMesh.scale.set(wWorld,hWorld,1);
+      refMesh.scale.set(wWorld,hRef,1);
       refMesh.position.set(wx,0.05,wz);
       const r=Math.max(0.3,wWorld*0.5);
       refSh.position.set(wx,0.04,wz); refSh.scale.set(r,r*0.55,1);
@@ -4305,6 +4513,33 @@
       if(typeof G==='undefined'||!G||!G.poss||!G.ck) return null;
       const p=PP[G.poss] && PP[G.poss][G.ck]; return p||null;
     }
+    /* ACTION FOCUS (author 2026-09-29: "where the ball arrived [on a cross] it
+       was blurred, like the depth of field, rather than in focus"). The sharp
+       band of the tilt-shift sat on the CARRIER's feet - and while a pass is in
+       the air the carrier is still the PASSER, so a cross landed in the blur.
+       The band now sits on the action: a cross's header point (where the ring
+       and the header happen), the ball for any other ball in flight or a loose
+       ball, the carrier otherwise. It glides there rather than jumping. */
+    let _tiltFy=null;
+    function actionFocusPoint(){
+      const g=(typeof G!=='undefined')?G:null; if(!g) return null;
+      const bt=(typeof ballTravel!=='undefined')?ballTravel:null, hasBall=(typeof ball!=='undefined'&&ball);
+      if(g.phase==='pass_anim'&&bt&&bt.active){
+        if(bt.kind==='cross'&&bt.meet) return {x:bt.meet.x,y:bt.meet.y};
+        if(hasBall) return {x:ball.x,y:ball.y};
+      }
+      if(g.phase==='loose'&&hasBall) return {x:ball.x,y:ball.y};
+      const cp=(g.poss&&g.ck&&typeof PP!=='undefined'&&PP[g.poss])?PP[g.poss][g.ck]:null;
+      return cp?{x:cp.x,y:cp.y}:(hasBall?{x:ball.x,y:ball.y}:null);
+    }
+    function tiltFocusY(base,lo,hi){
+      let fy=base;
+      try{ const p=actionFocusPoint();
+        if(p){ _v3.set(ex2wx(p.x),0.3,ey2wz(p.y)).project(camera); if(_v3.z<1) fy=Math.max(lo,Math.min(hi,_v3.y*0.5+0.5)); } }catch(e){}
+      _tiltFy=(_tiltFy==null)?fy:_tiltFy+(fy-_tiltFy)*0.16;
+      return _tiltFy;
+    }
+    P3D.tiltFocus=()=>({r:_tiltFy, point:actionFocusPoint()});
     function updateCamera(dt){
       const C=P3D.cam;
       camera.fov=C.fov; camera.updateProjectionMatrix();
@@ -4334,11 +4569,17 @@
       if(shotFocus && typeof ball!=='undefined'&&ball){
         let bx=ball.x, by=ball.y;
         if(_g._shotTrail&&typeof ballTravel!=='undefined'&&ballTravel&&ballTravel.active&&!ballTravel.loose){
-          bx+=(ballTravel.tx-bx)*0.45; by+=(ballTravel.ty-by)*0.45; }          // lead toward the goal
+          bx+=(ballTravel.tx-bx)*0.28; by+=(ballTravel.ty-by)*0.28; }          // lead toward the goal (was .45: framed the net, not the keeper)
         fx=ex2wx(bx); fz=ey2wz(by); cx01=bx/(CV.width||1280); kMul=2.5;
         if(GB.on&&GB.pos){ fx=GB.pos.x; fz=GB.pos.z; cx01=wx2ex(fx)/(CV.width||1280); }   // a goal: stay on the ball in the net
       } else if(passing && typeof ball!=='undefined'&&ball){
-        fx=ex2wx(ball.x); fz=ey2wz(ball.y); cx01=ball.x/(CV.width||1280);
+        let bx=ball.x, by=ball.y;
+        /* CROSS (2026-09-29): lead toward the HEADER POINT, like a shot leads
+           toward the goal - following the ball alone lagged a cross, and the
+           runner, the ring and the header happened at the edge of the frame. */
+        const _bt=(typeof ballTravel!=='undefined')?ballTravel:null;
+        if(_bt&&_bt.active&&_bt.kind==='cross'&&_bt.meet){ bx+=(_bt.meet.x-bx)*0.6; by+=(_bt.meet.y-by)*0.6; kMul=1.6; }
+        fx=ex2wx(bx); fz=ey2wz(by); cx01=bx/(CV.width||1280);
       } else if(cp){ fx=ex2wx(cp.x); fz=ey2wz(cp.y); cx01=cp.x/(CV.width||1280); }
       else if(typeof ball!=='undefined'&&ball){ fx=ex2wx(ball.x); fz=ey2wz(ball.y); cx01=ball.x/(CV.width||1280); }
       const k=_camSnap?1:Math.min(1,dt*C.followLerp*kMul); _camSnap=false;
@@ -4889,6 +5130,49 @@
               fill:+_bFill.toFixed(3), measured:!!_bUV, spinCap:P3D.ballSpinMax,
               sphereVisible:!!(ballMesh&&ballMesh.visible)};
     };
+    /* PERF PROBE (debug pass 2026-09-28): whole-frame draw calls / triangles /
+       lights. The composer's last pass resets renderer.info, so stadiumState()
+       only ever saw the final full-screen quad (calls 1). */
+    P3D.perfProbe=function(frames){
+      return new Promise(res=>{ const I=renderer.info; I.autoReset=false; I.reset(); let n=0,calls=0,tris=0;
+        const lights={}; scene.traverse(o=>{ if(o.isLight&&o.visible&&(o.intensity>0)){ const k=o.type+(o.castShadow?'+shadow':''); lights[k]=(lights[k]||0)+1; } });
+        (function f(){ calls+=I.render.calls; tris+=I.render.triangles; I.reset(); if(++n<(frames||30)) requestAnimationFrame(f);
+          else { I.autoReset=true; res({calls:Math.round(calls/n),tris:Math.round(tris/n),geos:I.memory.geometries,texs:I.memory.textures,progs:(I.programs||[]).length,lights,px:renderer.getPixelRatio()}); } })(); });
+    };
+    /* MATCH PREP (2026-09-28, author: "starting a match shows a black screen
+       with the referee and a golden KICK OFF for a few seconds"). The loader
+       only waited for P3D.ready, which is true from page load - so on a first
+       visit the match opened on the fallback bowl with no crowd, no players
+       and uncompiled shaders, and the Astra model popped in ~10 s later.
+       These three waits let game.js hold the loading screen until it is real. */
+    const _wait=(test,prog,cap)=>new Promise(res=>{ const t0=performance.now();
+      (function f(){ let p=0; try{ p=test(); }catch(e){ p=1; } if(prog) prog(Math.min(1,p));
+        if(p>=1||performance.now()-t0>cap) res(p>=1); else setTimeout(f,80); })(); });
+    P3D.waitStadium=function(prog){
+      if(P3D.stadium!=='classic-upgraded'||!window.U11_CLASSIC) return Promise.resolve(true);
+      return _wait(()=>{ const U=window.U11_CLASSIC; if(U.status==='error') return 1;
+        if(_bowlInfo&&_bowlInfo.type==='classic-upgraded') return 1;
+        return Math.min(.97,(U.progress||0)*.95); },prog,90000);
+    };
+    /* Everything a player is drawn from (2026-09-29): both kits, the keeper
+       sheet, the 2D hair layer (it was only requested at first draw, so it
+       popped in after the loading screen) and the pixel ball sprite. */
+    P3D.waitSheets=function(prog){
+      try{ syncSheets(); }catch(e){}
+      return _wait(()=>{
+        const ok=s=>s&&(s==='none'||(s.img&&s.img.complete));
+        const need2d=['h','a'].some(s=>SHEETS[s]&&SHEETS[s]!=='none'&&SHEETS[s].layer==='2d');
+        if(need2d) hairSheet('home');                 // start it now, not at the first frame
+        const hs=HAIR_SHEETS.home, hairOk=!need2d||!!(hs&&(hs.ok||hs.err));
+        const ballOk=!P3D.pixelBall||!!ballSprite||!!P3D._ballErr;
+        const parts=[ok(SHEETS.h),ok(SHEETS.a),!!GK_SHEET,hairOk,ballOk];
+        return parts.every(Boolean)?1:parts.filter(Boolean).length/parts.length; },prog,30000);
+    };
+    // compile every material the scene will use now, not on the first match frames
+    P3D.warmUp=function(){
+      return new Promise(res=>{ try{ renderer.compile(scene,camera); }catch(e){}
+        let n=0; (function f(){ if(++n>3) return res(true); requestAnimationFrame(f); })(); });
+    };
     P3D.stadiumState=function(){
       return {stadium:P3D.stadium, builtBowl:_bowlInfo&&_bowlInfo.type,
               asset:window.U11_CLASSIC?U11_CLASSIC.inspect():null,
@@ -4899,6 +5183,16 @@
       const t=Object.keys(_flagCache).map(k=>k+':'+(_flagCache[k]==='miss'?'no sheet':'animated'));
       return {sheets:t, liveFlags:animFlags.length, fps:P3D.flagFps,
               framesShowing:[...new Set(animFlags.map(a=>a.f))].sort((x,y)=>x-y)};
+    };
+    /* GPU memory probe: three r128 uploads one GL texture per THREE.Texture
+       object, so what counts is the number of distinct Textures on sprites. */
+    P3D.memState=function(){
+      const seen=new Set(); let px=0;
+      const add=t=>{ if(!t) return; const g=renderer.properties.get(t).__webglTexture; if(!g||seen.has(g)) return; seen.add(g);
+        const im=t.image; if(im&&im.width) px+=im.width*im.height; };
+      for(const id in sprites){ const o=sprites[id]; if(!o) continue; add(o.tex); if(o.hair) add(o.hair.tex); }
+      return {glTextures:renderer.info.memory.textures, playerSprites:Object.keys(sprites).length,
+              playerTextures:seen.size, playerTexMB:Math.round(px*4/1048576)};
     };
     P3D.grayOf=function(id){ const o=sprites[id]; return (o&&o._gray&&o._gray.u)?+o._gray.u.value.toFixed(3):null; };
     P3D.teleState=function(slot){ const t=TELES[slot||'tackle']; if(!t) return {built:false};
@@ -5712,7 +6006,7 @@
       monitorQuality(now);
       syncSheets(); watchActions();
       if(PEN){ penCamera(); camera.updateMatrixWorld(); }
-      else if(!cine){ if(!scnCam(dt)&&!goalCam(dt)&&!heroKickCam(dt)) updateCamera(dt); camera.updateMatrixWorld(); }
+      else if(!cine){ if(!scnCam(dt)&&!saveCam(dt)&&!goalCam(dt)&&!heroKickCam(dt)) updateCamera(dt); camera.updateMatrixWorld(); }
       syncPlayers();
       if(PEN) try{ penApply(); }catch(e){ console.error('[P3D] pen',e); }
       else if(!cine) try{ gkaAlign(); }catch(e){}
@@ -5736,6 +6030,7 @@
       if(ENV.time!=='classic'||ENV.weather!=='sunny') try{ envFrame(now,dt); }catch(e){ console.warn('[P3D] env',e); }
       try{ rigFrame(now,dt); }catch(e){ console.warn('[P3D] rig',e); }
       try{ syncCasters(); }catch(e){ console.warn('[P3D] shadows',e); }
+      try{ syncHair(); }catch(e){ console.warn('[P3D] hair',e); }
       // anchor god rays at the sun's projected screen position
       if(rayPass){
         _v3.copy(sun.position).project(camera);
@@ -5747,10 +6042,24 @@
          which left the comet a flat, glow-less band with a square head.
          Force it for the length of a cine3 shot only. */
       const _c3fx=!!(cine&&_c3on());
+      /* Day looks keep the author's fixed band (applyFx), except while a CROSS
+         is in the air: then the band moves onto the header point and glides
+         back after (see actionFocusPoint). The night rig tracks the action all
+         the time. */
+      if(hTilt&&vTilt&&!(RIG&&RIG._tiltSet)&&!cine){
+        const base=(P3D.stadium==='santa-fede'&&LOOK!=='night')?0.42:0.5;
+        const bt=(typeof ballTravel!=='undefined')?ballTravel:null;
+        const crossing=(typeof G!=='undefined'&&G&&G.phase==='pass_anim'&&bt&&bt.active&&bt.kind==='cross');
+        const fy=crossing?tiltFocusY(base,0.12,0.8):(_tiltFy=(_tiltFy==null?base:_tiltFy+(base-_tiltFy)*0.16));
+        hTilt.uniforms.r.value=fy; vTilt.uniforms.r.value=fy;
+      }
       if(composer && P3D.fx && (P3D.fx.on||_c3fx)){ if(_c3fx&&bloomPass) bloomPass.enabled=true; composer.render(dt); }
       else renderer.render(scene,camera);
       drawDebug(); drawHUD();
+      _frames3d++;                     // the match loader's curtain waits on real frames
     }
+    let _frames3d=0;
+    Object.defineProperty(P3D,'frameCount',{get:()=>_frames3d,configurable:true});
     requestAnimationFrame(loop3d);
 
     /* ---- 2.5D toggle buttons removed — engine is always on ---- */

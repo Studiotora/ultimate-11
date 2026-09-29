@@ -266,7 +266,7 @@ function heroFace(name,cls){ // legacy signature → route by name match
 function badge(k,s=24){
   const def=ST_CLUBS[k]||CR_CLUBS[k];
   const fb=def&&typeof crBadgeSvg==='function'?crBadgeSvg(def,s):((T[k]&&T[k].flag)||'🏳');
-  return `<span class="uee" style="width:${s}px;height:${s}px"><img src="assets/team/fake/${k}.png" onerror="this.style.display='none';this.nextElementSibling.style.display='flex'"><span class="fb">${fb}</span></span>`;
+  return `<span class="uee" style="width:${s}px;height:${s}px"><img src="assets/team/${k}.png" onerror="this.style.display='none';this.nextElementSibling.style.display='flex'"><span class="fb">${fb}</span></span>`;
 }
 
 
@@ -399,35 +399,7 @@ window.stOpenAlloc=function(){window._stView='edit';stRender();};
 window.stCloseAlloc=function(){const ov=document.getElementById('st-alloc');if(ov)ov.style.display='none';window._stView='hub';save();stRender();};
 window.stRenderAlloc=function(){};
 window.stSpend=function(){};
-function captainOf(teamKey){
-  const S=STORY;
-  if(S&&teamKey===S.hero.rivalClub)return{name:S.hero.rival,rival:true};
-  if(S&&S.phase==='hs'&&teamKey===S.rivalSchool)return{name:S.hero.rival,rival:true};
-  if(SCHOOL_CAPTAINS[teamKey])return{name:SCHOOL_CAPTAINS[teamKey],rival:false};
-  const t=T[teamKey];if(!t||!t.p)return{name:'The Captain',rival:false};
-  const best=[...t.p].filter(p=>p.pos!=='GK'&&!p._hero&&!p._rival).sort((a,b)=>((b.spd+b.pwr+b.tec)-(a.spd+a.pwr+a.tec)))[0];
-  return{name:best?best.name:'The Captain',rival:false};
-}
 function pick(arr,seed){return arr[seed%arr.length];}
-function preMatchLines(opp,cap){
-  const H=STORY.hero,me=H.name,on=tName(opp);
-  const seed=hash(opp+'_'+(STORY.league?STORY.league.md:STORY.phase)+'_'+H.level);
-  if(cap.rival){
-    return pick([
-      [cap.name+': "Of course it\'s you. The script writes itself."',me+': "Then you already know the ending."',cap.name+': "I\'m one level above you, '+me.split('.').pop()+'. I always will be."',me+': "Levels are numbers. Watch what I do with mine."'],
-      [cap.name+': "I watched your last match. Sloppy first half."',me+': "And I watched yours. You disappear when it matters."',cap.name+': "Then stay until the final whistle. I\'ll show you who disappears."'],
-      [cap.name+': "Genova wasn\'t big enough for both of us. Neither is this league."',me+': "Agreed. Pack your bags."',cap.name+': "Heh. See you out there, rival."']
-    ],seed);
-  }
-  return pick([
-    ['CAPTAIN '+cap.name+' ('+on+'): "So you\'re the kid everyone talks about."',me+': "Talk is cheap. Ninety minutes isn\'t."',cap.name+': "Good answer. Let\'s see if your feet agree."'],
-    [cap.name+' ('+on+'): "We studied your runs all week. There\'s nothing you can surprise us with."',me+': "You studied last week\'s me. I\'m better today."'],
-    [cap.name+' ('+on+'): "This is our house. Keep your head down and it won\'t hurt."',me+': "I came to take three points, not advice."',cap.name+': "Then you\'ll leave with neither."'],
-    [cap.name+' ('+on+'): "One star doesn\'t beat eleven men."',me+': "Right. That\'s why I brought ten friends."'],
-    [cap.name+' ('+on+'): "Heard you train until the lights go out."',me+': "The lights go out. I don\'t."',cap.name+': "...I almost like you, kid. Almost."'],
-    [cap.name+' ('+on+'): "Nervous?"',me+': "Excited. There\'s a difference. You\'ll feel it soon."']
-  ],seed);
-}
 
 /* ── RIVAL PHONE: calls & messages ─────────────────────────── */
 function showPhone(kind,lines,after){ // lines: [{who:'me'|'rv',t}]
@@ -858,7 +830,7 @@ window.storyOnFullTime=function(engHg,engAg){
   save();stRender();showSc('s-story');
   setTimeout(maybeStoryBeat,400);
 };
-window.stQuit=function(){if(!confirm('Delete story progress and start over?'))return;wipe();stRenderCreate();};
+window.stQuit=function(){ueAsk('Delete your story progress and start over?',{title:'NEW STORY',ok:'DELETE',danger:true}).then(function(y){if(!y)return;wipe();stRenderCreate();});};
 
 /* ── RENDER · STORY HUB / EDIT (1920×1080 scaled stage) ───── */
 const PHASE_T={hs:'CH.1 · NATIONAL SCHOOLS CUP',sb:'CH.2 · SERIE B',fr3:'CH.3 · AMICHEVOLE INTERNAZIONALE',sa:'CH.3 · SERIE A',fr4:'CH.4 · RITIRO AZZURRO',wc:'CH.4 · WORLD CUP',done:'EPILOGUE'};

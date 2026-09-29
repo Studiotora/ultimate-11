@@ -18,9 +18,9 @@
 <meta name="theme-color" content="#06080e">
 <title>Ultimate Eleven - Football Strategy Game | Beta</title>
 <meta name="description" content="Ultimate Eleven - A Captain Tsubasa inspired football strategy game with 11 vs 11 gameplay">
-<link href="https://fonts.googleapis.com/css2?family=Permanent+Marker&family=Rajdhani:wght@600;700&family=Orbitron:wght@400;700&family=Cinzel:wght@500;700;900&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Permanent+Marker&family=Rajdhani:wght@600;700&family=Cinzel:wght@500;700;900&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="tokens.css?v=8">
-<link rel="stylesheet" href="style.css?v=99">
+<link rel="stylesheet" href="style.css?v=104">
 <script>
 /* BUILD STAMP — prints which ?v= of each asset actually loaded. A stale
    index.html keeps requesting old versions and every edit looks like nothing
@@ -37,7 +37,8 @@ addEventListener('DOMContentLoaded',function(){
   /* TEMPORARY DIAGNOSTIC — remove once the stale-cache issue is confirmed gone.
      Shows the loaded style.css / game.js versions on screen so a screenshot is
      enough to tell a stale build from a real bug. */
-  try{
+  // on screen only with ?debug=1 / ?build=1 - players saw it over the HUD (debug pass 2026-09-28)
+  if(/[?&](debug|build)=1/.test(location.search)) try{
     var v=function(list,name){for(var i=0;i<list.length;i++){if(list[i].indexOf(name)===0)return list[i].replace(name,'').replace('?v=','v');}return '?';};
     var b=document.createElement('div');
     b.textContent='BUILD  css '+v(css,'style.css')+'  tok '+v(css,'tokens.css')+'  js '+v(js,'game.js')
@@ -189,7 +190,6 @@ addEventListener('DOMContentLoaded',function(){
 .cr-mgmt-lbl{font-family:var(--u-font-ui);font-size:6px;letter-spacing:.15em;color:#48586a;}
 .cr-mgmt-btn:hover .cr-mgmt-lbl{color:#f0c040;}
 /* Squad screen */
-#s-career-squad{background:linear-gradient(160deg,rgba(6,14,30,.82) 0%,rgba(4,8,14,.72) 100%),url('assets/wallpaper/teamedit.png') center/cover no-repeat;overflow:hidden;}
 .cr-squad-topbar{flex-shrink:0;display:flex;align-items:center;gap:10px;padding:8px 14px;background:linear-gradient(180deg,#0a1628,#071020);border-bottom:1px solid rgba(255,255,255,.07);}
 .cr-squad-title{flex:1;text-align:center;font-family:var(--u-font-display);font-size:clamp(16px,25.6px,22px);letter-spacing:.08em;color:#f0c040;text-transform:uppercase;}
 .cr-squad-subtitle{display:block;font-family:var(--u-font-ui);font-size:6px;letter-spacing:.2em;color:#48586a;margin-top:1px;}
@@ -316,6 +316,49 @@ addEventListener('DOMContentLoaded',function(){
 .ae-set-btn.ghost{color:#fff;border-color:rgba(255,255,255,.2);background:rgba(255,255,255,.05);}
 
 .ae-set-btn.ghost:hover{border-color:var(--gold);color:var(--gold);}
+
+/* ---- SETTINGS v2 (2026-09-28): pages + side rail. The modal is lifted to
+   <body> on open, outside the scaled stage, so it sizes in vw/vh. ---- */
+.ae-modal-card.st2-card{width:min(900px,95vw);height:min(580px,92vh);max-height:none;display:flex;flex-direction:column;overflow:hidden;}
+.st2-wrap{flex:1 1 auto;min-height:0;display:flex;}
+.st2-rail{flex:0 0 min(230px,26vw);display:flex;flex-direction:column;gap:6px;padding:14px 12px;border-right:1px solid rgba(240,192,64,.18);
+  background:linear-gradient(180deg,rgba(255,255,255,.025),rgba(255,255,255,0));}
+.st2-tab{all:unset;box-sizing:border-box;display:flex;flex-direction:column;gap:3px;padding:11px 14px;border-radius:8px;cursor:pointer;
+  border:1px solid transparent;border-left:3px solid transparent;transition:background .15s,border-color .15s;}
+.st2-tab b{font-family:var(--u-font-display);font-weight:700;font-size:15px;letter-spacing:.1em;color:#aeb9c8;}
+.st2-tab i{font-style:normal;font-family:var(--u-font-ui);font-size:10px;letter-spacing:.14em;color:#56657a;}
+.st2-tab:hover{background:rgba(255,255,255,.04);}
+.st2-tab.on{background:linear-gradient(90deg,rgba(240,192,64,.16),rgba(240,192,64,.02));border-color:rgba(240,192,64,.28);border-left-color:var(--gold);}
+.st2-tab.on b{color:var(--gold);} .st2-tab.on i{color:#9a8a5c;}
+.st2-tab.pad-focus{outline:2px solid var(--gold);outline-offset:2px;}
+.st2-hint{margin-top:auto;font-family:var(--u-font-ui);font-size:10px;letter-spacing:.16em;color:#48586a;padding:6px 4px;}
+.st2-hint kbd{font-family:var(--u-font-num);font-size:10px;color:#cfd8e3;border:1px solid rgba(255,255,255,.2);border-radius:4px;padding:1px 5px;margin-right:4px;}
+.st2-pages{flex:1 1 auto;min-width:0;overflow:auto;padding:6px 22px 18px;}
+.st2-page{display:none;} .st2-page.on{display:block;animation:aeFade .18s both;}
+.st2-ph{font-family:var(--u-font-display);font-size:20px;letter-spacing:.1em;color:#eceff4;padding:12px 2px 10px;border-bottom:1px solid rgba(240,192,64,.3);margin-bottom:2px;}
+.st2-ph span{display:block;font-family:var(--u-font-ui);font-size:10px;letter-spacing:.2em;color:#6b7d94;margin-top:4px;}
+.st2-card .ae-set-desc{font-size:10px;letter-spacing:.12em;color:#6b7d94;}
+.st2-card .ae-set-row{padding:10px 2px;}
+.st2-card .ae-set-row.st2-col{flex-direction:column;align-items:stretch;gap:7px;}
+.st2-card .ae-uisize button{padding:8px 6px!important;}
+.st2-card .ae-set-row.st2-col .ae-uisize{width:100%;}
+.st2-card .ae-uisize button{font-size:13px;letter-spacing:.12em;padding:10px 6px;}
+.st2-hint kbd{font-size:11px;}
+.st2-card .st2-wrapbtns{flex-wrap:wrap;} .st2-card .st2-wrapbtns button{flex:1 1 30%;}
+.st2-card .ae-uisize button.pad-focus,.st2-card .ae-tog.pad-focus,.st2-card .ae-set-btn.pad-focus,.st2-step button.pad-focus{outline:2px solid var(--gold);outline-offset:2px;}
+.st2-card button.ae-tog{padding:0;font:inherit;appearance:none;-webkit-appearance:none;}
+.st2-step{display:flex;align-items:center;gap:8px;}
+.st2-step button{width:30px;height:30px;border-radius:7px;border:1px solid rgba(255,255,255,.18);background:rgba(255,255,255,.05);color:#fff;font:700 16px var(--u-font-ui);cursor:pointer;}
+.st2-step button:hover{border-color:var(--gold);color:var(--gold);}
+.st2-step b{font-family:var(--u-font-num);font-weight:normal;font-size:14px;color:var(--gold);min-width:30px;text-align:right;}
+@media (max-width:720px),(max-height:430px){
+  .st2-rail{flex-basis:150px;padding:10px 8px;} .st2-tab{padding:8px 10px;} .st2-tab i{display:none;} .st2-hint{display:none;}
+  .st2-pages{padding:2px 14px 10px;} .st2-ph{font-size:15px;padding:6px 2px;} .st2-ph span{display:none;}
+  .st2-card .ae-set-row{padding:6px 2px;} .st2-card .ae-set-row.st2-col{gap:5px;}
+  .st2-card .ae-set-name{font-size:13px;} .st2-card .ae-set-desc{font-size:9px;}
+  .st2-card .ae-uisize button{font-size:11px;padding:6px 4px!important;}
+  .st2-tab b{font-size:13px;white-space:nowrap;} .st2-card .ae-modal-hd{padding:8px 16px;} .st2-card .ae-modal-title{font-size:18px;}
+}
 
 /* ---- HOW TO PLAY ---- px throughout: this stage is a fixed 1280x720 scaled
    by --vp-scale, so vw/vh would measure the window, not the stage. */
@@ -705,82 +748,135 @@ addEventListener('DOMContentLoaded',function(){
 <div class="ue-home-modals">
     <div class="ae-toast" id="aeToastEl"></div>
 
-    <!-- SETTINGS MODAL -->
+    <!-- SETTINGS MODAL (v2, 2026-09-28): four pages instead of one long column.
+         Every control is a real <button>, so the pad menu scan (game.js B.1)
+         reaches all of it; LB / RB (or Q / E) turn the page. -->
     <div class="ae-modal" id="aeSettings">
-      <div class="ae-modal-card">
+      <div class="ae-modal-card st2-card">
         <div class="ae-modal-hd">
           <div class="ae-modal-title">SETTINGS<small>環境設定 · OPTIONS</small></div>
           <button class="ae-modal-x" data-nav-back onclick="closeSettings()">✕</button>
         </div>
-        <div class="ae-modal-body">
-          <div class="ae-set-row">
-            <div class="ae-set-lbl"><div class="ae-set-name">MASTER VOLUME</div><div class="ae-set-desc">MUSIC & AUDIO LEVEL</div></div>
-            <input type="range" class="ae-range" id="setVol" min="0" max="100" step="1" oninput="setMasterVol(this.value)">
-          </div>
-          <div class="ae-set-row">
-            <div class="ae-set-lbl"><div class="ae-set-name">UI SIZE</div><div class="ae-set-desc">BUTTON SIZE · AUTO DETECTS YOUR DEVICE</div></div>
-            <div class="ae-uisize" id="uiSizeCtl">
-              <button data-sz="auto" onclick="setUiSize('auto')">AUTO</button>
-              <button data-sz="desktop" onclick="setUiSize('desktop')">SMALL</button>
-              <button data-sz="tablet" onclick="setUiSize('tablet')">MED</button>
-              <button data-sz="phone" onclick="setUiSize('phone')">LARGE</button>
-            </div>
-          </div>
-          <div class="ae-set-row">
-            <div class="ae-set-lbl"><div class="ae-set-name">MENU MUSIC</div><div class="ae-set-desc">PLAY THEME ON THE HOME SCREEN</div></div>
-            <div class="ae-tog" id="togMenuMusic" onclick="toggleMenuMusic()"></div>
-          </div>
-          <div class="ae-set-row">
-            <div class="ae-set-lbl"><div class="ae-set-name">MATCH MUSIC</div><div class="ae-set-desc">SOUNDTRACK DURING GAMES</div></div>
-            <div class="ae-tog" id="togMatchMusic" onclick="toggleMatchMusic()"></div>
-          </div>
-          <div class="ae-set-row">
-            <div class="ae-set-lbl"><div class="ae-set-name">PS1 RETRO FILTER</div><div class="ae-set-desc">DITHER & SCANLINE LOOK IN MATCHES</div></div>
-            <div class="ae-tog" id="togPS1" onclick="togglePS1()"></div>
-          </div>
-          <div class="ae-set-row">
-            <div class="ae-set-lbl"><div class="ae-set-name">STADIUM</div><div class="ae-set-desc">BOWL STYLE IN MATCHES · ASTRA LOADS A 12MB MODEL ONCE</div></div>
-            <div class="ae-uisize" id="stadiumCtl">
-              <button data-st="classic-upgraded" onclick="setStadium('classic-upgraded')">ASTRA</button>
-              <button data-st="classic" onclick="setStadium('classic')">CLASSIC</button>
-              <button data-st="oval" onclick="setStadium('oval')">OVAL</button>
-              <button data-st="santa-fede" onclick="setStadium('santa-fede')">SANTA FEDE · 5 v 5</button>
-            </div>
-          </div>
-          <div class="ae-set-row">
-            <div class="ae-set-lbl"><div class="ae-set-name">TIME</div><div class="ae-set-desc">MATCH LIGHTING · CHANGES LIVE</div></div>
-            <div class="ae-uisize" id="timeCtl">
-              <button data-tm="classic" onclick="setMatchTime('classic')">DAY</button>
-              <button data-tm="golden" onclick="setMatchTime('golden')">GOLDEN</button>
-              <button data-tm="night" onclick="setMatchTime('night')">NIGHT</button>
-            </div>
-          </div>
-          <div class="ae-set-row">
-            <div class="ae-set-lbl"><div class="ae-set-name">CAMERA</div><div class="ae-set-desc">MATCH CAMERA · CINEMATIC IS CLOSER AND LOWER</div></div>
-            <div class="ae-uisize" id="camCtl">
-              <button data-cm="broadcast" onclick="setMatchCam('broadcast')">BROADCAST</button>
-              <button data-cm="cinematic" onclick="setMatchCam('cinematic')">CINEMATIC</button>
-            </div>
-          </div>
-          <div class="ae-set-row">
-            <div class="ae-set-lbl"><div class="ae-set-name">WEATHER</div><div class="ae-set-desc">MATCH WEATHER · CHANGES LIVE</div></div>
-            <div class="ae-uisize" id="weatherCtl">
-              <button data-wx="sunny" onclick="setMatchWeather('sunny')">SUNNY</button>
-              <button data-wx="rain" onclick="setMatchWeather('rain')">RAIN</button>
-              <button data-wx="snow" onclick="setMatchWeather('snow')">SNOW</button>
-            </div>
-          </div>
-          <div class="ae-set-row">
-            <div class="ae-set-lbl"><div class="ae-set-name">PERF OVERLAY</div><div class="ae-set-desc">SHOW SPRITE / FPS DEBUG IN MATCHES</div></div>
-            <div class="ae-tog" id="togDebug" onclick="toggleDebug()"></div>
-          </div>
-          <div class="ae-set-row">
-            <div class="ae-set-lbl"><div class="ae-set-name">FULLSCREEN</div><div class="ae-set-desc">RECOMMENDED FOR LANDSCAPE PLAY</div></div>
-            <button class="ae-set-btn ghost" onclick="toggleFullscreen()">TOGGLE</button>
-          </div>
-          <div class="ae-set-row" style="border-bottom:none;">
-            <div class="ae-set-lbl"><div class="ae-set-name">RESET SAVE DATA</div><div class="ae-set-desc">WIPES CAREER & PROFILE · CANNOT UNDO</div></div>
-            <button class="ae-set-btn danger" onclick="resetSaveData()">RESET</button>
+        <div class="st2-wrap">
+          <nav class="st2-rail" id="st2Rail">
+            <div class="st2-tab" role="tab" data-pg="game" onclick="settingsPage('game')"><b>GAMEPLAY</b><i>DIFFICULTY · LENGTH · CAMERA</i></div>
+            <div class="st2-tab" role="tab" data-pg="view" onclick="settingsPage('view')"><b>MATCH VIEW</b><i>STADIUM · TIME · WEATHER</i></div>
+            <div class="st2-tab" role="tab" data-pg="audio" onclick="settingsPage('audio')"><b>AUDIO</b><i>VOLUME · MUSIC</i></div>
+            <div class="st2-tab" role="tab" data-pg="sys" onclick="settingsPage('sys')"><b>SYSTEM</b><i>DISPLAY · DATA</i></div>
+            <div class="st2-hint"><kbd>LB</kbd><kbd>RB</kbd> CHANGE PAGE</div>
+          </nav>
+          <div class="st2-pages">
+            <!-- GAMEPLAY -->
+            <section class="st2-page" data-pg="game">
+              <div class="st2-ph">GAMEPLAY<span>HOW THE MATCH PLAYS</span></div>
+              <div class="ae-set-row st2-col">
+                <div class="ae-set-lbl"><div class="ae-set-name">DIFFICULTY</div><div class="ae-set-desc" id="diffDesc"></div></div>
+                <div class="ae-uisize" id="diffCtl">
+                  <button data-df="rookie" onclick="setDifficulty('rookie')">ROOKIE</button>
+                  <button data-df="pro" onclick="setDifficulty('pro')">PRO</button>
+                  <button data-df="champion" onclick="setDifficulty('champion')">CHAMPION</button>
+                  <button data-df="legend" onclick="setDifficulty('legend')">LEGEND</button>
+                </div>
+              </div>
+              <div class="ae-set-row st2-col">
+                <div class="ae-set-lbl"><div class="ae-set-name">MATCH LENGTH</div><div class="ae-set-desc" id="lenDesc"></div></div>
+                <div class="ae-uisize" id="lenCtl">
+                  <button data-ln="short" onclick="setMatchLength('short')">SHORT</button>
+                  <button data-ln="normal" onclick="setMatchLength('normal')">NORMAL</button>
+                  <button data-ln="long" onclick="setMatchLength('long')">LONG</button>
+                </div>
+              </div>
+              <div class="ae-set-row st2-col" style="border-bottom:none;">
+                <div class="ae-set-lbl"><div class="ae-set-name">CAMERA</div><div class="ae-set-desc">MATCH CAMERA · CINEMATIC IS CLOSER AND LOWER</div></div>
+                <div class="ae-uisize" id="camCtl">
+                  <button data-cm="broadcast" onclick="setMatchCam('broadcast')">BROADCAST</button>
+                  <button data-cm="cinematic" onclick="setMatchCam('cinematic')">CINEMATIC</button>
+                </div>
+              </div>
+            </section>
+            <!-- MATCH VIEW -->
+            <section class="st2-page" data-pg="view">
+              <div class="st2-ph">MATCH VIEW<span>WHERE AND WHEN YOU PLAY · CHANGES LIVE</span></div>
+              <div class="ae-set-row st2-col">
+                <div class="ae-set-lbl"><div class="ae-set-name">STADIUM</div><div class="ae-set-desc">ASTRA LOADS A 12MB MODEL ONCE · SANTA FEDE IS 5 v 5</div></div>
+                <div class="ae-uisize st2-wrapbtns" id="stadiumCtl">
+                  <button data-st="classic-upgraded" onclick="setStadium('classic-upgraded')">ASTRA</button>
+                  <button data-st="classic" onclick="setStadium('classic')">CLASSIC</button>
+                  <button data-st="oval" onclick="setStadium('oval')">OVAL</button>
+                  <button data-st="santa-fede" onclick="setStadium('santa-fede')">SANTA FEDE</button>
+                  <button data-st="highschool" onclick="setStadium('highschool')">HIGH SCHOOL</button>
+                </div>
+              </div>
+              <div class="ae-set-row st2-col">
+                <div class="ae-set-lbl"><div class="ae-set-name">TIME</div><div class="ae-set-desc">MATCH LIGHTING</div></div>
+                <div class="ae-uisize" id="timeCtl">
+                  <button data-tm="classic" onclick="setMatchTime('classic')">DAY</button>
+                  <button data-tm="golden" onclick="setMatchTime('golden')">GOLDEN</button>
+                  <button data-tm="night" onclick="setMatchTime('night')">NIGHT</button>
+                </div>
+              </div>
+              <div class="ae-set-row st2-col">
+                <div class="ae-set-lbl"><div class="ae-set-name">WEATHER</div><div class="ae-set-desc">RAIN AND SNOW ALSO TURN THE SKY OVERCAST</div></div>
+                <div class="ae-uisize" id="weatherCtl">
+                  <button data-wx="sunny" onclick="setMatchWeather('sunny')">SUNNY</button>
+                  <button data-wx="rain" onclick="setMatchWeather('rain')">RAIN</button>
+                  <button data-wx="snow" onclick="setMatchWeather('snow')">SNOW</button>
+                </div>
+              </div>
+              <div class="ae-set-row st2-col" style="border-bottom:none;">
+                <div class="ae-set-lbl"><div class="ae-set-name">PLAYERS</div><div class="ae-set-desc">3D BETA: ASTRA'S BAKED MODEL · EVERY NATION'S KIT · OWN HAIR PER PLAYER</div></div>
+                <div class="ae-uisize" id="p3dCtl">
+                  <button data-p3="0" onclick="setPlayers3d(false)">CLASSIC</button>
+                  <button data-p3="1" onclick="setPlayers3d(true)">3D BETA</button>
+                </div>
+              </div>
+            </section>
+            <!-- AUDIO -->
+            <section class="st2-page" data-pg="audio">
+              <div class="st2-ph">AUDIO<span>MUSIC AND SOUND</span></div>
+              <div class="ae-set-row">
+                <div class="ae-set-lbl"><div class="ae-set-name">MASTER VOLUME</div><div class="ae-set-desc">MUSIC & SOUND EFFECTS</div></div>
+                <div class="st2-step">
+                  <button onclick="setMasterVol(Math.max(0,(+document.getElementById('setVol').value)-10))" aria-label="Volume down">−</button>
+                  <input type="range" class="ae-range" id="setVol" min="0" max="100" step="1" oninput="setMasterVol(this.value)">
+                  <b id="setVolVal">70</b>
+                  <button onclick="setMasterVol(Math.min(100,(+document.getElementById('setVol').value)+10))" aria-label="Volume up">+</button>
+                </div>
+              </div>
+              <div class="ae-set-row">
+                <div class="ae-set-lbl"><div class="ae-set-name">MENU MUSIC</div><div class="ae-set-desc">PLAY THE THEME ON THE HOME SCREEN</div></div>
+                <button class="ae-tog" id="togMenuMusic" onclick="toggleMenuMusic()" aria-label="Menu music"></button>
+              </div>
+              <div class="ae-set-row" style="border-bottom:none;">
+                <div class="ae-set-lbl"><div class="ae-set-name">MATCH MUSIC</div><div class="ae-set-desc">SOUNDTRACK DURING GAMES</div></div>
+                <button class="ae-tog" id="togMatchMusic" onclick="toggleMatchMusic()" aria-label="Match music"></button>
+              </div>
+            </section>
+            <!-- SYSTEM -->
+            <section class="st2-page" data-pg="sys">
+              <div class="st2-ph">SYSTEM<span>DISPLAY, DEVICE AND SAVE DATA</span></div>
+              <div class="ae-set-row st2-col">
+                <div class="ae-set-lbl"><div class="ae-set-name">UI SIZE</div><div class="ae-set-desc">BUTTON SIZE · AUTO DETECTS YOUR DEVICE</div></div>
+                <div class="ae-uisize" id="uiSizeCtl">
+                  <button data-sz="auto" onclick="setUiSize('auto')">AUTO</button>
+                  <button data-sz="desktop" onclick="setUiSize('desktop')">SMALL</button>
+                  <button data-sz="tablet" onclick="setUiSize('tablet')">MED</button>
+                  <button data-sz="phone" onclick="setUiSize('phone')">LARGE</button>
+                </div>
+              </div>
+              <div class="ae-set-row">
+                <div class="ae-set-lbl"><div class="ae-set-name">FULLSCREEN</div><div class="ae-set-desc">RECOMMENDED FOR LANDSCAPE PLAY</div></div>
+                <button class="ae-set-btn ghost" onclick="toggleFullscreen()">TOGGLE</button>
+              </div>
+              <div class="ae-set-row">
+                <div class="ae-set-lbl"><div class="ae-set-name">PERF OVERLAY</div><div class="ae-set-desc">SHOW SPRITE / FPS DEBUG IN MATCHES</div></div>
+                <button class="ae-tog" id="togDebug" onclick="toggleDebug()" aria-label="Performance overlay"></button>
+              </div>
+              <div class="ae-set-row" style="border-bottom:none;">
+                <div class="ae-set-lbl"><div class="ae-set-name">RESET SAVE DATA</div><div class="ae-set-desc">WIPES CAREER & PROFILE · CANNOT UNDO</div></div>
+                <button class="ae-set-btn danger" onclick="resetSaveData()">RESET</button>
+              </div>
+            </section>
           </div>
         </div>
       </div>
@@ -797,7 +893,7 @@ addEventListener('DOMContentLoaded',function(){
        muted (vol 0) and forced to LARGE buttons - as defaults those would start
        every new player with no sound, and give PC players oversized buttons.
        'auto' already picks the large size on phones. */
-    var def={vol:70,menuMusic:true,matchMusic:true,ps1:false,debug:false,uisize:'auto'};
+    var def={vol:70,menuMusic:true,matchMusic:true,ps1:false,debug:false,uisize:'auto',diff:'pro',len:'normal'};
     var S=load();
     function load(){try{return Object.assign({},def,JSON.parse(localStorage.getItem(K))||{});}catch(e){return Object.assign({},def);}}
     function save(){try{localStorage.setItem(K,JSON.stringify(S));}catch(e){}}
@@ -808,12 +904,19 @@ addEventListener('DOMContentLoaded',function(){
       if(bg){bg.volume=v;bg.muted=!S.menuMusic;}
       matchEls().forEach(function(a){a.volume=v;a.muted=!S.matchMusic;});
       if(window.SFX)SFX.master=v;
-      if(window.PS1){window.PS1.on=S.ps1;window.PS1.debug=S.debug;}
+      if(window.P3D) P3D.debug=!!S.debug;   // PERF OVERLAY = the renderer's debug overlay (ps1-mod.js is retired)
     }
     function setTog(id,on){var e=document.getElementById(id);if(e)e.classList.toggle('on',!!on);}
     function syncUI(){
       var sv=document.getElementById('setVol'); if(sv)sv.value=S.vol;
-      setTog('togMenuMusic',S.menuMusic);setTog('togMatchMusic',S.matchMusic);setTog('togPS1',S.ps1);setTog('togDebug',S.debug);
+      var svv=document.getElementById('setVolVal'); if(svv)svv.textContent=Math.round(S.vol);
+      var dct=document.getElementById('diffCtl');
+      if(dct)dct.querySelectorAll('button').forEach(function(b){b.classList.toggle('on',b.dataset.df===S.diff);});
+      var dd=document.getElementById('diffDesc'); if(dd)dd.textContent=DIFF_TXT[S.diff]||'';
+      var lct=document.getElementById('lenCtl');
+      if(lct)lct.querySelectorAll('button').forEach(function(b){b.classList.toggle('on',b.dataset.ln===S.len);});
+      var ld=document.getElementById('lenDesc'); if(ld)ld.textContent=LEN_TXT[S.len]||'';
+      setTog('togMenuMusic',S.menuMusic);setTog('togMatchMusic',S.matchMusic);setTog('togDebug',S.debug);
       var ctl=document.getElementById('uiSizeCtl');
       if(ctl)ctl.querySelectorAll('button').forEach(function(b){b.classList.toggle('on',b.dataset.sz===(S.uisize||'auto'));});
       var sct=document.getElementById('stadiumCtl');
@@ -823,8 +926,47 @@ addEventListener('DOMContentLoaded',function(){
       if(tct)tct.querySelectorAll('button').forEach(function(b){b.classList.toggle('on',b.dataset.tm===env.time);});
       var wct=document.getElementById('weatherCtl');
       if(wct)wct.querySelectorAll('button').forEach(function(b){b.classList.toggle('on',b.dataset.wx===env.weather);});
+      var pct=document.getElementById('p3dCtl'), p3=!!(window.P3D&&P3D.players3d);
+      if(pct)pct.querySelectorAll('button').forEach(function(b){b.classList.toggle('on',b.dataset.p3===(p3?'1':'0'));});
       var cct=document.getElementById('camCtl'), cm=(window.P3D&&P3D.camMode)||(function(){try{return localStorage.getItem('u11.cam')||'broadcast';}catch(e){return 'broadcast';}})();
       if(cct)cct.querySelectorAll('button').forEach(function(b){b.classList.toggle('on',b.dataset.cm===cm);});
+    }
+    /* DIFFICULTY + MATCH LENGTH (2026-09-28). Stored in ue_settings_v1;
+       game.js reads them through window.U11Settings (U11_DIFF / startMT). */
+    var DIFF_TXT={rookie:'CPU SLOWER TO RUN AND TO REACT · DUELS ~12% WEAKER · FEWER SUPER SHOTS',
+      pro:'THE STANDARD MATCH · EVEN DUELS',
+      champion:'CPU QUICKER TO RUN AND TO REACT · DUELS ~8% STRONGER · MORE SUPER SHOTS',
+      legend:'CPU FASTEST PACE AND REACTIONS · DUELS ~16% STRONGER · ELITE KEEPER'};
+    var LEN_TXT={short:'ABOUT 1.5 MINUTES A HALF',normal:'ABOUT 2 MINUTES A HALF',long:'ABOUT 3 MINUTES A HALF'};
+    window.U11Settings={get:function(k){return S[k];}};
+    window.setDifficulty=function(v){S.diff=v;save();syncUI();};
+    window.setMatchLength=function(v){S.len=v;save();syncUI();};
+    /* PAGES: one visible at a time; the pad scan skips hidden pages, and a
+       page change forces it to rescan so the cursor lands on the new page.
+       The rail tabs are divs, not buttons, so the pad cursor walks only the
+       page's own controls - LB / RB turn the page. */
+    var PAGES=['game','view','audio','sys'], curPage='game';
+    window.settingsPage=function(pg){
+      if(PAGES.indexOf(pg)<0) pg='game'; curPage=pg;
+      var m=document.getElementById('aeSettings'); if(!m) return;
+      m.querySelectorAll('.st2-tab').forEach(function(t){t.classList.toggle('on',t.dataset.pg===pg);});
+      m.querySelectorAll('.st2-page').forEach(function(p){p.classList.toggle('on',p.dataset.pg===pg);});
+      var pgs=m.querySelector('.st2-pages'); if(pgs) pgs.scrollTop=0;
+      try{ if(typeof _navScreen!=='undefined') _navScreen=''; }catch(e){}
+    };
+    function pageStep(d){ var i=PAGES.indexOf(curPage); settingsPage(PAGES[(i+d+PAGES.length)%PAGES.length]); }
+    document.addEventListener('keydown',function(e){
+      var m=document.getElementById('aeSettings'); if(!m||!m.classList.contains('show')) return;
+      if(e.key==='q'||e.key==='Q'||e.key==='PageUp'){ e.preventDefault(); pageStep(-1); }
+      else if(e.key==='e'||e.key==='E'||e.key==='PageDown'){ e.preventDefault(); pageStep(1); }
+    });
+    // LB / RB on a pad, polled only while Settings is open
+    var padPrev={4:false,5:false}, padRaf=0;
+    function padPoll(){
+      var m=document.getElementById('aeSettings'); if(!m||!m.classList.contains('show')){ padRaf=0; return; }
+      try{ var gp=(navigator.getGamepads?navigator.getGamepads():[]); for(var i=0;i<gp.length;i++){ var g=gp[i]; if(!g) continue;
+        [4,5].forEach(function(bi){ var on=!!(g.buttons[bi]&&g.buttons[bi].pressed); if(on&&!padPrev[bi]) pageStep(bi===4?-1:1); padPrev[bi]=on; }); break; } }catch(e){}
+      padRaf=requestAnimationFrame(padPoll);
     }
     window.setMatchCam=function(v){
       if(window.P3D&&P3D.setCamMode) P3D.setCamMode(v); else try{ localStorage.setItem('u11.cam',v); }catch(e){}
@@ -843,6 +985,10 @@ addEventListener('DOMContentLoaded',function(){
       if(window.P3D&&P3D.setTime) P3D.setTime(v); else try{ localStorage.setItem('u11.look',v); }catch(e){}
       syncUI();
     };
+    window.setPlayers3d=function(on){
+      if(window.P3D&&P3D.setPlayers3d) P3D.setPlayers3d(on); else try{ localStorage.setItem('u11.players3d',on?'1':'0'); }catch(e){}
+      syncUI();
+    };
     window.setMatchWeather=function(v){
       if(window.P3D&&P3D.setWeather) P3D.setWeather(v); else try{ localStorage.setItem('u11.weather',v); }catch(e){}
       syncUI();
@@ -852,7 +998,7 @@ addEventListener('DOMContentLoaded',function(){
        truth - do not mirror it into ue_settings_v1. */
     function curStadium(){
       try{ var s=localStorage.getItem('ue_stadium');
-        if(s==='classic'||s==='oval'||s==='classic-upgraded'||s==='santa-fede') return s; }catch(e){}
+        if(s==='classic'||s==='oval'||s==='classic-upgraded'||s==='santa-fede'||s==='highschool') return s; }catch(e){}
       return (window.P3D&&P3D.stadium)||'classic-upgraded';   // Astra Stadium is the default
     }
     window.setStadium=function(v){
@@ -938,15 +1084,15 @@ addEventListener('DOMContentLoaded',function(){
        (found 2026-09-24 while adding TIME / WEATHER). Lift them to <body> on
        open so they show over any screen. */
     function liftModal(m){ try{ if(m&&m.parentElement!==document.body) document.body.appendChild(m); }catch(e){} }
-    window.openSettings=function(){apply();syncUI();var m=document.getElementById('aeSettings');liftModal(m);if(m)m.classList.add('show');};
+    window.openSettings=function(pg){apply();syncUI();var m=document.getElementById('aeSettings');liftModal(m);if(m)m.classList.add('show');
+      settingsPage(typeof pg==='string'?pg:curPage); if(!padRaf) padRaf=requestAnimationFrame(padPoll);};
     window.closeSettings=function(){var m=document.getElementById('aeSettings');if(m)m.classList.remove('show');};
-    window.setMasterVol=function(v){S.vol=+v;save();apply();};
+    window.setMasterVol=function(v){S.vol=+v;save();apply();syncUI();};
     window.toggleMenuMusic=function(){S.menuMusic=!S.menuMusic;save();apply();syncUI();
       var bg=document.getElementById('bgMusic');
       if(bg){ if(S.menuMusic&&document.querySelector('#s-home.active')){var p=bg.play();if(p&&p.catch)p.catch(function(){});} else if(!S.menuMusic){bg.pause();} }
     };
     window.toggleMatchMusic=function(){S.matchMusic=!S.matchMusic;save();apply();syncUI();};
-    window.togglePS1=function(){S.ps1=!S.ps1;save();apply();syncUI();};
     window.toggleDebug=function(){S.debug=!S.debug;save();apply();syncUI();};
     window.toggleFullscreen=function(){
       try{
@@ -955,9 +1101,9 @@ addEventListener('DOMContentLoaded',function(){
       }catch(e){}
     };
     window.resetSaveData=function(){
-      if(!confirm('Reset ALL save data?\nThis wipes your career and profile and cannot be undone.'))return;
+      ueAsk('Reset ALL save data?\nThis wipes your career and profile and cannot be undone.',{title:'RESET SAVE DATA',ok:'RESET',danger:true}).then(function(y){ if(!y) return;
       try{Object.keys(localStorage).forEach(function(k){if(/^(ue_|ue11|career|car_|CAR|ultimate)/i.test(k))localStorage.removeItem(k);});}catch(e){}
-      location.reload();
+      location.reload(); });
     };
     var tTimer=null;
     window.aeToast=function(msg){
@@ -966,7 +1112,7 @@ addEventListener('DOMContentLoaded',function(){
       clearTimeout(tTimer); tTimer=setTimeout(function(){el.classList.remove('show');},1900);
     };
     function boot(){
-      // game.js / ps1-mod.js are deferred → guaranteed loaded by DOMContentLoaded.
+      // game.js is deferred → guaranteed loaded by DOMContentLoaded.
       ['startMatchMusic','startMusic','returnToMenuMusic'].forEach(function(fn){
         var orig=window[fn];
         if(typeof orig==='function'){window[fn]=function(){var r=orig.apply(this,arguments);setTimeout(apply,30);return r;};}
@@ -1218,8 +1364,9 @@ addEventListener('DOMContentLoaded',function(){
     <!-- CENTER: scores + clock on the central black plate -->
     <div class="hmid">
       <div class="hscores"><span class="hsc sh" id="sc-h">0</span><span class="hsc-sep">·</span><span class="hsc sa" id="sc-a">0</span></div>
-      <div class="hclock"><div class="htime" id="htime">45:00</div></div>
-      <div class="hhalf" id="hhalf">FIRST HALF</div>
+      <!-- clock tab hangs under the bar (2026-09-28): stacking it inside the
+           34px bar cropped the score -->
+      <div class="hclock-tab"><div class="htime" id="htime">45:00</div><div class="hhalf" id="hhalf">FIRST HALF</div></div>
       <div class="posstrip"><div class="posstrip-h" id="posstrip-h" style="width:50%"></div><div class="posstrip-a"></div></div>
     </div>
     <!-- AWAY team (right): name + flag centered on red banner -->
@@ -1585,11 +1732,11 @@ addEventListener('DOMContentLoaded',function(){
             <span class="cr-mgmt-icon">💸</span>
             <span class="cr-mgmt-lbl">TRANSFERS</span>
           </button>
-          <button class="cr-mgmt-btn" onclick="alert('Coach menu coming soon!')">
+          <button class="cr-mgmt-btn" onclick="ueTell('The coach menu is coming soon.',{title:'COACH'})">
             <span class="cr-mgmt-icon">📋</span>
             <span class="cr-mgmt-lbl">COACH</span>
           </button>
-          <button class="cr-mgmt-btn" onclick="alert('Formation editor coming soon!')">
+          <button class="cr-mgmt-btn" onclick="ueTell('The formation editor is coming soon.',{title:'TACTICS'})">
             <span class="cr-mgmt-icon">🗂</span>
             <span class="cr-mgmt-lbl">TACTICS</span>
           </button>
@@ -1599,47 +1746,6 @@ addEventListener('DOMContentLoaded',function(){
   </div>
 </div>
 
-<!-- ══════════════ CAREER: SQUAD MANAGEMENT ══════════════ -->
-<div id="s-career-squad" class="screen">
-  <div class="cr-squad-topbar">
-    <button class="back-btn" onclick="showSc('s-career-hub')">← HUB</button>
-    <div class="cr-squad-title">
-      <span id="csq-clubname">SQUAD</span>
-      <span class="cr-squad-subtitle" id="csq-subtitle">SEASON 1 · MD 1</span>
-    </div>
-    <button class="cr-save-btn" onclick="crSaveSquad()">💾 SAVE</button>
-  </div>
-
-  <div class="cr-squad-body">
-    <!-- LEFT: Formation pitch view -->
-    <div class="cr-squad-left">
-      <div class="cr-squad-formation-bar">
-        <span class="cr-fml">FORMATION</span>
-        <select id="csq-formation" class="cr-fsel" onchange="crSquadFormationChange()">
-          <option value="4-3-3">4-3-3</option>
-          <option value="4-4-2">4-4-2</option>
-          <option value="4-1-3-2">4-1-3-2</option>
-          <option value="3-5-2">3-5-2</option>
-        </select>
-      </div>
-      <div class="cr-pitch" id="csq-pitch">
-        <!-- slots rendered by JS -->
-      </div>
-    </div>
-
-    <!-- RIGHT: Player list -->
-    <div class="cr-squad-right">
-      <div class="cr-squad-tabs">
-        <button class="cr-stab active" onclick="crSquadTab('starters')">STARTERS</button>
-        <button class="cr-stab" onclick="crSquadTab('bench')">BENCH</button>
-        <button class="cr-stab" onclick="crSquadTab('all')">ALL</button>
-      </div>
-      <div class="cr-squad-list" id="csq-player-list">
-        <!-- players rendered by JS -->
-      </div>
-    </div>
-  </div>
-</div>
 
 <!-- ══════════════ CAREER: MATCH RESULT ══════════════ -->
 <div id="s-career-result" class="screen">
@@ -1733,11 +1839,11 @@ addEventListener('DOMContentLoaded',function(){
 </div>
 
 <script src="ult11-input.js?v=9" defer></script>
+<script src="ult11-dialog.js?v=1" defer></script>
 <script src="ult11-gkqte.js?v=2" defer></script>
 <script src="ult11-aerial.js?v=2" defer></script>
-<script src="game.js?v=212" defer></script>
-<!-- ps1-mod.js removed: P3D is the only renderer, its post-FX drew into the hidden 2D canvas.
-     Re-add this line to restore it: <script src="ps1-mod.js?v=1" defer></script> -->
+<script src="ult11-crossqte.js?v=1" defer></script>
+<script src="game.js?v=232" defer></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js" defer></script>
 <!-- HD-2D post-processing (bloom + tilt-shift + vignette). Stock three.js r128 examples; load order matters. -->
 <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/shaders/CopyShader.js" defer></script>
@@ -1754,28 +1860,29 @@ addEventListener('DOMContentLoaded',function(){
 <script src="ult11-ribbon.js?v=2" defer></script>
 <script src="ult11-fx-flame.js?v=7" defer></script>
 <script src="assets/stadium/GLTFLoader-r128.js?v=1" defer></script>
-<script src="ult11-stadium-classic.js?v=5" defer></script>
-<script src="ult11-sky.js?v=3" defer></script>
+<script src="ult11-stadium-classic.js?v=6" defer></script>
+<script src="ult11-sky.js?v=4" defer></script>
 <script src="ult11-santafede-art.js?v=8" defer></script>
 <script src="ult11-stadium-santafede.js?v=6" defer></script>
 <script src="ult11-santafede-city.js?v=8" defer></script>
-<script src="ult11-pitch3d.js?v=146" defer></script>
-<script src="ult11-cine3.js?v=10" defer></script>
+<script src="ult11-highschool.js?v=2" defer></script>
+<script src="ult11-pitch3d.js?v=161" defer></script>
+<script src="ult11-cine3.js?v=13" defer></script>
 <script src="ult11-goaltitle.js?v=2" defer></script>
-<script src="ult11-sfx-samples.js?v=2" defer></script>
-<script src="ult11-camlab.js?v=8" defer></script>
+<script src="ult11-sfx-samples.js?v=4" defer></script>
+<script src="ult11-camlab.js?v=9" defer></script>
 <!-- Legacy glass formation overlay intentionally retired: the native #s-team
      screen below is the current reference-based team-management flow. -->
-<script src="ult11-custom.js?v=6" defer></script>
-<script src="ult11-cup.js?v=6" defer></script>
+<script src="ult11-custom.js?v=7" defer></script>
+<script src="ult11-cup.js?v=7" defer></script>
 <script src="ult11-kitrun.js?v=4" defer></script>
-<script src="ult11-teamselect.js?v=2" defer></script>
-<script src="ult11-teammanage.js?v=1" defer></script>
+<script src="ult11-teamselect.js?v=4" defer></script>
+<script src="ult11-teammanage.js?v=2" defer></script>
 <script src="ult11-pausemenu.js?v=4" defer></script>
 <script src="ult11-fulltime.js?v=2" defer></script>
 <script src="ult11-penalty.js?v=3" defer></script>
 <script src="story-script.js?v=1" defer></script>
-<script src="ult11-story.js?v=6" defer></script>
+<script src="ult11-story.js?v=8" defer></script>
 <script>
 (function(){
   var _H="assets/home/menu-bg.png";

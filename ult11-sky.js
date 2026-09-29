@@ -162,7 +162,7 @@ function panel(o){
     const b=document.createElement('button'); b.textContent='COPY FINAL VALUES';
     b.style.cssText="margin-top:10px;width:100%;padding:6px;background:#f0c040;color:#111;border:0;border-radius:4px;font:700 11px 'Rajdhani',sans-serif;cursor:pointer";
     b.onclick=()=>{ const out={mode:sky.mode,sky:sky.params}; if(o.extras) out.light=Object.fromEntries(o.extras.map(e=>[e.key,+(+e.get()).toFixed(3)]));
-      const txt=JSON.stringify(out); try{ navigator.clipboard.writeText(txt); b.textContent='COPIED'; setTimeout(()=>b.textContent='COPY FINAL VALUES',1200); }catch(e){ prompt('Values',txt); } };
+      const txt=JSON.stringify(out); try{ navigator.clipboard.writeText(txt); b.textContent='COPIED'; setTimeout(()=>b.textContent='COPY FINAL VALUES',1200); }catch(e){ console.log('[sky] values',txt); if(window.ueTell) ueTell(txt,{title:'SKY VALUES (also in the console)'}); } };
     body.appendChild(b);
     const r=document.createElement('button'); r.textContent='RESET THIS MODE';
     r.style.cssText="margin-top:4px;width:100%;padding:5px;background:transparent;color:#cfd8e3;border:1px solid rgba(240,192,64,.4);border-radius:4px;font:600 11px 'Rajdhani',sans-serif;cursor:pointer";

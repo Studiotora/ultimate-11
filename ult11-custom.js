@@ -94,8 +94,8 @@ function origTeamLabel(key){
 }
 function badgeHtml(k,s=26){
   const fb=(CR_CLUBS[k]&&typeof crBadgeSvg==='function')?crBadgeSvg(CR_CLUBS[k],s):((T[k]&&T[k].flag)||'🏳');
-  const alt=CR_CLUBS[k]?` data-n="assets/career/clubs/fake/club${k}.png"`:'';
-  return `<span class="uee" style="width:${s}px;height:${s}px"><img src="assets/team/fake/${k}.png"${alt} onerror="if(this.dataset.n){const n=this.dataset.n;this.removeAttribute('data-n');this.src=n;}else{this.style.display='none';this.nextElementSibling.style.display='flex';}"><span class="fb">${fb}</span></span>`;
+  const alt=CR_CLUBS[k]?` data-n="assets/career/clubs/club${k}.png"`:'';
+  return `<span class="uee" style="width:${s}px;height:${s}px"><img src="assets/team/${k}.png"${alt} onerror="if(this.dataset.n){const n=this.dataset.n;this.removeAttribute('data-n');this.src=n;}else{this.style.display='none';this.nextElementSibling.style.display='flex';}"><span class="fb">${fb}</span></span>`;
 }
 
 // ── UI ───────────────────────────────────────────────────────
@@ -151,9 +151,9 @@ window.czResetTeam=function(){
   if(typeof aeToast==='function')aeToast('Team reset to original names');
 };
 window.czResetAll=function(){
-  if(!confirm('Reset ALL custom names back to the originals?'))return;
+  ueAsk('Reset ALL custom names back to the originals?',{title:'RESET NAMES',ok:'RESET',danger:true}).then(function(y){ if(!y) return;
   CZ={teams:{},players:{}};czSave();applyAll();czRender();
-  if(typeof aeToast==='function')aeToast('All names reset');
+  if(typeof aeToast==='function')aeToast('All names reset'); });
 };
 
 applyAll();

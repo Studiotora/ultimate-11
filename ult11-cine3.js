@@ -34,9 +34,9 @@ const VS=`varying vec2 vUv; void main(){ vUv=uv; gl_Position=projectionMatrix*mo
    cell. off/rep are copied from the live sprite texture every frame, so a
    mirrored sprite (negative repeat.x) mirrors the aura for free. */
 const FS_AURA=NOISE+`
-uniform sampler2D map; uniform vec2 off,rep; uniform float time,amt,tight,front,lick,spd,zap,dark; uniform vec3 col;
+uniform sampler2D map,hmap; uniform vec2 off,rep; uniform float time,amt,tight,front,lick,spd,zap,dark,hon; uniform vec3 col;
 varying vec2 vUv;
-float A(vec2 p){ p=clamp(p,0.002,0.998); return texture2D(map,off+p*rep).a; }
+float A(vec2 p){ p=clamp(p,0.002,0.998); vec2 q=off+p*rep; return max(texture2D(map,q).a,hon*texture2D(hmap,q).a); }
 void main(){
   vec2 p=vUv;
   float n =fbm(vec2(p.x*7.0,p.y*3.2-time*2.8*spd));
@@ -67,11 +67,13 @@ const WAVE_FS=NOISE+`uniform float rad,op,w; uniform vec3 col; varying vec2 vUv;
     float I=(band+inner)*op*smoothstep(1.0,0.92,r);
     gl_FragColor=vec4(mix(col,vec3(1.0),band*0.6)*I,1.0); }`;
 const FS_BODY=`
-uniform sampler2D map; uniform vec2 off,rep; uniform float flash,rimAmt; uniform vec3 rim;
+uniform sampler2D map,hmap; uniform vec2 off,rep; uniform float flash,rimAmt,hon; uniform vec3 rim,hcol;
 varying vec2 vUv;
-float A(vec2 p){ return texture2D(map,off+clamp(p,0.002,0.998)*rep).a; }
+float A(vec2 p){ vec2 q=off+clamp(p,0.002,0.998)*rep; return max(texture2D(map,q).a,hon*texture2D(hmap,q).a); }
 void main(){
-  vec4 c=texture2D(map,off+clamp(vUv,0.002,0.998)*rep);
+  vec2 q=off+clamp(vUv,0.002,0.998)*rep;
+  vec4 c=texture2D(map,q);
+  if(hon>0.5){ vec4 h=texture2D(hmap,q); if(h.a>0.5) c=vec4(h.rgb*hcol,1.0); }   // 3D players: per-player hair layer
   if(c.a<0.45) discard;
   vec3 k=c.rgb;
   float o=0.018;
@@ -322,6 +324,11 @@ function placeShooter(g,cam,S,amt,tight,rimAmt,flash,col){
   AU.time.value=fxT; AU.amt.value=amt; AU.tight.value=tight;
   BU.map.value=map; BU.off.value.copy(AU.off.value); BU.rep.value.copy(AU.rep.value);
   BU.rimAmt.value=rimAmt; BU.flash.value=flash;
+  /* 3D players (pitch3d hair layer): the game sprite is hidden while we draw
+     him, and so is his hair sprite - draw the hair here, same cell */
+  const hr=g.hair, hOn=!!(hr&&g._look&&hr.img&&hr.img.complete&&map===g.tex);
+  AU.hon.value=BU.hon.value=hOn?1:0;
+  if(hOn){ AU.hmap.value=BU.hmap.value=hr.tex; BU.hcol.value.set(g._look.col); }
   const e=cam.matrixWorld.elements;
   const sx=Math.abs(sp.scale.x), sy=Math.abs(sp.scale.y), cx=sp.center.x, cy=sp.center.y;
   const ox=(0.5-cx)*sx, oy=(0.5-cy)*sy, bz=0.02*S;
@@ -349,7 +356,7 @@ function build(A){
   if(C3.built) return;
   T=A.T; scene=A.scene; COL.v=new T.Color('#3ec8ff');
   const AU={map:{value:null},off:{value:new T.Vector2()},rep:{value:new T.Vector2(1,1)},
-            time:{value:0},amt:{value:0},tight:{value:0},col:{value:COL.v},
+            time:{value:0},amt:{value:0},tight:{value:0},col:{value:COL.v},hmap:{value:null},hon:{value:0},
             lick:{value:1},spd:{value:1},zap:{value:0},dark:{value:0}};
   const geo=new T.PlaneGeometry(1,1);
   auraB=new T.Mesh(geo,new T.ShaderMaterial(mkAdd({uniforms:Object.assign({},AU,{front:{value:0}}),vertexShader:VS,fragmentShader:FS_AURA})));
@@ -362,7 +369,7 @@ function build(A){
   auraD.renderOrder=-3.5; auraD.frustumCulled=false; auraD.visible=false; scene.add(auraD);
   C3._AU=AU;
   body=new T.Mesh(geo,new T.ShaderMaterial({uniforms:{map:{value:null},off:{value:new T.Vector2()},rep:{value:new T.Vector2(1,1)},
-    flash:{value:0},rimAmt:{value:0},rim:{value:COL.v}},vertexShader:VS,fragmentShader:FS_BODY,transparent:true,fog:false}));
+    flash:{value:0},rimAmt:{value:0},rim:{value:COL.v},hmap:{value:null},hon:{value:0},hcol:{value:new T.Color(1,1,1)}},vertexShader:VS,fragmentShader:FS_BODY,transparent:true,fog:false}));
   body.renderOrder=10; body.frustumCulled=false;
 
   pillar=new T.Mesh(new T.CylinderGeometry(1.25,0.75,7,40,1,true).translate(0,3.5,0),
@@ -411,7 +418,7 @@ function build(A){
   bglow=new T.Sprite(new T.SpriteMaterial({map:new T.CanvasTexture(rc),transparent:true,depthWrite:false,depthTest:false,blending:T.AdditiveBlending,fog:false,opacity:0}));
   shell.visible=bglow.visible=false; shell.renderOrder=bglow.renderOrder=13; scene.add(shell); scene.add(bglow);
   for(const o of [auraB,auraF,body,pillar,seal,glow.pts,rocks.pts]){ o.visible=false; scene.add(o); }
-  if(document.fonts&&document.fonts.load) document.fonts.load('80px Anton').then(()=>fontOK=true,()=>{});
+  if(document.fonts&&document.fonts.load) document.fonts.load('900 80px Cinzel').then(()=>fontOK=true,()=>{});
   C3.built=true;
 }
 
@@ -636,7 +643,7 @@ function drawOverlay(c,A,k,breath,release,tremble,S,ct){
     g.fillStyle=rgba(C,0.9); g.fillRect(0,-H*0.055,W,H*0.11);
     g.fillStyle='rgba(255,255,255,0.95)'; g.fillRect(0,-H*0.055,W,H*0.008); g.fillRect(0,H*0.047,W,H*0.008);
     g.fillStyle='#07101e'; const fs=Math.round(H*0.085);
-    g.font=(fontOK?'':'bold ')+fs+'px '+(fontOK?'Anton':'Impact, sans-serif'); g.textBaseline='middle';
+    g.font='900 '+fs+'px Cinzel, serif';   // house display font (was Anton / Impact) g.textBaseline='middle';
     g.transform(1,0,-0.2,1,0,0);
     g.fillText(c.arc==='drive'?'DRIVE SHOT':(c.style&&c.style.kind==='curve')?'CURVE SHOT':'SUPER SHOT',W*0.12,0);
     g.restore();
@@ -932,6 +939,17 @@ C3.flyCam=function(c,rdt,A){
     const lat=(A.kwx!=null)?(hx-A.kwx)*px+(hz-A.kwz)*pz:0;          // hit's offset from the goal's centre line
     P=[hx-dx*(7.5-ot*0.6)*S+px*sz*(5.4-ot*0.4)*S, (1.6+ot*0.25)*S, hz-dz*(7.5-ot*0.6)*S+pz*sz*(5.4-ot*0.4)*S];
     Lk=[hx-px*lat*0.5, 1.2*S, hz-pz*lat*0.5]; lag=1-Math.exp(-dt*4);
+    /* SAVE: frame the KEEPER with the ball in his gloves, not the net (author
+       2026-09-28: "SAVED! - the camera still focuses on the net rather than
+       showing the keeper who caught the ball"). The goal frame above aims 1.45m
+       behind the line; on a save the ball (steered onto the glove by pitch3d)
+       stops in front of it, often off to one side and out of shot. Close, low,
+       from the shooter's side, looking at the ball; held through SAVED!. */
+    if(!c.isGoal){
+      const kx=b.x, kz=b.z, ky=Math.max(0.55*S,b.y);
+      P=[kx-dx*(5.2-ot*0.5)*S+px*sz*(3.3-ot*0.3)*S, (1.25+ot*0.12)*S, kz-dz*(5.2-ot*0.5)*S+pz*sz*(3.3-ot*0.3)*S];
+      Lk=[kx, ky*0.85, kz]; lag=1-Math.exp(-dt*5);
+    }
   } else {
     if(c.arc==='drive'){
       P=[b.x-dx*6.5*S+px*8.5*S, b.y*0.55+1.0*S, b.z-dz*6.5*S+pz*8.5*S];

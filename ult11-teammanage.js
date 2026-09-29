@@ -10,8 +10,8 @@
      HOME_SLOT_ASSIGN  slot -> player id      (startGame / pzCloseSquadEditor)
      HOME_RESERVES     bench, index 0 = GK    (trimmed to 4: 1 GK + 3)
      activeHomeFormation
-   Tactics + man-marking choices are saved on HT._tm (not yet read by
-   the match AI - that is the next, engine-side step).
+   Tactics + man-marking choices are saved on HT._tm, and the match AI
+   reads them live (game.js tacticOf / manMarksFor, 2026-09-29).
 
    KICK OFF -> startGame(), or pzCloseSquadEditor() when opened from the
    pause menu (label APPLY & RESUME). BACK -> teamEditorBack() (pause /

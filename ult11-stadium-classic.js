@@ -29,7 +29,9 @@ function load(T){
   api.status='loading';api.error=null;
   pending=new Promise(function(resolve,reject){
     if(!T.GLTFLoader){reject(new Error('GLTFLoader is unavailable'));return;}
-    new T.GLTFLoader().load(assetURL,function(gltf){cached=gltf.scene;resolve(cached);},undefined,reject);
+    api.progress=0;
+    new T.GLTFLoader().load(assetURL,function(gltf){api.progress=1;cached=gltf.scene;resolve(cached);},
+      function(e){ if(e&&e.total) api.progress=e.loaded/e.total; },reject);   // download progress for the match loader (2026-09-28)
   }).catch(function(error){pending=null;api.status='error';api.error=String(error.message||error);throw error;});
   return pending;
 }

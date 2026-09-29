@@ -386,6 +386,21 @@ html,body{width:100%;height:100%;height:-webkit-fill-available;overflow:hidden;b
   overflow:hidden; z-index:12; font-size:19.44px; /* was min(1.55vw,2.7vh) — see #duel-ov note */
 }
 .mhud::after{display:none;}
+/* SCOREBOARD (2026-09-28, author: "crops the score badly - add a small box
+   below for the time"). The bar carries names + score only; the clock and
+   half sit in a tab hanging under the centre plate; possession runs along
+   the bar's bottom edge. overflow is visible so the tab can hang out. */
+#s-match .mhud{overflow:visible;}
+#s-match .hmid{justify-content:center;}
+#s-match .hscores{margin-top:1px;}
+#s-match .hclock-tab{position:absolute;top:100%;left:50%;transform:translateX(-50%);margin-top:-1px;
+  display:flex;align-items:center;gap:.55em;padding:4px 12px 5px;white-space:nowrap;
+  background:linear-gradient(180deg,var(--u-panel-deep),var(--u-panel));
+  border:var(--u-hair) solid var(--u-rule);border-top:none;border-radius:0 0 var(--u-r-md) var(--u-r-md);
+  box-shadow:var(--u-shadow-2);}
+#s-match .hclock-tab .htime{font-size:.78em;}
+#s-match .hclock-tab .hhalf{font-size:.46em;}
+#s-match .posstrip{position:absolute;left:0;right:0;bottom:0;width:auto;height:2px;border-radius:0;}
 /* Team cluster — name centered, emblem pinned to outer edge (inside the white slanted box of the scoreboard graphic) */
 .hteam{display:flex;align-items:center;justify-content:center;padding:0 .9em;gap:.5em;position:relative;height:100%;background:none!important;}
 .hteam.home,.hteam.away{justify-content:center;flex-direction:row;}
@@ -432,6 +447,16 @@ html,body{width:100%;height:100%;height:-webkit-fill-available;overflow:hidden;b
 #worldwrap.on{display:block}
 #worldwrap>canvas{position:absolute;inset:0;width:100%;height:100%;display:block}
 #viewport{z-index:1}
+/* Story, Cup and Customize are full-window screens that live OUTSIDE #viewport
+   (body children, own scalers). #viewport{z-index:1} above painted the stage's
+   opaque background over them - they opened as a blank dark screen. Lift the
+   out-of-stage screens above the stage; inactive screens are display:none, so
+   this only matters while one is open. (debug pass 2026-09-28) */
+body>.screen{z-index:2}
+/* match loader curtain: the loading screen stays over the match until the 3D
+   view has rendered real frames (game.js UELoader.run), then fades off */
+#s-loading.ld-curtain{z-index:9000;transition:opacity .35s ease;pointer-events:none;}
+#s-loading.ld-curtain.out{opacity:0;}
 #viewport.world-live,#viewport.world-live #s-match{background:transparent}
 /* DUEL DIM, edge to edge. #duel-ov lives in the 16:9 stage and #viewport
    clips (overflow:hidden), so on a wide phone its dim stopped at the stage
@@ -4327,10 +4352,11 @@ html.ue-phone #vjoy-base{transform:scale(calc(0.5 + 0.5*var(--tb)));transform-or
 #s-loading .loading-count{font:700 16px var(--u-font-num);color:var(--u-gold);text-align:right}
 #s-loading .loading-corner{position:absolute;right:44px;bottom:18px;padding:0!important;z-index:2;gap:0;align-items:flex-end!important;width:230px;height:154px;pointer-events:none;background:transparent}
 #s-loading .loading-corner::after{content:'';position:absolute;left:7px;right:5px;bottom:7px;height:18px;border-radius:50%;background:radial-gradient(ellipse,rgba(0,0,0,.55),transparent 68%);z-index:-1}
-#s-loading .loading-runner{position:absolute;bottom:0;left:17px;width:96px!important;height:135px!important;border-radius:0;background-color:transparent;background-image:url('loading-runner.png')!important;background-size:1152px 1077px!important;background-position:0 -269.25px;filter:none;animation:ueRun .82s steps(12,end) infinite!important}
-#s-loading .loading-ball{position:absolute;right:23px;bottom:17px;width:48px;height:48px;background:url('loading-ball.png') 0 0/192px 192px no-repeat;animation:ueBall .72s steps(4,end) infinite}
-@keyframes ueRun{from{background-position:0 -269.25px}to{background-position:-1152px -269.25px}}
-@keyframes ueBall{to{transform:rotate(360deg)}}
+/* Loading runner = Italy's own run cycle from the game sheet (assets/ps1/2d/italy.png row 3, 12 frames, baked by nearest-neighbour like the in-game sprites); the ball = the game's own ball-sprite.png at the in-game size (0.21 x body height, 28px beside a 135px runner). 2026-09-29 */
+#s-loading .loading-runner{position:absolute;bottom:0;left:6px;width:143px!important;height:135px!important;border-radius:0;background-color:transparent;background-image:url('assets/ps1/2d/loading_run_italy.png')!important;background-size:1716px 135px!important;background-position:0 0;image-rendering:pixelated;filter:none;animation:ueRun 1s steps(12,end) infinite!important}
+#s-loading .loading-ball{position:absolute;left:134px;right:auto;bottom:1px;width:34px;height:34px;background:url('assets/loading_ball_strip.png') 0 0/544px 34px no-repeat;image-rendering:pixelated;animation:ueBall .6s steps(16,end) infinite}
+@keyframes ueRun{from{background-position:0 0}to{background-position:-1716px 0}}
+@keyframes ueBall{from{background-position:0 0}to{background-position:-544px 0}}
 @media (prefers-reduced-motion:reduce){#s-loading .loading-runner,#s-loading .loading-ball{animation:none!important}}
 #s-ts .tsf-run{height:90px!important;width:100%!important;top:59%!important;object-fit:fill;box-shadow:none!important}
 

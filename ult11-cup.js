@@ -25,8 +25,8 @@ function clearSave(){try{localStorage.removeItem(KEY);}catch(e){} window.CUP=nul
 function tName(k){return (T[k]&&T[k].name)||(CR_CLUBS[k]&&CR_CLUBS[k].name)||k;}
 function badge(k,s=26){
   const fb=(CR_CLUBS[k]&&typeof crBadgeSvg==='function')?crBadgeSvg(CR_CLUBS[k],s):((T[k]&&T[k].flag)||'🏳');
-  const alt=CR_CLUBS[k]?` data-n="assets/career/clubs/fake/club${k}.png"`:'';
-  return `<span class="uee" style="width:${s}px;height:${s}px"><img src="assets/team/fake/${k}.png"${alt} onerror="if(this.dataset.n){const n=this.dataset.n;this.removeAttribute('data-n');this.src=n;}else{this.style.display='none';this.nextElementSibling.style.display='flex';}"><span class="fb">${fb}</span></span>`;
+  const alt=CR_CLUBS[k]?` data-n="assets/career/clubs/club${k}.png"`:'';
+  return `<span class="uee" style="width:${s}px;height:${s}px"><img src="assets/team/${k}.png"${alt} onerror="if(this.dataset.n){const n=this.dataset.n;this.removeAttribute('data-n');this.src=n;}else{this.style.display='none';this.nextElementSibling.style.display='flex';}"><span class="fb">${fb}</span></span>`;
 }
 function teamOvr(k){
   if(CR_CLUBS[k])return CR_CLUBS[k].ovr;
@@ -192,8 +192,8 @@ window.cupOnFullTime=function(engHg,engAg){
   cupRenderHub();showSc('s-cup');
 };
 window.cupQuit=function(){
-  if(!confirm('Abandon this tournament? Progress will be deleted.'))return;
-  clearSave();cupRenderSelect();
+  ueAsk('Abandon this tournament?\nYour progress will be deleted.',{title:'ABANDON CUP',ok:'ABANDON',danger:true}).then(function(y){ if(!y) return;
+  clearSave();cupRenderSelect(); });
 };
 window.cupNew=function(){clearSave();cupRenderSelect();};
 
