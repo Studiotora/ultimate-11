@@ -32,6 +32,8 @@ const CSS=`
 #u11wt.on{display:block}
 #u11wt.pen{--tone:#ff4048;--tone2:#6e0a10}
 #u11wt.offside{--tone:#5fb4ff;--tone2:#0b3a6e}
+#u11wt.gold{--tone:#f4d98a;--tone2:#6a4a0a}
+#u11wt.silver{--tone:#c9d3e6;--tone2:#2a3550}
 #u11wt .wt-vig{position:absolute;inset:0;background:linear-gradient(180deg,rgba(0,0,0,0) 55%,rgba(3,6,14,.42) 72%,rgba(3,6,14,.66) 90%,rgba(3,6,14,.5) 100%);opacity:0}
 #u11wt.on .wt-vig{animation:wtFade .35s ease-out forwards}
 @keyframes wtFade{to{opacity:1}}
@@ -126,7 +128,7 @@ WT.show=function(o){
   o=o||{}; build();
   clearTimeout(tOut); clearTimeout(tHide);
   root.className=''; void root.offsetWidth;
-  const tone=o.tone==='pen'?'pen':(o.tone==='offside'?'offside':'foul');
+  const tone=['pen','offside','gold','silver'].includes(o.tone)?o.tone:'foul';
   const col=o.col||'#1e72dc';
   root.style.setProperty('--c1',col); root.style.setProperty('--c2',darker(col));
   const word=String(o.word||'FREE KICK').toUpperCase();
@@ -150,7 +152,7 @@ WT.show=function(o){
   img.onload=()=>{ img.style.visibility='visible'; };
   const first=chain.shift(); if(first) img.src=first;
   root.classList.add(tone); if(card) root.classList.add('booked'); if(!o.name) root.classList.add('noplayer');
-  if(o.ref===false||(o.ref==null&&tone==='offside')) root.classList.add('noref');
+  if(o.ref===false||(o.ref==null&&tone!=='foul'&&tone!=='pen')) root.classList.add('noref');
   root.classList.add('on');
   const dur=o.dur||WT.dur;
   tOut=setTimeout(()=>root.classList.add('out'),dur-340);

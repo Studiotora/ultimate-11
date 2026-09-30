@@ -141,6 +141,15 @@ const CSS=`
   filter:drop-shadow(0 0 1px rgba(0,0,0,.9)) drop-shadow(0 4px 10px rgba(0,0,0,.45))}
 #u11tk.right .tk-por img{transform:scaleX(-1)}
 #u11tk .tk-por.sheet{overflow:hidden;border-radius:4px}
+/* no in-game face: the team flag, centred in the portrait slot, never mirrored */
+#u11tk.flag .tk-por{bottom:50%;transform:translateY(50%);width:min(8vw,104px);height:min(6.4vw,84px)}
+#u11tk.flag .tk-por img,#u11tk.flag.right .tk-por img{object-position:50% 50%;transform:none;
+  filter:drop-shadow(0 0 1px rgba(0,0,0,.8)) drop-shadow(0 3px 8px rgba(0,0,0,.45))}
+#u11tk .tk-flagtxt{position:absolute;inset:0;display:none;align-items:center;justify-content:center;font-size:min(5vw,64px);line-height:1}
+#u11tk.emoji .tk-flagtxt{display:flex}
+/* the Team Select flag (TS2.flagSVG): a small waving-free flag card with a thin frame */
+#u11tk.svgflag .tk-flagtxt{inset:14% 4%;border-radius:3px;overflow:hidden;box-shadow:0 0 0 1px rgba(10,16,34,.9),0 0 0 2px rgba(201,211,230,.55),0 4px 10px rgba(0,0,0,.45)}
+#u11tk.svgflag .tk-flagtxt svg{width:100%;height:100%;display:block}
 #u11tk .tk-por.sheet img{left:-40%;top:-6%;width:180%;height:300%;bottom:auto;object-fit:cover;object-position:50% 0}
 #u11tk .tk-name{display:inline-block;margin:calc(-1 * min(2.6vw,34px)) 0 min(.6vw,8px) 0;padding:min(.35vw,4px) min(1.2vw,16px);
   font-family:'Cinzel',Georgia,serif;font-weight:700;font-size:min(1.45vw,19px);letter-spacing:.14em;color:#f4d98a;
@@ -167,18 +176,21 @@ function build(){
   if(root) return;
   const st=document.createElement('style'); st.id='u11tk-css'; st.textContent=CSS; document.head.appendChild(st);
   root=document.createElement('div'); root.id='u11tk';
-  root.innerHTML='<div class="tk-box"><div class="tk-por"><img alt=""></div><div class="tk-head"><div class="tk-name"></div></div>'+
+  root.innerHTML='<div class="tk-box"><div class="tk-por"><img alt=""><span class="tk-flagtxt"></span></div><div class="tk-head"><div class="tk-name"></div></div>'+
     '<div class="tk-text"></div><i class="tk-next"></i></div><div class="tk-skip">SKIP <b></b></div>';
   document.body.appendChild(root);
-  root.querySelector('.tk-skip').addEventListener('click',e=>{ e.stopPropagation(); TK.skipScene(); });
-  // a click / tap anywhere during a scene skips it
-  document.addEventListener('pointerdown',e=>{ if(scene&&!(e.target.closest&&e.target.closest('#pause-overlay,.ae-modal'))) TK.skipScene(); },true);
+  const chip=root.querySelector('.tk-skip');
+  chip.addEventListener('pointerdown',e=>{ e.stopPropagation(); });
+  chip.addEventListener('click',e=>{ e.stopPropagation(); TK.skipScene(); });
+  // a click / tap anywhere during a scene moves the dialogue on (the SKIP chip skips the scene)
+  document.addEventListener('pointerdown',e=>{ if(scene&&!(e.target.closest&&e.target.closest('#pause-overlay,.ae-modal,.tk-skip'))) TK.advance(); },true);
 }
 function rgbaK(h,k,a){ const m=/^#?([0-9a-f]{6})$/i.exec(String(h||'')); const n=m?parseInt(m[1],16):0x1e72dc;
   return 'rgba('+Math.round((n>>16&255)*k)+','+Math.round((n>>8&255)*k)+','+Math.round((n&255)*k)+','+a+')'; }
 function skipGlyph(){
   let s=''; try{ s=typeof duelInputScheme==='function'?duelInputScheme():''; }catch(e){}
-  return s==='playstation'?'✕':s==='xbox'?'A':s==='keyboard'?'ENTER':'TAP';
+  // the scene skip is Start (Esc on a keyboard): Confirm now moves the dialogue on
+  return s==='playstation'?'OPTIONS':s==='xbox'?'MENU':s==='keyboard'?'ESC':'TAP HERE';
 }
 TK.sideColor=side=>side==='h'?'#1e72dc':'#c22020';
 
@@ -190,33 +202,52 @@ TK.say=function(o){
     root.style.setProperty('--plA',rgbaK(col,0.6,0.96)); root.style.setProperty('--plB',rgbaK(col,0.26,0.96));
     root.classList.toggle('right',side==='a');
     root.querySelector('.tk-name').textContent=surname(pl&&pl.name).toUpperCase();
-    // the profile: the bust's head crop; the old sheet crop only if it is not available
-    const por=root.querySelector('.tk-por'), img=por.querySelector('img');
+    /* the profile: his in-game bust crop. Only Italy and Germany have front
+       sheets - everyone else shows his team's FLAG (author 2026-09-30: "just
+       use flags ... the same flag as Team Select"): TS2.flagSVG, the Team
+       Select flag art; clubs / unknown teams: the badge PNG, else the emoji. */
+    const por=root.querySelector('.tk-por'), img=por.querySelector('img'), fl=por.querySelector('.tk-flagtxt');
     let face=null; try{ face=window.faceCropURL?faceCropURL(pl):null; }catch(e){}
-    let chain=[]; try{ chain=pl?_portraitChainFor(pl,side):[]; }catch(e){}
-    por.classList.toggle('sheet',!face); img.style.visibility='hidden';
-    img.onerror=()=>{ por.classList.add('sheet'); const n=chain.shift(); if(n) img.src=n; else img.style.visibility='hidden'; };
-    img.onload=()=>{ img.style.visibility='visible'; };
-    const f=face||chain.shift(); if(f) img.src=f;
+    const team=String((side==='h'?selHome:selAway)||'').toLowerCase(), tobj=(typeof T!=='undefined'&&T[team])||null;
+    fl.textContent=''; por.classList.remove('sheet'); root.classList.toggle('flag',!face); root.classList.remove('emoji','svgflag');
+    img.style.visibility='hidden'; img.onload=()=>{ img.style.visibility='visible'; };
+    let tsFlag=''; if(!face){ try{ tsFlag=(window.TS2&&TS2.flagSVG)?TS2.flagSVG(team):''; }catch(e){} }
+    if(face){ img.onerror=null; img.src=face; }
+    else if(tsFlag){ img.onerror=null; img.removeAttribute('src'); root.classList.add('emoji','svgflag'); fl.innerHTML=tsFlag; }
+    else{
+      let srcs=[]; try{ srcs=(typeof emblemSrcs==='function'?emblemSrcs(team,false):['assets/team/'+team+'.png']).slice(); }catch(e){ srcs=['assets/team/'+team+'.png']; }
+      img.onerror=()=>{ const n=srcs.shift(); if(n){ img.src=n; return; }
+        img.style.visibility='hidden'; root.classList.add('emoji'); fl.textContent=(tobj&&tobj.flag)||'🏳'; };
+      const f0=srcs.shift(); if(f0) img.src=f0; else img.onerror();
+    }
     const text=String(o.text||''), tx=root.querySelector('.tk-text'); tx.textContent='';
     root.classList.remove('done'); void root.offsetWidth; root.classList.add('on');
-    cur={resolve,timers:[],type:0};
+    /* the line waits for the player (author 2026-09-30: "the dialogue ends right
+       away without me pressing anything"): typed out, then the ▼ blinks until
+       Confirm (TK.advance). A safety net moves on after 12 s untouched. */
+    cur={resolve,timers:[],type:0,text,tx,finish:null};
     let i=0;
+    const typed=()=>{ if(!cur) return; clearInterval(cur.type); cur.type=0; tx.textContent=text; root.classList.add('done'); };
+    cur.finish=typed;
     cur.type=setInterval(()=>{
       if(!cur) return;
       i++; tx.textContent=text.slice(0,i);
-      if(i>=text.length){ clearInterval(cur.type); cur.type=0; root.classList.add('done');
-        cur.timers.push(setTimeout(()=>{ const c=cur; cur=null; TK.hide(true); if(c) c.resolve('done'); },o.hold!=null?o.hold:1700)); }   // forget it BEFORE hiding: hide() resolves a live line as 'skipped'
+      if(i>=text.length) typed();
     },28);
+    cur.timers.push(setTimeout(()=>TK.next(),12000));
   });
 };
+/* the line is over: forget it BEFORE hiding (hide() resolves a live line as 'skipped') */
+TK.next=function(){ if(!cur) return; const c=cur; cur=null; TK.hide(true); c.resolve('done'); };
+/* Confirm / click: finish the typing first, then move on */
+TK.advance=function(){ if(!cur) return false; if(cur.type){ cur.finish(); return true; } TK.next(); return true; };
 TK.hide=function(keepScene){
   if(cur){ clearInterval(cur.type); cur.timers.forEach(clearTimeout); const c=cur; cur=null; c.resolve('skipped'); }
   if(root){ root.classList.remove('on','done'); if(!keepScene) root.classList.remove('scene'); }
 };
 TK.talking=()=>!!cur;
 
-/* scenes: the SKIP chip + the skip route for ✕ / A / Enter / Start / click */
+/* scenes: the SKIP chip + the skip route (Start / Esc / the chip); Confirm and a click advance */
 TK.scene=function(onSkip){ build(); scene={onSkip}; root.querySelector('.tk-skip b').textContent=skipGlyph(); root.classList.add('scene'); };
 TK.endScene=function(){ scene=null; if(root) root.classList.remove('scene'); };
 TK.sceneActive=()=>!!scene;

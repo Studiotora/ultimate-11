@@ -111,7 +111,9 @@
     if(!SFX.on||!unlocked||typeof G==='undefined'||!G){if(live)stopBeds();return;}
     const screen=document.querySelector('#s-match.active');
     const active=!!screen&&!G.paused&&['moving','pass_anim','duel','duel_result','corner','freekick','throwin'].includes(G.phase);
-    const crowdActive=active||!!screen&&performance.now()<cheerUntil;
+    /* the crowd never stops for kick-offs, goals or the scenes - only a PAUSE
+       (the menu) silences it (author 2026-09-30) */
+    const crowdActive=!!screen&&!G.paused&&!document.querySelector('#pause-overlay.show');
     if(crowdActive&&!live){live=true;crowdBed.play().catch(()=>{});}
     if(!crowdActive&&live)stopBeds();
     crowdBed.volume=volume(SFX.crowd*duck*(performance.now()<cheerUntil?1.5:1));

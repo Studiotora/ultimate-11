@@ -984,7 +984,21 @@ function showSpecialCutscene(pl,special,callback){
   setTimeout(()=>{if(callback)callback();},450);
 }
 let _refTimer=null;
+/* The small referee popup is retired (author 2026-09-30): every call shows the
+   compact whistle title (ult11-whistletitle.js) - the band, the word and the
+   new referee art (author 2026-09-30), no player card. Gold for KICK-OFF / 2ND HALF, silver for the
+   restarts. The events with their own full titles (goal, foul, penalty,
+   offside, cards) only land here on the no-module fallback. */
+const REF_TITLE={'KICK OFF':['KICK-OFF','gold',1400],'2ND HALF':['2ND HALF','gold',1400],'CORNER':['CORNER','silver',1500],
+  'THROW-IN':['THROW-IN','silver',1400],'GOAL KICK':['GOAL KICK','silver',1400],'GOAL!':['GOAL','gold',1600],
+  'FOUL':['FREE KICK','foul',1600],'PENALTY!':['PENALTY','pen',1800],'OFFSIDE':['OFFSIDE','offside',1600],
+  'YELLOW':['YELLOW CARD','foul',1400],'RED CARD':['RED CARD','pen',1600]};
 function showReferee(msg,duration=1200){
+  if(window.U11WhistleTitle){
+    const m=String(msg||'').toUpperCase(), r=REF_TITLE[m]||[m,'silver',Math.max(1100,duration)];
+    try{ U11WhistleTitle.show({word:r[0],tone:r[1],name:'',ref:true,dur:r[2]}); }catch(e){}
+    return;
+  }
   const pop=document.getElementById('referee-popup');
   const lbl=document.getElementById('ref-msg');
   if(!pop||!lbl)return;
@@ -4950,10 +4964,14 @@ function actJump(){         // A/✕ · Space — jump (attacking) / block (defe
   if(G.poss!=='h'&&G.phase==='moving'){ const k=G.chk||ROLES.engager; if(k) startBlock('h',k); return; }
   if(typeof playerJump==='function') playerJump('h');
 }
+/* SCENES (goal celebration, captains, full time): Confirm (✕ / A / Enter) moves
+   the dialogue on - the whole line first, then the next one; Start / Esc skips
+   the whole scene (author 2026-09-30: the lines went by without a press). */
 function sceneSkip(){ if(window.U11Talk&&U11Talk.sceneActive()) return U11Talk.skipScene(); if(window.U11Celebrate&&U11Celebrate.active()) return U11Celebrate.skip(); return false; }
+function sceneOwnsInput(){ return !!((window.U11Talk&&U11Talk.sceneActive())||(window.U11Celebrate&&U11Celebrate.active())); }
 function actPause(){ if(sceneSkip()) return; if(typeof togglePause==='function') togglePause(); }
 function actConfirm(){
-  if(sceneSkip()) return;   // skip a scene: the goal celebration, the captains, full time
+  if(sceneOwnsInput()){ if(window.U11Talk) U11Talk.advance(); return; }   // a scene: next line
   /* Enter delivers a corner too - but not the pad's X: X is the header jump a
      moment later, and a double-tap would deliver AND jump far too early. */
   if(cornerHumanTaking()){
@@ -10404,6 +10422,7 @@ function afPass(s,tk){
   if(!tk||!PP[s]||!PP[s][tk])
     tk=bestTeammateFor(s,G.ck,'pass')||validOutfieldKeys(s).find(k=>k!==G.ck)||null;
   if(!tk){ closeDuel(); resume(s); return; }
+  closeDuel();                        // the pass (and the super pass) flew BEHIND the duel screen, which stayed up ~1.8 s (author 2026-09-30)
   launchPass(s,tk,'ground');
 }
 
@@ -11632,9 +11651,9 @@ function initMatch(){
   }}catch(e){}
   $id('passhint').style.display='none';
   say('Kick off! '+HT.name+' vs '+AT.name+' — build from midfield.');
-  showReferee('KICK OFF');
   G.kickoffUntil=Date.now()+3500;
-  G.phase='idle';setTimeout(()=>{ preMatchTalk(()=>armKickoff('h')); },900);
+  G.phase='idle';setTimeout(()=>{ preMatchTalk(()=>{ showReferee('KICK OFF'); const g0=G.goalGen; G._idleAt=Date.now(); G.kickoffUntil=Date.now()+2500;   /* the watchdog read the whole scene as a stuck idle */
+    setTimeout(()=>{ if(!G.over&&G.goalGen===g0&&!G.awaitKickoff) armKickoff('h'); },1000); }); },900);   // the title, then the prompt
 }
 // ── FORMATION POPUP ──────────────────────────────────────────────
 function openFormationPicker(){
