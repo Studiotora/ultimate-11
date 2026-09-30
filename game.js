@@ -2008,21 +2008,10 @@ function tick(dt=1){
     const carrier2=sq(s)[G.ck];
     if(carrier2&&carrier2.pos!=='GK'){
       const engClose=ROLES.engager&&PP[ds][ROLES.engager]&&dist(cp,PP[ds][ROLES.engager])<IR()*2.2;
-      carrier2.spirit=Math.max(0,spiritOf(carrier2)-((engClose?0.55:0.18)+((_sprintForSide(G.poss))?0.4:0))*dt);
+      const D=STAMINA.carry;
+      carrier2.spirit=Math.max(0,spiritOf(carrier2)-((engClose?D.pressed:D.free)+((_sprintForSide(G.poss))?D.sprint:0))*dt);
     }
-    ['h','a'].forEach(side=>{
-      Object.entries(sq(side)).forEach(([k,pl])=>{
-        if(!pl)return;
-        if(side===s&&k===G.ck)return; // current carrier doesn't regen
-        const isGK=pl.pos==='GK';
-        const maxSp=isGK?2000:1500;
-        // GKs regen slightly slower than outfield players (heavier kit, less running)
-        const regen=isGK?0.10:0.12;
-        // (pl.spirit||maxSp) read a spirit of EXACTLY 0 as full, so a player
-        // who bottomed out was frozen at 0 for the rest of the match.
-        if(spiritOf(pl)<maxSp) pl.spirit=Math.min(maxSp,spiritOf(pl)+regen*dt);
-      });
-    });
+    staminaRegen(dt);
   }
 
   // Looming defender alert
@@ -2177,7 +2166,7 @@ function tick(dt=1){
       const cpuPress=isCpuSide(ds)&&teamStance(ds)>0.55&&spiritOf(sq(ds)[ROLES.engager])>450;
       const pressMult=(((G.pressing||tacticOf('h').press)&&ds==='h')||cpuPress)?1.5:1.0;
       const engPl=sq(ds)[ROLES.engager];
-      if(engPl && _sprintForSide(ds)) engPl.spirit=Math.max(0,spiritOf(engPl)-0.5*dt);
+      if(engPl && _sprintForSide(ds)) engPl.spirit=Math.max(0,spiritOf(engPl)-STAMINA.chaseSprint*dt);
       const sprintMult=(_sprintForSide(ds))?1.34:1.30; // AI commits to the chase
       const manualMult=manualDef?1.3:1.0;
       // A committed lunge → skip normal chase steering, but DON'T return: flow
@@ -3744,6 +3733,7 @@ function startAnim(){
       if(typeof duelPadInput==='function') duelPadInput();   // single player
     }
     if(G.phase==='moving')tick(dt);
+    else if((G.phase==='pass_anim'||G.phase==='loose')&&!G._cineHold) staminaRegen(dt);
     if(G.phase==='loose'&&!G._cineHold)tickLoose(dt);
     if(G.phase==='corner'&&!G._cineHold)cornerTick(dt);
     if(G.phase==='throwin'&&!G._cineHold)throwInTick();
@@ -5921,6 +5911,40 @@ function tackleContact(dp,cp,dx,dy,L,el){
 }
 
 function spiritMax(pl){ return pl&&pl.pos==='GK'?2000:1500; }
+/* STAMINA BALANCE (author 2026-09-30: "a few dribbles and one super shot and
+   Frisina was basically out", "is recovery working?"). Measured before (60 fps,
+   per frame x 60 = per second): carrying 11/s, 33/s with a defender close, +24/s
+   sprinting - up to 57/s, a full bar in 26 s; and off the ball the running cost
+   beat the 7/s regen, so the team only ever went DOWN (avg 99% -> 70%, nobody
+   recovered). Now: carrying 4 / 12 / +12 per second; regen 12/s (keepers 9.6/s)
+   and it also runs while the ball travels or is loose - standing players catch
+   their breath, a hard run still costs more than it recovers. */
+const STAMINA={ carry:{free:0.07, pressed:0.20, sprint:0.20}, regen:{out:0.14, gk:0.12}, chaseSprint:0.30,
+  dribbleWon:40,                                   // a dribble you WIN costs half (lost: the full 80)
+  half:{refill:0.80, exhausted:0.50, exhaustedBelow:0.05, gk:1.0} };
+function staminaRegen(dt){
+  const cs=G.poss, ck=G.ck;
+  ['h','a'].forEach(side=>{
+    Object.entries(sq(side)).forEach(([k,pl])=>{
+      if(!pl)return;
+      if(side===cs&&k===ck&&G.phase==='moving')return;     // the man on the ball does not regen
+      const maxSp=spiritMax(pl), regen=pl.pos==='GK'?STAMINA.regen.gk:STAMINA.regen.out;
+      // (pl.spirit||maxSp) read a spirit of EXACTLY 0 as full, so a player
+      // who bottomed out was frozen at 0 for the rest of the match.
+      if(spiritOf(pl)<maxSp) pl.spirit=Math.min(maxSp,spiritOf(pl)+regen*dt);
+    });
+  });
+}
+/* HALF-TIME (author 2026-09-30): back to 80% of the bar, 50% for a player who
+   was fully exhausted (under 5%), keepers back to full. Nobody loses stamina. */
+function staminaHalfTime(){
+  const H=STAMINA.half;
+  ['h','a'].forEach(side=>Object.values(sq(side)).forEach(pl=>{
+    if(!pl)return; const mx=spiritMax(pl), cur=spiritOf(pl);
+    const to=pl.pos==='GK'?H.gk:(cur<mx*H.exhaustedBelow?H.exhausted:H.refill);
+    pl.spirit=Math.max(cur,Math.round(mx*to));
+  }));
+}
 function spiritOf(pl){ return (pl&&pl.spirit!=null)?pl.spirit:spiritMax(pl); }
 function spiritPct(pl){ return Math.max(0,Math.min(100,Math.round(spiritOf(pl)/spiritMax(pl)*100))); }
 /* The stamina colour ramp, defined ONCE: 0% red -> 50% green -> 100% cyan.
@@ -9080,8 +9104,9 @@ function selA(a,btn){
     const sn=SUPER_NAMES[a.id];
     const isSuper=isSuperAtk(a.id);
     let bannerTxt;
-    if(akB==='one-two') bannerTxt = isSuper ? '⚡ LIGHTNING 1-2 — PICK TEAMMATE' : 'ONE-TWO — PICK TEAMMATE';
-    else                bannerTxt = isSuper ? '🎯 THREADING PASS — CLICK A PLAYER' : 'PASS MODE — CLICK A PLAYER';
+    // ◀ ▶ walks the team-mates (the broadcast camera follows the aim - pitch3d duelPickTarget)
+    if(akB==='one-two') bannerTxt = isSuper ? '⚡ LIGHTNING 1-2 — ◀ ▶ PICK TEAMMATE' : 'ONE-TWO — ◀ ▶ PICK TEAMMATE';
+    else                bannerTxt = isSuper ? '🎯 THREADING PASS — ◀ ▶ OR CLICK A PLAYER' : 'PASS MODE — ◀ ▶ OR CLICK A PLAYER';
     $id('pass-banner').textContent=bannerTxt;
     document.getElementById('dcfm').classList.remove('rdy');
   } else {
@@ -9826,7 +9851,7 @@ function resDuel(){
   }
   const win=atkPow>defPow;
   G.D.lastDefPow=defPow;            // afSave reuses the duel's own verdict (GK roadmap step 2)
-  const atkCost=(ATK_ACTIONS[ak]||{}).cost||0;
+  const atkCost=(win&&ak==='dribble')?STAMINA.dribbleWon:((ATK_ACTIONS[ak]||{}).cost||0);
   const defCost=(DEF_ACTIONS[defA]||{}).cost||0;
   if(carrier&&atkCost>0)carrier.spirit=Math.max(0,spiritOf(carrier)-atkCost);
   if(def&&defCost>0){
@@ -11356,6 +11381,7 @@ function secondHalf(){
   G._halftime=false;G.paused=false;G._pendingStun=null;
   const ov=document.getElementById('pause-overlay');if(ov)ov.classList.remove('show');
   G.half=2;G.tL=2400;addedTimeReset();iPos();
+  staminaHalfTime();
   const q=sq('a'),kk=['CM2','CM1','ST'].find(k=>q[k])||Object.keys(q).find(k=>q[k]);
   G.poss='a';G.ck=kk;G.tP++;
   if(PP.a[kk]){PP.a[kk].x=W/2;PP.a[kk].y=H/2;}
