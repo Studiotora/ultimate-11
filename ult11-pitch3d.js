@@ -3239,6 +3239,12 @@
           let st=cellState(id,p,wx,wz,(o._L||GRID));
           if(cine&&cine._gkCell&&cine.o&&id===cine.o.ds+':GK') st=cine._gkCell;   // no idle flash mid-dive
           else if(k==='GK'&&useSheet===GK_SHEET){ const _ga=gkaCell(s); if(_ga) st=_ga; }
+          /* HELD POSE (2026-09-30, the full-time scene: the losing side "on the
+             ground" = the jump's last two frames, 10 then 11, held). A sequence
+             of [row,col,ms]; the last one holds. The facing flip is kept. */
+          const _hp=POSE_HOLD[id];
+          if(_hp){ let el=performance.now()-_hp.t0, i=0; while(i<_hp.seq.length-1&&el>=_hp.seq[i][2]){ el-=_hp.seq[i][2]; i++; }
+            st={row:_hp.seq[i][0],col:_hp.seq[i][1],flip:st.flip}; }
           o._frame={row:st.row,col:st.col,flip:st.flip};
           // Mirror via UV, not scale: THREE.Sprite ignores negative scale.x.
           // flip → repeat.x negative + offset shifted one cell to the right edge.
@@ -4994,9 +5000,38 @@
        The band now sits on the action: a cross's header point (where the ring
        and the header happen), the ball for any other ball in flight or a loose
        ball, the carrier otherwise. It glides there rather than jumping. */
-    let _tiltFy=null;
+    let _tiltFy=null, _pickCam=false;
+    /* GOAL CELEBRATION CAMERA (author 2026-09-30, ult11-celebrate.js drives it):
+       low and close on the near side of the scorer, following him with a lag
+       and drifting slowly round him while his team-mates run in.
+       P3D.celebrate(side,key) starts it, P3D.celebrate(null) ends it. */
+    let CELEB=null;
+    const POSE_HOLD={};
+    P3D.holdPose=function(side,key,seq){ const id=side+':'+key; if(seq&&seq.length) POSE_HOLD[id]={seq,t0:performance.now()}; else delete POSE_HOLD[id]; };
+    P3D.clearPoses=function(){ for(const k in POSE_HOLD) delete POSE_HOLD[k]; };
+    const _cbF=new T.Vector3();
+    P3D.celebrate=function(side,key){ CELEB=side?{side,key,t:0,f:null}:null; if(!side) _camSnap=true; };
+    function celebCam(dt){
+      if(!CELEB) return false;
+      const o=sprites[CELEB.side+':'+CELEB.key]; if(!o||!o.sprite) return false;
+      const k=PLEN/70, p=o.sprite.position; CELEB.t+=dt;
+      // centred on the scorer like the goal cinematic: a quick follow, close and low, only a slow drift
+      if(!CELEB.f) CELEB.f=p.clone(); CELEB.f.lerp(p,Math.min(1,dt*6));
+      const a=-0.32+0.1*CELEB.t, ease=Math.min(1,CELEB.t/1.0), dist=(9.2-1.9*ease)*k, h=(2.1-0.35*ease)*k;
+      camera.fov=34; camera.updateProjectionMatrix();
+      camera.position.set(CELEB.f.x+Math.sin(a)*dist, h, CELEB.f.z+Math.cos(a)*dist);
+      _cbF.set(CELEB.f.x, 0.95*k, CELEB.f.z); camera.lookAt(_cbF);
+      return true;
+    }
+    // the team-mate aimed at while picking a pass target in a duel (game.js _dpAim), or null
+    function duelPickTarget(){
+      try{ if(typeof G==='undefined'||!G||!G.pm||G.phase!=='duel'||!G.D||typeof _dpAim==='undefined'||!_dpAim) return null;
+        const p=PP[G.D.as]&&PP[G.D.as][_dpAim]; return p||null; }catch(e){ return null; }
+    }
     function actionFocusPoint(){
       const g=(typeof G!=='undefined')?G:null; if(!g) return null;
+      const pk=duelPickTarget(); if(pk) return {x:pk.x,y:pk.y};                 // pass pick: the aimed team-mate is sharp
+      if(CELEB&&PP[CELEB.side]&&PP[CELEB.side][CELEB.key]){ const cp=PP[CELEB.side][CELEB.key]; return {x:cp.x,y:cp.y}; }   // goal celebration: the scorer
       const bt=(typeof ballTravel!=='undefined')?ballTravel:null, hasBall=(typeof ball!=='undefined'&&ball);
       if(g.phase==='pass_anim'&&bt&&bt.active){
         if(bt.kind==='cross'&&bt.meet) return {x:bt.meet.x,y:bt.meet.y};
@@ -5017,14 +5052,12 @@
     function updateCamera(dt){
       const C=P3D.cam;
       camera.fov=C.fov; camera.updateProjectionMatrix();
-      // DUEL PASS-PICK: overhead tactical view so every teammate is visible/tappable
-      if(typeof G!=='undefined'&&G&&G.pm&&G.phase==='duel'){
-        const cp2=carrierPos();
-        const fx2=cp2?ex2wx(cp2.x)*0.4:0, fz2=cp2?ey2wz(cp2.y)*0.4:0;
-        camera.position.set(fx2, PLEN*0.60, fz2+8);
-        camera.lookAt(fx2, 0, fz2);
-        return;
-      }
+      /* DUEL PASS-PICK (author 2026-09-30): was an overhead tactical view. Now the
+         broadcast camera stays, and as you step through your team-mates it glides
+         onto the one you aim at - like picking a player's view in a replay. The
+         yellow aim ring + name (game.js duelPadAimPaint) follow him on screen. */
+      const pickT=duelPickTarget();
+      if(pickT) _pickCam=true; else if(_pickCam&&!(typeof G!=='undefined'&&G&&G.pm)) _pickCam=false;
       // FOCUS: during a pass/loose ball, follow the BALL (it leads to the
       // receiver); otherwise follow the carrier. This keeps far receivers framed.
       let fx=0,fz=0, cx01=0.5;
@@ -5054,16 +5087,18 @@
         const _bt=(typeof ballTravel!=='undefined')?ballTravel:null;
         if(_bt&&_bt.active&&_bt.kind==='cross'&&_bt.meet){ bx+=(_bt.meet.x-bx)*0.6; by+=(_bt.meet.y-by)*0.6; kMul=1.6; }
         fx=ex2wx(bx); fz=ey2wz(by); cx01=bx/(CV.width||1280);
-      } else if(cp){ fx=ex2wx(cp.x); fz=ey2wz(cp.y); cx01=cp.x/(CV.width||1280); }
+      } else if(pickT){ fx=ex2wx(pickT.x); fz=ey2wz(pickT.y); cx01=pickT.x/(CV.width||1280); kMul=3.2; }   // glide onto the aimed team-mate
+      else if(cp){ fx=ex2wx(cp.x); fz=ey2wz(cp.y); cx01=cp.x/(CV.width||1280); }
       else if(typeof ball!=='undefined'&&ball){ fx=ex2wx(ball.x); fz=ey2wz(ball.y); cx01=ball.x/(CV.width||1280); }
       const k=_camSnap?1:Math.min(1,dt*C.followLerp*kMul); _camSnap=false;
       camFocus.x+=(fx-camFocus.x)*k;
       camFocus.z+=(fz*C.zFollow-camFocus.z)*k;     // partial Z so view stays sideways
       // AUTO-ZOOM near the SOUTH touchline: as the carrier approaches the near
       // edge, pull the camera in so the dark base/sponsor panel goes out of frame.
-      const cyN = cp ? cp.y/(CV.height||720) : 0.5;        // 0..1 (1 = near/south)
+      const zp = pickT||cp;                                 // pass pick: frame the aimed team-mate, not the passer
+      const cyN = zp ? zp.y/(CV.height||720) : 0.5;        // 0..1 (1 = near/south)
       const southProx = Math.max(0, (cyN - 0.62)/0.38);   // 0 at mid, →1 at south edge
-      const targetDist = C.dist * (1 - 0.5*southProx);     // up to 50% closer
+      const targetDist = C.dist * (1 - 0.5*southProx) * (pickT?1+0.18*(1-southProx):1);     // up to 50% closer; a little wider while picking (see who's around him), never near the south boards
       camFocus.dist+=(targetDist-camFocus.dist)*k;
       // INWARD YAW: at midfield theta≈0 (pure sideways); near either goal, turn in.
       // cx01: 0=left goal, 0.5=mid, 1=right goal  →  signed -1..1
@@ -6480,7 +6515,7 @@
       monitorQuality(now);
       syncSheets(); watchActions();
       if(PEN){ penCamera(); camera.updateMatrixWorld(); }
-      else if(!cine){ if(!(P3D.camHook&&P3D.camHook(camera,dt))&&!scnCam(dt)&&!saveCam(dt)&&!goalCam(dt)&&!heroKickCam(dt)) updateCamera(dt); camera.updateMatrixWorld(); }   // camHook: a test / lab camera takes over (return true)
+      else if(!cine){ if(!(P3D.camHook&&P3D.camHook(camera,dt))&&!celebCam(dt)&&!scnCam(dt)&&!saveCam(dt)&&!goalCam(dt)&&!heroKickCam(dt)) updateCamera(dt); camera.updateMatrixWorld(); }   // camHook: a test / lab camera takes over (return true)
       syncPlayers();
       if(PEN) try{ penApply(); }catch(e){ console.error('[P3D] pen',e); }
       else if(!cine) try{ gkaAlign(); }catch(e){}

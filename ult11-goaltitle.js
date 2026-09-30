@@ -80,6 +80,7 @@ const CSS=`
 #u11gt .gt-face{width:min(11vh,8.2vw);height:min(11vh,8.2vw);clip-path:polygon(18% 0,100% 0,82% 100%,0 100%);
   background:linear-gradient(160deg,var(--c1),var(--c2));overflow:hidden;position:relative;box-shadow:0 0 0 2px var(--gold2)}
 #u11gt .gt-face img{position:absolute;left:-40%;top:-6%;width:180%;height:300%;object-fit:cover;object-position:50% 0}
+#u11gt .gt-face img.crop{left:0;top:0;width:100%;height:100%;object-fit:cover;object-position:50% 30%}   /* game.js faceCropURL: the bust's own head crop */
 #u11gt .gt-txt{display:flex;flex-direction:column;align-items:flex-start;line-height:1}
 #u11gt .gt-name{font-family:'Rajdhani',sans-serif;font-weight:700;font-size:min(4.6vh,3.4vw);letter-spacing:.14em;color:#fff;
   text-shadow:0 2px 0 rgba(0,0,0,.6),0 0 14px rgba(0,0,0,.6)}
@@ -155,8 +156,9 @@ GT.show=function(o){
     (o.team?'<span>'+esc(String(o.team).toUpperCase())+'</span>':'')+
     '<span class="gt-sc">'+esc(cd[0])+' <b>'+(+sc[0])+'</b>-<b>'+(+sc[1])+'</b> '+esc(cd[1])+'</span>';
   const img=root.querySelector('.gt-face img'), chain=(o.portrait||[]).slice();
+  img.classList.toggle('crop',!!o.faceCrop);
   img.style.visibility='hidden';
-  img.onerror=()=>{ const n=chain.shift(); if(n) img.src=n; else img.style.visibility='hidden'; };
+  img.onerror=()=>{ img.classList.remove('crop'); const n=chain.shift(); if(n) img.src=n; else img.style.visibility='hidden'; };
   img.onload=()=>{ img.style.visibility='visible'; };
   const first=chain.shift(); if(first) img.src=first;
   root.classList.add('on');

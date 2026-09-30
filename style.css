@@ -4554,3 +4554,9 @@ html.ue-phone #vjoy-base{transform:scale(calc(0.5 + 0.5*var(--tb)));transform-or
 @media(prefers-reduced-motion:reduce){.ue-start-flare,.ue-start-txt{animation:none}.ue-start-flare{opacity:.85}}
 /* splash placement: the old PLAY button's slot and fade-in */
 #s-splash .ue-start{z-index:10;animation:fU .7s .42s both}
+
+/* STAMINA POPS (game.js staminaPop, 2026-09-30): "-80" in red next to your player on a move's cost, green on a refund */
+.st-pop{position:fixed;z-index:8150;pointer-events:none;transform:translate(-50%,-50%);white-space:nowrap;
+  font-family:var(--u-font-ui);font-weight:700;font-size:clamp(17px,1.45vw,26px);letter-spacing:.04em;line-height:1;
+  color:#ff4d4d;text-shadow:0 0 2px #2a0000,0 1px 0 #2a0000,1px 0 0 #2a0000,-1px 0 0 #2a0000,0 -1px 0 #2a0000,0 0 10px rgba(255,40,40,.55)}
+.st-pop.up{color:#5dff8f;text-shadow:0 0 2px #002a0c,0 1px 0 #002a0c,1px 0 0 #002a0c,-1px 0 0 #002a0c,0 -1px 0 #002a0c,0 0 10px rgba(60,255,120,.5)}

@@ -3771,6 +3771,8 @@ function startAnim(){
     // fired it inside the deliberate short holds (keeper catch, restarts).
     if(G.phase==='idle'){ if(!G._idleAt) G._idleAt=_wnow; } else G._idleAt=0;
     if(G.phase==='idle'&&G.mt&&!G._cineHold&&!G.paused&&!G.awaitKickoff&&!G._scoringGoal&&!G._halftime&&
+       !(window.U11Talk&&U11Talk.sceneActive())&&   // a scene (captains before kick-off, full time) is idle on purpose
+       
        G._idleAt&&_wnow-G._idleAt>3500&&
        G.kickoffUntil&&Date.now()-G.kickoffUntil>2500){
       G._idleAt=0;
@@ -4301,6 +4303,32 @@ function getFaceCrop(pl){
   FACE_CROP_CACHE[cacheKey]=off;
   return off;
 }
+
+/* PORTRAITS for the titles and the celebration dialogue (author 2026-09-30:
+   "Mancuso has a face portrait, it is just cut wrong"). The GOAL / FOUL cards
+   loaded the whole front image and guessed a CSS crop - but the head sits in
+   a different place on every sheet. These use the in-game bust's own head
+   detection (headBox): the square face, and a head-and-shoulders bust with
+   the transparent background kept. Outfield only (keepers keep their chain);
+   null until the front image has loaded. */
+function faceCropURL(pl){
+  try{ if(!pl||pl.pos==='GK') return null; const c=getFaceCrop(pl); return c?c.toDataURL():null; }catch(e){ return null; }
+}
+const BUST_CROP_CACHE={};
+function bustCropURL(pl){
+  try{
+    if(!pl||pl.pos==='GK') return null;
+    const img=frontSpriteFor(pl); if(!img||!img.complete||!img.naturalWidth) return null;
+    if(BUST_CROP_CACHE[img.src]) return BUST_CROP_CACHE[img.src];
+    const b=headBox(img); if(!b) return null;
+    const w=b.size*2.3, h=b.size*2.45, sx=b.sx+b.size/2-w/2, sy=b.sy;
+    const k=Math.min(1,380/w), c=document.createElement('canvas'); c.width=Math.round(w*k); c.height=Math.round(h*k);
+    const x=c.getContext('2d'); x.imageSmoothingEnabled=true; x.imageSmoothingQuality='high';
+    x.drawImage(img,sx,sy,w,h,0,0,c.width,c.height);
+    return (BUST_CROP_CACHE[img.src]=c.toDataURL());
+  }catch(e){ return null; }
+}
+window.faceCropURL=faceCropURL; window.bustCropURL=bustCropURL;
 
 const JERSEY={GK:1,LB:3,CB1:5,CB2:6,RB:2,CM1:8,CM2:4,CM3:6,LW:11,ST:9,RW:7};
 function jerseyNum(k,s){const pl=sq(s||'h')[k];return (pl&&pl.jersey)||JERSEY[k]||'?';}
@@ -4922,8 +4950,10 @@ function actJump(){         // A/✕ · Space — jump (attacking) / block (defe
   if(G.poss!=='h'&&G.phase==='moving'){ const k=G.chk||ROLES.engager; if(k) startBlock('h',k); return; }
   if(typeof playerJump==='function') playerJump('h');
 }
-function actPause(){ if(typeof togglePause==='function') togglePause(); }
+function sceneSkip(){ if(window.U11Talk&&U11Talk.sceneActive()) return U11Talk.skipScene(); if(window.U11Celebrate&&U11Celebrate.active()) return U11Celebrate.skip(); return false; }
+function actPause(){ if(sceneSkip()) return; if(typeof togglePause==='function') togglePause(); }
 function actConfirm(){
+  if(sceneSkip()) return;   // skip a scene: the goal celebration, the captains, full time
   /* Enter delivers a corner too - but not the pad's X: X is the header jump a
      moment later, and a double-tap would deliver AND jump far too early. */
   if(cornerHumanTaking()){
@@ -5960,7 +5990,62 @@ function staminaFill(pct){
 function spendSpirit(pl,n){
   if(!pl) return false;
   const s=spiritOf(pl); if(s<n) return false;
-  pl.spirit=s-n; return true;
+  pl.spirit=s-n; staminaPop(pl,-n); return true;
+}
+/* STAMINA POPS (author 2026-09-30): a small "-80" / "-40" / "-400" in red next
+   to YOUR player whenever one of his moves costs stamina (dribble, super shot,
+   tackle, block, jump...), green "+20" for a refund. Human players only - the
+   CPU's spending is not shown. A duel's cost waits until the duel screens and
+   any cinematic are gone, then pops on the player; it follows him while it
+   floats up (1.3 s). */
+const _stPops=[];
+function _stWhere(pl){
+  for(const side of ['h','a']){ const q=sq(side); for(const k in q){ if(q[k]===pl) return {side,k}; } }
+  return null;
+}
+function staminaPop(pl,delta){
+  delta=Math.round(delta||0); if(!pl||!delta||!G||!G.mt) return;
+  const w=_stWhere(pl); if(!w) return;
+  if(typeof isCpuSide==='function'&&isCpuSide(w.side)&&!(typeof PVP!=='undefined'&&PVP&&PVP.on)) return;
+  _stPops.push({side:w.side,k:w.k,delta,born:Date.now(),t0:0,el:null});
+  if(_stPops.length===1) requestAnimationFrame(_stPopTick);
+}
+function _stPopScreen(side,k){
+  if(!CV) return null; const r=CV.getBoundingClientRect(); if(!r.width||!r.height) return null;
+  const cw=CV.width||W, ch=CV.height||H;
+  if(window.P3D&&P3D.on&&P3D.playerScreenPos){
+    const s3=P3D.playerScreenPos(side,k); if(!s3) return null;
+    // the drawn body fills only the bottom ~37% of the sprite box (measured): the top of the head sits ~0.2 r BELOW the box centre
+    return {x:r.left+s3.x*r.width/cw, y:r.top+(s3.y+s3.r*0.16)*r.height/ch, r:s3.r*0.37*r.height/ch};
+  }
+  const p=PP[side]&&PP[side][k]; if(!p) return null;
+  const sx=(perspX(p.x,p.y)-camX)*camZ+W/2, sy=(perspY(p.y)-camY)*camZ+H/2, rr=(CR+10)*perspScale(p.y)*camZ*r.height/H;
+  return {x:r.left+sx*r.width/W, y:r.top+sy*r.height/H-rr*1.6, r:rr};
+}
+function _stPopTick(){
+  const now=Date.now(), LIFE=1300;
+  const blocked=!!(G&&(G.phase==='duel'||G.phase==='duel_result'||G.phase==='idle'||G._cineHold||G.paused));   // idle: players are being put back after a duel
+  for(let i=_stPops.length-1;i>=0;i--){
+    const q=_stPops[i];
+    if(!q.t0){
+      if(!G||!G.mt||now-q.born>9000){ _stPops.splice(i,1); continue; }       // never got a clear moment
+      if(blocked) continue;
+      q.t0=now+ _stPops.filter(o=>o.t0&&o.side===q.side&&o.k===q.k&&now-o.t0<250).length*250;  // stacked pops on one man stagger
+    }
+    const t=(now-q.t0)/LIFE;
+    if(t<0) continue;
+    const pos=_stPopScreen(q.side,q.k);
+    if(t>=1||!G||!G.mt){ if(q.el) q.el.remove(); _stPops.splice(i,1); continue; }
+    if(!q.el){ q.el=document.createElement('div'); q.el.className='st-pop'+(q.delta>0?' up':'');
+      q.el.textContent=(q.delta>0?'+':'−')+Math.abs(q.delta); document.body.appendChild(q.el); }
+    if(!pos){ q.el.style.opacity='0'; continue; }
+    const rise=Math.min(1,t/0.85);
+    q.el.style.left=(pos.x+pos.r*0.75)+'px';
+    q.el.style.top=(pos.y-rise*pos.r*0.6)+'px';
+    q.el.style.opacity=String(t<0.12?t/0.12:(t>0.7?(1-t)/0.3:1));
+    q.el.style.transform='translate(-50%,-50%) scale('+(t<0.12?0.7+2.5*t:1)+')';
+  }
+  if(_stPops.length) requestAnimationFrame(_stPopTick);
 }
 let _sayThT=0;
 function sayThrottled(m){ const n=Date.now(); if(n-_sayThT<1200) return; _sayThT=n; say(m); }
@@ -6086,7 +6171,7 @@ function startBlock(side,k){
 function _blockSucceeded(side,k){
   const pl=sq(side)[k], ph=_phys[side+':'+k];
   if(ph) ph._blockHit=true;
-  if(pl) pl.spirit=Math.min(spiritMax(pl),spiritOf(pl)+BLOCK.refund);
+  if(pl){ pl.spirit=Math.min(spiritMax(pl),spiritOf(pl)+BLOCK.refund); staminaPop(pl,BLOCK.refund); }
 }
 /* Per tick: a brace that ran out with the carrier going past him leaves him
    wrong-footed (a short stumble, not the grey stun - he guessed, he did not
@@ -6254,7 +6339,7 @@ function superBlockStopped(){
   try{ if(window.SFX&&SFX.windupStop) SFX.windupStop(); }catch(e){}
   if(!b) { resume(G.poss); return; }
   const pl=sq(b.ds)[b.k];
-  if(pl) pl.spirit=Math.min(spiritMax(pl),spiritOf(pl)+BLOCK.refund);
+  if(pl){ pl.spirit=Math.min(spiritMax(pl),spiritOf(pl)+BLOCK.refund); staminaPop(pl,BLOCK.refund); }
   const ph=physOf(b.ds,b.k,pl); ph._stallUntil=Date.now()+600;       // knocked down, not beaten
   try{ if(typeof shakeScreen==='function') shakeScreen(8,160); }catch(e){}
   const a=Math.random()*Math.PI*2;
@@ -6572,7 +6657,7 @@ function stepLunge(dt){
     const jph=_jumpPh(G.poss,G.ck), jpl=sq(G.poss)[G.ck];
     if(jph && jph._jumpRefund && jpl){
       jph._jumpRefund=false;
-      jpl.spirit=Math.min(spiritMax(jpl), spiritOf(jpl)+JUMP.refund);
+      jpl.spirit=Math.min(spiritMax(jpl), spiritOf(jpl)+JUMP.refund); staminaPop(jpl,JUMP.refund);
     }
     endLunge(true);
     ph._lungeLock=now+L.recover; ph._stallUntil=now+L.stall;
@@ -6584,7 +6669,7 @@ function stepLunge(dt){
   if(hit){
     endLunge(false);
     ph._lungeLock=now+L.recover*0.4;             // short lock on a clean hit
-    if(rollFoul(side,dk,G.poss,L.foul))return;   // mistimed = free kick
+    if(rollFoul(side,dk,G.poss,L.foul,G.ck))return;   // mistimed = free kick (the tackled carrier takes it)
     G.chk=dk;
     try{ if(window.SFX&&SFX.tackle)SFX.tackle(); }catch(e){}
     opDuel(false);
@@ -9851,9 +9936,24 @@ function resDuel(){
   }
   const win=atkPow>defPow;
   G.D.lastDefPow=defPow;            // afSave reuses the duel's own verdict (GK roadmap step 2)
-  const atkCost=(win&&ak==='dribble')?STAMINA.dribbleWon:((ATK_ACTIONS[ak]||{}).cost||0);
+  /* FOUL - decided HERE, at the verdict (author 2026-09-30: "Mancuso vs Shester,
+     it said foul, it said it was Feo who was not even there, and then I got the
+     ball"). It used to be rolled AFTER the result screen had already said
+     "Shester wins it!", overturning it, and the defender-won path passed the
+     ATTACKER's side as the fouling team - so Shester's slot was looked up in
+     Italy's squad (Feo), who was booked and counted instead. Now the result
+     screen itself says FOUL, with the right names, and the free kick follows.
+     Same rates as before: attacker beats a tackle 8%, defender wins with a
+     tackle or block 3%. Shot duels vs the keeper never foul (advantage). */
+  let foul=false;
+  if(!isShot&&def&&dk){
+    if(win&&defA==='tackle'&&!['shoot','special'].includes(ak)) foul=Math.random()<0.08;
+    else if(!win&&(defA==='tackle'||defA==='block')) foul=Math.random()<0.03;
+  }
+  G.D.foul=foul;
+  const atkCost=((win||foul)&&ak==='dribble')?STAMINA.dribbleWon:((ATK_ACTIONS[ak]||{}).cost||0);
   const defCost=(DEF_ACTIONS[defA]||{}).cost||0;
-  if(carrier&&atkCost>0)carrier.spirit=Math.max(0,spiritOf(carrier)-atkCost);
+  if(carrier&&atkCost>0){ carrier.spirit=Math.max(0,spiritOf(carrier)-atkCost); staminaPop(carrier,-atkCost); }
   if(def&&defCost>0){
     const defMax=def.pos==='GK'?2000:1500;
     let spend=defCost;
@@ -9868,19 +9968,19 @@ function resDuel(){
       const close=clamp((prog-Z.longRange)/(Z.boxEdge-Z.longRange),0,1);
       spend=Math.round(defCost*(0.15+0.85*close)); // ~15% far → 100% point-blank
     }
-    def.spirit=Math.max(0,spiritOf(def)-spend);
+    def.spirit=Math.max(0,spiritOf(def)-spend); staminaPop(def,-spend);
   }
   G.duels++;
-  { const wSide=win?as:ds; if(wSide==='h')G.hDuels++; else G.aDuels++; }  // winner, not entrant
+  { const wSide=(win||foul)?as:ds; if(wSide==='h')G.hDuels++; else G.aDuels++; }  // winner, not entrant (a fouled attacker won it)
   if(['shoot','special'].includes(ak)){G.shots++; if(as==='h')G.hShots++; else G.aShots++;}
   updH();
-  if(win&&dk)scd(ds,dk);        // loser: full cooldown
-  if(!win)scd(as,G.ck);         // loser: full cooldown
+  if(win&&dk&&!foul)scd(ds,dk);  // loser: full cooldown (a foul stops play: the free kick resets it)
+  if(!win&&!foul)scd(as,G.ck);   // loser: full cooldown
   // ...and a real stun for a lost FIELD duel, started when play resumes
-  if(!isShot) queueDuelStun(win?ds:as, win?dk:G.ck);
+  if(!isShot&&!foul) queueDuelStun(win?ds:as, win?dk:G.ck);
   // Only the loser gets cooldown — winner is free to act immediately
   const hW=(as==='h'&&win)||(as==='a'&&!win);
-  const rc2=hW?'#20c878':'#dc2020';
+  let rc2=hW?'#20c878':'#dc2020';
   // Single, clean outcome: SUCCESS (green) when you win the duel,
   // COUNTERED (red) when you lose. Detail line keeps the context.
   let badge=hW?'SUCCESS':'COUNTERED',det='';
@@ -9901,6 +10001,10 @@ function resDuel(){
     'super-pass':'SUPER PASS','super-dribble':'SUPER DRIBBLE','super-one-two':'SUPER 1-2'};
   const dl={tackle:'TACKLE',intercept:'INTERCEPT',block:'BLOCK',save:'SAVE',punch:'PUNCH',
     supersave:'SUPER SAVE','super-tackle':'SUPER TACKLE','super-intercept':'SUPER INTERCEPT','super-block':'SUPER BLOCK'};
+  if(foul){                       // the verdict IS the foul: amber, the fouler named
+    badge='FOUL'; rc2='#ffb22e';
+    det=(def?def.name.split('.').pop().trim():'Defender')+' fouls '+(carrier?carrier.name.split('.').pop().trim():'the attacker')+'!';
+  }
   document.getElementById('rbadge').textContent=badge;
   document.getElementById('rbadge').style.color=rc2;
   document.getElementById('rdet').textContent=det;
@@ -9972,7 +10076,7 @@ function resDuel(){
     // BUG2 FIX: fouls primarily happen when the defender LUNGES AND MISSES.
     // Attacker wins vs tackle → 14% foul (free kick / PK to attacker).
     // Shots are exempt (advantage — the strike proceeds).
-    if(win&&!['shoot','special'].includes(ak)&&G.D.defA==='tackle'&&rollFoul(ds,G.D.dk,as,0.08))return;
+    if(G.D.foul&&rollFoul(ds,G.D.dk,as,1,G.ck))return;   // decided at the verdict (see FOUL above); ds = the fouler's side
     if(['shoot','special'].includes(ak)&&win){
       if(G.D.isShot){
         // Was already a shot duel (vs GK) — score directly
@@ -10090,6 +10194,7 @@ function afGoal(scorer,s,gen){
        const _min=_m?Math.max(1,(+_m[1])+((+_m[2])>0?1:0)):0;
        (G.goals||(G.goals=[])).push({s:s,name:scorer?scorer.name:'',min:_min}); }catch(e){}
   closeDuel(); G.phase='idle'; G.pressing=false;
+  try{ if(scorer&&scorer.pos!=='GK') frontSpriteFor(scorer); }catch(e){}   // the title / dialogue portrait crops from it
   const pb=document.getElementById('pressBtn');if(pb){pb.classList.remove('active');pb.textContent='PRESS';} if(s==='h')G.hG++; else G.aG++; if(s==='h')G.mom=Math.min(100,G.mom+16); else G.mom=Math.max(0,G.mom-16); updH();
   const tn=(s==='h'?HT:AT)?.name||''; document.getElementById('gscr').textContent=(scorer?scorer.name.toUpperCase():'')+' — '+tn;
   const gf=document.getElementById('gfl'); gf.classList.remove('show'); G_moveTarget=null;G_laneTarget=null;
@@ -10111,11 +10216,13 @@ function afGoal(scorer,s,gen){
       const code=t=>String((t&&(t.short||t.code||t.name))||'').replace(/[^A-Za-z]/g,'').slice(0,3).toUpperCase();
       let col=null; try{ col=window.P3D&&P3D.sideColor&&P3D.sideColor(s); }catch(e){}
       let chain=[]; try{ chain=scorer?_portraitChainFor(scorer,s):[]; }catch(e){}
+      const face=faceCropURL(scorer); if(face) chain.unshift(face);
       U11GoalTitle.show({name:scorer?(scorer.name||''):'', team:tn, side:s, col:col||(s==='h'?'#1e72dc':'#c22020'),
-        minute:min, score:[G.hG,G.aG], codes:[code(HT)||'HOM',code(AT)||'AWY'], portrait:chain, dur:_gb?2900:2100});
+        minute:min, score:[G.hG,G.aG], codes:[code(HT)||'HOM',code(AT)||'AWY'], portrait:chain, faceCrop:!!face, dur:_gb?2900:2100});
     } else { void gf.offsetWidth; gf.classList.add('show'); showReferee('GOAL!'); showGoalBanner(scorer,s); }
   },_gbDelay);
-  setTimeout(()=>{
+  const _restart=()=>{
+    if(G.goalGen!==_gen2||G.over) return;
     Object.values(hSq).forEach(p=>{if(p)p.cooldownUntil=0;}); Object.values(aSq).forEach(p=>{if(p)p.cooldownUntil=0;});
     iPos(); gkAnim('h','clear'); gkAnim('a','clear'); const ns=s==='h'?'a':'h',q=sq(ns),kk=['CM2','CM1','ST'].find(k=>q[k])||Object.keys(q).find(k=>q[k]);
     G.poss=ns; G.ck=kk; G.tP++; if(ns==='h')G.hP++; if(PP[ns][kk]){PP[ns][kk].x=W/2;PP[ns][kk].y=H/2;PT[ns][kk]={x:W/2,y:H/2};}
@@ -10123,7 +10230,17 @@ function afGoal(scorer,s,gen){
     ball.x=W/2;ball.y=H/2;ball.tx=W/2;ball.ty=H/2; updP(); say(((ns==='h'?HT:AT)?.name||'Team')+' to kick off.');
     showReferee('KICK OFF');
     setTimeout(()=>{ G._scoringGoal=false; armKickoff(ns); },1000);
-  },(_gb?2900:2100)+_gbDelay);             // with the goal ball: ~3 s of orbit round the net
+  };
+  /* GOAL CELEBRATION (author 2026-09-30, ult11-celebrate.js): the scorer runs to
+     his team-mates, jumps, pixel symbols, his portrait + a line - skippable.
+     It ends by calling _restart. Without the module (or a scorer on the
+     pitch): the old ~3 s orbit round the net, then the restart. */
+  let _cbKey=null; try{ const w=scorer&&_stWhere(scorer); if(w&&w.side===s&&PP[s]&&PP[s][w.k]) _cbKey=w.k; }catch(e){}
+  if(window.U11Celebrate&&_cbKey){
+    // the dialogue box takes the HOME / AWAY colour (author: "if the CPU scores it is red")
+    U11Celebrate.run({scorer, side:s, key:_cbKey, gen:_gen2, delay:_gbDelay, team:tn, col:s==='h'?'#1e72dc':'#c22020',
+      theme:(typeof isCpuSide==='function'&&isCpuSide(s))?'rival':'hero', done:_restart});   // a CPU goal gets the serious theme
+  } else setTimeout(_restart,(_gb?2900:2100)+_gbDelay);             // with the goal ball: ~3 s of orbit round the net
 }
 
 /* ACTION CAPTION: the outcome, shown AT the action (a save's contact) in the
@@ -10348,9 +10465,7 @@ function afSucc(s,c){
 function afTurn(ns){
   G.goalGen++;
   if(ns==='h')G.mom=Math.min(100,G.mom+6); else G.mom=Math.max(0,G.mom-6);
-  // Foul check — defender won via tackle/block (not intercept)
-  const defA=G.D.defA,attSide=G.D.as,dk=G.D.dk;
-  if((defA==='tackle'||defA==='block')&&rollFoul(ns===attSide?G.D.ds:attSide, dk, attSide, 0.03))return;
+  // (the foul check that used to sit here passed the ATTACKER's side as the fouler - it is decided at the verdict now)
   G_moveTarget=null;G_laneTarget=null; const winnerKey=G.D.dk||null, pk=pickCarrierAfterWin(ns,winnerKey); G.poss=ns; G.ck=pk; G.tP++; if(ns==='h')G.hP++; if(PP[ns][pk]){ball.tx=PP[ns][pk].x;ball.ty=PP[ns][pk].y;} updP();
   const q=sq(ns); resume(ns,(q[pk]?q[pk].name:'Player')+' wins the ball!');
 }
@@ -10748,9 +10863,15 @@ function callOffside(s,tk){
   const pb=$id('pass-banner');if(pb)pb.style.display='none';
   animateBallTo(fp2.x,fp2.y,tp.x,tp.y,()=>{
     if(G.goalGen!==gen)return;
-    showEventBanner('\u{1F6A9} OFFSIDE','foul',2400);
+    if(window.U11WhistleTitle){
+      let col=null; try{ col=window.P3D&&P3D.sideColor&&P3D.sideColor(s); }catch(e){}
+      let chain=[]; try{ chain=pl?_portraitChainFor(pl,s):[]; }catch(e){}
+      const face=faceCropURL(pl); if(face) chain.unshift(face);
+      const tm=(s==='h'?HT:AT)||{};
+      U11WhistleTitle.show({faceCrop:!!face, word:'OFFSIDE', tone:'offside', name:pl?pl.name.split('.').pop():'', label:'FLAG',
+        team:String(tm.short||tm.code||tm.name||'').replace(/[^A-Za-z]/g,'').slice(0,3), col:col||(s==='h'?'#1e72dc':'#c22020'), portrait:chain, dur:2200});
+    } else { showEventBanner('\u{1F6A9} OFFSIDE','foul',2400); showReferee('OFFSIDE'); }
     if(s==='h')G.hOff++; else G.aOff++;
-    showReferee('OFFSIDE');
     say((pl?pl.name:'Receiver')+' caught offside!');
     if(ds==='h')G.hP++; else G.tP++;
     G.poss=ds;G.chk=null;G_moveTarget=null;G_laneTarget=null;
@@ -10875,7 +10996,7 @@ function enforceRestartSpace(){
   }
 }
 
-function rollFoul(defSide,defSlot,attSide,prob){
+function rollFoul(defSide,defSlot,attSide,prob,fouledKey){
   // Foul chance — default 8%, callers can override (attacker-win lunges are higher)
   if(Math.random()>(prob||0.08))return false;
   const defPl=sq(defSide)[defSlot];
@@ -10893,7 +11014,24 @@ function rollFoul(defSide,defSlot,attSide,prob){
   const isPK=inBox&&Math.random()<0.4;
   if(defSide==='h')G.hFouls++; else G.aFouls++;
   const foulName=defPl?defPl.name.split('.').pop():'Defender';
-  if(isPK){
+  /* ONE whistle title (author 2026-09-30, ult11-whistletitle.js): replaces the
+     event banner + referee card + red FREE KICK box + the card popup that
+     landed on top of it. Portrait and colours are read BEFORE the booking - a
+     red card removes the player from the squad. */
+  const _wt=!!window.U11WhistleTitle;
+  let _wtInfo=null;
+  if(_wt){ try{
+    let col=null; try{ col=window.P3D&&P3D.sideColor&&P3D.sideColor(defSide); }catch(e){}
+    let chain=[]; try{ chain=defPl?_portraitChainFor(defPl,defSide):[]; }catch(e){}
+    const face=faceCropURL(defPl); if(face) chain.unshift(face);
+    const _t=(document.getElementById('htime')||{}).textContent||'', _m=/(\d+):(\d+)/.exec(_t);
+    const tm=(defSide==='h'?HT:AT)||{};
+    _wtInfo={col:col||(defSide==='h'?'#1e72dc':'#c22020'),portrait:chain,faceCrop:!!face,minute:_m?Math.max(1,(+_m[1])+((+_m[2])>0?1:0)):'',
+      team:String(tm.short||tm.code||tm.name||'').replace(/[^A-Za-z]/g,'').slice(0,3)};
+  }catch(e){ _wtInfo={}; } }
+  if(_wt){
+    say(isPK?foulName+' brings them down \u2014 PENALTY KICK!':foulName+' \u2014 foul! Free kick awarded.');
+  } else if(isPK){
     showEventBanner('🟥 PENALTY!','foul',3500);
     say(foulName+' brings them down — PENALTY KICK!');
     showReferee('PENALTY!');
@@ -10903,7 +11041,7 @@ function rollFoul(defSide,defSlot,attSide,prob){
     showReferee('FOUL');
   }
   // Discipline: roll for a card on the fouler (yellow / red / second-yellow).
-  bookPlayer(defSide,defSlot,isPK);
+  const _card=bookPlayer(defSide,defSlot,isPK,_wt);
   // Close the duel overlay right away and lock the match into an idle grace.
   closeDuel();
   G.phase='idle';
@@ -10911,7 +11049,11 @@ function rollFoul(defSide,defSlot,attSide,prob){
   // Freeze everyone visually during the foul pause — no movement at all
   G.kickoffUntil=Date.now()+(isPK?3000:2300);
   // Show a visible "FREE KICK" overlay banner for the full pause duration
-  showFreeKickPause(isPK?'PENALTY!':'FREE KICK',foulName, isPK?2800:1900);
+  if(_wt){ const I=_wtInfo||{}, bk=bookPlayer.last||{};
+    U11WhistleTitle.show({word:isPK?'PENALTY':'FREE KICK', tone:isPK?'pen':'foul', name:foulName, label:'FOUL',
+      team:I.team, col:I.col, minute:I.minute, portrait:I.portrait, faceCrop:I.faceCrop, card:_card==='none'?null:_card, cardSub:bk.sub,
+      dur:(isPK?3000:2400)+(_card!=='none'?500:0)});
+  } else showFreeKickPause(isPK?'PENALTY!':'FREE KICK',foulName, isPK?2800:1900);
   // Award possession to attacking team at foul position after the pause
   setTimeout(()=>{
     if(G._fkGen!==_fk||!G.mt)return; // state safety — match may have been torn down
@@ -10920,7 +11062,9 @@ function rollFoul(defSide,defSlot,attSide,prob){
     const attQ=sq(attSide);
     const candidates=Object.keys(attQ).filter(k=>attQ[k]&&k!=='GK');
     let ak=candidates[0]||Object.keys(attQ)[0];
-    if(candidates.length){
+    // the man who was fouled takes it (author 2026-09-30) - the nearest team-mate only if he is gone
+    if(fouledKey&&attQ[fouledKey]&&fouledKey!=='GK'&&PP[attSide]&&PP[attSide][fouledKey]) ak=fouledKey;
+    else if(candidates.length){
       let best=Infinity;
       candidates.forEach(k=>{
         const pp=PP[attSide]?.[k];
@@ -11102,8 +11246,8 @@ function updateRedBadges(){
 }
 // Decide & apply a card for a committed foul. Returns 'none' | 'yellow' | 'red'.
 // isPK = last-ditch foul in the box → punished harder (DOGSO).
-function bookPlayer(side,slot,isPK){
-  const pl=sq(side)[slot];
+function bookPlayer(side,slot,isPK,quiet){
+  const pl=sq(side)[slot]; bookPlayer.last=null;
   if(!pl||pl._sent)return 'none';
   const isGK=pl.pos==='GK';
   const yC=isPK?0.55:0.22, rC=isPK?0.12:0.03;   // yellow / straight-red chance — tune here
@@ -11115,9 +11259,9 @@ function bookPlayer(side,slot,isPK){
   const name=pl.name?pl.name.split('.').pop():(isGK?'Keeper':'Defender');
   if(card==='yellow'){
     pl._yc=(pl._yc||0)+1;
-    showCardFlash('yellow',name);
+    bookPlayer.last={card:'yellow',sub:'booked'};
+    if(!quiet){ showCardFlash('yellow',name); showReferee('YELLOW'); }
     say(name+' is booked \u2014 yellow card.');
-    showReferee('YELLOW');
     return 'yellow';
   }
   // ── RED → actually send the player off ──
@@ -11131,9 +11275,10 @@ function bookPlayer(side,slot,isPK){
   if(G.ck===slot)G.ck=null;
   G.reds=G.reds||{h:0,a:0}; G.reds[side]=(G.reds[side]||0)+1;
   const teamN=((side==='h'?HT:AT)||{}).name||(side==='h'?'HOME':'AWAY');
-  showCardFlash('red',name,secondYellow?'second yellow':'sent off');
+  bookPlayer.last={card:'red',sub:secondYellow?'second yellow \u00b7 sent off':'sent off'};
+  if(!quiet) showCardFlash('red',name,secondYellow?'second yellow':'sent off');
   say(name+(secondYellow?' \u2014 second yellow, OFF! ':' is SENT OFF! ')+teamN.toUpperCase()+' down to '+(11-G.reds[side])+' men.');
-  showReferee('RED CARD');
+  if(!quiet) showReferee('RED CARD');
   updateRedBadges();
   try{asnC();}catch(e){}
   return 'red';
@@ -11163,6 +11308,25 @@ function showKickoffPrompt(text,interactive){
 function hideKickoffPrompt(){const el=document.getElementById('kickoff-prompt');if(el)el.classList.remove('show');}
 // Freeze play and wait. Human kick-off → wait for PASS (or tap the button).
 // AI kick-off → short breather, then auto.
+/* THE CAPTAINS (author 2026-09-30): before the first kick-off the two captains
+   (U11Talk.captainOf: Frisina for Italy, Falkner for Germany, else the best-
+   rated) have a word - the home captain opens, the away captain answers, the
+   camera on each speaker. Skippable; then the kick-off is armed as before. */
+function preMatchTalk(then){
+  const hk=window.U11Talk&&U11Talk.captainOf('h'), ak=window.U11Talk&&U11Talk.captainOf('a');
+  if(!hk||!ak||!(window.P3D&&P3D.on)){ then(); return; }
+  const gen=G.goalGen; let ended=false;
+  const end=()=>{ if(ended) return; ended=true; U11Talk.endScene(); U11Talk.hide(); try{ P3D.celebrate(null); }catch(e){}
+    if(!G.over&&G.goalGen===gen) then(); };
+  U11Talk.scene(end);
+  const hn=(HT&&HT.name)||'Home', an=(AT&&AT.name)||'Away';
+  try{ P3D.celebrate('h',hk); }catch(e){}
+  U11Talk.say({pl:sq('h')[hk],side:'h',text:U11Talk.line('preOpen',{team:hn,opp:an}),hold:1300}).then(r=>{
+    if(r!=='done'||ended) return 'skipped';
+    try{ P3D.celebrate('a',ak); }catch(e){}
+    return U11Talk.say({pl:sq('a')[ak],side:'a',text:U11Talk.line('preReply',{team:an,opp:hn}),hold:1600});
+  }).then(r=>{ if(r==='done') end(); });
+}
 function armKickoff(side){
   G._restart=null;
   G.poss=side;
@@ -11310,8 +11474,61 @@ function doSub(outSlot,inPl){
   say(outPl.name.split('.').pop()+' off → '+inPl.name.split('.').pop()+' on.');
   buildSubPanel();
 }
+/* FULL-TIME SCENE (author 2026-09-30): the winners gather round their captain
+   and jump (pixel symbols, the fanfare - 'hero' if you won, 'rival' if the CPU
+   did), the losers go down on the grass (the jump's last two frames, 10 -> 11,
+   held; keepers stay up), and the winning captain says a line. A draw: nobody
+   celebrates, both captains have a word. Skippable; then the usual full time. */
 function goFull(){
+  if(G._endScene||G.over||!window.U11Talk||!(window.P3D&&P3D.on)) return goFullScreen(!!G._endScene);
+  G._endScene=true;
+  endMatchScene(()=>goFullScreen(true));
+}
+function endMatchScene(done){
   try{if(window.SFX&&SFX.whistle)SFX.whistle('full');}catch(e){}
+  clearInterval(G.mt); clearInterval(G.di); G.phase='idle'; G._cineHold=true; G.awaitKickoff=null;
+  try{ closeDuel(); }catch(e){} try{ hideKickoffPrompt(); }catch(e){} try{ clearKick(); }catch(e){}
+  try{ if(ballTravel) ballTravel.active=false; }catch(e){} try{ _passHold=null; passMeter(null); }catch(e){}
+  try{ $id('passhint').style.display='none'; $id('pass-banner').style.display='none'; }catch(e){}
+  try{ if(typeof hideBusts==='function') hideBusts(); }catch(e){}
+  const ws=G.hG>G.aG?'h':(G.aG>G.hG?'a':null), ls=ws?(ws==='h'?'a':'h'):null;
+  const nm=s=>((s==='h'?HT:AT)&&(s==='h'?HT:AT).name)||(s==='h'?'Home':'Away');
+  let ended=false, stopG=null; const timers=[];
+  const end=()=>{ if(ended) return; ended=true; timers.forEach(clearTimeout); if(stopG) stopG();
+    try{ if(window.U11Celebrate) U11Celebrate.sparkle(null,null,false); }catch(e){}
+    U11Talk.endScene(); U11Talk.hide();
+    try{ P3D.celebrate(null); P3D.clearPoses(); }catch(e){}
+    try{ if(window.U11Fanfare) U11Fanfare.stop(0.6); }catch(e){}
+    done(); };
+  U11Talk.scene(end);
+  if(ws){
+    const ck=U11Talk.captainOf(ws);
+    // the losers go down, one by one (keepers stay up: their sheet has another layout)
+    Object.keys(sq(ls)).forEach(k=>{ if(!sq(ls)[k]||!PP[ls][k]||k==='GK') return;
+      timers.push(setTimeout(()=>{ try{ P3D.holdPose(ls,k,[[7,10,140],[7,11,0]]); }catch(e){} },150+Math.random()*900)); });
+    if(ck){
+      try{ P3D.celebrate(ws,ck); }catch(e){}
+      try{ if(window.U11Fanfare) U11Fanfare.play((typeof isCpuSide==='function'&&isCpuSide(ws))?'rival':'hero'); }catch(e){}
+      try{ U11Celebrate.sparkle(ws,ck,true,U11Talk.sideColor(ws)); stopG=U11Celebrate.gather(ws,ck,{count:10,meetFrac:0.3,hopAll:true,hopMs:800,onJump:()=>U11Celebrate.burst(8)}); }catch(e){}
+      timers.push(setTimeout(()=>{ if(ended) return;
+        U11Talk.say({pl:sq(ws)[ck],side:ws,text:U11Talk.line('win',{team:nm(ws),opp:nm(ls)}),hold:2300}).then(r=>{ if(r==='done') end(); });
+      },2300));
+    } else timers.push(setTimeout(end,3500));
+  } else {
+    // a draw: no celebration - both captains have a word
+    const hk=U11Talk.captainOf('h'), ak=U11Talk.captainOf('a');
+    try{ if(hk) P3D.celebrate('h',hk); }catch(e){}
+    timers.push(setTimeout(()=>{ if(ended) return;
+      U11Talk.say({pl:sq('h')[hk],side:'h',text:U11Talk.line('drawHome',{team:nm('h'),opp:nm('a')}),hold:1400}).then(r=>{
+        if(r!=='done'||ended) return 'skipped';
+        try{ if(ak) P3D.celebrate('a',ak); }catch(e){}
+        return U11Talk.say({pl:sq('a')[ak],side:'a',text:U11Talk.line('drawAway',{team:nm('a'),opp:nm('h')}),hold:1900});
+      }).then(r=>{ if(r==='done') end(); });
+    },1400));
+  }
+}
+function goFullScreen(noWhistle){
+  if(!noWhistle) try{if(window.SFX&&SFX.whistle)SFX.whistle('full');}catch(e){}
   matchShutdown();                                   // the match is OVER: nothing may resume it
   // null the handles too: a cleared-but-set G.mt kept the idle watchdog
   // thinking the match was live, and it resumed play behind the FT screen
@@ -11417,7 +11634,7 @@ function initMatch(){
   say('Kick off! '+HT.name+' vs '+AT.name+' — build from midfield.');
   showReferee('KICK OFF');
   G.kickoffUntil=Date.now()+3500;
-  G.phase='idle';setTimeout(()=>{armKickoff('h');},900);
+  G.phase='idle';setTimeout(()=>{ preMatchTalk(()=>armKickoff('h')); },900);
 }
 // ── FORMATION POPUP ──────────────────────────────────────────────
 function openFormationPicker(){
