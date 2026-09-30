@@ -5000,8 +5000,15 @@ function _navStep(d){
   _navIdx = (_navIdx<0) ? 0 : (_navIdx+d+_navEls.length)%_navEls.length;
   _navPaint();
 }
+/* PRESS START: on the splash, Start / A / Enter go straight in (no cursor first) */
+function _splashStart(){
+  const sc=document.querySelector('.screen.active');
+  if(!sc||sc.id!=='s-splash'||(window.UEDialog&&UEDialog.isOpen())||document.querySelector('.ae-modal.show')) return false;
+  enterGame(); setTimeout(()=>{ _navScreen=''; _navSync(); _navPaint(); },140); return true;
+}
 function _navConfirm(){
   const _own=[window.UEDialog,window.TS2,window.TM2,window.PM2,window.FT2].find(m=>m&&m.owns()); if(_own) return _own.confirm();
+  if(_splashStart()) return true;
   if(!_navSync() || !_navEls.length) return false;
   if(_navIdx<0){ _navStep(0); return true; }
   const el=_navEls[_navIdx];
@@ -5054,7 +5061,7 @@ if(typeof UEInput!=='undefined'){
          .on('SWITCH', soloAction(actSwitch))
          .on('SUPER',  soloAction(actSuper))
          .on('JUMP',   soloAction(actJump))
-         .on('PAUSE',  actPause)
+         .on('PAUSE',  ()=>{ if(!_splashStart()) actPause(); })
          // CONFIRM serves both worlds: a menu if one is up, else the duel.
          .on('CONFIRM',()=>{
            if(_navConfirm())return;
@@ -11115,14 +11122,7 @@ function _ensureKickoffCSS(){
   #kickoff-prompt{position:fixed;left:50%;bottom:21%;transform:translateX(-50%) scale(.8);
     opacity:0;transition:opacity .2s,transform .2s;z-index:8200;text-align:center;}
   #kickoff-prompt.show{opacity:1;transform:translateX(-50%) scale(1);}
-  #kickoff-prompt .ko-btn{background:linear-gradient(160deg,#1e72dc,#0a3a86);color:#fff;
-    font-family:var(--u-font-ui,'Rajdhani',sans-serif);font-weight:700;letter-spacing:.18em;font-size:18px;padding:13px 26px;border-radius:30px;
-    box-shadow:0 8px 28px rgba(0,0,0,.55),inset 0 0 0 2px rgba(255,255,255,.18);
-    cursor:pointer;pointer-events:auto;animation:koPulse 1.1s ease-in-out infinite;}
-  #kickoff-prompt .ko-info{background:rgba(8,12,22,.85);color:#cfe0ff;font-family:var(--u-font-ui,'Rajdhani',sans-serif);font-weight:700;
-    font-size:16px;letter-spacing:.16em;padding:9px 20px;border-radius:24px;
-    box-shadow:0 6px 22px rgba(0,0,0,.5);}
-  @keyframes koPulse{0%,100%{transform:scale(1)}50%{transform:scale(1.06)}}`;
+  /* the look itself is .ue-start in style.css - the same prompt as PRESS START (author 2026-09-30) */`;
   document.head.appendChild(st);
 }
 function showKickoffPrompt(text,interactive){
@@ -11130,7 +11130,8 @@ function showKickoffPrompt(text,interactive){
   let el=document.getElementById('kickoff-prompt');
   if(!el){el=document.createElement('div');el.id='kickoff-prompt';
     (document.getElementById('viewport')||document.body).appendChild(el);}
-  el.innerHTML=interactive?`<div class="ko-btn">${text}</div>`:`<div class="ko-info">${text}</div>`;
+  const inner=`<i class="ue-start-line l"></i><span class="ue-start-txt">${text}</span><i class="ue-start-line r"></i><i class="ue-start-flare"></i>`;
+  el.innerHTML=interactive?`<button class="ue-start ko-btn" tabindex="-1">${inner}</button>`:`<div class="ue-start is-info ko-info">${inner}</div>`;
   if(interactive){const b=el.querySelector('.ko-btn');if(b)b.onclick=()=>{if(G.awaitKickoff==='h')doKickoff();};}
   el.classList.remove('show');void el.offsetWidth;el.classList.add('show');
 }

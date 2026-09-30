@@ -5,7 +5,31 @@
 var assetURL=new URL('assets/stadium/classic-upgraded.glb?v=1',document.currentScript.src).href;
 var cached=null, pending=null, active=null;
 var colors={homeCol:'#1e72dc',awayCol:'#c22020'};
+/* SUN SHAFTS ON THE CROWD (2026-09-30, golden hour): pitch3d builds slanted light
+   slabs through the roof; each slab's world->local matrix comes here, so a
+   spectator or seat is sunlit exactly where a visible shaft lands on it and sits
+   in shade elsewhere. shN=0 (default) leaves the stand exactly as before. */
+var SH_MAX=12, SH_U=null;
+function shaftUniforms(T){
+  if(SH_U)return SH_U; var inv=[];for(var i=0;i<SH_MAX;i++)inv.push(new T.Matrix4());
+  SH_U={shInv:{value:inv},shN:{value:0},shDark:{value:new T.Color(1,1,1)},shLit:{value:new T.Color(0,0,0)},shTint:{value:new T.Color(1,1,1)}};return SH_U;
+}
+var SH_GLSL='uniform mat4 shInv['+SH_MAX+'];uniform float shN;uniform vec3 shDark;uniform vec3 shLit;uniform vec3 shTint;\n'+
+ 'float shLitAt(vec3 w){float l=0.0;for(int i=0;i<'+SH_MAX+';i++){if(float(i)>=shN)break;vec3 q=(shInv[i]*vec4(w,1.0)).xyz;'+
+ 'l=max(l,(1.0-smoothstep(0.28,0.5,abs(q.x)))*(1.0-smoothstep(0.30,0.5,abs(q.z)))*step(-0.5,q.y)*step(q.y,0.5));}return l;}\n'+
+ 'vec3 shLight(vec3 w){return shN<0.5?shTint:shDark+shLit*shLitAt(w);}\n';
 var api={status:'idle',error:null};
+api.shaftUniforms=function(T){return shaftUniforms(T);};
+// the bowl's own surfaces (terracing, concrete, roof) take the same sun: shade, or a shaft
+function shaftify(material,T){
+  if(!material||material.userData.shaft)return;material.userData.shaft=true;
+  material.onBeforeCompile=function(shader){
+    var SU=shaftUniforms(T);Object.keys(SU).forEach(function(k){shader.uniforms[k]=SU[k];});
+    shader.vertexShader='varying vec3 vShW;\n'+shader.vertexShader.replace('#include <begin_vertex>','#include <begin_vertex>\n vShW=(modelMatrix*vec4(transformed,1.0)).xyz;');
+    shader.fragmentShader='varying vec3 vShW;\n'+SH_GLSL+shader.fragmentShader.replace('#include <color_fragment>','#include <color_fragment>\n diffuseColor.rgb*=shLight(vShW);');
+  };
+  material.customProgramCacheKey=function(){return 'astra-shaft-v1';};material.needsUpdate=true;
+}
 // Supporter identity is independent of the home/away UI colors.
 var SUPPORTER_PALETTES={
  italy:['#2086dc','#edf1e8','#183553'],holland:['#ef821f','#f4eee1','#24447d'],netherlands:['#ef821f','#f4eee1','#24447d'],
@@ -55,8 +79,9 @@ function buildCrowd(T,model,state){
   var texture=new T.CanvasTexture(canvas);texture.magFilter=T.NearestFilter;texture.minFilter=T.NearestFilter;
   texture.generateMipmaps=false;state.crowdTexture=texture;
   var uniforms={atlas:{value:texture},time:{value:0},eye:{value:new T.Vector3()},home:{value:new T.Color(colors.homeCol)},away:{value:new T.Color(colors.awayCol)},homeAlt:{value:new T.Color()},awayAlt:{value:new T.Color()},homeAccent:{value:new T.Color()},awayAccent:{value:new T.Color()},cheer:{value:0},winner:{value:0},standLight:{value:.9}};
+  var SU=shaftUniforms(T);Object.keys(SU).forEach(function(k){uniforms[k]=SU[k];});
   var material=new T.ShaderMaterial({uniforms:uniforms,side:T.DoubleSide,depthWrite:true,
-    vertexShader:`attribute vec3 anchor;attribute vec4 fan;attribute vec2 facing;varying vec2 tileUV;varying float team;varying float shade;varying float outfit;uniform float time;uniform vec3 eye;uniform float cheer;uniform float winner;
+    vertexShader:`attribute vec3 anchor;attribute vec4 fan;attribute vec2 facing;varying vec2 tileUV;varying float team;varying float shade;varying float outfit;varying vec3 vShW;uniform float time;uniform vec3 eye;uniform float cheer;uniform float winner;
     void main(){float near=1.-smoothstep(24.,48.,distance(eye,anchor));float motion=fan.z*near;float celebrate=cheer*(1.-step(.1,abs(fan.y-winner)));
     float wave=sin(time*3.2+fan.w);float raised=step(.55,wave+celebrate)*step(.01,motion);
     tileUV=vec2((uv.x+fan.x)/16.,(uv.y+1.-raised)/2.);team=fan.y;outfit=fract(fan.w*7.13);shade=(.71+.22*fract(fan.w*3.7))*(.84+.16*uv.y);
@@ -64,14 +89,15 @@ function buildCrowd(T,model,state){
     if(dot(right,billboard)<0.)billboard=-billboard;right=normalize(mix(right,billboard,near*fan.z*.5));
     vec3 p=anchor+vec3(right.x*position.x,position.y,right.y*position.x);
     p.y+=max(0.,sin(time*(3.5+celebrate*3.)+fan.w))*motion*(.018+celebrate*.13);
+    vShW=(modelMatrix*vec4(p,1.)).xyz;
     gl_Position=projectionMatrix*modelViewMatrix*vec4(p,1.);}`,
-    fragmentShader:`uniform sampler2D atlas;uniform vec3 home;uniform vec3 away;uniform vec3 homeAlt;uniform vec3 awayAlt;uniform vec3 homeAccent;uniform vec3 awayAccent;uniform float standLight;varying float outfit;varying vec2 tileUV;varying float team;varying float shade;
+    fragmentShader:SH_GLSL+`uniform sampler2D atlas;uniform vec3 home;uniform vec3 away;uniform vec3 homeAlt;uniform vec3 awayAlt;uniform vec3 homeAccent;uniform vec3 awayAccent;uniform float standLight;varying float outfit;varying vec2 tileUV;varying float team;varying float shade;varying vec3 vShW;
     void main(){vec4 p=texture2D(atlas,tileUV);if(p.a<.5)discard;vec3 shirt=mix(home,away,team);
     if(outfit>.55)shirt=mix(homeAlt,awayAlt,team);if(outfit>.68)shirt=mix(homeAccent,awayAccent,team);
     if(outfit>.76)shirt=vec3(.17,.20,.25);if(outfit>.81)shirt=vec3(.60,.57,.49);if(outfit>.86)shirt=vec3(.79,.78,.70);if(outfit>.91)shirt=vec3(.36,.41,.39);if(outfit>.96)shirt=vec3(.40,.29,.25);
     if(p.g>.65&&p.r<.1&&p.b<.1)p.rgb=shirt*p.g;
     float lamp=0.88+0.12*sin(tileUV.x*100.0+team*3.0);
-    gl_FragColor=vec4(p.rgb*shade*standLight*lamp,1.);}`});
+    gl_FragColor=vec4(p.rgb*shade*standLight*lamp*shLight(vShW),1.);}`});
   state.crowdUniforms=uniforms;state.crowdStats={spectators:0,animated:0,flags:0,batches:0};
   state.flashSpots=[];var batches={},parents={},seed=731;
   function rnd(){seed=(Math.imul(seed,1664525)+1013904223)>>>0;return seed/4294967296;}
@@ -132,7 +158,7 @@ function buildStandShell(T,model,state){
     band(end+2.3,end+2.3,-.25,top+.25,[.23,.28,.32]);
     band(off-.07,off-.07,base-.48,base-.06,[.12,.17,.22]);
   });
-  var mat=new T.MeshLambertMaterial({vertexColors:true,side:T.DoubleSide});mat.name='terrace_structure';
+  var mat=new T.MeshLambertMaterial({vertexColors:true,side:T.DoubleSide});mat.name='terrace_structure';shaftify(mat,T);
   state.shellTriangles=0;
   Object.keys(batches).forEach(function(key){var b=batches[key],g=new T.BufferGeometry();g.setAttribute('position',new T.Float32BufferAttribute(b.p,3));g.setAttribute('color',new T.Float32BufferAttribute(b.c,3));g.computeVertexNormals();
     var m=new T.Mesh(g,mat);m.name='solid_terracing_'+key;(parents[key]||model).add(m);state.shellTriangles+=b.p.length/9;
@@ -148,19 +174,20 @@ function buildStandShell(T,model,state){
 // Seat finish: broad lighting and fine seat-to-seat variation without extra meshes.
 // This is attached only to the imported seat materials, so the original geometry
 // and the near-side camera sectors keep their existing behaviour.
-function finishSeats(material){
+function finishSeats(material,T){
   material.onBeforeCompile=function(shader){
+    if(T){var SU=shaftUniforms(T);Object.keys(SU).forEach(function(k){shader.uniforms[k]=SU[k];});}
     shader.vertexShader='varying vec3 vAstraSeat;\n'+shader.vertexShader;
     shader.vertexShader=shader.vertexShader.replace('#include <begin_vertex>',
       '#include <begin_vertex>\n vAstraSeat=(modelMatrix*vec4(position,1.0)).xyz;');
-    shader.fragmentShader='varying vec3 vAstraSeat;\n'+shader.fragmentShader;
+    shader.fragmentShader='varying vec3 vAstraSeat;\n'+(T?SH_GLSL:'')+shader.fragmentShader;
     shader.fragmentShader=shader.fragmentShader.replace('#include <color_fragment>',
       '#include <color_fragment>\n'+
       'float seatNoise=fract(sin(dot(floor(vAstraSeat.xz*2.6),vec2(127.1,311.7)))*43758.5453);\n'+
       'float aisleGlow=pow(max(0.0,1.0-abs(sin(vAstraSeat.x*0.22))),18.0);\n'+
-      'diffuseColor.rgb*=mix(0.80,1.08,seatNoise)*(0.91+0.10*aisleGlow);');
+      'diffuseColor.rgb*=mix(0.80,1.08,seatNoise)*(0.91+0.10*aisleGlow);'+(T?'\ndiffuseColor.rgb*=shLight(vAstraSeat);':''));
   };
-  material.customProgramCacheKey=function(){return 'astra-seat-finish-v1';};
+  material.customProgramCacheKey=function(){return T?'astra-seat-finish-v2':'astra-seat-finish-v1';};
   material.needsUpdate=true;
 }
 
@@ -231,7 +258,7 @@ api.build=function(T,group,PLEN,PWID){
         var glowing=/^(Lamp|Amber)$/.test(name);
         var m=glowing?new T.MeshBasicMaterial({color:old.color}):new T.MeshLambertMaterial({color:old.color,side:T.DoubleSide});
         m.name=name;materials.set(name,m);
-        if(/^seats_(home|away|neutral)$/.test(name))finishSeats(m);
+        if(/^seats_(home|away|neutral)$/.test(name))finishSeats(m,T);else if(!glowing)shaftify(m,T);
       }
       o.material=materials.get(name);o.castShadow=false;o.receiveShadow=false;
     });
@@ -269,6 +296,19 @@ api.update=function(camera){
   });
 };
 api.inspect=function(){return {status:api.status,error:api.error,crowd:active?active.crowdStats:null,shellTriangles:active?active.shellTriangles:0,parts:active?active.sectors.map(function(s){return {name:s.node.name,visible:s.node.visible};}):[],materials:active?active.materials.map(function(m){return {name:m.name,color:m.color.getHexString(),type:m.type};}):[]};};
+/* warm lamps under each tier's front edge (night, author target 2026-09-30): world positions */
+api.tierLights=function(step){
+  if(!active||!active.ready)return [];var out=[],sc=active.root.scale,st=step||2.6;
+  function outline(off){var hx=60+off,hy=40+off,r=12+off*.14,p=[];
+    [[hx-r,hy-r,0],[-hx+r,hy-r,90],[-hx+r,-hy+r,180],[hx-r,-hy+r,270]].forEach(function(q){
+      if(q[2]===270)p.push([-12,-hy],[12,-hy]);for(var i=0;i<9;i++){var a=(q[2]+i*90/8)*Math.PI/180;p.push([q[0]+r*Math.cos(a),q[1]+r*Math.sin(a)]);}});return p;}
+  [[10.9,6.10],[19.85,12.45],[28.35,20.30]].forEach(function(t,tier){var path=outline(t[0]-.45),carry=0;
+    for(var i=0;i<path.length;i++){var a=path[i],b=path[(i+1)%path.length],L=Math.hypot(b[0]-a[0],b[1]-a[1]);
+      for(var d=carry;d<L;d+=st){var u=d/L,x=a[0]+(b[0]-a[0])*u,z=a[1]+(b[1]-a[1])*u;
+        out.push([x*2/3*sc.x,(t[1]+.42)*2/3*sc.y,-z*2/3*sc.z,tier]);}
+      carry=(carry-L)%st;if(carry<0)carry+=st;}});
+  return out;
+};
 api.flashSpots=function(){if(!active)return [];return active.flashSpots.map(function(p){return [p[0]*active.root.scale.x,p[1]*active.root.scale.y,p[2]*active.root.scale.z];});};
 api.placeFlags=function(T,group,tex,home,PLEN,PWID){
   var k=PLEN/70,w=PWID/44.87,mat=new T.MeshBasicMaterial({map:tex,side:T.DoubleSide,transparent:true});

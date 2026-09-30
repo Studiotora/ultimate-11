@@ -300,6 +300,119 @@
     function ex2wx(x){ return ((x/(CV.width ||1280)) - fbCx)/fbSx * PLEN; }
     function ey2wz(y){ return ((y/(CV.height|| 720)) - fbCy)/fbSy * PWID; }
 
+    /* ════════ LIVING GRASS (author 2026-09-30: "the pitch grass ... almost as if it's alive") ════════
+       One GLSL layer on top of the existing turf (day MeshBasic via onBeforeCompile,
+       the night pool shader directly), so the pixel pitch texture and its markings
+       stay exactly as they are:
+         - blades: fine world-space grain, faded out wherever a screen pixel already
+           covers it (no shimmer in the distance)
+         - wind: slow gusts roll across the pitch - the turf breathes, paler where
+           the blades bend
+         - sheen: looking toward a low sun the grass glows (backlit blades)
+         - dew: sparse glints that twinkle as the camera moves (under the
+           floodlights at night)
+       Players are never touched. P3D.grass = per time [blade, wind, sheen, dew];
+       P3D.grass.on=false switches the layer off (A/B). */
+    const GRASS_U={ gTime:{value:0}, gAmt:{value:new T.Vector4(1,1,0.5,0.3)}, gSun:{value:new T.Vector3(0.5,0.5,0.5)},
+                    gSunCol:{value:new T.Color(1,0.9,0.7)} };
+    P3D.grass={ on:true, classic:[1,1,0.45,0.22], golden:[1,1,1.25,0.5], night:[0.9,0.85,0,1.0] };
+    const GRASS_GLSL=[
+      'uniform float gTime; uniform vec4 gAmt; uniform vec3 gSun; uniform vec3 gSunCol;',
+      'float gH(vec2 p){ return fract(sin(dot(p,vec2(127.1,311.7)))*43758.5453); }',
+      'float gN(vec2 p){ vec2 i=floor(p), f=fract(p); f=f*f*(3.0-2.0*f);',
+      '  return mix(mix(gH(i),gH(i+vec2(1.0,0.0)),f.x),mix(gH(i+vec2(0.0,1.0)),gH(i+vec2(1.0,1.0)),f.x),f.y); }',
+      // ground size of one screen pixel here (world units)
+      '#if __VERSION__ >= 300 || defined(GL_OES_standard_derivatives)',
+      'float gPx(vec3 w){ vec2 d=fwidth(w.xz); return max(max(d.x,d.y),1e-4); }',
+      '#else',
+      'float gPx(vec3 w){ return length(w-cameraPosition)*0.0016; }',
+      '#endif',
+      // albedo: blades + wind gusts (line = 1 on the painted markings)
+      'vec3 grassBase(vec3 c, vec3 w, float line){',
+      '  vec2 p=w.xz; float px=gPx(w); float k=1.0-line*0.85;',
+      '  float b1=gN(p*11.0), b2=gN(p*31.0+vec2(17.0,3.0));',
+      '  float f1=1.0-smoothstep(0.035,0.11,px), f2=1.0-smoothstep(0.012,0.04,px);',
+      '  float blade=((b1-0.5)*f1+(b2-0.5)*f2*0.8)*gAmt.x;',
+      '  vec2 wd=vec2(0.83,0.55);',
+      '  float g=gN(p*0.05-wd*gTime*0.11)*0.6+gN(p*0.13-wd.yx*gTime*0.07+5.0)*0.4;',
+      '  float gust=(smoothstep(0.28,0.82,g)-0.5)*gAmt.y;',
+      '  vec3 o=c*(1.0+(blade*0.24+gust*0.16)*k);',
+      '  o+=vec3(0.030,0.036,0.0)*max(0.0,gust)*k;',
+      '  return o; }',
+      // additive: backlit sheen toward the sun + dew glints (light = local light level)
+      'vec3 grassAdd(vec3 w, float line, float light){',
+      '  vec2 p=w.xz; float px=gPx(w); float k=1.0-line;',
+      '  vec3 v=normalize(w-cameraPosition);',
+      '  vec2 sh=normalize(gSun.xz+vec2(1e-4));',
+      // broad backlight on the FAR grass only (a near lobe read as a spotlight)
+      '  float back=pow(max(0.0,dot(normalize(v.xz+vec2(1e-4)),sh)*0.5+0.5),3.0)*smoothstep(10.0,45.0,length(w-cameraPosition));',
+      '  float gs=gN(p*0.05-vec2(0.83,0.55)*gTime*0.11);',
+      '  vec3 o=gSunCol*back*gAmt.z*(0.07+0.06*gs)*k;',
+      '  float cs=0.075; vec2 q=p/cs, ci=floor(q); float r=gH(ci);',
+      '  vec2 jp=vec2(gH(ci+3.1),gH(ci+7.7))*0.6+0.2;',
+      // a glint stays >= ~1.5 px, and there are fewer of them the further away (constant per screen area)
+      '  float rad=max(0.14,0.8*px/cs);',
+      '  float d=length(fract(q)-jp)/rad;',
+      '  float dens=0.02*min(1.0,0.35*(cs*cs)/(px*px));',
+      '  float tw=pow(0.5+0.5*sin(gTime*(1.3+r*3.5)+r*61.0+dot(v.xz,vec2(23.0,17.0))),8.0);',
+      '  float sp=step(1.0-dens,r)*(1.0-smoothstep(0.0,1.0,d))*tw*mix(1.0,0.55,smoothstep(0.02,0.12,px));',
+      '  o+=vec3(1.0,0.98,0.9)*sp*gAmt.w*light*k*1.4;',
+      '  return o; }'].join(String.fromCharCode(10));
+    // day turf / apron: the stock MeshBasicMaterial (map, colour, fog all unchanged) + the layer
+    function grassify(mat){
+      if(!mat||mat.userData.grass) return mat; mat.userData.grass=true;
+      mat.onBeforeCompile=function(sh){
+        Object.assign(sh.uniforms,GRASS_U);
+        sh.vertexShader='varying vec3 vGW;\n'+sh.vertexShader.replace('#include <begin_vertex>',
+          '#include <begin_vertex>\n  vGW=(modelMatrix*vec4(transformed,1.0)).xyz;');
+        sh.fragmentShader='varying vec3 vGW;\n'+GRASS_GLSL+'\n'+sh.fragmentShader
+          .replace('#include <map_fragment>','#include <map_fragment>\n  float gLine=step(0.55,dot(diffuseColor.rgb,vec3(0.299,0.587,0.114)));\n  diffuseColor.rgb=grassBase(diffuseColor.rgb,vGW,gLine);')
+          .replace('#include <fog_fragment>','  gl_FragColor.rgb+=grassAdd(vGW,gLine,1.0);\n#include <fog_fragment>');
+      };
+      mat.customProgramCacheKey=function(){ return 'u11-grass-v1'; };
+      mat.needsUpdate=true; return mat;
+    }
+    const _gs=new T.Vector3();
+    function grassFrame(now){
+      const G2=P3D.grass, t=(typeof ENV!=='undefined'&&ENV.time)||'classic', a=(G2&&G2.on!==false&&G2[t])||[0,0,0,0];
+      GRASS_U.gTime.value=(now||0)*0.001; GRASS_U.gAmt.value.set(a[0],a[1],a[2],a[3]);
+      _gs.copy(sun.position).normalize(); GRASS_U.gSun.value.copy(_gs);
+      GRASS_U.gSunCol.value.copy(sun.color).multiplyScalar(t==='golden'?1.0:0.7);
+    }
+
+    /* FOREGROUND BOKEH (author night target 2026-09-30: out-of-focus glints in the grass
+       right in front of a LOW camera). Points on the turf in a 24x24 tile that wraps
+       around the camera; near ones draw as big soft discs (defocus), far ones vanish.
+       Only when the camera is low (kick-off orbit, lab shots) - never over the match
+       camera's play. P3D.bokeh = {on, amt per time}. */
+    P3D.bokeh={ on:true, classic:0, golden:0.55, night:0.8 };
+    let BOK=null;
+    function bokehFrame(now){
+      const t=(typeof ENV!=='undefined'&&ENV.time)||'classic', amt=(P3D.bokeh&&P3D.bokeh.on!==false&&P3D.bokeh[t])||0;
+      const low=camera.position.y<4.2*(PLEN/70);
+      if(!amt||!low){ if(BOK) BOK.visible=false; return; }
+      if(!BOK){
+        const N=320, P=new Float32Array(N*3), ph=new Float32Array(N);
+        for(let i=0;i<N;i++){ P[i*3]=(Math.random()-.5)*24; P[i*3+1]=0.04; P[i*3+2]=(Math.random()-.5)*24; ph[i]=Math.random(); }
+        const g=new T.BufferGeometry(); g.setAttribute('position',new T.BufferAttribute(P,3)); g.setAttribute('ph',new T.BufferAttribute(ph,1));
+        const m=new T.ShaderMaterial({uniforms:{time:{value:0},amt:{value:1},col:{value:new T.Color(1,0.86,0.62)},k:{value:PLEN/70}},
+          transparent:true,depthWrite:false,depthTest:false,blending:T.AdditiveBlending,fog:false,
+          vertexShader:['attribute float ph; uniform float time, amt, k; varying float a;',
+            'void main(){ vec3 p=position*k; p.xz=cameraPosition.xz+mod(p.xz-cameraPosition.xz+12.0*k,24.0*k)-12.0*k;',
+            ' vec4 mv=modelViewMatrix*vec4(p,1.0); gl_Position=projectionMatrix*mv; float d=-mv.z/k;',
+            ' float tw=pow(0.5+0.5*sin(time*(0.7+ph*1.6)+ph*50.0),3.0);',
+            ' a=amt*tw*smoothstep(15.0,5.0,d)*smoothstep(1.2,2.6,d)*(0.35+0.65*ph);',
+            ' gl_PointSize=a>0.001?clamp(440.0/d,4.0,58.0):0.0; }'].join(String.fromCharCode(10)),
+          fragmentShader:['uniform vec3 col; varying float a;',
+            'void main(){ float d=length(gl_PointCoord-0.5)*2.0; if(d>1.0) discard;',
+            ' float disc=(1.0-smoothstep(0.82,1.0,d))*(0.55+0.45*smoothstep(0.45,0.95,d));',
+            ' gl_FragColor=vec4(col*disc*a*0.22,1.0); }'].join(String.fromCharCode(10))});
+        BOK=new T.Points(g,m); BOK.frustumCulled=false; BOK.renderOrder=11; scene.add(BOK);
+      }
+      BOK.visible=true; const u=BOK.material.uniforms; u.time.value=(now||0)*0.001; u.amt.value=amt;
+      if(t==='night') u.col.value.setRGB(1,0.88,0.66); else u.col.value.setRGB(1,0.8,0.5);
+    }
+
     /* ════════ PITCH ════════ */
     const loader=new T.TextureLoader();
     let pitchMesh=null, apronMesh=null;
@@ -432,7 +545,7 @@
       const aL=PLEN*2.4, aW=PWID*2.4;
       let mat;
       if(P3D.stadium==='santa-fede'){ mat=new T.MeshLambertMaterial({color:0x696960}); }
-      else if(P3D.pixelPitch!==false){ const t=makeApronTex(); t.repeat.set(aL/24,aW/24); mat=new T.MeshBasicMaterial({map:t}); }
+      else if(P3D.pixelPitch!==false){ const t=makeApronTex(); t.repeat.set(aL/24,aW/24); mat=grassify(new T.MeshBasicMaterial({map:t})); }
       else mat=new T.MeshBasicMaterial({color:0x4c8c3f});
       apronMesh=new T.Mesh(new T.PlaneGeometry(aL,aW),mat);
       apronMesh.rotation.x=-Math.PI/2; apronMesh.position.y=-0.05;
@@ -539,7 +652,7 @@
       const santa=P3D.stadium==='santa-fede'&&window.U11_SANTA ? U11_SANTA.makePitch(T,tex,PLEN,PWID):null;
       if(santa) tex.dispose();
       pitchMesh=new T.Mesh(santa?santa.geometry:new T.PlaneGeometry(PLEN,PWID),
-        santa?santa.material:new T.MeshBasicMaterial({map:tex}));
+        santa?santa.material:grassify(new T.MeshBasicMaterial({map:tex})));
       pitchMesh.receiveShadow=true;
       pitchMesh.userData.surface=santa?'asphalt':'grass';
       pitchMesh.rotation.x=-Math.PI/2; pitchMesh.position.y=0; scene.add(pitchMesh);
@@ -2695,12 +2808,18 @@
       tryLoad('assets/ps1/gk_sheet6.png', LGK6,
         ()=>tryLoad('assets/ps1/gk_cine.png', LGK4, ()=>tryLoad('assets/ps1/gk.png', null)));
     })();
+    /* HEAD-BAKED 2D SHEETS (2026-09-30): a sheet whose heads are drawn INTO it (the author's
+       hand-placed japan.png) must not get the shared hair_home.png layer on top - that layer is
+       home's OLD hair outline and lands on the new face as black scribbles. Add a team key here
+       when its 2d sheet carries its own heads. */
+    P3D.headBaked=P3D.headBaked||new Set(['japan']);
+    const headBaked=u=>{ const m=/\/2d\/([^\/.?]+)\.png/.exec(u); return !!(m&&P3D.headBaked.has(m[1].toLowerCase())); };
     function loadSheet(side,urls){
       let i=0; const next=()=>{ if(i>=urls.length){ if(!SHEETS[side])SHEETS[side]='none'; return; }
         const im=new Image(), u=urls[i++];
         im.onload=()=>{const L=layoutFor(im,u);
           SHEETS[side]={img:im,L,cw:im.width/L.cols,ch:im.height/L.rows,url:u,is3d:/\/3d\//.test(u),
-                        layer:/\/3d\//.test(u)?'3d':/\/2d\//.test(u)?'2d':null};
+                        layer:/\/3d\//.test(u)?'3d':(/\/2d\//.test(u)&&!headBaked(u))?'2d':null};
           measureSheet(SHEETS[side]);
           console.log('[P3D] '+side+' sheet '+u+' '+im.width+'x'+im.height+
             ' -> '+L.cols+' cols x '+L.rows+' rows, cell '+
@@ -3714,7 +3833,7 @@
     // tuned from 3 captures (look-dev 2026-09-24): a dark blue base so the gaps
     // go dark, near-white LED floodlights (warm read yellow-green on grass),
     // sprites capped so white kits don't blow out under the pools
-    P3D.night={ amb:[0.19,0.23,0.35], lamp:[1.08,1.04,0.96], max:1.3, spriteMax:0.96, turf:1,
+    P3D.night={ amb:[0.20,0.25,0.35], lamp:[1.12,1.08,0.98], max:1.3, spriteMax:0.96, turf:0.55,   // 2026-09-30 target: lusher turf (was amb .19/.23/.35, lamp 1.08/1.04/.96, turf 1)
       pools:[[-0.46,-0.25,15,1.05],[-0.46,0.25,15,1.05],[0.46,-0.25,15,1.05],[0.46,0.25,15,1.05],
              [-0.86,0,10.5,0.92],[0.86,0,10.5,0.92],[0,0,12.5,0.78]],
       // the author's Camera Lab values, tuned side by side with the hero frame (2026-09-25)
@@ -3731,7 +3850,8 @@
       // the real pools do that job now); lamp heads glow harder
       fog:{col:[0.035,0.055,0.11], near:55, far:230}, beam:1.9, beamPools:0.45, halo:1.6, haloScale:1.5,
       // step 4 DOF (HD-2D tilt-shift) and step 5 FINISH (film grain + edge colour fringing)
-      tilt:0.44, grain:0.035, ca:0.005 };
+      tilt:0.44, grain:0.035, ca:0.005,
+      bowl:[1.2,1.08,0.9] };   // 2026-09-30 target: stands + crowd warm under the floodlights (was neutral)
     let LOOK='classic', _lookSaved=null, _nightMat=null, _lookPending=null, _lookRest=null, _finishPass=null;
     // lamp heads (floodBank halo sprites) glow harder at night
     function nightHalos(on){
@@ -3748,9 +3868,11 @@
          pass, the lab's exact math. amount 0 = grain + fringe only. */
       uniforms:{ tDiffuse:{value:null}, time:{value:0}, grain:{value:0.035}, ca:{value:0.01}, amount:{value:0}, exposure:{value:1.12},
         lift:{value:new T.Vector3(0.008,0.010,0.022)}, gain:{value:new T.Vector3(1.06,1.0,0.92)},
-        shadowTint:{value:new T.Vector3(0.84,0.93,1.14)}, highTint:{value:new T.Vector3(1.14,1.02,0.86)}, vig:{value:0.62} },
+        shadowTint:{value:new T.Vector3(0.84,0.93,1.14)}, highTint:{value:new T.Vector3(1.14,1.02,0.86)}, vig:{value:0.62},
+        leak:{value:new T.Vector3()}, leakPos:{value:new T.Vector2(1,1)}, leakR:{value:0.6}, aspect:{value:16/9} },
       vertexShader:'varying vec2 vUv; void main(){ vUv=uv; gl_Position=projectionMatrix*modelViewMatrix*vec4(position,1.0); }',
       fragmentShader:['varying vec2 vUv; uniform sampler2D tDiffuse; uniform float time, grain, ca, amount, exposure, vig; uniform vec3 lift, gain, shadowTint, highTint;',
+        'uniform vec3 leak; uniform vec2 leakPos; uniform float leakR, aspect;',
         'float rnd(vec2 p){ return fract(sin(dot(p,vec2(12.9898,78.233))+time*7.13)*43758.5453); }',
         'vec3 aces(vec3 x){ return clamp((x*(2.51*x+.03))/(x*(2.43*x+.59)+.14),0.,1.); }',
         'void main(){ vec2 d=vUv-0.5; vec2 o=d*ca*dot(d,d)*4.0;',
@@ -3759,6 +3881,7 @@
         ' g*=mix(shadowTint,highTint,smoothstep(.15,.7,l)); g=g*gain+lift;',
         ' g*=1.-vig*smoothstep(.2,.95,length(d*vec2(1.25,1.)));',
         ' c=mix(c,g,amount);',
+        ' vec2 lp=(vUv-leakPos)*vec2(aspect,1.0); vec3 lk=leak*exp(-dot(lp,lp)/(leakR*leakR)); c=1.0-(1.0-c)*(1.0-lk);',
         ' c+=(rnd(floor(vUv*vec2(1280.0,720.0)))-0.5)*grain;',
         ' gl_FragColor=vec4(c,1.0); }'].join(String.fromCharCode(10)) };
     function nightFinish(on,P){
@@ -3787,19 +3910,22 @@
       u.pools={value:pools};
       const sp=[], sc=[]; for(let i=0;i<10;i++){ sp.push(new T.Vector4(0,0,1,0)); sc.push(new T.Vector3()); }
       u.spill={value:sp}; u.spillCol={value:sc};
-      return new T.ShaderMaterial({uniforms:u, fog:true,
+      Object.assign(u,GRASS_U);                                   // living grass (shared uniforms)
+      return new T.ShaderMaterial({uniforms:u, fog:true, extensions:{derivatives:true},
         vertexShader:['varying vec2 vUv; varying vec3 vW;','#include <fog_pars_vertex>',
           'void main(){ vUv=uv; vec4 w=modelMatrix*vec4(position,1.0); vW=w.xyz; vec4 mvPosition=viewMatrix*w; gl_Position=projectionMatrix*mvPosition;',
           '#include <fog_vertex>','}'].join(String.fromCharCode(10)),
         fragmentShader:['uniform sampler2D map; uniform vec4 pools[8]; uniform vec3 amb; uniform vec3 lamp; uniform float maxL; uniform float lineMax; uniform float wet; uniform float turf; uniform vec4 spill[10]; uniform vec3 spillCol[10]; varying vec2 vUv; varying vec3 vW;',
-          '#include <fog_pars_fragment>',
+          '#include <fog_pars_fragment>', GRASS_GLSL,
           'void main(){ vec3 c=texture2D(map,vUv).rgb; float s=0.0;',
           ' c=mix(c,vec3(dot(c,vec3(.299,.587,.114))),turf*0.32)*mix(vec3(1.0),vec3(.84,.95,1.02),turf);',   // the lab's muted cool turf
+          ' float gLine=step(0.55,dot(c,vec3(.299,.587,.114))); c=grassBase(c,vW,gLine);',
           ' for(int i=0;i<8;i++){ vec2 d=vW.xz-pools[i].xy; s+=pools[i].w*exp(-dot(d,d)/(pools[i].z*pools[i].z)); }',
           ' vec3 sl=vec3(0.0); for(int i=0;i<10;i++){ vec2 e=vW.xz-spill[i].xy; sl+=spillCol[i]*spill[i].w*exp(-dot(e,e)/(spill[i].z*spill[i].z)); }',
           ' vec3 o=c*min(amb+lamp*s+sl*0.5,vec3(maxL))*(1.0-wet*0.16)+lamp*pow(min(s,1.0),3.0)*wet*0.10+sl*(0.085+wet*0.06);',   // coloured light also glows ON the grass (multiplying red onto green gives nothing)
           ' float lum=dot(c,vec3(0.299,0.587,0.114)); float m=max(o.r,max(o.g,o.b));',
           ' if(lum>0.55&&m>lineMax) o*=lineMax/m;',
+          ' o+=grassAdd(vW,gLine,min(s,1.2));',
           ' gl_FragColor=vec4(o,1.0);',
           '#include <fog_fragment>','}'].join(String.fromCharCode(10))});
     }
@@ -3835,7 +3961,7 @@
         if(night){ _nightMat=_nightMat||makeNightPitchMat(); _nightMat.uniforms.map.value=dm.map; syncNightUniforms();
           if(P3D.stadium==='santa-fede'&&_nightMat.uniforms.spill){_nightMat.uniforms.spill.value.forEach(v=>v.set(0,0,1,0));}
                    _nightMat.uniforms.wet.value=W?(W.wet||0):0; pitchMesh.material=_nightMat; }
-        else { pitchMesh.material=dm; if(dm.color) dm.color.setScalar(W?(W.day||1):1); }      // rain darkens the day grass
+        else { pitchMesh.material=dm; if(dm.color){ const pc=(P&&P.pitch)||[1,1,1], wk=W?(W.day||1):1; dm.color.setRGB(pc[0]*wk,pc[1]*wk,pc[2]*wk); } }      // rain darkens the day grass; golden deepens it
       } else nightPoolsW();
       if(apronMesh&&apronMesh.material&&apronMesh.material.color){
         const a=night?N.apron:(P&&P.apron?P.apron:[1,1,1]), wk=W?(W.day||1):1;
@@ -3880,9 +4006,11 @@
        API: P3D.setTime(t), P3D.setWeather(w), P3D.setLook(t) (old name), P3D.env.
        Saved: localStorage u11.look (time) / u11.weather. URL: ?look= / ?weather=.
        Key N cycles the time on PC. Presets: P3D.golden, P3D.night, P3D.weatherFx. */
-    P3D.golden={ light:{elev:0.24, key:3.2, ambient:0.46, warmth:0.9, shade:0.45, glow:0.5, shadowLen:3.2},
-      fx:{bloom:0.22,bloomRadius:0.5,bloomThresh:0.62,contrast:1.08,sat:1.04,lift:0.0,split:1.15,vignette:0.8},
+    P3D.golden={ light:{elev:0.24, key:3.2, ambient:0.46, warmth:0.9, shade:0.45, glow:0.18, shadowLen:3.2},   // glow .5 -> .18 (2026-09-30): its pool sat opposite the moved sun
+      fx:{bloom:0.26,bloomRadius:0.55,bloomThresh:0.62,contrast:1.13,sat:1.06,lift:-0.01,split:1.15,vignette:0.85},
       shadowTint:[0.84,0.90,1.12], highTint:[1.12,1.02,0.86], sky:[1.0,0.82,0.66], sprite:[1.05,0.99,0.9],
+      pitch:[0.94,0.95,0.76],   // 2026-09-30 target: warm sunlit turf under the grade (not lime, not cold)
+      leak:{amt:0.48, r:0.78, edge:1.0, col:[1.0,0.70,0.40]},   // warm spill from the sun's side of the frame
       fog:{col:[0.40,0.28,0.20], near:120, far:430}, tilt:1.2, grain:0.02, ca:0.003, apron:[1.0,0.92,0.78] };
     P3D.weatherFx={
       rain:{ sat:0.86, contrast:0.96, lift:-0.01, amb:0.85, sky:0.6, sprite:0.9, fogMix:[0.30,0.34,0.40], fogK:0.7, day:0.84, wet:1.0,
@@ -3960,9 +4088,18 @@
       }
       if(ENV.time==='night') nightTint();
       else if(P||W) constTint((P&&P.sprite)||[1,1,1], W?W.sprite:1);
-      if(_finishPass&&_finishPass.enabled) _finishPass.uniforms.time.value=(now||0)*0.001;
+      if(_finishPass&&_finishPass.enabled){ const u=_finishPass.uniforms; u.time.value=(now||0)*0.001;
+        /* LIGHT LEAK (golden, author target 2026-09-30): the low sun sits just outside the
+           frame, so its warmth spills in from that side - a soft screen-blend glow at the
+           frame edge toward the sun (off when the sun is well behind the camera). */
+        const L=P&&P.leak; if(L&&L.amt>0){ _lkV.copy(sun.position).normalize().transformDirection(camera.matrixWorldInverse);
+          const h=Math.hypot(_lkV.x,_lkV.y)||1, back=1-Math.min(1,Math.max(0,(_lkV.z-0.3)/0.6));
+          u.leakPos.value.set(0.5+0.5*L.edge*_lkV.x/h, 0.5+0.5*L.edge*_lkV.y/h); u.leakR.value=L.r; u.aspect.value=camera.aspect||16/9;
+          u.leak.value.set(L.col[0],L.col[1],L.col[2]).multiplyScalar(L.amt*back); }
+        else u.leak.value.set(0,0,0); }
       weatherTick(dt||0.016);
     }
+    const _lkV=new T.Vector3();
     function constTint(c,k){
       const r=c[0]*k,g=c[1]*k,bb=c[2]*k;
       for(const id in sprites){ const m=sprites[id]&&sprites[id].sprite&&sprites[id].sprite.material; if(m&&m.color) m.color.setRGB(r,g,bb); }
@@ -4033,10 +4170,18 @@
        goal ends x~+-51.5.  P3D.rig.on=false removes it. */
     const RIG={on:true, built:false, cones:[], banks:[], dust:null, phones:null, photogs:[], flashes:[], spill:[], t:0, nextFlash:1};
     P3D.rig=RIG;
-    const RIG_BANKS=[   // [bank x,y,z] -> [pool target x,z, cone radius at the ground]
+    const RIG_BANKS=[   // [bank x,y,z] -> [pool target x,z, cone radius at the ground] (, beam strength: secondary banks)
       [[-18,16.2,-37.2],[-16.1,-5.6,7.5]], [[18,16.2,-37.2],[16.1,-5.6,7.5]], [[0,16.2,-37.2],[0,0,6.5]],
       [[-36,16.2,-37.2],[-16.1,5.6,7.5]], [[36,16.2,-37.2],[16.1,5.6,7.5]],
-      [[-50.5,16.2,0],[-30.1,0,6]], [[50.5,16.2,0],[30.1,0,6]] ];
+      [[-50.5,16.2,0],[-30.1,0,6]], [[50.5,16.2,0],[30.1,0,6]],
+      /* author target 2026-09-30: a ring of floodlight clusters, not seven. Secondary
+         banks carry their own head, glow and a lighter beam; they add NO pitch pool
+         (the grass light stays the author's seven), and none sits on the near side,
+         where a beam would wash over the match camera. */
+      [[-27,16.2,-37.2],[-21,-3,6.5],.55], [[-9,16.2,-37.2],[-7,-4,6],.55], [[9,16.2,-37.2],[7,-4,6],.55], [[27,16.2,-37.2],[21,-3,6.5],.55],
+      [[-45,16.2,-31],[-27,-9,6],.5], [[45,16.2,-31],[27,-9,6],.5],
+      [[-50.5,16.2,15],[-32,6,5.5],.5], [[50.5,16.2,15],[32,6,5.5],.5],
+      [[-50.5,16.2,-15],[-32,-6,5.5],.5], [[50.5,16.2,-15],[32,-6,5.5],.5] ];
     function rigCanvasTex(w,h,draw,pixel){ const c=document.createElement('canvas'); c.width=w; c.height=h; draw(c.getContext('2d'),w,h);
       const t=new T.CanvasTexture(c); if(pixel){ t.magFilter=T.NearestFilter; t.minFilter=T.NearestFilter; t.generateMipmaps=false; } return t; }
     function buildRig(){
@@ -4048,74 +4193,116 @@
          light, not a fixture. Cells are now warm-white but under the bloom
          knee, the gaps stay visibly dark, and a dim steel gradient replaces
          the flat #10131a so the chassis has some form. */
-      const headTex=rigCanvasTex(96,64,(x,w,h)=>{
+      /* v3 (author target 2026-09-30): ROUND bulbs - a cluster of lamps, each
+         with a hot centre that just crosses the bloom knee, dark gaps between */
+      const headTex=rigCanvasTex(128,80,(x,w,h)=>{
         const bg=x.createLinearGradient(0,0,0,h);
-        bg.addColorStop(0,'#2a3040'); bg.addColorStop(1,'#141821');
+        bg.addColorStop(0,'#232a38'); bg.addColorStop(1,'#10141c');
         x.fillStyle=bg; x.fillRect(0,0,w,h);
-        for(let r=0;r<4;r++) for(let c=0;c<6;c++){
-          const lx=4+c*15, ly=4+r*15;
-          const lg=x.createLinearGradient(lx,ly,lx,ly+11);
-          lg.addColorStop(0,'#f3ecd8'); lg.addColorStop(1,'#c9bd9c');
-          x.fillStyle=lg; x.fillRect(lx,ly,11,11);
+        for(let r=0;r<4;r++) for(let c=0;c<7;c++){
+          const cx=10+c*18, cy=11+r*19, R=7.6, lg=x.createRadialGradient(cx,cy,0,cx,cy,R);
+          lg.addColorStop(0,'#fffdf5'); lg.addColorStop(0.45,'#fff0cf'); lg.addColorStop(0.8,'#b59d6c'); lg.addColorStop(1,'#2b2a2a');
+          x.fillStyle=lg; x.beginPath(); x.arc(cx,cy,R,0,Math.PI*2); x.fill();
         }
-      },true);
+      },false);
       /* Emissive ON (MeshBasic ignores scene lights, so the head stays readable
          at night) but scaled well under the .86 bloom threshold - the halo and
          the cone now carry the glow, the head only carries the shape. */
-      const headMat=new T.MeshBasicMaterial({map:headTex,color:0xb9ae94,fog:false});
-      /* NIGHTLIGHTRIG v1 (2026-09-27) - real light shafts.
-         The old shader was `pow(abs(dot(N,V)),1.3)`, a flat fresnel rim term.
-         Measured against the broadcast + hero captures: that makes the shaft
-         BRIGHTEST exactly when the camera looks along the cone wall and
-         BLACK when it looks down the axis - i.e. from the hero/broadcast
-         camera the beams were invisible, and the floodlights did not motivate
-         the light at all. On top of that the whole cone was multiplied by .36
-         and then pushed through a .86-threshold bloom, so nothing survived.
-
-         This is now an approximate single-scatter integral instead of a rim:
-           - path length through the cone  -> soft edge ON the silhouette
-           - 1/r falloff down the beam       -> hot at the lamp, gone at the grass
-           - 3D value noise                  -> drifting dust striations (haze
-                                              breakup, so it is not a clean gel)
-           - height gate on the grass end   -> kills the hard cone rim on the turf
-         Tuned so a beam reads clearly at 1920x1080 without touching the bloom. */
-      const coneMat=new T.ShaderMaterial({uniforms:{str:{value:1},time:{value:0},tint:{value:new T.Color(1.0,0.95,0.85)}},transparent:true,depthWrite:false,blending:T.AdditiveBlending,side:T.DoubleSide,fog:false,
-        vertexShader:['varying float vy;varying vec3 vN;varying vec3 vV;varying vec3 vW;',
+      const headMat=new T.MeshBasicMaterial({map:headTex,color:0xf2e8d2,fog:false});
+      /* NIGHT BEAMS v2 (2026-09-30) - a real light volume per floodlight.
+         v1 (2026-09-27) replaced the pre-09-27 fresnel shader, and the author
+         found it worse. Measured: its `1/(1+vy*7)` put the brightness at the
+         GRASS end (ConeGeometry's uv.y is 1 at the apex = the lamp), and
+         `1-|N.V|` lit the cone's EDGES, so every beam read as a hollow glass
+         tube. The pre-09-27 shader had both the right way round, but a
+         surface term can only fake a volume.
+         v2 ray-marches the cone itself: for each pixel of the cone's front
+         surface it finds where the view ray leaves the analytic cone, and
+         sums the light along that chord - thick in the core, zero at the
+         silhouette, from ANY camera. Along the beam: hot at the lamp, a
+         soft tail onto the pitch (the pools take over there). Streaks radiate
+         from the lamp (noise in the beam's angular coords) and drift slowly.
+         Camera inside a cone: that cone draws its back faces from the camera.
+         P3D.rig.setConeStyle('classic') brings back the pre-09-27 look for an
+         A/B; P3D.rig.beam = {gain, cap, streak, steps} tunes it live
+         (cap = the brightest a beam may get: a soft ceiling, so a beam seen
+         down its axis glows instead of blowing out). */
+      const BEAM_VS=['varying float vy;varying vec3 vN;varying vec3 vV;varying vec3 vW;',
           'void main(){vy=uv.y;vec4 mv=modelViewMatrix*vec4(position,1.);',
           'vN=normalize(normalMatrix*normal);vV=normalize(-mv.xyz);vW=(modelMatrix*vec4(position,1.)).xyz;',
-          'gl_Position=projectionMatrix*mv;}'].join(String.fromCharCode(10)),
-        fragmentShader:['varying float vy;varying vec3 vN;varying vec3 vV;varying vec3 vW;',
-          'uniform float str;uniform float time;uniform vec3 tint;',
-          // cheap 3D hash noise - the striations that make it read as air
-          'float h(vec3 p){return fract(sin(dot(p,vec3(127.1,311.7,74.7)))*43758.5453);}',
+          'gl_Position=projectionMatrix*mv;}'].join(String.fromCharCode(10));
+      const BEAM_FS=['varying vec3 vW;',
+          'uniform float str,time,gain,streak,capv,uIn,uL,uR,uAmp;uniform vec3 tint,uA,uD;',
+          'float h1(vec3 p){return fract(sin(dot(p,vec3(127.1,311.7,74.7)))*43758.5453);}',
           'float n3(vec3 p){vec3 i=floor(p),f=fract(p);f=f*f*(3.-2.*f);',
-          ' float a=mix(mix(h(i),h(i+vec3(1,0,0)),f.x),mix(h(i+vec3(0,1,0)),h(i+vec3(1,1,0)),f.x),f.y);',
-          ' float b=mix(mix(h(i+vec3(0,0,1)),h(i+vec3(1,0,1)),f.x),mix(h(i+vec3(0,1,1)),h(i+vec3(1,1,1)),f.x),f.y);',
+          ' float a=mix(mix(h1(i),h1(i+vec3(1,0,0)),f.x),mix(h1(i+vec3(0,1,0)),h1(i+vec3(1,1,0)),f.x),f.y);',
+          ' float b=mix(mix(h1(i+vec3(0,0,1)),h1(i+vec3(1,0,1)),f.x),mix(h1(i+vec3(0,1,1)),h1(i+vec3(1,1,1)),f.x),f.y);',
           ' return mix(a,b,f.z);}',
           'void main(){',
-          // 1/r: brightest at the lamp head, dies out toward the grass
-          ' float fall=1.0/(1.0+vy*7.0);',
-          // body mask - no hard rim where the cone meets the turf
-          ' float body=smoothstep(0.02,0.30,vy);',
-          // grazing = thin air = dimmer, face-on = thick = brighter
-          ' float graze=1.0-abs(dot(vN,vV));',
-          ' float thick=mix(0.34,1.0,pow(graze,1.6));',
-          // drifting striations
-          ' float d=n3(vW*0.09+vec3(0.0,-time*0.09,time*0.04));',
-          ' float d2=n3(vW*0.26+vec3(time*0.05,-time*0.16,0.0));',
-          ' float haze=0.52+0.30*d+0.18*d2;',
-          ' float a=fall*body*thick*haze*0.40*str;',
-          ' gl_FragColor=vec4(tint*a,1.0);}'].join(String.fromCharCode(10))});
+          ' vec3 ro=cameraPosition, rd=normalize(vW-ro); float tS=length(vW-ro);',
+          ' float k=uL*uL/(uL*uL+uR*uR); vec3 co=ro-uA; float dD=dot(rd,uD), cD=dot(co,uD);',
+          ' float qa=dD*dD-k, qb=2.0*(dD*cD-k*dot(co,rd)), qc=cD*cD-k*dot(co,co), disc=qb*qb-4.0*qa*qc;',
+          ' float t0=tS, t1=tS+2.2*uR;',
+          ' if(uIn>0.5){ t0=0.0; t1=tS; }',
+          ' else if(disc>0.0&&abs(qa)>1e-6){ float sq=sqrt(disc), r1=(-qb-sq)/(2.0*qa), r2=(-qb+sq)/(2.0*qa);',
+          '   float lo=min(r1,r2), hi=max(r1,r2); if(lo>tS+1e-3) t1=lo; else if(hi>tS+1e-3) t1=hi; }',
+          // clip at the base plane (ground end) and behind the lamp
+          ' if(abs(dD)>1e-5){ float tp=((dD>0.0?uL:0.0)-cD)/dD; if(tp>t0) t1=min(t1,tp); }',
+          ' t1=min(t1,t0+2.2*uR); if(t1<=t0) discard;',
+          ' vec3 s1=normalize(cross(uD,abs(uD.y)<0.99?vec3(0,1,0):vec3(1,0,0))), s2=cross(uD,s1);',
+          ' float dt=(t1-t0)/float(STEPS), acc=0.0, jit=h1(vec3(gl_FragCoord.xy,floor(time*30.0)));',
+          ' for(int i=0;i<STEPS;i++){',
+          '  vec3 p=ro+rd*(t0+(float(i)+jit)*dt); vec3 w=p-uA; float h=dot(w,uD), hn=h/uL;',
+          '  if(hn<=0.0||hn>=1.0) continue;',
+          '  vec3 tr=w-uD*h; float rn=length(tr)/(uR*hn);',
+          // soft round edge, full in the core
+          '  float core=exp(-rn*rn*2.6)*(1.0-smoothstep(0.82,1.0,rn));',
+          // what the eye sees along the beam, divided by the chord width -> density
+          '  float tgt=0.16+0.84*exp(-hn*2.6);',
+          '  float fall=tgt/max(hn,0.035);',
+          // soft onto the grass
+          '  float grd=smoothstep(1.0,0.80,hn)*smoothstep(0.0,1.4,p.y);',
+          // streaks radiate from the lamp: noise in the beam's angular coords
+          '  vec2 ang=vec2(dot(tr,s1),dot(tr,s2))/(uR*hn);',
+          '  float st=n3(vec3(ang*5.0,hn*1.2-time*0.05)), dust=n3(p*0.22+vec3(time*0.05,-time*0.12,0.0));',
+          '  float haze=mix(1.0,0.35+0.9*st,streak)*(0.8+0.4*dust);',
+          '  acc+=core*fall*grd*haze*dt; }',
+          ' float a=acc/uR*gain*str*uAmp; a=capv*(1.0-exp(-a/capv));',
+          ' gl_FragColor=vec4(tint*a,1.0);}'].join(String.fromCharCode(10));
+      const BEAM_FS_CLASSIC='uniform float str;varying float vy;varying vec3 vN;varying vec3 vV;void main(){float edge=pow(abs(dot(vN,vV)),1.3);float along=(.35+.65*vy)*smoothstep(.02,.3,vy);gl_FragColor=vec4(vec3(1.,.95,.85)*edge*along*.36*str,1.);}';
+      const BEAM=RIG.beam=RIG.beam||{gain:0.9, cap:0.42, steps:12, streak:0.55, style:'vol'};
+      // shared uniforms (one str/time/gain for every cone) + per-cone geometry
+      const coneU={str:{value:1},time:{value:0},tint:{value:new T.Color(1.0,0.97,0.92)},gain:{value:BEAM.gain},streak:{value:BEAM.streak},capv:{value:BEAM.cap}};
+      const coneMat={uniforms:coneU};                  // rigFrame writes str/time/gain here
+      function makeConeMat(A,D,L,R,amp){
+        const vol=BEAM.style!=='classic';
+        return new T.ShaderMaterial({uniforms:Object.assign({},coneU,{uA:{value:A},uD:{value:D},uL:{value:L},uR:{value:R},uIn:{value:0},uAmp:{value:amp!=null?amp:1}}),
+          defines:{STEPS:Math.max(4,BEAM.steps|0)},transparent:true,depthWrite:false,blending:T.AdditiveBlending,
+          side:vol?T.FrontSide:T.DoubleSide,fog:false,vertexShader:BEAM_VS,fragmentShader:vol?BEAM_FS:BEAM_FS_CLASSIC});
+      }
+      RIG.setConeStyle=function(st){ BEAM.style=st==='classic'?'classic':'vol';
+        RIG.cones.forEach(c=>{ const u=c.material.uniforms, m=makeConeMat(u.uA.value,u.uD.value,u.uL.value,u.uR.value,u.uAmp.value); c.material.dispose(); c.material=m;
+          const cap=c.userData.cap; if(cap){ cap.material=m; cap.visible=BEAM.style!=='classic'; } }); };
       RIG.coneMat=coneMat;
       const dustP=[];
-      RIG_BANKS.forEach(([bk,tg])=>{
+      // one wide, soft glow per bank: the whole cluster reads as ONE source (author target)
+      const glowMat=new T.SpriteMaterial({map:haloTex(),color:0xffe2b0,transparent:true,opacity:.5,depthWrite:false,blending:T.AdditiveBlending,fog:false});
+      const atmoMat=new T.SpriteMaterial({map:haloTex(),color:0xc9b48e,transparent:true,opacity:.16,depthWrite:false,blending:T.AdditiveBlending,fog:false});
+      RIG_BANKS.forEach(([bk,tg,amp])=>{
         const from=new T.Vector3(bk[0]*k,bk[1]*k,bk[2]*PWID/44.87), to=new T.Vector3(tg[0]*k,0,tg[1]*PWID/44.87);
-        const head=new T.Mesh(new T.BoxGeometry(5.2*k,3.2*k,0.45*k),headMat); head.position.copy(from); head.lookAt(to); g.add(head);
+        const sc=amp!=null?0.82:1;
+        const head=new T.Mesh(new T.BoxGeometry(5.2*k*sc,3.2*k*sc,0.45*k),headMat); head.position.copy(from); head.lookAt(to); g.add(head);
         const halo=new T.Sprite(new T.SpriteMaterial({map:haloTex(),color:0xfff3dc,transparent:true,opacity:.9,depthWrite:false,blending:T.AdditiveBlending,fog:false}));
-        halo.position.copy(from); halo.scale.set(13*k,13*k,1); halo.material.opacity=.95; g.add(halo);   // softer: they blew out with bloom (author)
-        const len=from.distanceTo(to), cg=new T.ConeGeometry(tg[2]*k,len,40,1,true); cg.translate(0,-len/2,0);
-        const cone=new T.Mesh(cg,coneMat); cone.position.copy(from); cone.quaternion.setFromUnitVectors(new T.Vector3(0,-1,0),to.clone().sub(from).normalize());
+        halo.position.copy(from); halo.scale.set(13*k*sc,13*k*sc,1); halo.material.opacity=.95; g.add(halo);   // softer: they blew out with bloom (author)
+        const glow=new T.Sprite(glowMat); glow.position.copy(from); glow.scale.set(44*k*sc,32*k*sc,1); glow.renderOrder=10; g.add(glow);
+        if(amp==null){ const atmo=new T.Sprite(atmoMat); atmo.position.copy(from); atmo.position.y+=3*k; atmo.scale.set(96*k,50*k,1); atmo.renderOrder=10; g.add(atmo); }
+        const len=from.distanceTo(to), cg=new T.ConeGeometry(tg[2]*k,len,48,1,true); cg.translate(0,-len/2,0);
+        const cone=new T.Mesh(cg,makeConeMat(from.clone(),to.clone().sub(from).normalize(),len,tg[2]*k,amp)); cone.position.copy(from); cone.quaternion.setFromUnitVectors(new T.Vector3(0,-1,0),to.clone().sub(from).normalize());
         cone.frustumCulled=false; cone.renderOrder=9; g.add(cone); RIG.cones.push(cone); RIG.banks.push({from,to,halo});
+        // closed base: from the low hero camera you look INTO the open end, and without a
+        // surface there the volume vanished inside a hard arc (the base rim)
+        { const capG=new T.CircleGeometry(tg[2]*k,48); capG.rotateX(Math.PI/2); capG.translate(0,-len,0);
+          const cap=new T.Mesh(capG,cone.material); cap.frustumCulled=false; cap.renderOrder=9; cap.visible=BEAM.style!=='classic'; cone.add(cap); cone.userData.cap=cap; }
         for(let i=0;i<150;i++){ const f=0.18+Math.random()*0.8, a=Math.random()*6.283, r=Math.random()*f*tg[2]*k*0.85, q=from.clone().lerp(to,f);
           dustP.push(q.x+Math.cos(a)*r, q.y+(Math.random()-.5)*2, q.z+Math.sin(a)*r); }
       });
@@ -4129,6 +4316,49 @@
       rigPhones();
       // photographers behind both goals (hi-vis bibs, lens), with flashes
       rigPhotogs(k);
+      rigFlares(k);
+    }
+    /* FLARES (author night target 2026-09-30): a few red flares in the crowd, each
+       pushing a smoke plume that is red-lit at its foot and drifts up grey under
+       the floodlights. Night rig only (Astra stadium). P3D.rig.flares=false hides them. */
+    function smokeTex(){ if(smokeTex._t) return smokeTex._t;
+      const c=document.createElement('canvas'); c.width=c.height=96; const x=c.getContext('2d');
+      for(let i=0;i<18;i++){ const px=30+Math.random()*36, py=30+Math.random()*36, r=14+Math.random()*20, gr=x.createRadialGradient(px,py,0,px,py,r);
+        gr.addColorStop(0,'rgba(255,255,255,.22)'); gr.addColorStop(1,'rgba(255,255,255,0)'); x.fillStyle=gr; x.fillRect(0,0,96,96); }
+      smokeTex._t=new T.CanvasTexture(c); return smokeTex._t; }
+    function rigFlares(k){
+      const g=RIG.group, zk=PWID/44.87, st=(x,h)=>new T.Vector3(x*k,(0.5+13*h)*k+0.6*k,(-27-19*h)*zk);
+      const spots=[st(-24,0.32), st(27,0.5), new T.Vector3(-43*k,2.4*k,-7*zk), new T.Vector3(43*k,2.4*k,6*zk)];
+      RIG.flares=spots.map((p,fi)=>{
+        const core=new T.Sprite(new T.SpriteMaterial({map:haloTex(),color:0xff4a2a,transparent:true,opacity:1,depthWrite:false,blending:T.AdditiveBlending,fog:false}));
+        core.position.copy(p); core.scale.set(2.6*k,2.6*k,1); g.add(core);
+        const puffs=[]; for(let i=0;i<12;i++){ const m=new T.SpriteMaterial({map:smokeTex(),color:0xffffff,transparent:true,opacity:0,depthWrite:false,fog:false});
+          const sp=new T.Sprite(m); sp.renderOrder=7; g.add(sp); puffs.push({sp,age:i*0.55,seed:Math.random()*6.28}); }
+        return {p,core,puffs,seed:fi*1.7};
+      });
+    }
+    function flaresFrame(t,dt){
+      if(!RIG.flares) return; const k=PLEN/70, on=RIG.flaresOn!==false;
+      RIG.flares.forEach(f=>{ f.core.visible=on; f.core.material.opacity=0.75+0.25*Math.sin(t*23+f.seed)*Math.sin(t*7.1+f.seed*2);
+        f.puffs.forEach(q=>{ q.sp.visible=on; if(!on) return; q.age+=dt; if(q.age>6.6){ q.age-=6.6; q.seed=Math.random()*6.28; }
+          const a=q.age, life=a/6.6;
+          q.sp.position.set(f.p.x+(0.35*a+0.25*Math.sin(a*0.9+q.seed))*k, f.p.y+(0.9*a)*k, f.p.z+0.2*Math.sin(a*0.7+q.seed)*k);
+          const s=(1.6+a*1.05)*k; q.sp.scale.set(s,s,1); q.sp.material.rotation=q.seed+a*0.15;
+          const red=Math.max(0,1-a/1.6); q.sp.material.color.setRGB(0.42+0.5*red,0.44-0.22*red,0.5-0.3*red);
+          q.sp.material.opacity=0.26*Math.sin(Math.PI*Math.min(1,life))*(1-0.3*life); }); });
+    }
+    /* warm lamps under every tier edge (author target 2026-09-30: the bowl is dotted
+       with warm light at night). Positions from the stadium (U11_CLASSIC.tierLights). */
+    function rigTierLamps(){
+      const g=RIG.group; if(RIG.tierLamps||!g) return;
+      try{ const L=(window.U11_CLASSIC&&U11_CLASSIC.tierLights)?U11_CLASSIC.tierLights(2.4):[]; if(!L.length) return;
+        const n=L.length, P=new Float32Array(n*3), ph=new Float32Array(n);
+        for(let i=0;i<n;i++){ P[i*3]=L[i][0]; P[i*3+1]=L[i][1]; P[i*3+2]=L[i][2]; ph[i]=Math.random(); }
+        const pg=new T.BufferGeometry(); pg.setAttribute('position',new T.BufferAttribute(P,3)); pg.setAttribute('ph',new T.BufferAttribute(ph,1));
+        const pm=new T.ShaderMaterial({uniforms:{time:{value:0}},transparent:true,depthWrite:false,blending:T.AdditiveBlending,fog:false,
+          vertexShader:'attribute float ph;uniform float time;varying float a;void main(){vec4 mv=modelViewMatrix*vec4(position,1.);gl_Position=projectionMatrix*mv;a=(.7+.5*ph)*(.93+.07*sin(time*.7+ph*40.));gl_PointSize=clamp(300./-mv.z,2.5,11.);}',
+          fragmentShader:'varying float a;void main(){float d=length(gl_PointCoord-.5)*2.;float c=pow(max(0.,1.-d),1.8);gl_FragColor=vec4(vec3(1.,.78,.46)*c*a+vec3(1.,.95,.85)*pow(max(0.,1.-d*2.2),3.)*a,1.);}'});
+        RIG.tierLamps=new T.Points(pg,pm); RIG.tierLamps.frustumCulled=false; g.add(RIG.tierLamps); }catch(e){}
     }
     // phone lights in the crowd (seat spots from the stadium; retried until the GLB is in)
     function rigPhones(){
@@ -4188,20 +4418,28 @@
     function rigSyncPools(){
       // the night pools ARE the cones' footprints
       const hx=PLEN/2, hz=PWID/2;
-      P3D.night.pools=RIG_BANKS.map(([bk,tg])=>[tg[0]*(PLEN/70)/hx, tg[1]*(PWID/44.87)/hz, tg[2]*2.05, 1.0]);
+      P3D.night.pools=RIG_BANKS.filter(b=>b[2]==null).map(([bk,tg])=>[tg[0]*(PLEN/70)/hx, tg[1]*(PWID/44.87)/hz, tg[2]*2.05, 1.0]);
       syncNightUniforms();
     }
+    const _rigV=new T.Vector3();
     function rigFrame(now,dt){
       const on=RIG.on&&LOOK==='night'&&P3D.stadium!=='santa-fede'&&P3D.stadium!=='highschool';   // no stadium roof rig at the school
       if(!on){ if(RIG._tiltSet&&hTilt&&vTilt){ RIG._tiltSet=false; hTilt.uniforms.r.value=0.5; vTilt.uniforms.r.value=0.5; try{ applyFx(); }catch(e){} }
         if(RIG.group) RIG.group.visible=false; if(RIG._astraOff){ RIG._astraOff=false; P3D.gfx.volRays=RIG._ar; P3D.gfx.volPools=RIG._ap; P3D.gfx.volDust=RIG._ad; } return; }
       if(!RIG.built){ buildRig(); rigSyncPools(); }
-      if(!RIG.phones&&(now-(RIG._phTry||0))>1000){ RIG._phTry=now; rigPhones(); }
+      if((!RIG.phones||!RIG.tierLamps)&&(now-(RIG._phTry||0))>1000){ RIG._phTry=now; rigPhones(); rigTierLamps(); }
       RIG.group.visible=true;
       if(!RIG._astraOff){ RIG._astraOff=true; RIG._ar=P3D.gfx.volRays; RIG._ap=P3D.gfx.volPools; RIG._ad=P3D.gfx.volDust; P3D.gfx.volRays=false; P3D.gfx.volPools=false; P3D.gfx.volDust=false; }
       const t=now*0.001; RIG.t=t;
       const W=P3D.weatherFx[ENV.weather]; RIG.coneMat.uniforms.str.value=W?1.35:1;          // beams read stronger in rain/snow
-      RIG.coneMat.uniforms.time.value=t;                                                    // drifting dust striations (v1)
+      RIG.coneMat.uniforms.time.value=t;                                                    // drifting streaks
+      { const B=RIG.beam, u=RIG.coneMat.uniforms; u.gain.value=B.gain; u.streak.value=B.streak; u.capv.value=Math.max(0.05,B.cap);
+        // a camera INSIDE a cone sees none of its front faces: draw the back faces from the camera
+        const cp=camera.position;
+        RIG.cones.forEach(c=>{ const cu=c.material.uniforms; if(!cu.uA) return;
+          const w=_rigV.subVectors(cp,cu.uA.value), h=w.dot(cu.uD.value), hn=h/cu.uL.value;
+          const inside=hn>0&&hn<1&&w.addScaledVector(cu.uD.value,-h).length()<cu.uR.value*hn*1.04;
+          cu.uIn.value=inside?1:0; const sd=inside?T.BackSide:(B.style==='classic'?T.DoubleSide:T.FrontSide); if(c.material.side!==sd) c.material.side=sd; }); }
       if(RIG.dust) RIG.dust.material.uniforms.time.value=t;
       if(RIG.nearDust) RIG.nearDust.material.uniforms.time.value=t;
       if(RIG.mists) RIG.mists.forEach((m,i)=>{ m.material.map.offset.x=t*0.004*(i%2?1:-1); m.material.map.offset.y=t*0.002; });
@@ -4212,6 +4450,8 @@
         hTilt.uniforms.r.value=fy; vTilt.uniforms.r.value=fy;
         const tb=P3D.fx.tilt*0.0035*(SCN?1.7:1.25); hTilt.uniforms.h.value=tb; vTilt.uniforms.v.value=tb; RIG._tiltSet=true; }
       if(RIG.phones) RIG.phones.material.uniforms.time.value=t;
+      if(RIG.tierLamps) RIG.tierLamps.material.uniforms.time.value=t;
+      try{ flaresFrame(t,dt||0.016); }catch(e){}
       // boards cycle their colours; flashes fire one at a time
       const seg=Math.floor(t*0.9);
       for(let i=0;i<6;i++){ const c=RIG.cols[(seg+i*2)%RIG.cols.length]; RIG.spill[i][4]=c[0]; RIG.spill[i][5]=c[1]; RIG.spill[i][6]=c[2]; }
@@ -4221,6 +4461,93 @@
       RIG.flashSprite.material.opacity=fk; RIG.spill[6][3]=fk*9;
       if(_nightMat){ const u=_nightMat.uniforms; for(let i=0;i<10;i++){ const q=RIG.spill[i];
         if(q){ u.spill.value[i].set(q[0],q[1],Math.max(.01,q[2]),q[3]); u.spillCol.value[i].set(q[4],q[5],q[6]); } else u.spill.value[i].set(0,0,1,0); } }
+    }
+
+    /* ════════ SUN SHAFTS (golden hour; author target 2026-09-30) ════════
+       art/look_targets/target_day_golden.webp: shafts of low sun slant through
+       the roof and land on the crowd, which is otherwise in shade. Each shaft is
+       a slanted slab of light along the REAL sun direction (the one the player
+       shadows use), landing on the far stand; it is ray-marched like the night
+       beams (soft edges, drifting dust, fades in from the roof). The same slabs
+       go to the crowd + seat shaders (U11_CLASSIC.shaftUniforms), so a spectator
+       is sunlit exactly where a visible shaft lands and in shade elsewhere.
+       Astra stadium only (the far stand's rake is known). Tune: P3D.sunShafts
+       (gain / dark / lit / tint per time, spots = [x, tier 0..1, width, depth]);
+       P3D.sunShafts.on=false for the A/B. Players are never lit by it. */
+    P3D.sunShafts={ on:true,
+      gain:{classic:0, golden:6.0}, tint:{golden:[1.0,0.80,0.52]},
+      dark:{golden:[0.50,0.52,0.64]}, lit:{golden:[1.25,0.90,0.52]},
+      spots:[[-31,0.55,1.5,9],[-23,0.35,2.3,11],[-16,0.72,1.1,8],[-9,0.45,2.7,11],[-1,0.62,1.5,9],
+             [6,0.30,2.1,10],[12,0.76,1.3,8],[19,0.50,2.5,11],[26,0.40,1.4,9],[32,0.66,1.9,10]],
+      len:95, steps:10 };
+    const SS={built:false, slabs:[], group:null, key:''};
+    const SHAFT_VS='varying vec3 vW; void main(){ vec4 w=modelMatrix*vec4(position,1.0); vW=w.xyz; gl_Position=projectionMatrix*viewMatrix*w; }';
+    const SHAFT_FS=['varying vec3 vW; uniform mat4 uInv; uniform float gain, time; uniform vec3 tint;',
+      'float h1(vec3 p){return fract(sin(dot(p,vec3(127.1,311.7,74.7)))*43758.5453);}',
+      'float n3(vec3 p){vec3 i=floor(p),f=fract(p);f=f*f*(3.-2.*f);',
+      ' float a=mix(mix(h1(i),h1(i+vec3(1,0,0)),f.x),mix(h1(i+vec3(0,1,0)),h1(i+vec3(1,1,0)),f.x),f.y);',
+      ' float b=mix(mix(h1(i+vec3(0,0,1)),h1(i+vec3(1,0,1)),f.x),mix(h1(i+vec3(0,1,1)),h1(i+vec3(1,1,1)),f.x),f.y);',
+      ' return mix(a,b,f.z);}',
+      'void main(){',
+      // the view ray in the slab's unit-box space; t = 0 camera .. 1 this surface point
+      ' vec3 ro=cameraPosition, roL=(uInv*vec4(ro,1.0)).xyz, rdL=(uInv*vec4(vW,1.0)).xyz-roL;',
+      ' vec3 iv=1.0/(rdL+sign(rdL)*1e-6+vec3(1e-7)); vec3 t0=(-0.5-roL)*iv, t1=(0.5-roL)*iv, a0=min(t0,t1), a1=max(t0,t1);',
+      ' float tn=max(max(a0.x,a0.y),max(a0.z,0.0)), tf=min(min(a1.x,a1.y),a1.z); if(tf<=tn) discard;',
+      ' float L=length(vW-ro), dt=(tf-tn)/float(STEPS), acc=0.0, jit=h1(vec3(gl_FragCoord.xy,floor(time*30.0)));',
+      ' for(int i=0;i<STEPS;i++){ float t=tn+(float(i)+jit)*dt; vec3 q=roL+rdL*t, w=ro+(vW-ro)*t;',
+      '  float ex=1.0-smoothstep(0.12,0.5,abs(q.x)), ez=1.0-smoothstep(0.22,0.5,abs(q.z));',
+      '  float along=smoothstep(0.5,0.08,q.y)*smoothstep(-0.5,-0.43,q.y);',          // fades in from the roof, ends on the stand
+      '  float dust=0.65+0.7*n3(w*0.3+vec3(0.0,-time*0.25,time*0.12));',
+      '  acc+=ex*ez*along*dust; }',
+      ' float a=acc*dt*L*gain*0.012; a=0.7*(1.0-exp(-a/0.7));',
+      ' gl_FragColor=vec4(tint*a,1.0); }'].join(String.fromCharCode(10));
+    const _ssS=new T.Vector3(), _ssA=new T.Vector3(), _ssB=new T.Vector3(), _ssUp=new T.Vector3(0,1,0), _ssC=new T.Vector3(), _ssQ=new T.Vector3();
+    const SS_SHARED={gain:{value:1}, time:{value:0}, tint:{value:new T.Color(1,0.8,0.5)}};
+    function shaftsBuild(){
+      const Z=P3D.sunShafts; if(SS.group){ SS.slabs.forEach(s=>{ s.mesh.geometry.dispose(); s.mesh.material.dispose(); }); scene.remove(SS.group); }
+      SS.group=new T.Group(); SS.group.renderOrder=8; scene.add(SS.group); SS.slabs=[];
+      _ssS.copy(sun.position).normalize(); if(_ssS.y<0.05) _ssS.y=0.05; _ssS.normalize();
+      _ssB.crossVectors(_ssS,_ssUp).normalize(); _ssA.crossVectors(_ssB,_ssS).normalize();
+      const k=PLEN/70, zk=PWID/44.87, len=Z.len*k, geo=new T.BoxGeometry(1,1,1);
+      (Z.spots||[]).slice(0,12).forEach(sp=>{
+        const h=Math.max(0,Math.min(1,sp[1])), L=new T.Vector3(sp[0]*k,(0.5+13*h)*k,(-27-19*h)*zk);
+        _ssC.copy(L).addScaledVector(_ssS,len*0.45);
+        const m=new T.Matrix4().makeBasis(_ssQ.copy(_ssA).multiplyScalar(sp[2]*k).clone(),_ssS.clone().multiplyScalar(len),_ssB.clone().multiplyScalar(sp[3]*k)).setPosition(_ssC);
+        const inv=m.clone().invert();
+        const mat=new T.ShaderMaterial({uniforms:{uInv:{value:inv},gain:SS_SHARED.gain,time:SS_SHARED.time,tint:SS_SHARED.tint},
+          defines:{STEPS:Math.max(4,Z.steps|0)},vertexShader:SHAFT_VS,fragmentShader:SHAFT_FS,
+          transparent:true,depthWrite:false,blending:T.AdditiveBlending,side:T.FrontSide,fog:false});
+        const mesh=new T.Mesh(geo,mat); mesh.matrixAutoUpdate=false; mesh.matrix.copy(m); mesh.frustumCulled=false; mesh.renderOrder=8;
+        SS.group.add(mesh); SS.slabs.push({mesh,m,inv});
+      });
+      SS.built=true;
+    }
+    function shaftsCrowd(on,t){
+      if(!(window.U11_CLASSIC&&U11_CLASSIC.shaftUniforms)) return;
+      const U=U11_CLASSIC.shaftUniforms(T), Z=P3D.sunShafts;
+      if(!on){ U.shN.value=0; return; }
+      SS.slabs.forEach((s,i)=>{ if(U.shInv.value[i]) U.shInv.value[i].copy(s.inv); });
+      U.shN.value=SS.slabs.length;
+      const d=(Z.dark&&Z.dark[t])||[1,1,1], l=(Z.lit&&Z.lit[t])||[0,0,0];
+      U.shDark.value.setRGB(d[0],d[1],d[2]); U.shLit.value.setRGB(l[0],l[1],l[2]);
+    }
+    function shaftsFrame(now){
+      const Z=P3D.sunShafts, t=ENV.time, g=(Z&&Z.gain&&Z.gain[t])||0;
+      // night: the whole bowl warm under the floodlights (author night target); day/golden: neutral
+      if(window.U11_CLASSIC&&U11_CLASSIC.shaftUniforms){ const U=U11_CLASSIC.shaftUniforms(T), nb=(t==='night'&&P3D.night.bowl)||null;
+        if(U.shTint){ if(nb) U.shTint.value.setRGB(nb[0],nb[1],nb[2]); else U.shTint.value.setRGB(1,1,1); } }
+      const on=!!(Z&&Z.on!==false&&g>0&&t!=='night'&&P3D.stadium==='classic-upgraded'&&_bowlInfo&&_bowlInfo.type==='classic-upgraded');
+      if(!on){ if(SS.group) SS.group.visible=false; if(SS._on){ SS._on=false; shaftsCrowd(false); } return; }
+      const key=[sun.position.x.toFixed(1),sun.position.y.toFixed(1),sun.position.z.toFixed(1),JSON.stringify(Z.spots),Z.len,Z.steps].join('|');
+      if(key!==SS.key){ SS.key=key; shaftsBuild(); }
+      SS.group.visible=true; SS._on=true;
+      SS_SHARED.gain.value=g; SS_SHARED.time.value=(now||0)*0.001;
+      const tc=(Z.tint&&Z.tint[t])||[1,0.9,0.7]; SS_SHARED.tint.value.setRGB(tc[0],tc[1],tc[2]);
+      shaftsCrowd(true,t);
+      // a camera inside a slab sees its back faces
+      const cp=camera.position;
+      SS.slabs.forEach(s=>{ _ssQ.copy(cp).applyMatrix4(s.inv); const inside=Math.abs(_ssQ.x)<0.5&&Math.abs(_ssQ.y)<0.5&&Math.abs(_ssQ.z)<0.5;
+        const sd=inside?T.BackSide:T.FrontSide; if(s.mesh.material.side!==sd) s.mesh.material.side=sd; });
     }
 
     /* ════════ KICKOFF HERO CAMERA (hero-frame step 2) ════════
@@ -4333,7 +4660,8 @@
        P3D.realShadows.on=false compares against the old fake shadows. */
     const SH3={on:true, opacity:{classic:0.55,golden:0.62,night:0.66}, weatherK:0.65,
       // sun direction per time (the game's own azimuth; lower = longer shadows)
-      dir:{classic:{azim:4.03,elev:0.3}, golden:{azim:4.03,elev:0.08}, night:{azim:2.07,elev:0.07}}};   // the real shadow is physical: a low light makes it long (the fake one was stretched x3)
+      // golden 2026-09-30 (author target): the low sun from the RIGHT, slightly behind the camera, so its shafts land on the far stand's crowd
+      dir:{classic:{azim:4.03,elev:0.3}, golden:{azim:1.2,elev:0.2}, night:{azim:2.07,elev:0.07}}};   // the real shadow is physical: a low light makes it long (the fake one was stretched x3)
     P3D.setRealShadows=function(on){ SH3.on=!!on; try{ applyEnv(); }catch(e){} return SH3.on; };
     P3D.realShadows=SH3;
     P3D._sh=()=>({sun,renderer,scene,catcher:shadowCatcher,T,ball:_ballCaster});   // debug
@@ -6006,7 +6334,7 @@
       monitorQuality(now);
       syncSheets(); watchActions();
       if(PEN){ penCamera(); camera.updateMatrixWorld(); }
-      else if(!cine){ if(!scnCam(dt)&&!saveCam(dt)&&!goalCam(dt)&&!heroKickCam(dt)) updateCamera(dt); camera.updateMatrixWorld(); }
+      else if(!cine){ if(!(P3D.camHook&&P3D.camHook(camera,dt))&&!scnCam(dt)&&!saveCam(dt)&&!goalCam(dt)&&!heroKickCam(dt)) updateCamera(dt); camera.updateMatrixWorld(); }   // camHook: a test / lab camera takes over (return true)
       syncPlayers();
       if(PEN) try{ penApply(); }catch(e){ console.error('[P3D] pen',e); }
       else if(!cine) try{ gkaAlign(); }catch(e){}
@@ -6028,7 +6356,9 @@
       syncRef(dt);
       if(_lookPending&&pitchMesh){ _lookPending=null; applyEnv(); }
       if(ENV.time!=='classic'||ENV.weather!=='sunny') try{ envFrame(now,dt); }catch(e){ console.warn('[P3D] env',e); }
+      try{ grassFrame(now); bokehFrame(now); }catch(e){}
       try{ rigFrame(now,dt); }catch(e){ console.warn('[P3D] rig',e); }
+      try{ shaftsFrame(now); }catch(e){ console.warn('[P3D] shafts',e); }
       try{ syncCasters(); }catch(e){ console.warn('[P3D] shadows',e); }
       try{ syncHair(); }catch(e){ console.warn('[P3D] hair',e); }
       // anchor god rays at the sun's projected screen position
