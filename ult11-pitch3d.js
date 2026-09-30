@@ -313,11 +313,71 @@
            floodlights at night)
        Players are never touched. P3D.grass = per time [blade, wind, sheen, dew];
        P3D.grass.on=false switches the layer off (A/B). */
+    /* HD TURF (author 2026-09-30: "square chunks, repeating, with 2 kinds of colour so
+       we still have the classic lines"). The pitch texture now carries only the
+       markings + soft wear; the turf itself is drawn here: the classic light/dark
+       mow bands (same colours, same 14 bands), each filled with a repeating square
+       tile of real grass (blades laid along the mowing direction, clumps, pale tips).
+       The band contrast follows the camera like a real mowed pitch - strong from the
+       broadcast side, flipped from the other side. P3D.turf tunes it;
+       P3D.turfHD=false (before the pitch builds) brings back the old pixel turf. */
+    P3D.turf={ tile:5, contrast:0.36, swing:0.6, detail:1.0 };
+    const TURF_LIGHT=[62,120,52], TURF_DARK=[42,92,38], TURF_FLAT=[52,106,45];
+    function makeGrassDetail(){
+      const N=512, c=document.createElement('canvas'); c.width=c.height=N; const x=c.getContext('2d');
+      let seed=11; const rnd=()=>{seed=(seed*16807)%2147483647;return seed/2147483647;};
+      x.fillStyle='rgb(128,128,128)'; x.fillRect(0,0,N,N);
+      const wrap=(fn,px,py,m)=>{ for(const ox of [-N,0,N]) for(const oy of [-N,0,N]){ if(Math.abs(px+ox-N/2)<N/2+m&&Math.abs(py+oy-N/2)<N/2+m) fn(px+ox,py+oy); } };
+      // clumps: soft light / dark patches a few blades wide
+      for(let i=0;i<260;i++){ const px=rnd()*N, py=rnd()*N, r=10+rnd()*34, l=rnd()<0.5?70:190;
+        wrap((qx,qy)=>{ const g=x.createRadialGradient(qx,qy,0,qx,qy,r); g.addColorStop(0,'rgba('+l+','+l+','+l+',0.16)'); g.addColorStop(1,'rgba('+l+','+l+','+l+',0)'); x.fillStyle=g; x.fillRect(qx-r,qy-r,r*2,r*2); },px,py,r); }
+      // blades: laid along the mowing direction (canvas y = world z), dark roots, pale tips
+      x.lineCap='round';
+      for(let i=0;i<16000;i++){ const px=rnd()*N, py=rnd()*N, len=5+rnd()*13, a=(rnd()-0.5)*0.9+(rnd()<0.5?0:Math.PI), w=0.7+rnd()*1.3;
+        const l=Math.round(70+rnd()*150), dx=Math.sin(a)*len, dy=Math.cos(a)*len;
+        const tip=l>175?'rgb('+Math.min(255,l+18)+','+l+','+Math.round(l*0.78)+')':'rgb('+l+','+l+','+Math.round(l*0.92)+')';
+        wrap((qx,qy)=>{ x.strokeStyle=tip; x.lineWidth=w; x.beginPath(); x.moveTo(qx,qy); x.lineTo(qx+dx,qy+dy); x.stroke(); },px,py,len+2); }
+      // normalise: mean exactly mid-grey, so the tile only adds texture, never shifts the colour
+      const im=x.getImageData(0,0,N,N), d=im.data; let m=[0,0,0];
+      for(let i=0;i<d.length;i+=4){ m[0]+=d[i]; m[1]+=d[i+1]; m[2]+=d[i+2]; }
+      m=m.map(v=>v/(N*N));
+      for(let i=0;i<d.length;i+=4) for(let k=0;k<3;k++) d[i+k]=Math.max(0,Math.min(255,Math.round(d[i+k]*128/m[k])));
+      x.putImageData(im,0,0);
+      const t=new T.CanvasTexture(c); t.wrapS=t.wrapT=T.RepeatWrapping; t.minFilter=T.LinearMipmapLinearFilter; t.magFilter=T.LinearFilter;
+      try{ t.anisotropy=renderer.capabilities.getMaxAnisotropy(); }catch(e){ t.anisotropy=8; }
+      return t;
+    }
     const GRASS_U={ gTime:{value:0}, gAmt:{value:new T.Vector4(1,1,0.5,0.3)}, gSun:{value:new T.Vector3(0.5,0.5,0.5)},
+                    gDetail:{value:makeGrassDetail()}, gStripe:{value:new T.Vector4(5,0.22,0.68,5)}, gX0:{value:-35}, gDet:{value:1},
+                    gLight:{value:new T.Color(TURF_LIGHT[0]/255,TURF_LIGHT[1]/255,TURF_LIGHT[2]/255)},
+                    gDark:{value:new T.Color(TURF_DARK[0]/255,TURF_DARK[1]/255,TURF_DARK[2]/255)},
+                    gFlat:{value:new T.Color(TURF_FLAT[0]/255,TURF_FLAT[1]/255,TURF_FLAT[2]/255)},
                     gSunCol:{value:new T.Color(1,0.9,0.7)} };
     P3D.grass={ on:true, classic:[1,1,0.45,0.22], golden:[1,1,1.25,0.5], night:[0.9,0.85,0,1.0] };
     const GRASS_GLSL=[
       'uniform float gTime; uniform vec4 gAmt; uniform vec3 gSun; uniform vec3 gSunCol;',
+      'uniform sampler2D gDetail; uniform vec4 gStripe; uniform float gX0, gDet; uniform vec3 gLight, gDark, gFlat;',
+      // shells cut blades out of 2x2 pixel quads, so their texture LOD is explicit (derivatives there are garbage)
+      '#ifdef G_SHELL',
+      '#if __VERSION__ < 300',
+      '#define texture2DLodEXT(t,u,l) texture2D(t,u)',
+      '#endif',
+      'float gLod=0.0;',
+      '#endif',
+      // HD turf: band colour (view-dependent) x grass tile x the texture's own wear (c / flat base)
+      'vec3 grassHD(vec3 c, vec3 w, float line){',
+      '  if(line>0.5) return c;',
+      '  vec2 p=w.xz; float band=floor((p.x-gX0)/gStripe.x); float par=1.0-mod(band,2.0);',
+      '  vec3 v=normalize(w-cameraPosition); float sgn=par*2.0-1.0;',
+      '  float t=0.5+0.5*sgn*clamp(gStripe.y+gStripe.z*(-v.z),-1.0,1.0);',
+      '  vec3 col=mix(gDark,gLight,t);',
+      '#ifdef G_SHELL',
+      '  vec3 det=texture2DLodEXT(gDetail,p/gStripe.w,gLod).rgb*2.0;',
+      '#else',
+      '  vec3 det=texture2D(gDetail,p/gStripe.w).rgb*2.0;',
+      '#endif',
+      '  vec3 macro=clamp(c/gFlat,vec3(0.5),vec3(1.7));',
+      '  return col*mix(vec3(1.0),det,gDet)*macro; }',
       'float gH(vec2 p){ return fract(sin(dot(p,vec2(127.1,311.7)))*43758.5453); }',
       'float gN(vec2 p){ vec2 i=floor(p), f=fract(p); f=f*f*(3.0-2.0*f);',
       '  return mix(mix(gH(i),gH(i+vec2(1.0,0.0)),f.x),mix(gH(i+vec2(0.0,1.0)),gH(i+vec2(1.0,1.0)),f.x),f.y); }',
@@ -359,23 +419,26 @@
       '  o+=vec3(1.0,0.98,0.9)*sp*gAmt.w*light*k*1.4;',
       '  return o; }'].join(String.fromCharCode(10));
     // day turf / apron: the stock MeshBasicMaterial (map, colour, fog all unchanged) + the layer
-    function grassify(mat){
+    function grassify(mat,hd){
       if(!mat||mat.userData.grass) return mat; mat.userData.grass=true;
+      if(hd) mat.defines=Object.assign({},mat.defines||{},{G_HD:''});
       mat.onBeforeCompile=function(sh){
         Object.assign(sh.uniforms,GRASS_U);
         sh.vertexShader='varying vec3 vGW;\n'+sh.vertexShader.replace('#include <begin_vertex>',
           '#include <begin_vertex>\n  vGW=(modelMatrix*vec4(transformed,1.0)).xyz;');
         sh.fragmentShader='varying vec3 vGW;\n'+GRASS_GLSL+'\n'+sh.fragmentShader
-          .replace('#include <map_fragment>','#include <map_fragment>\n  float gLine=step(0.55,dot(diffuseColor.rgb,vec3(0.299,0.587,0.114)));\n  diffuseColor.rgb=grassBase(diffuseColor.rgb,vGW,gLine);')
+          .replace('#include <map_fragment>','#include <map_fragment>\n  float gLine=step(0.55,dot(diffuseColor.rgb,vec3(0.299,0.587,0.114)));\n\n#ifdef G_HD\n  diffuseColor.rgb=grassHD(diffuseColor.rgb,vGW,gLine);\n#endif\n  diffuseColor.rgb=grassBase(diffuseColor.rgb,vGW,gLine);')
           .replace('#include <fog_fragment>','  gl_FragColor.rgb+=grassAdd(vGW,gLine,1.0);\n#include <fog_fragment>');
       };
-      mat.customProgramCacheKey=function(){ return 'u11-grass-v1'; };
+      mat.customProgramCacheKey=function(){ return hd?'u11-grass-v2-hd':'u11-grass-v2'; };
       mat.needsUpdate=true; return mat;
     }
     const _gs=new T.Vector3();
     function grassFrame(now){
       const G2=P3D.grass, t=(typeof ENV!=='undefined'&&ENV.time)||'classic', a=(G2&&G2.on!==false&&G2[t])||[0,0,0,0];
       GRASS_U.gTime.value=(now||0)*0.001; GRASS_U.gAmt.value.set(a[0],a[1],a[2],a[3]);
+      const TF=P3D.turf||{}, bw=PLEN/14; GRASS_U.gStripe.value.set(bw,TF.contrast!=null?TF.contrast:0.22,TF.swing!=null?TF.swing:0.68,(TF.tile||5)*PLEN/70);
+      GRASS_U.gX0.value=-PLEN/2; GRASS_U.gDet.value=TF.detail!=null?TF.detail:1;
       _gs.copy(sun.position).normalize(); GRASS_U.gSun.value.copy(_gs);
       GRASS_U.gSunCol.value.copy(sun.color).multiplyScalar(t==='golden'?1.0:0.7);
     }
@@ -411,6 +474,86 @@
       }
       BOK.visible=true; const u=BOK.material.uniforms; u.time.value=(now||0)*0.001; u.amt.value=amt;
       if(t==='night') u.col.value.setRGB(1,0.88,0.66); else u.col.value.setRGB(1,0.8,0.5);
+    }
+
+    /* 3D GRASS (author 2026-09-30, grass step 3): stacked shells over the turf give the
+       blades real height for LOW cameras (kick-off orbit, goal camera, lab shots). Each
+       shell cuts blade cross-sections out of a fine cell grid (thinner toward the tip),
+       swaying with the same wind as the gusts. Colour = the turf underneath (bands,
+       grass tile, painted lines turn the blades white), darker at the roots, player
+       shadows on it (Lambert shadow mask), the floodlight pools at night. A patch in
+       front of the camera only, faded out with distance; off for the match camera.
+       P3D.grass3d = {on, layers, height (world units), reach}. */
+    P3D.grass3d={ on:true, layers:14, height:0.085, reach:9 };
+    let SHELL=null;
+    function shellBuild(){
+      const Z=P3D.grass3d, N=Math.max(4,Z.layers|0), S=36, pos=[], fa=[], idx=[];
+      for(let i=0;i<N;i++){ const f=(i+1)/N, b=i*4;
+        pos.push(-S/2,f,-S/2, S/2,f,-S/2, S/2,f,S/2, -S/2,f,S/2); fa.push(f,f,f,f);
+        idx.push(b,b+2,b+1, b,b+3,b+2); }
+      const g=new T.BufferGeometry(); g.setAttribute('position',new T.Float32BufferAttribute(pos,3)); g.setAttribute('sf',new T.Float32BufferAttribute(fa,1)); g.setIndex(idx);
+      g.setAttribute('normal',new T.Float32BufferAttribute(new Array(pos.length).fill(0).map((v,i)=>i%3===1?1:0),3));   // up: the shadow normal-bias needs it
+      const pools=[]; for(let i=0;i<8;i++) pools.push(new T.Vector4(0,0,1,0));
+      const SU={ sMap:{value:null}, sH:{value:Z.height}, sReach:{value:Z.reach}, sNight:{value:0}, sTint:{value:new T.Color(1,1,1)},
+        sPools:{value:pools}, sAmb:{value:new T.Color()}, sLamp:{value:new T.Color()}, sMax:{value:1.3}, sTurf:{value:0}, sPitch:{value:new T.Vector2(PLEN,PWID)} };
+      const m=new T.MeshLambertMaterial({color:0xffffff});
+      m.onBeforeCompile=function(sh){
+        Object.assign(sh.uniforms,GRASS_U,SU);
+        sh.vertexShader='attribute float sf; varying float vSF; varying vec3 vSW; uniform float sH;\n'+sh.vertexShader
+          .replace('#include <begin_vertex>','#include <begin_vertex>\n  transformed.y=sf*sH; vSF=sf; vSW=(modelMatrix*vec4(transformed,1.0)).xyz;');
+        sh.fragmentShader=['varying float vSF; varying vec3 vSW;',
+          'uniform sampler2D sMap; uniform float sH, sReach, sNight, sMax, sTurf; uniform vec3 sTint, sAmb, sLamp; uniform vec4 sPools[8]; uniform vec2 sPitch;',
+          GRASS_GLSL].join('\n')+'\n'+sh.fragmentShader
+          .replace('#include <clipping_planes_fragment>',[
+            '#include <clipping_planes_fragment>',
+            '  float sd=length(vSW.xz-cameraPosition.xz);',
+            '  float hk=1.0-smoothstep(sReach*0.55,sReach,sd);',                    // the grass flattens out with distance
+            '  if(abs(vSW.x)>sPitch.x*0.5+1.5||abs(vSW.z)>sPitch.y*0.5+1.5) discard;',
+            '  vec2 wd=vec2(0.83,0.55); float gg=gN(vSW.xz*0.13-wd.yx*gTime*0.07+5.0);',
+            '  vec2 sway=wd*(0.012+0.02*gg)*sin(gTime*1.7+vSW.x*1.3+vSW.z*0.9)*vSF*vSF;',
+            '  vec2 q=(vSW.xz-sway)/0.036; vec2 ci=floor(q); vec2 fq=fract(q)-0.5;',
+            '  vec2 jc=vec2(gH(ci+1.7),gH(ci+9.3))-0.5; float bh=0.55+0.45*gH(ci+4.1);',
+            '  float rad=0.30*(1.0-vSF/bh)*mix(0.3,1.0,hk);',
+            '  if(vSF>bh*hk||length(fq-jc*0.5)>rad) discard;'].join('\n'))
+          .replace('#include <tonemapping_fragment>',[
+            '  vec2 suv=vec2(vSW.x/sPitch.x+0.5, 0.5-vSW.z/sPitch.y);',
+            '  gLod=clamp(log2(max(sd,0.5)*0.0016/0.0098)+2.5,2.5,7.0);',
+            '  vec3 sc=texture2DLodEXT(sMap,suv,0.0).rgb; float sLine=step(0.55,dot(sc,vec3(0.299,0.587,0.114)));',
+            '#ifdef G_HD',
+            '  sc=grassHD(sc,vSW,sLine);',
+            '#endif',
+            '  if(sNight>0.5) sc=mix(sc,vec3(dot(sc,vec3(.299,.587,.114))),sTurf*0.32)*mix(vec3(1.0),vec3(.84,.95,1.02),sTurf);',
+            '  vec3 bc=sc*mix(0.9,1.12,vSF/bh)*(0.93+0.14*gH(ci+2.3))*sTint;',                              // dark roots, bright tips
+            '  if(sNight>0.5){ float s=0.0; for(int i=0;i<8;i++){ vec2 d=vSW.xz-sPools[i].xy; s+=sPools[i].w*exp(-dot(d,d)/(sPools[i].z*sPools[i].z)); }',
+            '    bc*=min(sAmb+sLamp*s,vec3(sMax)); }',
+            '  float shm=1.0;',
+            '#ifdef USE_SHADOWMAP',
+            '  shm=mix(1.0,getShadowMask(),0.6);',
+            '#endif',
+            '  gl_FragColor=vec4(bc*shm,1.0);',
+            '#include <tonemapping_fragment>'].join('\n'));   // r128 Lambert has no output_fragment chunk: our colour goes in right before tonemapping
+      };
+      m.defines=(P3D.turfHD!==false)?{G_HD:'',G_SHELL:''}:{G_SHELL:''};
+      m.customProgramCacheKey=function(){ return 'u11-grass3d-v1'; };
+      const mesh=new T.Mesh(g,m); mesh.frustumCulled=false; mesh.receiveShadow=true; mesh.renderOrder=0; scene.add(mesh);
+      SHELL={mesh,SU,N};
+    }
+    const _shF=new T.Vector3();
+    function shellFrame(){
+      const Z=P3D.grass3d, low=camera.position.y<4.2*(PLEN/70);
+      const onGrass=pitchMesh&&pitchMesh.userData.surface==='grass'&&pitchMesh.material&&(pitchMesh.material.map||(pitchMesh.material.uniforms&&pitchMesh.material.uniforms.map));
+      if(!(Z&&Z.on!==false&&low&&onGrass)){ if(SHELL&&SHELL.mesh.visible){ SHELL.mesh.visible=false; pitchGlow.position.y=0.02; } return; }
+      if(!SHELL||SHELL.N!==(Math.max(4,Z.layers|0))){ if(SHELL){ scene.remove(SHELL.mesh); SHELL.mesh.geometry.dispose(); SHELL.mesh.material.dispose(); } shellBuild(); }
+      const U=SHELL.SU, dm=pitchMesh.userData.dayMat||pitchMesh.material;
+      U.sMap.value=dm.map||null; U.sH.value=Z.height*(PLEN/70); U.sReach.value=Z.reach*(PLEN/70); U.sPitch.value.set(PLEN,PWID);
+      if(dm.color) U.sTint.value.copy(dm.color); else U.sTint.value.setRGB(1,1,1);
+      const night=LOOK==='night'&&_nightMat; U.sNight.value=night?1:0;
+      if(night){ const nu=_nightMat.uniforms; for(let i=0;i<8;i++) U.sPools.value[i].copy(nu.pools.value[i]);
+        U.sAmb.value.copy(nu.amb.value); U.sLamp.value.copy(nu.lamp.value); U.sMax.value=nu.maxL.value; U.sTurf.value=nu.turf?nu.turf.value:0; }
+      camera.getWorldDirection(_shF); _shF.y=0; if(_shF.lengthSq()<1e-4) _shF.set(0,0,-1); _shF.normalize();
+      SHELL.mesh.position.set(Math.round((camera.position.x+_shF.x*14)*2)/2, 0.0, Math.round((camera.position.z+_shF.z*14)*2)/2);
+      SHELL.mesh.visible=true;
+      pitchGlow.position.y=U.sH.value+0.01;          // the additive sun pool must lie ON the blades, or they read darker than the turf
     }
 
     /* ════════ PITCH ════════ */
@@ -478,8 +621,9 @@
       const EX0=0.07,EX1=0.93,EY0=0.01,EY1=0.99;
       const u=ex=>((ex-EX0)/(EX1-EX0))*cw, v=ey=>((ey-EY0)/(EY1-EY0))*ch;
       // 1) mow stripes — 14 bands, light/dark
-      const NB=14, bw=cw/NB, LIGHT=[62,120,52], DARK=[42,92,38];
-      for(let i=0;i<NB;i++){ const col=(i%2)?DARK:LIGHT;
+      const NB=14, bw=cw/NB, LIGHT=TURF_LIGHT, DARK=TURF_DARK, HD=P3D.turfHD!==false;
+      if(HD){ x.fillStyle='rgb('+TURF_FLAT.join(',')+')'; x.fillRect(0,0,cw,ch); }       // HD turf: bands + grass come from the shader
+      else for(let i=0;i<NB;i++){ const col=(i%2)?DARK:LIGHT;
         x.fillStyle='rgb('+col[0]+','+col[1]+','+col[2]+')'; x.fillRect(Math.round(i*bw),0,Math.ceil(bw)+1,ch); }
       // 2) pixel grain — 2-texel cells, plus a cross-mow checker and worn patches
       const cell=Math.max(2,Math.round(cw/384));
@@ -487,12 +631,12 @@
       for(let py=0;py<ch;py+=cell){
         for(let px=0;px<cw;px+=cell){
           const r=rnd(); let dv=0;
-          if(r<0.10)dv=15; else if(r<0.22)dv=7; else if(r<0.34)dv=-6; else if(r<0.40)dv=-13;
-          dv+=(Math.floor((py/ch)*8)%2)?3:-3;                       // cross-mow bands
+          if(!HD){ if(r<0.10)dv=15; else if(r<0.22)dv=7; else if(r<0.34)dv=-6; else if(r<0.40)dv=-13;
+          dv+=(Math.floor((py/ch)*8)%2)?3:-3; }                     // cross-mow bands (pixel turf only)
           const ex=px/cw, ey=py/ch;
           let wear=Math.max(0,1-Math.hypot((ex-0.5)*2.2,(ey-0.5)*1.4)*3)*0.5;   // centre circle
           if((ex<0.13||ex>0.87)&&Math.abs(ey-0.5)<0.26) wear+=0.35*(1-Math.abs(ey-0.5)/0.26); // goalmouths
-          wear*=0.6+0.4*rnd();
+          if(!HD) wear*=0.6+0.4*rnd();                               // HD: soft wear, no per-cell noise
           for(let yy=0;yy<cell;yy++)for(let xx=0;xx<cell;xx++){
             const i=((py+yy)*cw+(px+xx))*4; if(i>=d.length)continue;
             d[i]  =Math.max(0,Math.min(255,d[i]  +dv+wear*40));
@@ -526,7 +670,7 @@
       const qr=cw*0.012;                                            // corner quadrants
       ARC(u(gL),v(Yt),qr,0,Math.PI/2); ARC(u(gR),v(Yt),qr,Math.PI/2,Math.PI);
       ARC(u(gR),v(Yb),qr,Math.PI,Math.PI*1.5); ARC(u(gL),v(Yb),qr,Math.PI*1.5,Math.PI*2);
-      const tex=new T.CanvasTexture(c);
+      const tex=new T.CanvasTexture(c); tex._turfHD=HD;
       tex.magFilter=T.NearestFilter; tex.minFilter=T.LinearMipmapLinearFilter;
       tex.anisotropy=(function(){try{return renderer.capabilities.getMaxAnisotropy();}catch(e){return 8;}})();
       return tex;
@@ -652,7 +796,7 @@
       const santa=P3D.stadium==='santa-fede'&&window.U11_SANTA ? U11_SANTA.makePitch(T,tex,PLEN,PWID):null;
       if(santa) tex.dispose();
       pitchMesh=new T.Mesh(santa?santa.geometry:new T.PlaneGeometry(PLEN,PWID),
-        santa?santa.material:grassify(new T.MeshBasicMaterial({map:tex})));
+        santa?santa.material:grassify(new T.MeshBasicMaterial({map:tex}),P3D.turfHD!==false&&!!tex._turfHD));
       pitchMesh.receiveShadow=true;
       pitchMesh.userData.surface=santa?'asphalt':'grass';
       pitchMesh.rotation.x=-Math.PI/2; pitchMesh.position.y=0; scene.add(pitchMesh);
@@ -3911,7 +4055,7 @@
       const sp=[], sc=[]; for(let i=0;i<10;i++){ sp.push(new T.Vector4(0,0,1,0)); sc.push(new T.Vector3()); }
       u.spill={value:sp}; u.spillCol={value:sc};
       Object.assign(u,GRASS_U);                                   // living grass (shared uniforms)
-      return new T.ShaderMaterial({uniforms:u, fog:true, extensions:{derivatives:true},
+      return new T.ShaderMaterial({uniforms:u, fog:true, extensions:{derivatives:true}, defines:(P3D.turfHD!==false?{G_HD:''}:{}),
         vertexShader:['varying vec2 vUv; varying vec3 vW;','#include <fog_pars_vertex>',
           'void main(){ vUv=uv; vec4 w=modelMatrix*vec4(position,1.0); vW=w.xyz; vec4 mvPosition=viewMatrix*w; gl_Position=projectionMatrix*mvPosition;',
           '#include <fog_vertex>','}'].join(String.fromCharCode(10)),
@@ -3919,7 +4063,9 @@
           '#include <fog_pars_fragment>', GRASS_GLSL,
           'void main(){ vec3 c=texture2D(map,vUv).rgb; float s=0.0;',
           ' c=mix(c,vec3(dot(c,vec3(.299,.587,.114))),turf*0.32)*mix(vec3(1.0),vec3(.84,.95,1.02),turf);',   // the lab's muted cool turf
-          ' float gLine=step(0.55,dot(c,vec3(.299,.587,.114))); c=grassBase(c,vW,gLine);',
+          ' float gLine=step(0.55,dot(c,vec3(.299,.587,.114)));',
+          '#ifdef G_HD', ' c=grassHD(c,vW,gLine);', '#endif',
+          ' c=grassBase(c,vW,gLine);',
           ' for(int i=0;i<8;i++){ vec2 d=vW.xz-pools[i].xy; s+=pools[i].w*exp(-dot(d,d)/(pools[i].z*pools[i].z)); }',
           ' vec3 sl=vec3(0.0); for(int i=0;i<10;i++){ vec2 e=vW.xz-spill[i].xy; sl+=spillCol[i]*spill[i].w*exp(-dot(e,e)/(spill[i].z*spill[i].z)); }',
           ' vec3 o=c*min(amb+lamp*s+sl*0.5,vec3(maxL))*(1.0-wet*0.16)+lamp*pow(min(s,1.0),3.0)*wet*0.10+sl*(0.085+wet*0.06);',   // coloured light also glows ON the grass (multiplying red onto green gives nothing)
@@ -6357,6 +6503,7 @@
       if(_lookPending&&pitchMesh){ _lookPending=null; applyEnv(); }
       if(ENV.time!=='classic'||ENV.weather!=='sunny') try{ envFrame(now,dt); }catch(e){ console.warn('[P3D] env',e); }
       try{ grassFrame(now); bokehFrame(now); }catch(e){}
+      try{ shellFrame(); }catch(e){ console.warn('[P3D] grass3d',e); }
       try{ rigFrame(now,dt); }catch(e){ console.warn('[P3D] rig',e); }
       try{ shaftsFrame(now); }catch(e){ console.warn('[P3D] shafts',e); }
       try{ syncCasters(); }catch(e){ console.warn('[P3D] shadows',e); }
