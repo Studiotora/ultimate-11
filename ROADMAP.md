@@ -76,6 +76,7 @@ That is a systems problem (no evasion, no tempo, one input verb), fixed in Phase
     shield (clubs). Verified across home → team select → match → cup:
     **zero real-crest requests**. Drop art into `assets/team/fake/{key}.png` and it
     appears with no code change.
+  - 🟡 **Names**: Brazil done 2026-10-02 (author's names + duel sheets, see the dated entry). Japan done 2026-10-01.
   - 🟡 **Names**: 530 total. **Italy and Germany are done** (2026-09-08) —
     10 names replaced with originals in the user's own convention (Donati, Conti,
     Aldini, Bertoldi, Corsaro, Manzini, Sereni, Steiner, Reinhardt, Falkner);
@@ -4657,3 +4658,13 @@ Each of these also leaves full screen. Replacing them with one in-game confirm p
   - Shaft strength (`P3D.sunShafts.gain.golden`).
   - Night turf brightness.
 - Pre-existing: Santa Fede golden is very dark.
+
+### 2026-10-02 — Brazil: original names, duel sheets, per-player super moves (game.js v253, ult11-talk.js v9, ult11-pitch3d.js v173)
+- Brazil (brand sweep 0.3): all 10 outfield players renamed by the author. Their 10 front/back duel sheets are in `assets/players/front|back/`.
+- Players can carry a `sup` list: exactly the super moves the author gave them (super one-two comes with super pass).
+- Captain: Ferasao (#0, best OVR).
+- Open: the yellow boots (Ferasao, Carlito, Seymarin) carry a clear swoosh; the blue boots have a swoosh-like curve. Both need de-branding before release (D.7).
+- 2026-10-02 (v254): Brazil keeper Salinas renamed Rawanga, with his own duel sheet. A keeper with no large image now uses its front sheet in the duel. His boots carry a double-diamond logo, also flagged for D.7.
+- 2026-10-02 (pitch3d v174): Brazil signature shots: Rivao' gold straight, Ferasao green dark-aura straight, Carlito red drive. Curve shots are capped by distance and stay inside the pitch. A drive's arch now scales with distance (straight up close).
+- 2026-10-02 (game v255 / pitch3d v175 / cine3 v14): super shots are named again with original names (signatures + trail families; a plain shot stays SUPER SHOT). Every Captain Tsubasa term is removed from the shipped code: skill tables, fallback moves, club specials, the TSUBASA AIR ad board, meta text and the default profile name. Player names on other teams are still open (0.3).
+- 2026-10-02 (game v256 / pitch3d v177 / sfx v6 / hitfx v4): super dribbles are named after the shot family. Debug pass (DEBUG-CHECKLIST.md): a controller-only session now unlocks the SFX, the home-menu blue bar follows the cursor, and the save flash tracks the glove.

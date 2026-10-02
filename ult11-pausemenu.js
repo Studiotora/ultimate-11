@@ -54,7 +54,9 @@ function ensureCss(){
   if(document.getElementById('pm2-css')) return;
   const st=document.createElement('style'); st.id='pm2-css';
   st.textContent=`
-/* match HUD layers that sit above the overlay (kick-off prompt z 8200, bust chips) hide while paused */
+/* match HUD layers that sit above the overlay (kick-off prompt z 8200, bust chips) hide while paused -
+   and whenever another screen is up (Team Management from the pause menu showed both busts, 2026-10-02) */
+body:not(:has(#s-match.active)) #kickoff-prompt,body:not(:has(#s-match.active)) #hud-chips,body:not(:has(#s-match.active)) #bust-h,body:not(:has(#s-match.active)) #bust-a,body:not(:has(#s-match.active)) #dpad,body:not(:has(#s-match.active)) #vjoy-base,
 body:has(#pause-overlay.show) #kickoff-prompt,body:has(#pause-overlay.show) #hud-chips,body:has(#pause-overlay.show) #bust-h,body:has(#pause-overlay.show) #bust-a,body:has(#pause-overlay.show) #dpad,body:has(#pause-overlay.show) #vjoy-base,body:has(#pause-overlay.show) #s-match .mcomm{visibility:hidden!important}
 #pause-overlay .pm2{position:absolute;inset:0;overflow:hidden;background:#030a18;color:#fbfbfc;font-family:'Rajdhani',system-ui,sans-serif;z-index:5;
   --home:#2f8cff;--glow:rgba(47,140,255,.7);--panel:rgba(2,10,26,.8);--rule:rgba(38,126,226,.45);--dim:#9fb2cc;--mute:#48586a}

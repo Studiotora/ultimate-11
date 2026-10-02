@@ -24,7 +24,7 @@ window.U11Talk=TK;
 
 /* ─── CAPTAINS (author: "Frisina is Italy's captain and Falkner Germany's") ───
    Other teams: the best-rated outfield player on the pitch. */
-TK.CAPTAINS={ italy:'frisina', germany:'falkner' };
+TK.CAPTAINS={ italy:'frisina', germany:'falkner', japan:'aozora', brazil:'ferasao' };
 const surname=n=>String(n||'').split('.').pop().trim().toLowerCase();
 TK.captainOf=function(side){
   try{
@@ -240,7 +240,7 @@ TK.say=function(o){
 /* the line is over: forget it BEFORE hiding (hide() resolves a live line as 'skipped') */
 TK.next=function(){ if(!cur) return; const c=cur; cur=null; TK.hide(true); c.resolve('done'); };
 /* Confirm / click: finish the typing first, then move on */
-TK.advance=function(){ if(!cur) return false; if(cur.type){ cur.finish(); return true; } TK.next(); return true; };
+TK.advance=function(){ if(!cur){ if(scene&&scene.tapSkips){ TK.skipScene(); return true; } return false; } if(cur.type){ cur.finish(); return true; } TK.next(); return true; };
 TK.hide=function(keepScene){
   if(cur){ clearInterval(cur.type); cur.timers.forEach(clearTimeout); const c=cur; cur=null; c.resolve('skipped'); }
   if(root){ root.classList.remove('on','done'); if(!keepScene) root.classList.remove('scene'); }
@@ -248,7 +248,7 @@ TK.hide=function(keepScene){
 TK.talking=()=>!!cur;
 
 /* scenes: the SKIP chip + the skip route (Start / Esc / the chip); Confirm and a click advance */
-TK.scene=function(onSkip){ build(); scene={onSkip}; root.querySelector('.tk-skip b').textContent=skipGlyph(); root.classList.add('scene'); };
+TK.scene=function(onSkip,opts){ build(); scene={onSkip,tapSkips:!!(opts&&opts.tapSkips)}; root.querySelector('.tk-skip b').textContent=skipGlyph(); root.classList.add('scene'); };
 TK.endScene=function(){ scene=null; if(root) root.classList.remove('scene'); };
 TK.sceneActive=()=>!!scene;
 TK.skipScene=function(){ if(!scene) return false; const f=scene.onSkip; TK.endScene(); TK.hide(); try{ f&&f(); }catch(e){ console.warn('[talk] skip',e); } return true; };

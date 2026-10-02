@@ -39,8 +39,13 @@
     if(!SFX.on||!unlocked||!files[name])return null;
     const now=performance.now();if(spacing&&now-(last[name]||0)<spacing)return null;
     last[name]=now;
-    if(ctx&&bufs[name]&&ctx.state!=='closed'){
-      try{ if(ctx.state==='suspended') ctx.resume();
+    /* only through Web Audio when the context is RUNNING. A suspended context
+       (no gesture yet, tab came back, output device changed) queues the sound
+       silently - that was one way to lose every effect while the music, an
+       <audio> element, kept playing. Not running: nudge it and use <audio>. */
+    if(ctx&&ctx.state!=='running'&&ctx.state!=='closed'){ try{ ctx.resume(); }catch(e){} }
+    if(ctx&&bufs[name]&&ctx.state==='running'){
+      try{
         const src=ctx.createBufferSource(), g=ctx.createGain(); src.buffer=bufs[name]; g.gain.value=volume(gain);
         if(rate!==1) src.playbackRate.value=rate;
         src.connect(g); g.connect(ctx.destination); src.start(0,trim[name]||0);
@@ -52,7 +57,7 @@
     try{a.pause();a.currentTime=trim[name]!=null?trim[name]:(PRE[name]||0);a.volume=volume(gain);const p=a.play();if(p&&p.catch)p.catch(()=>{});}catch(e){}
     return a;
   }
-  SFX._audio=()=>({ctx:ctx?ctx.state:'none',decoded:Object.keys(bufs).length,trimMs:Object.fromEntries(Object.entries(trim).map(([k,v])=>[k,Math.round(v*1000)]))});
+  SFX._audio=()=>({unlocked,on:SFX.on,master:SFX.master,ctx:ctx?ctx.state:'none',decoded:Object.keys(bufs).length,trimMs:Object.fromEntries(Object.entries(trim).map(([k,v])=>[k,Math.round(v*1000)]))});
   function stop(name){(live1[name]||[]).splice(0).forEach(s=>{try{s.stop();}catch(e){}});
     (pools[name]||[]).forEach(a=>{a.pause();try{a.currentTime=0;}catch(e){}});}
   function stopBeds(){crowdBed.pause();runBed.pause();live=false;}
@@ -61,8 +66,18 @@
   const crowdBed=new Audio(A+crowds[crowdIndex]);crowdBed.preload='auto';
   crowdBed.addEventListener('ended',()=>{crowdIndex=(crowdIndex+1)%crowds.length;crowdBed.src=A+crowds[crowdIndex];if(live&&SFX.on)crowdBed.play().catch(()=>{});});
   const runBed=make('run');runBed.loop=true;
-  function unlock(){unlocked=true;try{if(ctx&&ctx.state==='suspended')ctx.resume();}catch(e){}}
-  ['pointerdown','touchstart','keydown'].forEach(type=>addEventListener(type,unlock,{passive:true}));
+  function unlock(){unlocked=true;try{if(ctx&&ctx.state!=='running'&&ctx.state!=='closed')ctx.resume();}catch(e){}}
+  ['pointerdown','touchstart','keydown','mousedown','click'].forEach(type=>addEventListener(type,unlock,{passive:true}));
+  /* AUDIO LOCK FIX (author 2026-10-02: "sometimes all audio don't work aside
+     from music"). Effects + crowd only unlocked on mouse / touch / keyboard.
+     A gamepad fires none of those, and Chrome lets the MUSIC autoplay on a
+     site played often - so a controller-only session had music and nothing
+     else. Now also unlocked by: any gamepad button, and any page music that
+     is already playing (proof the browser allows sound). */
+  document.addEventListener('playing',e=>{ if(e.target&&(e.target.id==='bgMusic'||/^matchMusic/.test(e.target.id||''))) unlock(); },true);
+  document.addEventListener('visibilitychange',()=>{ if(!document.hidden&&unlocked) unlock(); });
+  function padPressed(){ try{ const l=navigator.getGamepads?navigator.getGamepads():[];
+    for(const g of l){ if(g&&g.connected&&g.buttons.some(b=>b.pressed)) return true; } }catch(e){} return false; }
 
   SFX.cheer=function(intensity=1){
     if(!SFX.on||!unlocked)return;
@@ -108,6 +123,8 @@
 
   function watch(){
     requestAnimationFrame(watch);
+    if(!unlocked&&padPressed()) unlock();
+    if(unlocked&&ctx&&ctx.state==='suspended'&&padPressed()) unlock();
     if(!SFX.on||!unlocked||typeof G==='undefined'||!G){if(live)stopBeds();return;}
     const screen=document.querySelector('#s-match.active');
     const active=!!screen&&!G.paused&&['moving','pass_anim','duel','duel_result','corner','freekick','throwin'].includes(G.phase);

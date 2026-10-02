@@ -1,6 +1,6 @@
 /**
  * ULTIMATE ELEVEN - BETA VERSION
- * Captain Tsubasa Football Strategy Game
+ * Ultimate Eleven - anime football strategy game
  * 
  * ENHANCEMENTS IN THIS VERSION:
  * ✓ Improved error handling and validation
@@ -71,20 +71,21 @@ const T={
     {id:110,name:'Margus',pos:'RW',spd:84,pwr:82,tec:80,def:54,rar:1,jersey:9},
     {id:111,name:'Meyer',pos:'CM3',spd:68,pwr:78,tec:66,def:82,rar:1,jersey:4},   // author 2026-09-26: starts as the holding midfielder - Germany had no CM3 and played away games with 10
   ]},
+  // Brazil: original names + duel sheets (author 2026-10-02). `sup` = the super
+  // moves this player has (author's list); see canSuper.
   brazil:{name:'Brazil',flag:'🇧🇷',p:[
-    {id:1101,name:'Salinas',pos:'GK',spd:68,pwr:74,tec:72,def:94,rar:2,jersey:1,sav:90,ref:82},
-    {id:1102,name:'R.Carolus',pos:'LB',spd:78,pwr:72,tec:74,def:80,rar:1,jersey:2},
-    {id:1103,name:'Alberto',pos:'CB1',spd:70,pwr:82,tec:70,def:88,rar:2,jersey:3},
-    {id:1104,name:'Senardo',pos:'CB2',spd:68,pwr:84,tec:68,def:90,rar:2,jersey:4},
-    {id:1105,name:'Casagrande',pos:'RB',spd:76,pwr:74,tec:72,def:82,rar:1,jersey:5},
-    {id:1106,name:'Radunga',pos:'CM1',spd:78,pwr:86,tec:80,def:78,rar:2,jersey:6},
-    {id:1107,name:'L.Leo',pos:'CM2',spd:82,pwr:80,tec:86,def:62,rar:2,jersey:7},
-    {id:1108,name:'Rivaul',pos:'CM3',spd:80,pwr:84,tec:92,def:60,rar:2,jersey:10},
-    {id:1109,name:'Natureza',pos:'LW',spd:90,pwr:96,tec:94,def:52,rar:2,jersey:0},
-    {id:1110,name:'C.Santana',pos:'ST',spd:84,pwr:88,tec:90,def:54,rar:2,jersey:11},
-    {id:1111,name:'Neymar',pos:'RW',spd:94,pwr:82,tec:92,def:50,rar:2,jersey:9},
-    {id:1112,name:'Pepe',pos:'RW',spd:82,pwr:80,tec:82,def:52,rar:1,jersey:8},
-  ],reserves:[1112]},
+    {id:1101,name:'Rawanga',  pos:'GK', spd:68,pwr:74,tec:72,def:94,rar:2,jersey:1, sav:90,ref:82},
+    {id:1102,name:'Robuertos',pos:'LB', spd:84,pwr:86,tec:74,def:86,rar:2,jersey:6, sho:80,pas:76,dri:76,pow:88, sup:['super-tackle','super-block']},
+    {id:1103,name:'Singao',   pos:'CB1',spd:76,pwr:88,tec:70,def:92,rar:2,jersey:3, sho:62,pas:72,dri:68,pow:90, sup:['super-tackle','super-intercept','super-block']},
+    {id:1104,name:'Jovinho',  pos:'CB2',spd:78,pwr:80,tec:72,def:87,rar:2,jersey:12,sho:58,pas:74,dri:70,pow:80, sup:['super-intercept','super-block']},
+    {id:1105,name:'Serro',    pos:'RB', spd:82,pwr:78,tec:74,def:86,rar:2,jersey:7, sho:64,pas:76,dri:76,pow:78, sup:['super-tackle','super-block']},
+    {id:1106,name:'Macalule', pos:'CM1',spd:78,pwr:82,tec:84,def:88,rar:2,jersey:15,sho:70,pas:88,dri:78,pow:82, sup:['super-tackle','super-intercept','super-pass']},
+    {id:1107,name:'Ferasao',  pos:'CM2',spd:92,pwr:94,tec:97,def:58,rar:2,jersey:0, sho:97,pas:92,dri:98,pow:95, sup:['special','super-pass','super-dribble']},
+    {id:1108,name:'Kaverro',  pos:'CM3',spd:86,pwr:78,tec:90,def:62,rar:2,jersey:8, sho:82,pas:92,dri:90,pow:78, sup:['super-pass','super-dribble']},
+    {id:1109,name:'Carlito',  pos:'LW', spd:86,pwr:90,tec:86,def:52,rar:2,jersey:11,sho:92,pas:80,dri:89,pow:91, sup:['special','super-dribble']},
+    {id:1110,name:"Rivao'",   pos:'ST', spd:84,pwr:94,tec:88,def:56,rar:2,jersey:10,sho:95,pas:88,dri:88,pow:94, sup:['special','super-pass','super-dribble']},
+    {id:1111,name:'Seymarin', pos:'RW', spd:94,pwr:80,tec:92,def:50,rar:2,jersey:9, sho:88,pas:82,dri:95,pow:78, sup:['special','super-dribble']},
+  ],reserves:[]},
   spain:{name:'Spain',flag:'🇪🇸',p:[
     {id:1201,name:'Casillas',pos:'GK',spd:70,pwr:74,tec:76,def:94,rar:3,jersey:1,sav:94,ref:88},
     {id:1202,name:'Puyol',pos:'LB',spd:76,pwr:80,tec:72,def:88,rar:2,jersey:5},
@@ -281,17 +282,17 @@ const T={
     {id:2611,name:'Hamdallah',pos:'RW',spd:80,pwr:84,tec:82,def:54,rar:2,jersey:10},
   ]},
   japan:{name:'Japan',flag:'🇯🇵',p:[
-    {id:201,name:'G.Wakabayashi',pos:'GK',spd:68,pwr:72,tec:74,def:92,rar:2,jersey:1,sav:92,ref:86},
-    {id:202,name:'S.Akai',pos:'LB',spd:74,pwr:70,tec:68,def:78,rar:1,jersey:23},
-    {id:203,name:'R.Ishizaki',pos:'CB1',spd:72,pwr:74,tec:70,def:80,rar:2,jersey:4},
-    {id:204,name:'J.Misugi',pos:'CB2',spd:70,pwr:68,tec:80,def:76,rar:2,jersey:6},
-    {id:205,name:'M.Soda',pos:'RB',spd:76,pwr:68,tec:72,def:74,rar:1,jersey:7},
+    {id:201,name:'G.Kenzo',pos:'GK',spd:68,pwr:72,tec:74,def:92,rar:2,jersey:1,sav:92,ref:86},
+    {id:202,name:'S.Garou',pos:'LB',spd:74,pwr:70,tec:68,def:78,rar:1,jersey:8},
+    {id:203,name:'R.Igami',pos:'CB1',spd:72,pwr:74,tec:70,def:80,rar:2,jersey:14},
+    {id:204,name:'J.Risugi',pos:'CB2',spd:70,pwr:68,tec:80,def:76,rar:2,jersey:6},
+    {id:205,name:'M.Matsuda',pos:'RB',spd:76,pwr:68,tec:72,def:74,rar:1,jersey:7},
     {id:206,name:'H.Matsuyama',pos:'CM1',spd:66,pwr:80,tec:66,def:82,rar:2,jersey:12},
-    {id:207,name:'S.Aoi',pos:'CM2',spd:78,pwr:72,tec:82,def:68,rar:2,jersey:20},
-    {id:208,name:'T.Misaki',pos:'CM3',spd:84,pwr:68,tec:90,def:66,rar:2,jersey:11},
-    {id:209,name:'S.Nitta',pos:'LW',spd:82,pwr:76,tec:80,def:54,rar:1,jersey:18},
-    {id:210,name:'T.Ozora',pos:'CM2',spd:86,pwr:82,tec:92,def:54,rar:2,jersey:10},
-    {id:211,name:'K.Hyuga',pos:'ST',spd:84,pwr:90,tec:82,def:52,rar:2,jersey:9},
+    {id:207,name:'S.Shinta',pos:'CM2',spd:78,pwr:72,tec:82,def:68,rar:2,jersey:20},
+    {id:208,name:'T.Seizuke',pos:'CM3',spd:84,pwr:68,tec:90,def:66,rar:2,jersey:11},
+    {id:209,name:'S.Kenta',pos:'LW',spd:82,pwr:76,tec:80,def:54,rar:1,jersey:18},
+    {id:210,name:'T.Aozora',pos:'CM2',spd:86,pwr:82,tec:92,def:54,rar:2,jersey:10},
+    {id:211,name:'K.Ryuga',pos:'ST',spd:84,pwr:90,tec:82,def:52,rar:2,jersey:9},
     // Reserves
     {id:212,name:'K.Wakashimazu',pos:'GK',spd:66,pwr:70,tec:72,def:84,rar:1,jersey:17,sav:82,ref:78},
     {id:213,name:'K.Jito',pos:'RB',spd:76,pwr:68,tec:70,def:76,rar:1,jersey:5},
@@ -454,19 +455,19 @@ const ENGINE_CONFIG={
 };
 
 const PLAYER_ARCHETYPES={
-  'T.Ozora':      {passBias:1.30,dribbleBias:1.20,shootBias:1.00,oneTwoBias:1.25,longShotBias:0.95,pressResistance:1.20,wideRunBias:0.90,specialBias:1.05,defensiveAggression:0.90},
-  'T.Misaki':     {passBias:1.28,dribbleBias:0.95,shootBias:0.86,oneTwoBias:1.35,longShotBias:0.80,pressResistance:1.10,wideRunBias:0.95,specialBias:0.95,defensiveAggression:0.85},
-  'K.Hyuga':      {passBias:0.78,dribbleBias:1.00,shootBias:1.35,oneTwoBias:0.80,longShotBias:1.20,pressResistance:1.08,wideRunBias:0.85,specialBias:1.25,defensiveAggression:1.05},
-  'J.Misugi':     {passBias:1.20,dribbleBias:0.90,shootBias:1.15,oneTwoBias:1.10,longShotBias:1.05,pressResistance:1.15,wideRunBias:0.90,specialBias:1.10,defensiveAggression:0.80},
+  'T.Aozora':      {passBias:1.30,dribbleBias:1.20,shootBias:1.00,oneTwoBias:1.25,longShotBias:0.95,pressResistance:1.20,wideRunBias:0.90,specialBias:1.05,defensiveAggression:0.90},
+  'T.Seizuke':     {passBias:1.28,dribbleBias:0.95,shootBias:0.86,oneTwoBias:1.35,longShotBias:0.80,pressResistance:1.10,wideRunBias:0.95,specialBias:0.95,defensiveAggression:0.85},
+  'K.Ryuga':      {passBias:0.78,dribbleBias:1.00,shootBias:1.35,oneTwoBias:0.80,longShotBias:1.20,pressResistance:1.08,wideRunBias:0.85,specialBias:1.25,defensiveAggression:1.05},
+  'J.Risugi':     {passBias:1.20,dribbleBias:0.90,shootBias:1.15,oneTwoBias:1.10,longShotBias:1.05,pressResistance:1.15,wideRunBias:0.90,specialBias:1.10,defensiveAggression:0.80},
   'H.Matsuyama':  {passBias:0.85,dribbleBias:1.05,shootBias:1.20,oneTwoBias:0.88,longShotBias:1.15,pressResistance:1.05,wideRunBias:0.88,specialBias:1.15,defensiveAggression:1.10},
-  'S.Nitta':      {passBias:1.00,dribbleBias:1.10,shootBias:1.15,oneTwoBias:1.00,longShotBias:1.00,pressResistance:1.05,wideRunBias:1.10,specialBias:1.10,defensiveAggression:0.90},
-  'M.Soda':       {passBias:0.90,dribbleBias:1.05,shootBias:1.10,oneTwoBias:0.90,longShotBias:1.08,pressResistance:1.00,wideRunBias:1.05,specialBias:1.05,defensiveAggression:1.05},
-  'S.Aoi':        {passBias:1.15,dribbleBias:1.15,shootBias:1.10,oneTwoBias:1.10,longShotBias:0.95,pressResistance:1.10,wideRunBias:1.05,specialBias:1.10,defensiveAggression:0.88},
+  'S.Kenta':      {passBias:1.00,dribbleBias:1.10,shootBias:1.15,oneTwoBias:1.00,longShotBias:1.00,pressResistance:1.05,wideRunBias:1.10,specialBias:1.10,defensiveAggression:0.90},
+  'M.Matsuda':       {passBias:0.90,dribbleBias:1.05,shootBias:1.10,oneTwoBias:0.90,longShotBias:1.08,pressResistance:1.00,wideRunBias:1.05,specialBias:1.05,defensiveAggression:1.05},
+  'S.Shinta':        {passBias:1.15,dribbleBias:1.15,shootBias:1.10,oneTwoBias:1.10,longShotBias:0.95,pressResistance:1.10,wideRunBias:1.05,specialBias:1.10,defensiveAggression:0.88},
   'K.H.Schneider':{passBias:0.82,dribbleBias:1.05,shootBias:1.35,oneTwoBias:0.82,longShotBias:1.20,pressResistance:1.10,wideRunBias:0.92,specialBias:1.18,defensiveAggression:1.02},
   'K.H.Falkner'  :{passBias:0.82,dribbleBias:1.05,shootBias:1.35,oneTwoBias:0.82,longShotBias:1.20,pressResistance:1.10,wideRunBias:0.92,specialBias:1.18,defensiveAggression:1.02},
-  'Natureza':     {passBias:1.00,dribbleBias:1.35,shootBias:1.20,oneTwoBias:1.00,longShotBias:1.08,pressResistance:1.25,wideRunBias:1.08,specialBias:1.15,defensiveAggression:0.92},
-  'Rivaul':       {passBias:1.18,dribbleBias:1.10,shootBias:1.08,oneTwoBias:1.12,longShotBias:1.10,pressResistance:1.14,wideRunBias:0.94,specialBias:1.08,defensiveAggression:0.95},
-  'C.Santana':    {passBias:0.92,dribbleBias:1.08,shootBias:1.22,oneTwoBias:0.94,longShotBias:1.08,pressResistance:1.10,wideRunBias:0.96,specialBias:1.10,defensiveAggression:1.00},
+  'Ferasao':      {passBias:1.00,dribbleBias:1.35,shootBias:1.20,oneTwoBias:1.00,longShotBias:1.08,pressResistance:1.25,wideRunBias:1.08,specialBias:1.15,defensiveAggression:0.92},
+  "Rivao'":       {passBias:1.18,dribbleBias:1.10,shootBias:1.08,oneTwoBias:1.12,longShotBias:1.10,pressResistance:1.14,wideRunBias:0.94,specialBias:1.08,defensiveAggression:0.95},
+  'Carlito':      {passBias:0.92,dribbleBias:1.08,shootBias:1.22,oneTwoBias:0.94,longShotBias:1.08,pressResistance:1.10,wideRunBias:0.96,specialBias:1.10,defensiveAggression:1.00},
   'Michael':      {passBias:1.20,dribbleBias:1.10,shootBias:1.18,oneTwoBias:1.05,longShotBias:1.08,pressResistance:1.14,wideRunBias:0.92,specialBias:1.12,defensiveAggression:0.98},
   'A.Pirlo':      {passBias:1.28,dribbleBias:0.82,shootBias:0.88,oneTwoBias:1.10,longShotBias:1.12,pressResistance:1.00,wideRunBias:0.90,specialBias:0.95,defensiveAggression:0.82},
   'A.Sereni' :      {passBias:1.28,dribbleBias:0.82,shootBias:0.88,oneTwoBias:1.10,longShotBias:1.12,pressResistance:1.00,wideRunBias:0.90,specialBias:0.95,defensiveAggression:0.82},
@@ -484,14 +485,14 @@ const PLAYER_ARCHETYPES={
 const DEFAULT_BEHAVIOR_PROFILE={passBias:1.0,dribbleBias:1.0,shootBias:1.0,oneTwoBias:1.0,longShotBias:1.0,pressResistance:1.0,wideRunBias:1.0,specialBias:1.0,defensiveAggression:1.0};
 
 const STAR_STAT_OVERRIDES={
-  'T.Ozora':       {spd:86,dri:95,pas:96,sho:87,def:58,pow:84},
-  'T.Misaki':      {spd:84,dri:91,pas:94,sho:78,def:68,pow:66},
-  'K.Hyuga':       {spd:84,dri:83,pas:72,sho:95,def:54,pow:94},
-  'J.Misugi':      {spd:70,dri:82,pas:86,sho:88,def:76,pow:70},
+  'T.Aozora':       {spd:86,dri:95,pas:96,sho:87,def:58,pow:84},
+  'T.Seizuke':      {spd:84,dri:91,pas:94,sho:78,def:68,pow:66},
+  'K.Ryuga':       {spd:84,dri:83,pas:72,sho:95,def:54,pow:94},
+  'J.Risugi':      {spd:70,dri:82,pas:86,sho:88,def:76,pow:70},
   'H.Matsuyama':   {spd:66,dri:76,pas:70,sho:86,def:82,pow:82},
-  'S.Nitta':       {spd:82,dri:80,pas:76,sho:84,def:54,pow:78},
-  'M.Soda':        {spd:76,dri:74,pas:72,sho:82,def:74,pow:70},
-  'S.Aoi':         {spd:78,dri:84,pas:80,sho:84,def:68,pow:74},
+  'S.Kenta':       {spd:82,dri:80,pas:76,sho:84,def:54,pow:78},
+  'M.Matsuda':        {spd:76,dri:74,pas:72,sho:82,def:74,pow:70},
+  'S.Shinta':         {spd:78,dri:84,pas:80,sho:84,def:68,pow:74},
   'K.H.Schneider': {spd:87,dri:84,pas:76,sho:96,def:52,pow:95},
   'K.H.Falkner'  : {spd:87,dri:84,pas:76,sho:96,def:52,pow:95},
   // author 2026-09-26: Germany's other super shooters. Falkner stays the top
@@ -500,9 +501,6 @@ const STAR_STAT_OVERRIDES={
   'Shester'      : {spd:80,dri:88,pas:90,sho:86,def:64,pow:82},
   'M.Goethe'     : {spd:85,dri:89,pas:82,sho:86,def:56,pow:80},
   'Margus'       : {spd:85,dri:86,pas:80,sho:88,def:54,pow:83},
-  'Natureza':      {spd:94,dri:98,pas:90,sho:96,def:52,pow:93},
-  'Rivaul':        {spd:84,dri:94,pas:95,sho:90,def:60,pow:86},
-  'C.Santana':     {spd:85,dri:89,pas:80,sho:92,def:54,pow:90},
   'Michael':       {spd:89,dri:95,pas:94,sho:97,def:72,pow:94},
   'A.Pirlo':       {spd:70,dri:84,pas:98,sho:84,def:70,pow:74},
   'A.Sereni' :       {spd:70,dri:84,pas:98,sho:84,def:70,pow:74},
@@ -777,7 +775,7 @@ function showSc(id){
   document.querySelectorAll('.screen').forEach(s=>s.classList.remove('active'));
   document.getElementById(id).classList.add('active');
   _setWorldLive(id==='s-match');
-  if(id==='s-home'){hmHover('friendly');returnToMenuMusic();}
+  if(id==='s-home'){hmHover('friendly');returnToMenuMusic();ueNavActive(document.querySelector('#s-home .ue-nav .ue-item'));}   // back home: the cursor restarts on the first item
   if(id==='s-career-clubs'){crBuildClubList();}
   if(id==='s-ts'){if(typeof syncTeamSelections==='function')syncTeamSelections(); if(typeof _pvpInjectToggle==='function')_pvpInjectToggle();}
 }
@@ -876,6 +874,20 @@ function hmHover(mode){
   });
   _hmCurrent=mode;
 }
+
+/* HOME MENU HIGHLIGHT (author 2026-10-02: "friendly match is always blue like
+   if it's selected ... that blue should be on the menu that you are at").
+   index.html hard-codes .active on FRIENDLY MATCH and nothing ever moved it, so
+   it stayed lit while the pad / keyboard cursor (.pad-focus) or the mouse was
+   on another item. The blue bar now follows the item you are on. */
+function ueNavActive(el){
+  if(!el||!el.classList||!el.classList.contains('ue-item')) return;
+  const nav=el.closest('.ue-nav'); if(!nav) return;
+  nav.querySelectorAll('.ue-item.active').forEach(x=>{ if(x!==el) x.classList.remove('active'); });
+  el.classList.add('active');
+}
+document.addEventListener('pointerover',e=>{ const el=e.target&&e.target.closest&&e.target.closest('.ue-nav .ue-item'); if(el) ueNavActive(el); },true);
+document.addEventListener('focusin',e=>{ const el=e.target&&e.target.closest&&e.target.closest('.ue-nav .ue-item'); if(el) ueNavActive(el); },true);
 
 // ══════════════════════════════════════════════════════════
 // IMPACT SYSTEM — screen shake, zoom, floating text
@@ -1243,6 +1255,11 @@ function matchShutdown(){
   try{ if(_cq) _cq.done=true; if(window.CROSSQTE) CROSSQTE.unmount(0); setSlowMo(1); }catch(e){}
   try{ if(ballTravel) ballTravel.active=false; }catch(e){}
   try{ if(window.SFX&&SFX.windupStop) SFX.windupStop(); }catch(e){}
+  // the scenes end with the match: intro, captains / celebration dialogue, fanfare
+  try{ if(window.U11TextFX) U11TextFX.skipIntro(); }catch(e){}
+  try{ if(window.U11Celebrate&&U11Celebrate.active()) U11Celebrate.skip(true); }catch(e){}
+  try{ if(window.U11Talk){ U11Talk.endScene(); U11Talk.hide(); } }catch(e){}
+  try{ if(window.U11Fanfare) U11Fanfare.stop(0.2); }catch(e){}
   ['kickoff-prompt','goal-banner','card-flash','pass-banner','passhint'].forEach(id=>{ const e=document.getElementById(id); if(e){ e.classList.remove('show'); if(id==='pass-banner'||id==='passhint') e.style.display='none'; } });
 }
 // Full teardown when leaving mid-match / returning to main menu.
@@ -4152,7 +4169,7 @@ const CR_IMG_CACHE={};
 
 function playerLastName(pl){
   if(!pl||!(pl.origName||pl.name))return null;
-  return (pl.origName||pl.name).split('.').pop().toLowerCase().trim();
+  return (pl.origName||pl.name).split('.').pop().toLowerCase().replace(/['’]/g,'').trim();
 }
 
 function playerImg(pl){
@@ -4326,12 +4343,12 @@ function getFaceCrop(pl){
    the transparent background kept. Outfield only (keepers keep their chain);
    null until the front image has loaded. */
 function faceCropURL(pl){
-  try{ if(!pl||pl.pos==='GK') return null; const c=getFaceCrop(pl); return c?c.toDataURL():null; }catch(e){ return null; }
+  try{ if(!pl) return null; const c=getFaceCrop(pl); return c?c.toDataURL():null; }catch(e){ return null; }   // keepers too, when they have a front sheet (Kenzo)
 }
 const BUST_CROP_CACHE={};
 function bustCropURL(pl){
   try{
-    if(!pl||pl.pos==='GK') return null;
+    if(!pl) return null;
     const img=frontSpriteFor(pl); if(!img||!img.complete||!img.naturalWidth) return null;
     if(BUST_CROP_CACHE[img.src]) return BUST_CROP_CACHE[img.src];
     const b=headBox(img); if(!b) return null;
@@ -5021,6 +5038,9 @@ function _navScan(scr){
 function _navPaint(){
   _navEls.forEach((e,i)=>e.classList.toggle('pad-focus', i===_navIdx));
   const el=_navEls[_navIdx];
+  ueNavActive(el);                                   // the home menu's blue bar rides with the cursor
+  if(el&&!el.classList.contains('ue-item')&&el.closest&&el.closest('#s-home'))   // cursor up on the top bar: no menu item is 'selected'
+    document.querySelectorAll('#s-home .ue-nav .ue-item.active').forEach(x=>x.classList.remove('active'));
   if(el&&el.scrollIntoView) try{ el.scrollIntoView({block:'nearest',inline:'nearest'}); }catch(e){}
 }
 function _navSync(){
@@ -5071,7 +5091,9 @@ function _padChip(){
     c.textContent='PAD CONNECTED';
     document.body.appendChild(c);
   }
-  const on = (typeof UEInput!=='undefined') && UEInput.hasPad() && !!_navScreenEl();
+  /* debug only (author 2026-10-02: the long PAD readout covered Team Management's
+     button hints). Settings > PERF OVERLAY (P3D.debug) brings it back. */
+  const on = !!(window.P3D&&P3D.debug) && (typeof UEInput!=='undefined') && UEInput.hasPad() && !!_navScreenEl();
   c.style.display = on ? 'block' : 'none';
   /* Live readout while we chase the "pad connected but nothing happens" case.
      polls frozen  -> the rAF driver is dead
@@ -7972,7 +7994,7 @@ function _portraitChainFor(pl,side){
   if(isGK){
     return _pre.concat(isClub
       ?[`assets/career/clubs/${ln}${effTeam}.png`,'assets/career/clubs/gk.png',_GENERIC_PLAYER_SVG_URL]
-      :[`assets/players/${lastName}.png`,'assets/career/clubs/gk.png',_GENERIC_PLAYER_SVG_URL]);  // GK art stays
+      :[`assets/players/${lastName}.png`,`assets/players/front/${lastName}.png`,'assets/career/clubs/gk.png',_GENERIC_PLAYER_SVG_URL]);  // GK art stays; a keeper with only a duel sheet (Rawanga) uses its front
   }
   return _pre.concat(isClub
     ?[`assets/career/clubs/${ln}${effTeam}.png`,`assets/career/clubs/${effTeam}.png`,_GENERIC_PLAYER_SVG_URL]
@@ -8094,9 +8116,12 @@ function updBusts(){
     imgEl.style.transform = dirFor(side)<0 ? 'scaleX(-1)' : '';
 
     // Outfield players take the head crop from their front sheet — the same
-    // artwork the duel uses, so one man looks like one man. Keepers still use
-    // the old chain (author: GK art stays until it is redone).
-    if(pl.pos!=='GK'){
+    // artwork the duel uses, so one man looks like one man. Keepers use the old
+    // chain, unless they have a front sheet of their own (2026-10-01: Kenzo's
+    // sheet is for the field and dialogue; his duel keeps the large image).
+    const _gkSheet=pl.pos==='GK'&&frontSpriteFor(pl);
+    if(_gkSheet&&!_gkSheet.complete) _gkSheet.addEventListener('load',()=>{ if(_bustKey[side]===sig) _bustKey[side]=null; },{once:true});   // repaint with his face once the sheet is in
+    if(pl.pos!=='GK'||(_gkSheet&&_gkSheet.complete&&_gkSheet.naturalWidth)){
       const spr=frontSpriteFor(pl);
       if(!spr){ imgEl.style.backgroundImage=''; return; }
       const paint=()=>{
@@ -8361,6 +8386,7 @@ function fCard(role,pl,s,displayRole){
   // teamKey is the club key in career mode and the nation key in friendlies,
   // so one directory covers both.
   const _heroChain = [];
+  if(lastName&&isGK&&!isClubTeam) _heroChain.push('assets/players/'+lastName+'.png');   // keepers: the large duel image (author 2026-10-01)
   if(lastName) _heroChain.push('assets/players/'+_heroDir+'/'+lastName+'.png');
   if(teamKey)  _heroChain.push('assets/players/'+_heroDir+'/'+teamKey+'.png');
   // Sliced sheets are bottom-anchored on one shared canvas per player, so both
@@ -8569,7 +8595,7 @@ function fCard(role,pl,s,displayRole){
         spDc=document.getElementById(p+'sp-desc');
   let sp = pl ? (isGK ? (typeof getGKSuper==='function'?getGKSuper(pl):null) : (typeof getSpecial==='function'?getSpecial(pl):null)) : null;
   if(pl && !sp){
-    const _posMoves={ST:'Power Strike',CF:'Power Strike',LW:'Slider Shot',RW:'Slider Shot',OMF:'Drive Shot',CM1:'Twin Drive Pass',CM2:'Twin Drive Pass',DMF:'Iron Tackle',CB1:'Iron Tackle',CB2:'Iron Tackle',LB:'Overlap Cross',RB:'Overlap Cross',GK:'Super Save'};
+    const _posMoves={ST:'Power Strike',CF:'Power Strike',LW:'Swerve Strike',RW:'Swerve Strike',OMF:'Playmaker Strike',CM1:'Thread Pass',CM2:'Thread Pass',DMF:'Iron Tackle',CB1:'Iron Tackle',CB2:'Iron Tackle',LB:'Overlap Cross',RB:'Overlap Cross',GK:'Super Save'};
     sp={l:_posMoves[pl.pos]||'Power Strike',generic:true};
   }
   if(spNm) spNm.textContent = sp ? (sp.l||sp.name||'—') : '—';
@@ -8577,20 +8603,12 @@ function fCard(role,pl,s,displayRole){
   if(spGr) spGr.style.color = sp && sp.generic ? '#44c8ff' : 'var(--gold)';
   if(spDc){
     const descs = {
-      'Drive Shot':'A bullet trajectory that bends past keepers.',
-      'Tiger Shot':'Devastating power strike that rattles the net.',
-      'Fire Shot':'A scorching long-range cannon.',
-      'Riser Shot':'Rises sharply over the wall — unstoppable.',
-      'Atomic Shot':'Pure annihilation. The cleanest finish.',
-      'Sky Rocket Volley':'Aerial mastery — impossible angle.',
-      'Wild Eagle Shot':'Soaring strike, sky-bound.',
-      'Slider Shot':'Curves wickedly mid-flight.',
-      'Fantasista Shot':'Genius improvisation, no defending it.',
+      'Swerve Strike':'Bends round the wall and away from the keeper.',
+      'Playmaker Strike':'Picks the corner from the edge of the box.',
+      'Thread Pass':'Finds the gap nobody else saw.',
       'Power Strike':'A reliable strike honed through countless matches.',
       'Iron Tackle':'A crunching, perfectly timed challenge.',
       'Overlap Cross':'A surging run capped by a whipped delivery.',
-      'God Hand':'Catches anything within reach.',
-      'SSGK':'World-class reflexes — Wakabayashi territory.',
       'Iron Wall':'Goal becomes a fortress.',
       'Colossus':'A giant in the box.',
       'Super Save':'Pulls off the impossible.',
@@ -8630,41 +8648,12 @@ function fCard(role,pl,s,displayRole){
   }catch(e){}
 }
 
-const SPECIALS={
-  // ── JAPAN ─────────────────────────────────────────────────────
-  'Ozora':      {l:'Drive Shot',       i:'⚡',c:400},
-  'Tsubasa':    {l:'Drive Shot',       i:'⚡',c:400},
-  'Hyuga':      {l:'Tiger Shot',       i:'🔥',c:400},
-  'Matsuyama':  {l:'Wild Eagle Shot',  i:'🦅',c:400},
-  'Misugi':     {l:'Sky Rocket Volley',i:'🚀',c:400},
-  'Nitta':      {l:'Super Falcon Shot',i:'🦅',c:400},
-  'Soda':       {l:'Razor Shot',       i:'⚔️',c:400},
-  'Misaki':     {l:'Slider Shot',      i:'🌊',c:400},
-  'Aoi':        {l:'Fantasista Shot',  i:'✨',c:400},
-  // ── EUROPE / WORLD ────────────────────────────────────────────
-  'Schneider':  {l:'Fire Shot',        i:'🔥',c:400},
-  'Falkner':    {l:'Fire Shot',        i:'🔥',c:400},
-  'Deuter':     {l:'Death Ball',       i:'💀',c:400},
-  'Espadas':    {l:'El Tornado',       i:'🌪',c:400},
-  'Napoleon':   {l:'Cannon Shot',      i:'💥',c:400},
-  'Santana':    {l:'Overhead',         i:'🌀',c:400},
-  'Frisina':    {l:'Riser Shot',       i:'🚀',c:400},
-  'Natureza':   {l:'Atomic Shot',      i:'☢️',c:400},
-  'Michael':    {l:'Miracle Shot',     i:'✨',c:400},
-  'Pierre':     {l:'Eiffel Shot',      i:'🗼',c:400},
-  'Victorino':  {l:'Panther Shot',     i:'🐆',c:400},
-  'Hino':       {l:'Tornado Shot',     i:'🌪',c:400},
-  'Xiao':       {l:'Dragon Shot',      i:'🐉',c:400},
-  'Levi':       {l:'Levi Shot',        i:'⚡',c:400},
-  'Rivaul':     {l:'Golden Eagle',     i:'🦅',c:400},
-  'Mancuso':    {l:'Fury Shot',        i:'🔴',c:400},
-  'Vella':      {l:'Emerald Shot',     i:'💚',c:400},
-};
 /* Super skills are EARNED: the matching stat must be 85+ (GK supersave exempt). */
 const SUPER_STAT_REQ=85;
 function canSuper(pl,id){
   if(!pl)return false;
   if(id==='supersave')return pl.pos==='GK';
+  if(Array.isArray(pl.sup)) return pl.sup.includes(id==='super-one-two'?'super-pass':id);
   const st={'special':'sho','super-pass':'pas','super-one-two':'pas','super-dribble':'dri',
             'super-tackle':'def','super-intercept':'def','super-block':'def'}[id];
   return !!st && (pl[st]||0)>=SUPER_STAT_REQ;
@@ -8672,25 +8661,12 @@ function canSuper(pl,id){
 function getSpecial(pl){
   if(!pl)return null;
   if(!canSuper(pl,'special'))return null;             // SHO 85+ required
-  // Named skills removed from screen — one generic label for everyone.
-  return {l:'SUPER SHOT', i:'⚡', c:300, generic:true};
+  /* the shot's own name (author 2026-10-02): a signature's, otherwise its
+     trail family's - all original, see SIGNATURES / TRAIL_NAMES in ult11-pitch3d.js */
+  let nm='SUPER SHOT'; try{ if(window.P3D&&P3D.shotName) nm=P3D.shotName(pl)||nm; }catch(e){}
+  return {l:nm, i:'⚡', c:300, generic:true};
 }
 
-// GK Super Save registry — every GK can attempt one, named per player
-const GK_SUPERS={
-  'Wakabayashi': {l:'SSGK',         i:'🌟'},
-  'Wakashimazu': {l:'God Hand',     i:'🤚'},
-  'Muller':      {l:'Iron Wall',    i:'🧱'},
-  'Steiner':     {l:'Iron Wall',    i:'🧱'},
-  'Buffon':      {l:'Colossus',     i:'🏛'},
-  'Donati':      {l:'Colossus',     i:'🏛'},
-  'Casillas':    {l:'San Iker',     i:'🛡'},
-  'Salinas':     {l:'El Muro',      i:'⚔️'},
-  'Morisaki':    {l:'Miracle Hand', i:'✋'},
-  'Hernandez':   {l:'Reflex Save',  i:'💫'},
-  'Gino':        {l:'Gino Save',    i:'🧤'},
-  'Olsen':       {l:'Viking Wall',  i:'❄️'},
-};
 // Fallback for any GK not in registry
 function getGKSuper(pl){
   if(!pl)return null;
@@ -9087,7 +9063,7 @@ function bldA(carrier,isShot){
   if(G.D.ak){
     const lbl=document.createElement('div');
     lbl.style.cssText='color:var(--gold);font-size:11px;font-family:var(--u-font-ui);font-weight:700;letter-spacing:1px;opacity:.8;align-self:center;border:1px solid rgba(240,192,64,.2);border-radius:6px;padding:7px 12px;';
-    const sn=SUPER_NAMES[G.D.ak];
+    const sn=superMeta(G.D.ak,G.D.carrier);
     const lblTxt = G.D.ak==='special' ? '⚡ SPECIAL SHOT' : G.D.ak==='header' ? '⚽ HEADER' : G.D.ak==='volley' ? '⚡ VOLLEY' : (sn? sn.i+' '+sn.l.toUpperCase() : '⚽ SHOT');
     lbl.textContent=lblTxt+' — COMMITTED';
     el.appendChild(lbl);chkRdy();return;
@@ -9128,7 +9104,7 @@ function bldA(carrier,isShot){
     const bb=document.createElement('div');bb.className='dmenu-btns';
     list.forEach(a=>{
       let id=a.id,lbl=a.l,icon=a.i;
-      if(isSp){const meta=SUPER_NAMES[id];if(meta){lbl=meta.l;icon=meta.i;}}
+      if(isSp){const meta=superMeta(id,G.D&&G.D.carrier);if(meta){lbl=meta.l;icon=meta.i;}}
       bb.appendChild(mkBtn(id,lbl,icon,isSp,a.ot));
     });
     m.appendChild(bb);return m;
@@ -9572,7 +9548,7 @@ function confirmDuel(){
   if(G.D.ak && G.D.defA){
     const _v2=!!(window.P3D&&P3D.superCine2&&P3D.superCine2.active());
     if(isSuperAtk(G.D.ak)&&!_v2){
-      const spec=G.D.ak==='special'?getSpecial(G.D.carrier):SUPER_NAMES[G.D.ak];
+      const spec=G.D.ak==='special'?getSpecial(G.D.carrier):superMeta(G.D.ak,G.D.carrier);
       if(spec){clearInterval(G.di);showSpecialCutscene(G.D.carrier,spec,()=>gkQteThen(resDuel));return;}
     }
     if(isSuperDef(G.D.defA) && G.D.defA!=='supersave'){
@@ -9687,9 +9663,16 @@ function baseAction(id){return SUPER_TO_BASE[id]||id;}
 function isSuperAtk(id){return id==='special'||id==='super-pass'||id==='super-dribble'||id==='super-one-two';}
 function isSuperDef(id){return id==='supersave'||id==='super-tackle'||id==='super-intercept'||id==='super-block';}
 // UI labels + icons for super variants
+/* label + icon of a super move for THIS player: the super dribble is named after
+   his super-shot family (P3D.dribbleName), the others use SUPER_NAMES */
+function superMeta(id,pl){
+  const m=SUPER_NAMES[id]; if(!m) return m;
+  if(id==='super-dribble'){ try{ if(window.P3D&&P3D.dribbleName) return {l:P3D.dribbleName(pl),i:m.i}; }catch(e){} }
+  return m;
+}
 const SUPER_NAMES={
   'super-pass':    {l:'Threading Pass',  i:'🎯'},
-  'super-dribble': {l:'Falcon Dribble',  i:'💨'},
+  'super-dribble': {l:'Super Dribble',   i:'💨'},   // the player's own name comes from superMeta()
   'super-one-two': {l:'Lightning 1-2',   i:'⚡'},
   'super-tackle':  {l:'Iron Tackle',     i:'⚔'},
   'super-intercept':{l:'Aerial Intercept',i:'🦅'},
@@ -9767,7 +9750,7 @@ function calcAttackPower(carrier,ak,side){
     // Pressure penalty — harder to shoot under pressure at all ranges
     mAction *= (1 - pressure * ENGINE_CONFIG.duel.pressureAttackPenalty * (2-(bh.pressResistance||1)));
 
-    // Long shot specialist bonus (Hyuga, Schneider etc have longShotBias > 1)
+    // Long shot specialist bonus (Ryuga, Schneider etc have longShotBias > 1)
     if(prog < Z.longRange) mAction *= (bh.longShotBias||1) * 1.15; // extra reward for specialists
     else if(prog < Z.midRange) mAction *= (bh.longShotBias||1);
 
@@ -11331,6 +11314,24 @@ function hideKickoffPrompt(){const el=document.getElementById('kickoff-prompt');
    (U11Talk.captainOf: Frisina for Italy, Falkner for Germany, else the best-
    rated) have a word - the home captain opens, the away captain answers, the
    camera on each speaker. Skippable; then the kick-off is armed as before. */
+/* MATCH INTRO (author 2026-10-01, ult11-textfx.js): place & time, the two
+   teams converging with their flags, VS, competition · difficulty - then the
+   captains. Skippable with Confirm / Start / click. */
+function matchIntro(then){
+  if(!(window.U11TextFX&&window.U11Talk&&window.P3D&&P3D.on)){ then(); return; }
+  const gen=G.goalGen; let ended=false;
+  const go=()=>{ if(ended) return; ended=true; U11Talk.endScene(); G._idleAt=Date.now(); if(!G.over&&G.goalGen===gen) then(); };
+  U11Talk.scene(()=>{ U11TextFX.skipIntro(); go(); },{tapSkips:true});
+  const ST={'classic-upgraded':'ASTRA STADIUM','classic':'CLASSIC STADIUM','oval':'THE OVAL','santa-fede':'SANTA FEDE','highschool':'HIGH SCHOOL GROUND'};
+  const env=(P3D.env||{}), tm=env.time==='night'?'20:45 · NIGHT':env.time==='golden'?'18:30 · GOLDEN HOUR':'15:00 · DAY';
+  const wx=env.weather==='rain'?' · RAIN':env.weather==='snow'?' · SNOW':'';
+  let comp='FRIENDLY'; try{ if(window.STORY&&STORY.pending) comp='STORY'; else if(window.CUP&&CUP.pending) comp='CUP'; else if(CAR&&CAR.active&&CAR.pendingMatch) comp='LEAGUE'; }catch(e){}
+  let dk='pro'; try{ dk=(window.U11Settings&&U11Settings.get('diff'))||'pro'; }catch(e){}
+  if(typeof PVP!=='undefined'&&PVP&&PVP.on) comp='VERSUS';
+  U11TextFX.matchIntro({caption:(ST[P3D.stadium]||'STADIUM')+' · '+tm+wx, home:String((HT&&HT.name)||'HOME').toUpperCase(), away:String((AT&&AT.name)||'AWAY').toUpperCase(),
+    homeKey:selHome, awayKey:selAway, homeFlag:HT&&HT.flag, awayFlag:AT&&AT.flag,
+    sub:comp+(comp==='VERSUS'?'':' · '+dk.toUpperCase()), diffKey:dk}).then(go);
+}
 function preMatchTalk(then){
   const hk=window.U11Talk&&U11Talk.captainOf('h'), ak=window.U11Talk&&U11Talk.captainOf('a');
   if(!hk||!ak||!(window.P3D&&P3D.on)){ then(); return; }
@@ -11652,8 +11653,8 @@ function initMatch(){
   $id('passhint').style.display='none';
   say('Kick off! '+HT.name+' vs '+AT.name+' — build from midfield.');
   G.kickoffUntil=Date.now()+3500;
-  G.phase='idle';setTimeout(()=>{ preMatchTalk(()=>{ showReferee('KICK OFF'); const g0=G.goalGen; G._idleAt=Date.now(); G.kickoffUntil=Date.now()+2500;   /* the watchdog read the whole scene as a stuck idle */
-    setTimeout(()=>{ if(!G.over&&G.goalGen===g0&&!G.awaitKickoff) armKickoff('h'); },1000); }); },900);   // the title, then the prompt
+  G.phase='idle';setTimeout(()=>{ matchIntro(()=>preMatchTalk(()=>{ showReferee('KICK OFF'); const g0=G.goalGen; G._idleAt=Date.now(); G.kickoffUntil=Date.now()+2500;   /* the watchdog read the whole scene as a stuck idle */
+    setTimeout(()=>{ if(!G.over&&G.goalGen===g0&&!G.awaitKickoff) armKickoff('h'); },1000); })); },900);   // intro, captains, the title, then the prompt
 }
 // ── FORMATION POPUP ──────────────────────────────────────────────
 function openFormationPicker(){
@@ -12195,22 +12196,22 @@ if(window.visualViewport){
 // CAREER MODE ENGINE
 // ═══════════════════════════════════════════════════════
 const CR_CLUBS={
-  barcelona:{name:'FC Barcelona',div:1,ovr:91,star:'Messi',special:'Levitating Drive',colors:['#a50044','#004d98'],abbr:'FCB'},
+  barcelona:{name:'FC Barcelona',div:1,ovr:91,star:'Messi',special:'ZEPHYR CUTTER',colors:['#a50044','#004d98'],abbr:'FCB'},
   madrid:{name:'Real Madrid',div:1,ovr:92,star:'C.Ronaldo',special:null,colors:['#ffffff','#00529f'],abbr:'RMA'},
-  manutd:{name:'Man United',div:1,ovr:88,star:'T.Frisina',special:'Riser Shot',colors:['#da291c','#fbe122'],abbr:'MUN'},
+  manutd:{name:'Man United',div:1,ovr:88,star:'T.Frisina',special:'RYUJIN TORNADO',colors:['#da291c','#fbe122'],abbr:'MUN'},
   mancity:{name:'Man City',div:1,ovr:87,star:'De Bruyne',special:null,colors:['#6cabdd','#1c2c5b'],abbr:'MCI'},
-  juventus:{name:'Juventus',div:1,ovr:86,star:'Del Piero',special:'Drive Shot',colors:['#000000','#ffffff'],abbr:'JUV'},
+  juventus:{name:'Juventus',div:1,ovr:86,star:'Del Piero',special:'METEOR DRIVE',colors:['#000000','#ffffff'],abbr:'JUV'},
   inter:{name:'Inter Milan',div:1,ovr:85,star:'Ibrahimovic',special:null,colors:['#003f8a','#000000'],abbr:'INT'},
   chelsea:{name:'Chelsea FC',div:1,ovr:84,star:'Drogba',special:null,colors:['#034694','#ffffff'],abbr:'CHE'},
-  napoli:{name:'Napoli',div:1,ovr:83,star:'R.Hino',special:'Tornado Shot',colors:['#12a0c7','#ffffff'],abbr:'NAP'},
-  psg:{name:'Paris SG',div:1,ovr:84,star:'Pierre',special:'Eiffel Shot',colors:['#004170','#da291c'],abbr:'PSG'},
-  bayern:{name:'Bayern Munich',div:1,ovr:90,star:'S.Levi',special:'Levi Shot',colors:['#dc052d','#0066b2'],abbr:'BAY'},
+  napoli:{name:'Napoli',div:1,ovr:83,star:'R.Hino',special:'TYPHOON SPIRAL',colors:['#12a0c7','#ffffff'],abbr:'NAP'},
+  psg:{name:'Paris SG',div:1,ovr:84,star:'Pierre',special:'ASTRAL NEBULA',colors:['#004170','#da291c'],abbr:'PSG'},
+  bayern:{name:'Bayern Munich',div:1,ovr:90,star:'S.Levi',special:'STORM SPEAR',colors:['#dc052d','#0066b2'],abbr:'BAY'},
   ajax:{name:'Ajax',div:2,ovr:78,star:'Robben',special:null,colors:['#d2122e','#ffffff'],abbr:'AJX'},
   feyenoord:{name:'Feyenoord',div:2,ovr:75,star:'Kuyt',special:null,colors:['#cc0000','#000000'],abbr:'FEY'},
   atletico:{name:'Atletico Madrid',div:2,ovr:77,star:'Torres',special:null,colors:['#ce3524','#272e61'],abbr:'ATM'},
-  genoa:{name:'Genoa CFC',div:2,ovr:72,star:'M.Mancuso',special:'Fury Shot',colors:['#cc0000','#003087'],abbr:'GEN'},
-  hamburg:{name:'SV Hamburg',div:2,ovr:74,star:'K.H.Schneider',special:'Fire Shot',colors:['#0033a0','#ffffff'],abbr:'HSV'},
-  tokyo:{name:'FC Tokyo',div:2,ovr:71,star:'T.Ozora',special:'Drive Shot',colors:['#003087','#e60012'],abbr:'FCT'},
+  genoa:{name:'Genoa CFC',div:2,ovr:72,star:'M.Mancuso',special:'RAIJIN DRIVE',colors:['#cc0000','#003087'],abbr:'GEN'},
+  hamburg:{name:'SV Hamburg',div:2,ovr:74,star:'K.H.Schneider',special:'INFERNO LANCE',colors:['#0033a0','#ffffff'],abbr:'HSV'},
+  tokyo:{name:'FC Tokyo',div:2,ovr:71,star:'T.Aozora',special:'AZURE SKYBREAK',colors:['#003087','#e60012'],abbr:'FCT'},
   marseille:{name:'Olympique Marseille',div:2,ovr:76,star:'Cantona',special:null,colors:['#2faee0','#ffffff'],abbr:'OM'},
   bremen:{name:'Werder Bremen',div:2,ovr:73,star:'Klose',special:null,colors:['#1d9053','#ffffff'],abbr:'WER'},
 };
@@ -12225,16 +12226,16 @@ const CR_REP=['UNKNOWN','PROMISING','RESPECTED','ESTABLISHED','ELITE','LEGENDARY
 const CR_NAMES={
   // Slot order: GK, LB, CB1, CB2, RB, CM1, CM2, CM3, LW, ST, RW
   // After 11 starters, additional names = bench (reserves get them too).
-  barcelona:['Valdes','Puyol','Pique','Abidal','Alves','Busquets','T.Ozora','Xavi','Iniesta','Rivaul','Messi','Pinto','Mascherano','Adriano','Thiago','Cesc','Pedro','Villa'],
-  madrid:['Casillas','R.Carlos','Pepe','Ramos','Marcelo','Alonso','Z.Zidane','Higuain','Natureza','Raul','C.Ronaldo','Diego Lopez','Albiol','Coentrao','Khedira','Modric','Di Maria','Benzema'],
+  barcelona:['Valdes','Puyol','Pique','Abidal','Alves','Busquets','T.Aozora','Xavi','Iniesta',"Rivao'",'Messi','Pinto','Mascherano','Adriano','Thiago','Cesc','Pedro','Villa'],
+  madrid:['Casillas','R.Carlos','Pepe','Ramos','Marcelo','Alonso','Z.Zidane','Higuain','Ferasao','Raul','C.Ronaldo','Diego Lopez','Albiol','Coentrao','Khedira','Modric','Di Maria','Benzema'],
   manutd:['VanderSar','Evra','Ferdinand','Vidic','G.Neville','T.Frisina','Scholes','Rooney','Giggs','Anderson','Nani','Lindegaard','Smalling','Fabio','Carrick','Cleverley','Welbeck','Hernandez'],
   mancity:['Hart','Clichy','Lescott','Kompany','Richards','Barry','De Bruyne','Silva','Milner','Tevez','Dzeko','Pantilimon','Nastasic','Zabaleta','Yaya Toure','Nasri','Aguero','Jovetic'],
-  juventus:['Buffon','S.Gentile','Bonucci','Chiellini','Barzagli','E.Davids','Pirlo','Nedved','Del Piero','K.Hyuga','Camoranesi','Storari','Caceres','Lichtsteiner','Marchisio','Vidal','Quagliarella','Trezeguet'],
-  inter:['Julio Cesar','Maicon','Lucio','Samuel','Zanetti','Cambiasso','S.Aoi','Vieira','R.Ishizaki','Milito','Ibrahimovic','Castellazzi','Ranocchia','Chivu','Stankovic','Sneijder','Pandev','Eto\'o'],
+  juventus:['Buffon','S.Gentile','Bonucci','Chiellini','Barzagli','E.Davids','Pirlo','Nedved','Del Piero','K.Ryuga','Camoranesi','Storari','Caceres','Lichtsteiner','Marchisio','Vidal','Quagliarella','Trezeguet'],
+  inter:['Julio Cesar','Maicon','Lucio','Samuel','Zanetti','Cambiasso','S.Shinta','Vieira','R.Igami','Milito','Ibrahimovic','Castellazzi','Ranocchia','Chivu','Stankovic','Sneijder','Pandev','Eto\'o'],
   chelsea:['Cech','Cole','Terry','Carvalho','Bosingwa','Ballack','Lampard','Mikel','Malouda','Drogba','Anelka','Hilario','Ivanovic','Bertrand','Essien','Ramires','Sturridge','Torres'],
   napoli:['De Sanctis','Contini','Cannavaro','Campagnaro','Maggio','Gargano','J.Diaz','Hamsik','Lavezzi','R.Hino','Callejon','Rafael','Britos','Dossena','Inler','Insigne','Mertens','Cavani'],
-  psg:['Sirigu','Camara','Sakho','Kombouare','Cissse','Makelele','Pierre','T.Misaki','Mbappe','Hoarau','Neymar','Douchez','Alex','Maxwell','Verratti','Matuidi','Lavezzi','Ibrahimovic'],
-  bayern:['G.Wakabayashi','Lahm','Xiao','Van Buyten','Lizarazu','Schweinsteiger','Ballack','S.Levi','Ribery','K.H.Schneider','Makaay','Kraft','Boateng','Alaba','Kroos','Robben','Mandzukic','Klose'],
+  psg:['Sirigu','Camara','Sakho','Kombouare','Cissse','Makelele','Pierre','T.Seizuke','Mbappe','Hoarau','Seymarin','Douchez','Alex','Maxwell','Verratti','Matuidi','Lavezzi','Ibrahimovic'],
+  bayern:['G.Kenzo','Lahm','Xiao','Van Buyten','Lizarazu','Schweinsteiger','Ballack','S.Levi','Ribery','K.H.Schneider','Makaay','Kraft','Boateng','Alaba','Kroos','Robben','Mandzukic','Klose'],
   ajax:['Stekelenburg','Vertonghen','Heitinga','Vermaelen','Van der Wiel','Van der Vaart','Sneijder','Bojan','Babel','Huntelaar','Suarez','Cillessen','Alderweireld','Anita','Eriksen','De Jong','El Hamdaoui','Lukaku'],
   feyenoord:['Timmer','Mathijsen','Loovens','De Guzman','Bosvelt','Kuyt','Kalou','Van Persie','Castelen','Tomasson','Emnes','Lobont','Bahia','Wijnaldum','Clasie','Vilhena','Schaken','Boetius'],
   atletico:['Aranzubia','Filipe Luis','Perea','Ujfalusi','Juanito','Tiago','Garcia','Seitaridis','Simao','Torres','Forlan','Courtois','Godin','Insua','Mario Suarez','Koke','Adrian','Falcao'],
@@ -12257,7 +12258,6 @@ function crSort(table,keys){return[...keys].sort((a,b)=>{const ta=table[a],tb=ta
 function crCalcOvr(pl){if(!pl)return 60;const s=pl.spd||70,p=pl.pwr||70,t=pl.tec||70,d=pl.def||70;if(pl.pos==='GK')return Math.round(((pl.sav||d)*.45)+(p*.2)+(d*.2)+((pl.ref||p)*.15));if(['CB1','CB2'].includes(pl.pos))return Math.round(d*.45+p*.3+s*.15+t*.1);if(['LB','RB'].includes(pl.pos))return Math.round(d*.35+s*.25+p*.2+t*.2);if(['CM1','CM2','CM3'].includes(pl.pos))return Math.round(t*.35+s*.25+p*.2+d*.2);return Math.round(p*.35+t*.3+s*.25+d*.1);}
 // ── BUILD CAREER CLUB AS A FULL TEAM OBJECT IN T[] ─────────────────
 // Creates a team in the exact same shape as T.germany etc: {name, flag, p:[18 players], reserves:[7 ids]}
-// Uses the star's name to hit the SPECIALS registry when applicable.
 // Look up a player's stats across all national teams by surname match.
 // E.g. 'Pirlo' → finds 'A.Pirlo' in T.italy and returns their stats.
 // Returns null if no match. Cached across calls.
@@ -12343,7 +12343,7 @@ function crBuildClubTeam(clubKey){
     const name = rosterName || ('P.'+clubKey.slice(0,3).toUpperCase()+(i+1));
 
     // ── Try to find this player in the existing national-team data first.
-    // If they exist (e.g. Pirlo, Buffon, Messi, Ozora, Hyuga), copy their
+    // If they exist (e.g. Pirlo, Buffon, Messi, Aozora, Ryuga), copy their
     // proven stats so the club version actually plays like the national one.
     const nationalStats = findNationalPlayerStats(name);
 

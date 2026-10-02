@@ -643,9 +643,11 @@ function drawOverlay(c,A,k,breath,release,tremble,S,ct){
     g.fillStyle=rgba(C,0.9); g.fillRect(0,-H*0.055,W,H*0.11);
     g.fillStyle='rgba(255,255,255,0.95)'; g.fillRect(0,-H*0.055,W,H*0.008); g.fillRect(0,H*0.047,W,H*0.008);
     g.fillStyle='#07101e'; const fs=Math.round(H*0.085);
-    g.font='900 '+fs+'px Cinzel, serif';   // house display font (was Anton / Impact) g.textBaseline='middle';
+    g.font='900 '+fs+'px Cinzel, serif'; g.textBaseline='middle';   // house display font (was Anton / Impact); the baseline sat inside this comment, so the name rode high in the band
     g.transform(1,0,-0.2,1,0,0);
-    g.fillText(c.arc==='drive'?'DRIVE SHOT':(c.style&&c.style.kind==='curve')?'CURVE SHOT':'SUPER SHOT',W*0.12,0);
+    const nm=c.shotName||'SUPER SHOT', tw=g.measureText(nm).width;   // the shot's own name (author 2026-10-02)
+    if(tw>W*0.78){ const k=W*0.78/tw; g.font='900 '+Math.round(fs*k)+'px Cinzel, serif'; }
+    g.fillText(nm,W*0.12,0);
     g.restore();
   }
 }

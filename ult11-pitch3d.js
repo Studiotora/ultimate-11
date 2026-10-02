@@ -206,6 +206,13 @@
     else CV.parentNode.insertBefore(gl, CV.nextSibling);
 
     const renderer=new T.WebGLRenderer({canvas:gl,antialias:true,alpha:true});
+    /* BLACK PITCH AFTER PAUSE (author 2026-10-02, Opera GX): the 3D canvas is
+       transparent, so when it draws nothing you see the dark #viewport behind it.
+       A browser may drop the WebGL context of a canvas hidden behind a menu
+       (resource limiters do). three.js r128 restores it when the browser hands it
+       back; we count both events for P3D.health() and re-size on restore. */
+    gl.addEventListener('webglcontextlost',e=>{ e.preventDefault(); P3D._ctxLost=(P3D._ctxLost||0)+1; P3D._ctxLostAt=Date.now(); console.warn('[P3D] WebGL context LOST'); },false);
+    gl.addEventListener('webglcontextrestored',()=>{ P3D._ctxRestored=(P3D._ctxRestored||0)+1; console.warn('[P3D] WebGL context restored'); try{ resize(); }catch(e){} },false);
     renderer.shadowMap.enabled=true; renderer.shadowMap.type=T.PCFSoftShadowMap;   // REAL SHADOWS (hero-frame step 1)
     const scene=new T.Scene();
     scene.fog=new T.Fog('#16202e',180,560);
@@ -1447,7 +1454,7 @@
     const BRANDS=[
       {bg:'#b0121a',fg:'#fff4e0',txt:'ROLE COLA'},
       {bg:'#0d1b3a',fg:'#7fd7ff',txt:'VARDIDAS'},
-      {bg:'#f0a614',fg:'#241a08',txt:'TSUBASA AIR'},
+      {bg:'#f0a614',fg:'#241a08',txt:'KAZE AIR'},
       {bg:'#12351f',fg:'#e8ffd8',txt:'GENOVA BANCA'},
       {bg:'#2a1240',fg:'#ffc7f0',txt:'KAMPF ENERGY'},
       {bg:'#e8e2d6',fg:'#1a1a1a',txt:'PUNA SPORT'},
@@ -2075,15 +2082,26 @@
     /* Ball height along the flight, 0..1 -> engine bz.
        'normal' is the old symmetric arc blended into a hover so the ball
        arrives at goal height instead of dropping to the grass in front of
-       the keeper. 'drive' is the Tsubasa Drive Shot: it CLIMBS hard, hangs,
+       the keeper. 'drive' is the classic anime drive: it CLIMBS hard, hangs,
        then knifes down under the bar - asymmetric, which is the whole point.
        The descent is what makes it read as a drive rather than a lob. */
-    function shotArc(kind,fe,stl){
+    /* STRAIGHT (author 2026-10-02, Rivao' / Ferasao): a rocket - up off the
+       grass in the first ~12% and then level at goal height, no arc, no bend. */
+    function straightArc(fe){ const r=Math.min(1,fe/0.12); return 4*r*(2-r)+2.2*Math.sin(Math.PI*fe); }
+    function shotArc(kind,fe,stl,c){
       const loft=(stl&&stl.loft!=null)?stl.loft:1;
+      if(kind==='straight') return straightArc(fe);
+      /* the drive's climb depends on where it is struck from (author 2026-10-02:
+         "from inside the box way lower arch, from up close just straight").
+         c.arcMul 0..1 from the shot length (cineStart); 1 = the full drive. */
+      if(kind==='drive'&&c&&c.arcMul!=null&&c.arcMul<1){
+        const m=c.arcMul, full=shotArc('drive',fe,stl,null);
+        return straightArc(fe)*(1-m)+full*m;
+      }
       if(kind==='drive'){
         /* v2 (author, first look: "descends too early"). v1 peaked at 42% of
            the flight and was back near the grass by ~80%, so the drop happened
-           mid-pitch where nobody is looking. A Tsubasa drive shot stays UP and
+           mid-pitch where nobody is looking. A drive stays UP and
            dips at the goal. Now: climb to just under the bar by 62%, hold,
            then fall with k^2 - slow at first, steep at the end - so nearly
            all of the drop lands in the final ~20% of the flight.
@@ -2168,10 +2186,9 @@
     /* SIGNATURE SHOTS. Named players get a fixed trail AND a fixed
        trajectory instead of the stat-and-hash roll everyone else gets. Keyed
        on lowercase surname, so 'T.Frisina' / 'Frisina' / 'frisina' all hit.
-       `label` is wired but NOT displayed: game.js's getSpecial() deliberately
-       returns a generic 'SUPER SHOT' for everyone ("Named skills removed from
-       screen"). That was a decision, so it is left alone - turning it back on
-       is one line in getSpecial(). */
+       `label` IS the shot's name on screen (author 2026-10-02: names back,
+       all original, nothing from the anime it grew from): getSpecial() -> duel menu,
+       ticker, banner; cine.shotName -> the cinematic title card. */
     /* aura (2026-09-26): the CHARGE profile in ult11-cine3.js AURA_P
        (base / thunder / flame / shadow / dragon / seraph). Only signatures
        carry one - everyone else charges with the plain 'base' aura, the same
@@ -2180,18 +2197,64 @@
        the "strong striker" roll) nearly every shooter got a cyan FLAME aura
        and thunder / shadow / seraph never showed up. */
     const SIGNATURES={
-      mancuso:{ trail:'drive',  arc:'drive',  label:'DRIVE SHOT',   aura:'base'    },
-      vella:  { trail:'nature', arc:'normal', label:'EMERALD SHOT', col:'#19e07a', aura:'base' },
-      frisina:{ trail:'dragon', arc:'normal', label:'DRAGON SHOT',  aura:'dragon'  },
+      mancuso:{ trail:'drive',  arc:'drive',  label:'RAIJIN DRIVE',   aura:'base'    },
+      vella:  { trail:'nature', arc:'normal', label:'JADE SERPENT', col:'#19e07a', aura:'base' },
+      frisina:{ trail:'dragon', arc:'normal', label:'RYUJIN TORNADO',  aura:'dragon'  },
       // author 2026-09-24: Germany's two - every other player is the generic cyan
-      falkner:{ trail:'flame',  arc:'normal', label:'FLAME SHOT',   col:'#ff6a1e', aura:'flame' },
-      margus: { trail:'lightning', arc:'normal', label:'THUNDER SHOT', col:'#ffd21f', aura:'thunder' }
+      falkner:{ trail:'flame',  arc:'normal', label:'PHOENIX BLAZE',   col:'#ff6a1e', aura:'flame' },
+      margus: { trail:'lightning', arc:'normal', label:'MJOLNIR BREAKER', col:'#ffd21f', aura:'thunder' },
+      // author 2026-10-02: Brazil's three
+      rivao:  { trail:'standard', arc:'straight', label:'SOLAR LANCE', col:'#ffc23a', aura:'base' },    // golden aura, straight
+      ferasao:{ trail:'shadow',   arc:'straight', label:'DARK NOVA',   col:'#2ee06a', aura:'shadow' },  // the dark aura in green, straight
+      carlito:{ trail:'drive',    arc:'drive',    label:'CRIMSON METEOR',  col:'#ff2a2a', aura:'base' }     // red drive shot
     };
+    /* CURVE LIMIT (author 2026-10-02: "from extreme distance the curve shot goes
+       out of the field and then comes back by the goal"). The bow used to be a
+       fixed W*0.05 whatever the distance, so from a long way out on the wing the
+       ball set off parallel to the touchline. Now: at most ~9 degrees off the
+       straight line (L*0.05; the start angle is atan(pi*amt/L)), a small minimum
+       so short curlers still bend, and never closer than 6% of the width to a
+       touchline or 2% to a goal line anywhere along the flight. */
+    function curveLimit(amt,fx,fy,tx,ty,px,py){
+      const W2=(CV.width||1280), H2=(CV.height||720), L=Math.hypot(tx-fx,ty-fy);
+      let a=Math.min(amt, Math.max(Math.min(W2*0.012,L*0.1), L*0.05));
+      for(let i=0;i<12&&a>0.5;i++){
+        let ok=true;
+        for(let f=0.1;f<0.95;f+=0.1){ const o=Math.sin(Math.PI*f)*a, x=fx+(tx-fx)*f+px*o, y=fy+(ty-fy)*f+py*o;
+          if(y<H2*0.06||y>H2*0.94||x<W2*0.09||x>W2*0.91){ ok=false; break; } }
+        if(ok) break; a*=0.75;
+      }
+      return a;
+    }
     /* which charge aura a shot plays: a signature's own, a Camera-Lab /
        ?trail= forced style's, otherwise the plain base aura */
     function auraKey(){ const f=_trailFx; if(!f) return null;
       if(f.sig) return f.sig.aura||f.k;
       return _trailForce?f.k:'base'; }
+    /* everyone without a signature is named after his trail family
+       (same naming style as the Aura Charge Lab: RAIJIN DRIVE, PHOENIX BLAZE...) */
+    const TRAIL_NAMES={standard:'SUPER SHOT',flame:'INFERNO LANCE',lightning:'STORM SPEAR',wind:'ZEPHYR CUTTER',
+      shadow:'ABYSS ECLIPSE',aura:'SERAPH NOVA',tiger:'BYAKKO FANG',after:'PHANTOM MIRAGE',dragon:'SEIRYU TEMPEST',
+      drive:'METEOR DRIVE',ice:'FROST HALBERD',nature:'VERDANT GALE',galaxy:'ASTRAL NEBULA'};
+    P3D.shotName=function(pl){
+      if(!pl) return 'SUPER SHOT';
+      const sig=signatureFor(pl); if(sig&&sig.label) return sig.label;
+      const t=trailStyleFor(pl); return TRAIL_NAMES[t&&t.k]||'SUPER SHOT';
+    };
+    /* SUPER DRIBBLE names follow the shot (author 2026-10-02: "same concept for
+       the dribbling ... connected to the super shot"): a signature's own, else the
+       trail family's; a plain shooter's is just Super Dribble. */
+    const SIG_DRIBBLE={mancuso:'Raijin Flash',frisina:'Ryujin Coil',falkner:'Phoenix Dash',margus:'Mjolnir Charge',
+      vella:'Jade Slither',rivao:'Solar Stride',ferasao:'Dark Nova Step',carlito:'Crimson Rush'};
+    const TRAIL_DRIBBLE={standard:'Super Dribble',flame:'Inferno Dash',lightning:'Storm Step',wind:'Zephyr Glide',
+      shadow:'Abyss Shade',aura:'Seraph Wings',tiger:'Byakko Prowl',after:'Mirage Step',dragon:'Seiryu Coil',
+      drive:'Meteor Rush',ice:'Frost Slide',nature:'Verdant Weave',galaxy:'Astral Drift'};
+    P3D.dribbleName=function(pl){
+      if(!pl) return 'Super Dribble';
+      const nm=String(pl.origName||pl.name||'').toLowerCase();
+      for(const k in SIG_DRIBBLE){ if(SIGNATURES[k]&&nm.indexOf(k)>=0) return SIG_DRIBBLE[k]; }
+      const t=trailStyleFor(pl); return TRAIL_DRIBBLE[t&&t.k]||'Super Dribble';
+    };
     function signatureFor(pl){
       if(!pl) return null;
       const nm=String(pl.origName||pl.name||'').toLowerCase();
@@ -2888,7 +2951,11 @@
       falkner:['spiky','#e6a84a'], feo:['buzz','#e2a47a'], ferlora:['buzz','#5d3c2a'], frisina:['spiky','#573b28'],
       goethe:['spiky','#f7db90'], mancuso:['buzz','#241f24'], manzini:['spiky','#43291e'], margus:['spiky','#5c2d16'],
       meyer:['spiky','#e5a661'], reinhardt:['spiky','#fac160'], schmidt:['spiky','#fb8621'], shester:['spiky','#c48c56'],
-      vella:['spiky','#593927']};
+      vella:['spiky','#593927'],
+      // Brazil (sampled from the 2026-10-02 duel sheets; Robuertos is bald = a skin-tone buzz)
+      rivao:['buzz','#30221b'], ferasao:['spiky','#4c2514'], carlito:['spiky','#29201d'], singao:['buzz','#2a1d18'],
+      robuertos:['buzz','#845b3d'], macalule:['spiky','#2f2017'], jovinho:['buzz','#1c1613'], serro:['spiky','#2f1f18'],
+      kaverro:['spiky','#3a2519'], seymarin:['spiky','#462616']};
     const HC={black:'#1e1a1e',dark:'#2e2420',dbrown:'#4a2e1e',brown:'#6a4228',lbrown:'#8a6038',
               dblond:'#b88a52',blond:'#e0b860',plat:'#f0dc98',ginger:'#d0682a'};
     const HAIR_NATION={
@@ -2900,7 +2967,7 @@
       england:'north',usa:'north',scotland:'isles',ireland:'isles',wales:'isles',japan:'east',china:'east',northkorea:'east',
       morocco:'africa'};
     function hairLookOf(team,pl){
-      const nm=String((pl&&(pl.origName||pl.name))||'').split('.').pop().toLowerCase().trim();
+      const nm=String((pl&&(pl.origName||pl.name))||'').split('.').pop().toLowerCase().replace(/'/g,'').trim();
       if(pl&&pl.hair&&pl.hair.col) return {style:pl.hair.style||'spiky',col:pl.hair.col};   // data wins when present
       const f=HAIR_LOOK[nm]; if(f) return {style:f[0],col:f[1]};
       let h=2166136261; const key=nm+'|'+(team||''); for(let i=0;i<key.length;i++){ h^=key.charCodeAt(i); h=Math.imul(h,16777619); }
@@ -3801,7 +3868,7 @@
           if(_os.bt!==bt){                   // a new shot → pick the shooter's style once
             const s=G.poss, pl=(typeof sq==='function'&&G.ck&&sq(s))?sq(s)[G.ck]:null;
             const st=shotStyleFor(pl), pp=shotPerp(bt.fx,bt.fy,bt.tx,bt.ty);
-            _os={bt,st,px:pp.px,py:pp.py,L:pp.L,amt:(CV.width||1280)*0.05*st.curve};
+            _os={bt,st,px:pp.px,py:pp.py,L:pp.L,amt:curveLimit((CV.width||1280)*0.05*st.curve,bt.fx,bt.fy,bt.tx,bt.ty,pp.px,pp.py)};
             _trailFx=trailStyleFor(pl); try{ clearTrail(); }catch(e){}
             window.U11DBG&&U11DBG('[3D] open-play shot: '+st.kind+' / trail '+_trailFx.k
               +' ('+(pl?(pl.origName||pl.name):'?')+')');
@@ -5259,7 +5326,7 @@
       const stl=c.style||{curve:0,loft:1,speed:1,kind:'normal'}, fe=cineEase(c,f);
       let bx=c.fx+(c.tx-c.fx)*fe, by=c.fy+(c.ty-c.fy)*fe;
       if(c.curveAmt){ const off=Math.sin(Math.PI*fe)*c.curveAmt; bx+=c.perpX*off; by+=c.perpY*off; }
-      const bz=shotArc(c.arc,fe,stl), W2=(CV.width||1280);
+      const bz=shotArc(c.arc,fe,stl,c), W2=(CV.width||1280);
       const d=PLEN*(P3D.spriteFrac!=null?P3D.spriteFrac:0.045)*0.21;
       const lift=(c.jumpLift||0)*Math.pow(1-f,2);
       return {x:ex2wx(Math.min(Math.max(bx,0.02*W2),0.98*W2)), y:Math.max(d*.5,0.05+bz*.09)+lift, z:ey2wz(by)};
@@ -5365,7 +5432,7 @@
       const hh=PLEN*(P3D.spriteFrac!=null?P3D.spriteFrac:0.045);
       /* STAGED CHARGE. This used to be a straight ramp and every element -
          speed lines, rings, bolts, aura - scaled by that one value, so the
-         whole hold was a single continuous swell. Tsubasa does not swell, it
+         whole hold was a single continuous swell. Anime does not swell, it
          stages: gather, tremble, a held breath, release. The DIP at 0.82-0.92
          is the important part; the release only reads as a release because
          everything goes quiet just before it. */
@@ -5920,7 +5987,15 @@
           Object.assign(cine,{style:st,perpX:pp.px,perpY:pp.py,curveAmt:W*0.05*st.curve,dur:1.6/st.speed});
           _trailFx=trailStyleFor(shooter); try{ clearTrail(); scorchClear(); }catch(e){}
           cine.arc=(_trailFx&&_trailFx.sig&&_trailFx.sig.arc)||'normal';
+          cine.shotName=P3D.shotName(shooter);   // the title card (ult11-cine3.js)
           if(cine.arc==='drive') cine.curveAmt*=0.35;   // a drive barely bends
+          if(cine.arc==='straight'){ cine.curveAmt=0; cine.style=Object.assign({},st,{kind:'power',curve:0}); }
+          cine.curveAmt=curveLimit(cine.curveAmt,sp.x,sp.y,stopX,gp.y,pp.px,pp.py);
+          /* drive height by distance: ~10 m out (W*0.085) a straight line,
+             the box edge (~W*0.16) a low arch, ~W*0.34 and beyond the full drive */
+          { const L=Math.hypot(stopX-sp.x,gp.y-sp.y), m=Math.max(0,Math.min(1,(L-W*0.085)/(W*0.34-W*0.085)));
+            cine.arcMul=Math.pow(m,1.3);
+            if(cine.arc==='drive') cine.curveAmt*=0.25+0.75*cine.arcMul; }   // up close a drive is dead straight
           window.U11DBG&&U11DBG('[3D] super shot: '+st.kind+' / trail '+_trailFx.k
             +' ('+(shooter?((shooter.origName||shooter.name)+' pwr'+shooter.pwr+' tec'+shooter.tec):'?')+')');
         }catch(e){}
@@ -6115,7 +6190,7 @@
         cineGkNudge(c);                               // ...a step off his line
         const stl=c.style||{curve:0,loft:1,speed:1,kind:'normal'}, dur=c.dur||1.6;
         if(c.mode==='fly'){
-          // Tsubasa-style ramp: hard off the boot, then slides into slow motion
+          // anime-style ramp: hard off the boot, then slides into slow motion
           // for the middle of the flight so the trail is actually readable.
           if(c.decided) c.ft+=dt/(U11_CINE3.flyDur||1.35);   // mockup: 1.35s, no slow-mo
           else{
@@ -6158,7 +6233,7 @@
         }
         bx=c.fx+(c.tx-c.fx)*fe; by=c.fy+(c.ty-c.fy)*fe;
         if(c.curveAmt){ const off=Math.sin(Math.PI*fe)*c.curveAmt; bx+=c.perpX*off; by+=c.perpY*off; }  // banana
-        bz=shotArc(c.arc,fe,stl);
+        bz=shotArc(c.arc,fe,stl,c);
         if(c.mode==='fly'&&c.blk&&!c.blk.done&&fe>=c.blk.fe) blockImpact(c,bx,by);
         if(c.mode==='wait')bz=4+Math.sin(c.t*6)*0.8;  // hover short of the keeper
       }else if(c.mode==='out'){
@@ -6221,6 +6296,18 @@
       if(!_c3on()) try{ shotBallFx(c,bwx,bwy,bwz,d,(c.mode==='fly'||(c.mode==='out'&&c.isGoal)),c.mode==='wait'); }catch(e){}
       if(c.mode==='fly'&&!_c3on()){ try{ drawFlyLines(c,dt,bwx,bwy,bwz); }catch(e){} }
       if(c.mode==='out'&&c.ot>=cineOutDur(c)&&!c._impact){ c._impact=true;
+        /* the keeper SAVES the super shot: the slash / hit flash on the gloves
+           (ult11-hitfx.js; author 2026-10-01: blue = the player's keeper, red = the CPU's) */
+        if(!c.isGoal&&window.U11HitFX){ try{
+          /* centred on the GLOVE (the measured fist point of the dive frame on
+             screen), re-projected every frame while the flash plays - placed
+             once, it drifted off as the save camera swung in and the dive went on */
+          const ds=c.o&&c.o.ds;
+          const where=()=>{ const g=P3D.gkaGlove(ds), w=(g&&g.glove)||ballMesh.position, r=gl.getBoundingClientRect();
+            const p=projectToScreen(w.x,w.y,w.z,1,1); return p.z<1?{x:r.left+p.x*r.width,y:r.top+p.y*r.height}:null; };
+          const p0=where();
+          if(p0) U11HitFX.play(p0.x, p0.y, {pal:ds==='a'?'away':'home', flip:Math.random()<.5, track:where});
+          P3D._lastSaveFx=Date.now(); P3D._saveFxWhere=where; }catch(e){} }
         let _c3a=false;
         if(_c3on()){ try{
           const _gwx=ex2wx(c.gx),_gwz=ey2wz(c.gy),_swx=ex2wx(c.fx),_swz=ey2wz(c.fy);
@@ -6508,11 +6595,17 @@
         return;
       }
       if(gl.style.display==='none'){ gl.style.display='block'; resize(); if(P3D.suppress2D)CV.style.visibility='hidden'; }
+      /* self-heal: the match is on screen, so the world layer must be live and the
+         canvas must have a size - if a screen swap left either off, fix it here */
+      { const ww=document.getElementById('worldwrap');
+        if(ww&&!ww.classList.contains('on')){ ww.classList.add('on'); const vp=document.getElementById('viewport'); if(vp) vp.classList.add('world-live'); P3D._heal=(P3D._heal||0)+1; resize(); }
+        else if(!gl.clientWidth||!gl.clientHeight||!gl.width||!gl.height){ P3D._heal=(P3D._heal||0)+1; resize(); } }
       // Auto-resize: fullscreen enter/exit changes canvas size — re-sync or it stays blurry.
       const _cw=CV.clientWidth,_ch=CV.clientHeight;
       if(_cw&&_ch&&(_cw!==_lastW||_ch!==_lastH)){ _lastW=_cw;_lastH=_ch;resize(); }
       const now=performance.now(); const dt=Math.min(0.05,(now-lastTs)/1000); lastTs=now;
       monitorQuality(now);
+      try{                             // an error in one update must not stop the frame from being DRAWN (a black pitch)
       syncSheets(); watchActions();
       if(PEN){ penCamera(); camera.updateMatrixWorld(); }
       else if(!cine){ if(!(P3D.camHook&&P3D.camHook(camera,dt))&&!celebCam(dt)&&!scnCam(dt)&&!saveCam(dt)&&!goalCam(dt)&&!heroKickCam(dt)) updateCamera(dt); camera.updateMatrixWorld(); }   // camHook: a test / lab camera takes over (return true)
@@ -6535,6 +6628,7 @@
       try{ tickGfx(dt,now); }catch(e){}
       try{ tickFlags(now); }catch(e){}
       syncRef(dt);
+      }catch(e){ P3D._loopErr=String(e&&(e.stack||e.message)||e).slice(0,400); if(!P3D._loopErrN){ console.error('[P3D] frame update error',e); } P3D._loopErrN=(P3D._loopErrN||0)+1; }
       if(_lookPending&&pitchMesh){ _lookPending=null; applyEnv(); }
       if(ENV.time!=='classic'||ENV.weather!=='sunny') try{ envFrame(now,dt); }catch(e){ console.warn('[P3D] env',e); }
       try{ grassFrame(now); bokehFrame(now); }catch(e){}
@@ -6571,6 +6665,12 @@
       _frames3d++;                     // the match loader's curtain waits on real frames
     }
     let _frames3d=0;
+    /* one-line check for the author when the pitch goes black: type P3D.health() */
+    P3D.health=function(){ let lost=null; try{ lost=renderer.getContext().isContextLost(); }catch(e){}
+      const ww=document.getElementById('worldwrap');
+      return {on:P3D.on, matchOnScreen:_matchActive(), canvas:gl.style.display, cssSize:[gl.clientWidth,gl.clientHeight], buffer:[gl.width,gl.height],
+        worldLayer:ww?ww.className:'missing', contextLost:lost, lostCount:P3D._ctxLost||0, restoredCount:P3D._ctxRestored||0,
+        frames:_frames3d, selfHeals:P3D._heal||0, updateErrors:P3D._loopErrN||0, lastError:P3D._loopErr||null}; };
     Object.defineProperty(P3D,'frameCount',{get:()=>_frames3d,configurable:true});
     requestAnimationFrame(loop3d);
 
