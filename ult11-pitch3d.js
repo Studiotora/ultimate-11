@@ -107,7 +107,8 @@
     gfx:{ sky:true, masts:true, lamps:true, boards:true, flags:true, flashes:true, floods:true, banners:true, volumetrics:true,
           volRays:true, volPools:true, volDust:true },
     // super-shot cinematic camera (console-tunable): hold = charging aura, chase = ball flight
-    cine:{ holdFront:true, holdDist:9.6, holdHeight:1.55, holdSide:1.1, holdLookAhead:20, holdLookY:1.25,
+    cine:{ ballFootLead:0.45, // ball center ahead of the boot, in cine3 body-scale units S
+           holdFront:true, holdDist:9.6, holdHeight:1.55, holdSide:1.1, holdLookAhead:20, holdLookY:1.25,
            // chase: sits well back and off to the side so the tail reads in
            // profile instead of the camera riding on top of the ball
            chaseDist:16.5, chaseHeight:4.2, chaseSide:5.5, chaseLookY:1.0,
@@ -704,14 +705,17 @@
     }
     /* bulging nets (see buildGoals). netHit(side,z,y): side = sign of the goal's world x */
     const NETS={};
-    function netHit(side,z,y){ const N=NETS[side]; if(!N) return; N.t=0; N.hz=z; N.hy=y; }
+    function netEase(a,b,t){ const q=Math.max(0,Math.min(1,(t-a)/(b-a))); return q*q*(3-2*q); }
+    function ultraNetPush(t,dep){ return dep*0.8*netEase(0,0.25,t)*(1-netEase(2.7,3.7,t)); }
+    function netHit(side,z,y,ultra){ const N=NETS[side]; if(!N) return; N.t=0; N.hz=z; N.hy=y; N.ultra=!!ultra; if(N.mat) N.mat.opacity=ultra?0.88:0.34; }
     P3D.netHit=netHit;
     function tickNets(dt){
       for(const k in NETS){ const N=NETS[k]; if(N.t<0) continue;
         N.t+=dt; const a=N.geo.attributes.position, b=N.base, t=N.t;
-        if(t>4){ for(let i=0;i<b.length;i++) a.array[i]=b[i]; a.needsUpdate=true; N.t=-1; continue; }
-        const amp=(1.35*Math.exp(-t*3.2)*Math.cos(t*9)+0.35*Math.exp(-t*1.2))*N.DEP/1.6*(1-Math.min(1,Math.max(0,(t-3)/1)));
-        const sc=N.HW/3.66, s2=sc*sc;
+        if(t>4){ for(let i=0;i<b.length;i++) a.array[i]=b[i]; a.needsUpdate=true; N.t=-1; N.ultra=false; if(N.mat) N.mat.opacity=0.34; continue; }
+        const amp=N.ultra?ultraNetPush(t,N.DEP):(1.35*Math.exp(-t*3.2)*Math.cos(t*9)+0.35*Math.exp(-t*1.2))*N.DEP/1.6*(1-Math.min(1,Math.max(0,(t-3)/1)));
+        if(N.ultra&&N.mat) N.mat.opacity=0.34+0.54*(1-netEase(2.7,3.7,t));
+        const sc=N.HW/(N.ultra?2.3:3.66), s2=sc*sc;
         for(let i=0;i<b.length/3;i++){ const y=b[i*3+1], z=b[i*3+2];
           const d2=((y-N.hy)*(y-N.hy)*1.6+(z-N.hz)*(z-N.hz))/s2;
           a.array[i*3]=b[i*3]+N.side*amp*Math.exp(-d2/1.6); }
@@ -789,7 +793,7 @@
           });
           const sgeo=new T.BufferGeometry(); sgeo.setAttribute('position',new T.Float32BufferAttribute(st,3));
           g.add(new T.LineSegments(sgeo,nm));
-          NETS[side]={geo:bgeo,base,t:-1,hy:0,hz:0,HW,DEP,side};
+          NETS[side]={geo:bgeo,base,mat:nm,t:-1,hy:0,hz:0,HW,DEP,side,ultra:false};
         }
         g.traverse(m=>{ if(m.isMesh) m.castShadow=true; });      // real shadows: the frame on the grass
         goalGroup.add(g);
@@ -1969,8 +1973,9 @@
       SCORCH={rib,M,ch,em,pts:[],life:0,emb:0,fed:false};
       return SCORCH;
     }
-    function scorchFeed(x,y,z,d){
+    function scorchFeed(x,y,z,d,ultra){
       const S=ensureScorch(); if(!S) return;
+      S.ultra=!!ultra;                                    // a normal fire shot feeding it again returns it to the short fade
       /* burn width follows the ball's HEIGHT: a ball skimming the grass
          scorches a wide strip, one up at the bar barely singes it */
       const hf=Math.max(0.22,Math.min(1,1-(y-0.35)/3.6));
@@ -1989,7 +1994,17 @@
       while(S.pts.length>160) S.pts.shift();
       S.fed=true;
     }
+    /* ULTRA BURN (author roadmap 2026-10-02): the strip stays on the grass - an ember in the
+       shooter's aura colour that cools to char over ~6 s, then the char fades back to green
+       over ~60 s of GAME time (it does not run down while paused). */
+    const ULTRA_BURN_S=60, ULTRA_EMBER_S=6;
+    function ultraBurn(x,y,z,d){
+      const S=ensureScorch(); if(!S) return;
+      try{ const col=new T.Color(superCol()); S.M.ember.uniforms.uTint.value.set(col.r,col.g,col.b); S.M.ember.uniforms.uTintAmt.value=1; }catch(e){}
+      scorchFeed(x,Math.min(y,0.5),z,d*1.7,true);        // wider, and as if skimming the grass
+    }
     function scorchClear(){ if(!SCORCH) return;
+      SCORCH.ultra=false; try{ SCORCH.M.ember.uniforms.uTintAmt.value=0; }catch(e){}
       SCORCH.pts.length=0; SCORCH.life=0; SCORCH.emb=0; SCORCH.fed=false;
       SCORCH.ch.visible=SCORCH.em.visible=false; SCORCH.rib.clear(); }
     function scorchUpdate(dt,now){
@@ -1997,6 +2012,7 @@
       if(S.pts.length<2){ S.ch.visible=S.em.visible=false; return; }
       const frozen=!!(P3D.trailFx&&P3D.trailFx.freeze);
       if(S.fed||frozen){ S.life=Math.min(1,S.life+dt*8); S.emb=Math.min(1,S.emb+dt*8); }
+      else if(S.ultra){ const gdt=(typeof G!=='undefined'&&G&&G.paused)?0:dt; S.life-=gdt/ULTRA_BURN_S; S.emb=Math.max(0,S.emb-gdt/ULTRA_EMBER_S); }
       else { S.life-=dt/1.4; S.emb=Math.max(0,S.emb-dt/0.7); }
       S.fed=false;
       if(S.life<=0){ scorchClear(); return; }
@@ -2014,6 +2030,7 @@
     }
     function global_U11Ribbon(){ return window.U11Ribbon; }
     function global_U11Flame(){ return window.U11Flame; }
+    P3D.scorchInfo=function(){ const S=SCORCH; return S?{pts:S.pts.length,life:+S.life.toFixed(3),ember:+S.emb.toFixed(3),ultra:!!S.ultra,visible:!!S.ch.visible}:null; };   // test probe
     function ribbonPush(R,x,y,z){
       const L=R.pts[R.pts.length-1];
       if(L){
@@ -2091,6 +2108,7 @@
     function shotArc(kind,fe,stl,c){
       const loft=(stl&&stl.loft!=null)?stl.loft:1;
       if(kind==='straight') return straightArc(fe);
+      if(kind==='ultra'){ const t=Math.min(1,Math.max(0,(fe-0.86)/0.14)); return 4*t*t*(3-2*t); }   // ULTRA: skims the turf the whole way, lifts into the goal at the very end (ends at 4 = the hover height)
       /* the drive's climb depends on where it is struck from (author 2026-10-02:
          "from inside the box way lower arch, from up close just straight").
          c.arcMul 0..1 from the shot length (cineStart); 1 = the full drive. */
@@ -2691,7 +2709,7 @@
         const loft=(_os&&_os.st&&_os.st.loft)||1;
         const hN=Math.max(0,(o.bz||0)*0.09*loft)/_gkaBody();          // arrival height, in body heights
         const high=hN>0.5, ms=Math.max(260,o.ms||600);
-        const D=central?(high?GK6_DIVE.high:null):(high?GK6_DIVE.sideHigh:GK6_DIVE.side);
+        const D=central?(o.smother?GK6_DIVE.side:(high?GK6_DIVE.high:null)):(high?GK6_DIVE.sideHigh:GK6_DIVE.side);
         const steps=[{row:0,cols:[0],ms:ms*0.4,lat:0}];
         if(D) steps.push({row:D.row,cols:D.cols,ms:ms*0.6,lat:1});
         // where the ball really crosses his line, in world space (for the glove)
@@ -3908,7 +3926,7 @@
         }
       }
       /* the pixel skin: same spot, same size, frame from the roll */
-      if(ballSprite&&ballSpriteTex&&P3D.pixelBall!==false){
+      if(ballSprite&&ballSpriteTex&&(P3D.pixelBall!==false||(typeof G!=='undefined'&&G&&G._openingKickoff))){
         if(_bPrevX!==null&&r>1e-6){
           const trav2=Math.hypot(wx-_bPrevX,wz-_bPrevZ);
           const inc=trav2/(2*Math.PI*r)*BALL_FRAMES;       // the sheet = one rotation
@@ -5116,6 +5134,31 @@
       return _tiltFy;
     }
     P3D.tiltFocus=()=>({r:_tiltFy, point:actionFocusPoint()});
+    // Macro lens at grass level; follows the opening ground pass for one beat.
+    // Put the ball ahead of the boot on the lens side of the player billboard.
+    // Engine and renderer share this launch point, so the pass never jumps at contact.
+    P3D.openingKickoffOrigin=function(from,to){
+      const dx=ex2wx(to.x)-ex2wx(from.x),dz=ey2wz(to.y)-ey2wz(from.y),len=Math.hypot(dx,dz)||1;
+      const ux=dx/len,uz=dz/len,k=PLEN/70;
+      return {x:wx2ex(ex2wx(from.x)-ux*.30*k-uz*.48*k),y:wz2ey(ey2wz(from.y)-uz*.30*k+ux*.48*k)};
+    };
+    let openingCamActive=false;
+    function openingKickoffCam(){
+      const c=typeof G!=='undefined'&&G&&G._openingKickoff;
+      if(!c||G.phase!=='kickoff_closeup'){
+        if(openingCamActive){openingCamActive=false;_camSnap=true;}
+        return false;
+      }
+      openingCamActive=true;
+      const bx=ex2wx(ball.x),bz=ey2wz(ball.y);
+      const dx=ex2wx(c.tx)-ex2wx(c.fx),dz=ey2wz(c.ty)-ey2wz(c.fy),len=Math.hypot(dx,dz)||1;
+      const ux=dx/len,uz=dz/len,k=PLEN/70;
+      const r=PLEN*(P3D.spriteFrac!=null?P3D.spriteFrac:.045)*.21*.5;
+      camera.fov=43;camera.updateProjectionMatrix();
+      camera.position.set(bx-ux*.90*k-uz*1.45*k,r+.18*k,bz-uz*.90*k+ux*1.45*k);
+      camera.lookAt(bx+ux*.08*k,r+.30*k,bz+uz*.08*k);
+      return true;
+    }
     function updateCamera(dt){
       const C=P3D.cam;
       camera.fov=C.fov; camera.updateProjectionMatrix();
@@ -5308,7 +5351,7 @@
        focus band - both made the cinematic read "too close". updateCamera()
        puts fov back on the first normal frame; applyFx() restores the blur. */
     function _c3view(){
-      if(camera.fov!==42){ camera.fov=42; camera.updateProjectionMatrix(); }
+      if(!(cine&&cine.ultra)&&camera.fov!==42){ camera.fov=42; camera.updateProjectionMatrix(); }   // an Ultra frame owns its fov (ult11-cine3.js ultra cameras)
       if(hTilt&&vTilt){ hTilt.uniforms.h.value=0; vTilt.uniforms.v.value=0; }
       /* The mockup is a NIGHT scene: its additive FX sit on a dark pitch.
          On the game's lit pitch the same additive colours clip to white and
@@ -5318,13 +5361,28 @@
       sun.intensity=(L.key!=null?L.key:1)*P3D._c3dim; hemi.intensity=(L.ambient!=null?L.ambient:1)*P3D._c3dim;
     }
     P3D._c3dim=0.5;   // cine3 scene light multiplier (tunable with ?debug=1)
+    /* ULTRA SHOT tunables (author's approved mockup values, roadmap phase 5). Distances in the mockup's
+       metres (ball radius 0.11); cine3 scales them by `scale`*S to the game's ball. Live: P3D.ultra.chaseDist=2.4 ... */
+    P3D.ultra={chaseDist:2.8,chaseHeight:0.07,chaseFov:34,slowMo:0.2,netFov:26,netDist:6,netSide:5,netHold:3.8,afterHold:2.7,scale:1.82,chargeScale:2.4};
     /* world position of the super shot at flight fraction f (0..1) - the SAME
        maths cineStep2 uses, so the comet can be sampled along the real path
        (mockup: tail = last 31% of the flight) instead of from frame history. */
+    /* The sprite anchor is between the boots. Keep a distinct ball launch
+       point ahead of it along the shot line, shared by hold, impact and flight.
+       World-space normalization keeps the lead consistent in every direction. */
+    function cineBallLaunch(c){
+      const sx=ex2wx(c.fx), sz=ey2wz(c.fy);
+      const dx=ex2wx(c.gx)-sx, dz=ey2wz(c.gy)-sz, len=Math.hypot(dx,dz);
+      const CC=P3D.cine||{}, S=_c3hh()/1.8;
+      const lead=Math.min(len*0.5,Math.max(0,(CC.ballFootLead!=null?CC.ballFootLead:0.45)*S));
+      if(len<0.0001) return {x:c.fx,y:c.fy};
+      return {x:wx2ex(sx+dx/len*lead),y:wz2ey(sz+dz/len*lead)};
+    }
     function cinePathW(c,f){
       f=Math.max(0,Math.min(1,f));
       const stl=c.style||{curve:0,loft:1,speed:1,kind:'normal'}, fe=cineEase(c,f);
-      let bx=c.fx+(c.tx-c.fx)*fe, by=c.fy+(c.ty-c.fy)*fe;
+      const fx=c.bfx!=null?c.bfx:c.fx, fy=c.bfy!=null?c.bfy:c.fy;
+      let bx=fx+(c.tx-fx)*fe, by=fy+(c.ty-fy)*fe;
       if(c.curveAmt){ const off=Math.sin(Math.PI*fe)*c.curveAmt; bx+=c.perpX*off; by+=c.perpY*off; }
       const bz=shotArc(c.arc,fe,stl,c), W2=(CV.width||1280);
       const d=PLEN*(P3D.spriteFrac!=null?P3D.spriteFrac:0.045)*0.21;
@@ -5342,7 +5400,7 @@
     function cineOutDur(c){
       if(!c.decided) return 0.55/1.20;
       if(c._outDur==null){
-        const vEnd=1.68*Math.hypot(c.tx-c.fx,c.ty-c.fy)/(U11_CINE3.flyDur||1.35);   // d(ease)/df at 1 = 1.68
+        const vEnd=1.68*Math.hypot(c.tx-(c.bfx!=null?c.bfx:c.fx),c.ty-(c.bfy!=null?c.bfy:c.fy))/(U11_CINE3.flyDur||1.35);   // d(ease)/df at 1 = 1.68
         const tgt=c.isGoal?{x:c.gx,y:c.gy}:{x:c.kx,y:c.ky};
         c._outDur=Math.max(0.06,Math.min(0.4,Math.hypot(tgt.x-c.tx,tgt.y-c.ty)/Math.max(1,vEnd)));
       }
@@ -5977,29 +6035,33 @@
         const dy=aim.s*dir*Hc*0.052*0.78;          // inside the post, not on it
         const jumpStart=typeof jumpHeight==='function'?jumpHeight(o.as,o.sk):0;
         const jumpLift=P3D.getJumpLift(o.as,o.sk);
-        cine={v2:true,mode:'hold',t:0,ft:0,ot:0,o,dir,arrived:false,gkRestore:null,jumpStart,jumpLift,
+        cine={v2:true,mode:'hold',t:0,ft:0,ot:0,o,dir,arrived:false,gkRestore:null,jumpStart,jumpLift,ultra:!!o.ultra,_camSide:1,_shFlip:false,
           fx:sp.x,fy:sp.y, tx:stopX,ty:gp.y+dy*0.55, gx,gy:gp.y+dy, kx:gp.x,ky:gp.y,
           aim, aimDy:dy,
           col:o.color||sideColor(o.as)};
+        const launch=cineBallLaunch(cine); cine.bfx=launch.x; cine.bfy=launch.y;
+        const radius=PLEN*(P3D.spriteFrac!=null?P3D.spriteFrac:0.045)*0.105;
+        cine._bw={x:ex2wx(cine.bfx),y:Math.max(radius,0.05)+(cine.jumpLift||0),z:ey2wz(cine.bfy)};
         try{
           const shooter=(typeof sq==='function'&&sq(o.as))?sq(o.as)[o.sk]:null;
-          const st=shotStyleFor(shooter), pp=shotPerp(sp.x,sp.y,stopX,gp.y);
+          const st=shotStyleFor(shooter), pp=shotPerp(cine.bfx,cine.bfy,stopX,gp.y);
           Object.assign(cine,{style:st,perpX:pp.px,perpY:pp.py,curveAmt:W*0.05*st.curve,dur:1.6/st.speed});
           _trailFx=trailStyleFor(shooter); try{ clearTrail(); scorchClear(); }catch(e){}
           cine.arc=(_trailFx&&_trailFx.sig&&_trailFx.sig.arc)||'normal';
           cine.shotName=P3D.shotName(shooter);   // the title card (ult11-cine3.js)
+          if(cine.ultra){ cine.shotName='ULTRA SHOT'; cine.arc='ultra'; cine.curveAmt=0; }   // the captain's once-per-match shot keeps the shooter's own aura + trail
           if(cine.arc==='drive') cine.curveAmt*=0.35;   // a drive barely bends
           if(cine.arc==='straight'){ cine.curveAmt=0; cine.style=Object.assign({},st,{kind:'power',curve:0}); }
-          cine.curveAmt=curveLimit(cine.curveAmt,sp.x,sp.y,stopX,gp.y,pp.px,pp.py);
+          cine.curveAmt=curveLimit(cine.curveAmt,cine.bfx,cine.bfy,stopX,gp.y,pp.px,pp.py);
           /* drive height by distance: ~10 m out (W*0.085) a straight line,
              the box edge (~W*0.16) a low arch, ~W*0.34 and beyond the full drive */
-          { const L=Math.hypot(stopX-sp.x,gp.y-sp.y), m=Math.max(0,Math.min(1,(L-W*0.085)/(W*0.34-W*0.085)));
+          { const L=Math.hypot(stopX-cine.bfx,gp.y-cine.bfy), m=Math.max(0,Math.min(1,(L-W*0.085)/(W*0.34-W*0.085)));
             cine.arcMul=Math.pow(m,1.3);
             if(cine.arc==='drive') cine.curveAmt*=0.25+0.75*cine.arcMul; }   // up close a drive is dead straight
           window.U11DBG&&U11DBG('[3D] super shot: '+st.kind+' / trail '+_trailFx.k
             +' ('+(shooter?((shooter.origName||shooter.name)+' pwr'+shooter.pwr+' tec'+shooter.tec):'?')+')');
         }catch(e){}
-        if(typeof ball!=='undefined'&&ball){ball.x=sp.x;ball.y=sp.y;ball.bz=0;}
+        if(typeof ball!=='undefined'&&ball){ball.x=ball.tx=cine.bfx;ball.y=ball.ty=cine.bfy;ball.bz=0;}
         try{ cineCamera2(); }catch(e){}   // place the frontal camera before frame 1
         return true;
       },
@@ -6007,7 +6069,7 @@
          ball reaches fraction fe of the flight, burst + hit-stop + onHit(); if
          stop, the flight ends there and onArrive('blocked') fires. */
       path(){ if(!cine) return null;
-        return {fx:cine.fx,fy:cine.fy,tx:cine.tx,ty:cine.ty,perpX:cine.perpX||0,perpY:cine.perpY||0,curve:cine.curveAmt||0}; },
+        return {fx:cine.bfx,fy:cine.bfy,tx:cine.tx,ty:cine.ty,perpX:cine.perpX||0,perpY:cine.perpY||0,curve:cine.curveAmt||0}; },
       fly(onArrive,opts){
         if(!(cine&&cine.v2&&cine.mode==='hold'))return;
         cine.blk=(opts&&opts.block)?Object.assign({done:false},opts.block):null;
@@ -6029,7 +6091,7 @@
            debris); the old ring/flash burst only runs when it is off. */
         let _c3imp=false;
         if(_c3on()){ try{
-          const _b=cine._bw||{x:ex2wx(cine.fx),y:0.3,z:ey2wz(cine.fy)};
+          const _b=cine._bw||{x:ex2wx(cine.bfx),y:0.3,z:ey2wz(cine.bfy)};
           _c3imp=U11_CINE3.impact(cine,{T,scene,camera,hh:_c3hh(),
             bx:_b.x,by:_b.y,bz:_b.z,swx:ex2wx(cine.fx),swz:ey2wz(cine.fy),gwx:ex2wx(cine.gx),gwz:ey2wz(cine.gy),
             col:superCol(),shake:(a,ms)=>shakeCam(a,ms)});
@@ -6056,26 +6118,11 @@
       },
       abort(){ if(cine&&cine.v2){cine.o.onDone=null;cineEnd();} }
     };
-    /* Which way must the shooter be MIRRORED?
-       Sheet art faces screen-right. In open play syncPlayers reads that from
-       world x, but under the frontal hold camera the shot direction points
-       straight AT the lens, so world x tells us nothing — the same world
-       heading can land on either side of the screen depending on which side
-       holdSide put the camera. So project the shooter's forward vector and
-       read the sign of its SCREEN motion, exactly as syncPlayers does for
-       live players. Sticky when the vector is near-parallel to the view, so
-       he never strobes as the camera crosses his facing axis. */
-    const _cf1=new T.Vector3(), _cf2=new T.Vector3();
-    function cineShooterFlip(c){
-      const swx=ex2wx(c.fx),swz=ey2wz(c.fy);
-      const gwx=ex2wx(c.gx),gwz=ey2wz(c.gy);
-      let dx=gwx-swx,dz=gwz-swz;const L=Math.hypot(dx,dz)||1;dx/=L;dz/=L;
-      _cf1.set(swx,1.0,swz).project(camera);
-      _cf2.set(swx+dx,1.0,swz+dz).project(camera);
-      const sdx=_cf2.x-_cf1.x;
-      if(Math.abs(sdx)<2e-4) return !!c._shFlip;
-      return (c._shFlip=(sdx<0));
-    }
+    /* Preserve the original right-footed artwork. Mirroring the texture
+       swaps the kicking leg. The cinematic uses the same relative camera
+       side for either attacking direction, so the shot reads screen-right
+       without flipping the run-up, charge or strike frames. */
+    function cineShooterFlip(c){ c._shFlip=false; return false; }
     function cineStep2(dt){
       const c=cine; if(!c)return;
       if(c._lm!==c.mode){c._lm=c.mode;window.U11DBG&&U11DBG('[3D] cine v2 mode='+c.mode+' (frames running)');}
@@ -6096,7 +6143,7 @@
       const sid=c.o.as+':'+c.o.sk;
       const frac=(P3D.spriteFrac!=null?P3D.spriteFrac:0.045);
       const d=PLEN*frac*0.21;
-      let bx=c.fx,by=c.fy,bz=0;
+      let bx=c.bfx,by=c.bfy,bz=0;
       if(c.mode==='hold'){
         const g=sprites[sid];
         /* SUPER ROW (12x8 sheets, row 6 cols 6-11): frames 0-2 charge,
@@ -6192,7 +6239,12 @@
         if(c.mode==='fly'){
           // anime-style ramp: hard off the boot, then slides into slow motion
           // for the middle of the flight so the trail is actually readable.
-          if(c.decided) c.ft+=dt/(U11_CINE3.flyDur||1.35);   // mockup: 1.35s, no slow-mo
+          if(c.decided){
+            /* ULTRA: the last quarter of the flight runs at 0.22x (mockup slow-mo before the keeper) */
+            let _k=1; if(c.ultra){ const u=Math.min(1,Math.max(0,(c.ft-0.64)/0.10)), a=u*u*(3-2*u); _k=1-(1-((P3D.ultra&&P3D.ultra.slowMo)||0.2))*a;
+              if(a>0.05&&!c._ultraSlow){ c._ultraSlow=true; try{ window.U11_ULTRAFX&&U11_ULTRAFX.sfx('slow'); }catch(e){} } }
+            c.ft+=dt*_k/(U11_CINE3.flyDur||1.35);   // mockup: 1.35s
+          }
           else{
           const CCs=P3D.cine||{}, smoMax=(CCs.slowMo||2.4), inAt=(CCs.slowInAt||0.12);
           const ramp=Math.min(1,Math.max(0,(c.ft-inAt)/0.22));
@@ -6201,15 +6253,10 @@
           c.ft+=dt*1.20/(dur*smo); // flight only: 20% faster, charge timing unchanged
           }
           if(c._superRow){
-            /* frames 3,4,5 at ~9fps: contact, then follow-through.
-               The mirror is LOCKED to whatever the charge ended on, not
-               recomputed: the chase camera is swinging from in front of him
-               to behind him during exactly these three frames, so a live test
-               flips him mid-kick - and it lands on the contact frame, the one
-               moment nobody is looking anywhere else. He is off-frame long
-               before the swing makes the frozen mirror wrong. */
+            /* Original right-footed contact and follow-through frames stay
+               unmirrored even while the chase camera swings behind him. */
             forceAnim(sid,'side','super',3+Math.min(2,Math.floor((c.ft*(c.decided?(U11_CINE3.flyDur||1.35):dur))/0.11)),
-                      !!c._shFlip);
+                      false);
           }else{
             const kf=Math.min(3,Math.floor((c.ft*dur)/0.14));
             forceAnimT(sid,'up','shoot',kf/3,false);  // kick frames, back view
@@ -6231,7 +6278,7 @@
           const k=Math.max(0,Math.min(1,(fe-0.55)/0.45));
           c._diveP=(k*k*(3-2*k))*(c.isGoal?0.6:0.85); gkOutcome(c,c._diveP); cineGkNudge(c);
         }
-        bx=c.fx+(c.tx-c.fx)*fe; by=c.fy+(c.ty-c.fy)*fe;
+        bx=c.bfx+(c.tx-c.bfx)*fe; by=c.bfy+(c.ty-c.bfy)*fe;
         if(c.curveAmt){ const off=Math.sin(Math.PI*fe)*c.curveAmt; bx+=c.perpX*off; by+=c.perpY*off; }  // banana
         bz=shotArc(c.arc,fe,stl,c);
         if(c.mode==='fly'&&c.blk&&!c.blk.done&&fe>=c.blk.fe) blockImpact(c,bx,by);
@@ -6261,7 +6308,8 @@
         cineGkNudge(c);
         /* decided: hold the goal / save shot as long as the mockup does (net
            bulge, flash, drifting goal camera) before game.js takes over */
-        const _hand=c.decided?cineOutDur(c)+(c.isGoal?(U11_CINE3.goalHold||1.6):(U11_CINE3.saveHold||1.0)):0.85;
+        const _UL=P3D.ultra||{};
+        const _hand=c.decided?cineOutDur(c)+(c.isGoal?(c.ultra?((_UL.netHold!=null?_UL.netHold:3.8)+(_UL.afterHold!=null?_UL.afterHold:2.7)):(U11_CINE3.goalHold||1.6)):(U11_CINE3.saveHold||1.0)):0.85;
         if(c.ot>=_hand&&!c._fired){                   // outcome shown — hand control to game.js,
           c._fired=true;                              // keep the frontal camera until it releases us
           const cb=c.o.onDone; c.o.onDone=null;
@@ -6274,6 +6322,16 @@
       let bwx=ex2wx(Math.min(Math.max(bx,0.02*W2),0.98*W2)),bwz=ey2wz(by);
       const launchLift=c.mode==='hold'?(c.jumpLift||0):c.mode==='fly'?(c.jumpLift||0)*Math.pow(1-Math.min(1,c.ft),2):0;
       let bwy=Math.max(d*.5,0.05+bz*.09)+launchLift;
+      if(c.ultra&&c.mode==='out'&&c.isGoal&&c.ot>=cineOutDur(c)){
+        // Keep the ball pressed against the back mesh while that mesh bows
+        // away from the pitch. The normal goal path left it floating in front.
+        const side=Math.sign(ex2wx(c.gx))||1, dep=PWID*0.030, S=_c3hh()/1.8;
+        const t=Math.max(0,c.ot-cineOutDur(c));
+        bwy=Math.max(0.2*S,Math.min(PWID*0.030-0.2*S,bwy));
+        bwz=Math.max(-PWID*0.052+0.2*S,Math.min(PWID*0.052-0.2*S,bwz));
+        const backX=dep*(1-0.5*bwy/(PWID*0.030)); // sloped back mesh: ground depth → half-depth at the roof
+        bwx=ex2wx(c.gx)+side*(backX+ultraNetPush(t,dep)-0.2*S);
+      }
       /* SAVE: INTO HIS HANDS (author 2026-09-26: "the ball was never at the
          height of the hands" - it settled at his stomach). The save target
          above is his spot at a guessed height; now the ball is steered onto
@@ -6287,6 +6345,7 @@
           bwx+=(gl.glove.x+_v3.x-bwx)*k; bwy+=(gl.glove.y+_v3.y-bwy)*k; bwz+=(gl.glove.z+_v3.z-bwz)*k;
           c._onGlove=k; } }catch(e){} }
       ballMesh.scale.setScalar(d); ballMesh.position.set(bwx,bwy,bwz);
+      if(c.ultra&&c.mode==='fly'&&!(c._hitStop>0)){ try{ ultraBurn(bwx,bwy,bwz,d); }catch(e){} }   // the Ultra burn mark
       if(c.mode==='fly'&&c.style){
         if(c.style.kind==='curve') ballMesh.rotateOnWorldAxis(_AY,dt*26);                 // side-spin
         else if(c._pbw){ const ddx=bwx-c._pbw.x, ddz=bwz-c._pbw.z;                       // topspin along travel
@@ -6313,7 +6372,7 @@
           const _gwx=ex2wx(c.gx),_gwz=ey2wz(c.gy),_swx=ex2wx(c.fx),_swz=ey2wz(c.fy);
           let _dx=_gwx-_swx,_dz=_gwz-_swz; const _L=Math.hypot(_dx,_dz)||1;
           _c3a=U11_CINE3.arrive(c,{T,scene,camera,hh:_c3hh(),bx:bwx,by:bwy,bz:bwz,isGoal:!!c.isGoal,
-            gwx:_gwx,gwz:_gwz,dx:_dx/_L,dz:_dz/_L,netHit:()=>netHit(Math.sign(_gwx)||1,bwz,bwy)});
+            gwx:_gwx,gwz:_gwz,dx:_dx/_L,dz:_dz/_L,netHit:()=>netHit(Math.sign(_gwx)||1,bwz,bwy,!!c.ultra)});
         }catch(e){ console.error('[C3] arrive',e); } }
         if(!_c3a){ try{ impactBurst(c,bwx,bwy,bwz,d); }catch(e){} } }
       c._bw={x:bwx,y:bwy,z:bwz}; c._bd=d;
@@ -6427,7 +6486,7 @@
         let dx=gwx-swx,dz=gwz-swz;const L=Math.hypot(dx,dz)||1;dx/=L;dz/=L;
         const CC=P3D.cine||{};
         const dv=(CC.holdDist||9.6)-Math.min(0.8,c.t*0.16);      // slow dolly-in
-        const sd=(CC.holdSide!=null?CC.holdSide:1.1);
+        const sd=Math.abs(CC.holdSide!=null?CC.holdSide:1.1);
         const front=(CC.holdFront!==false);                      // false = old over-the-shoulder
         const sgn=front?1:-1;
         camera.position.set(swx+sgn*dx*dv-dz*sd, (CC.holdHeight||1.55), swz+sgn*dz*dv+dx*sd);
@@ -6608,7 +6667,7 @@
       try{                             // an error in one update must not stop the frame from being DRAWN (a black pitch)
       syncSheets(); watchActions();
       if(PEN){ penCamera(); camera.updateMatrixWorld(); }
-      else if(!cine){ if(!(P3D.camHook&&P3D.camHook(camera,dt))&&!celebCam(dt)&&!scnCam(dt)&&!saveCam(dt)&&!goalCam(dt)&&!heroKickCam(dt)) updateCamera(dt); camera.updateMatrixWorld(); }   // camHook: a test / lab camera takes over (return true)
+      else if(!cine){ if(!openingKickoffCam()&&!(P3D.camHook&&P3D.camHook(camera,dt))&&!celebCam(dt)&&!scnCam(dt)&&!saveCam(dt)&&!goalCam(dt)&&!heroKickCam(dt)) updateCamera(dt); camera.updateMatrixWorld(); }   // camHook: a test / lab camera takes over (return true)
       syncPlayers();
       if(PEN) try{ penApply(); }catch(e){ console.error('[P3D] pen',e); }
       else if(!cine) try{ gkaAlign(); }catch(e){}

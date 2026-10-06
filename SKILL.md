@@ -34,6 +34,12 @@ football game: vanilla JS + Canvas engine with a permanently-on Three.js layer.
    Bold Pixel (numerals only). Never load or use any other face - not in the
    game, not in lab mockups (author's fixed rule, 2026-09-23).
 
+## Backup policy (author, 2026-10-06)
+- Keep all backup files in `bak file/`, using subfolders when needed to preserve their original context.
+- Do not make new full-file or full-project backups for every routine edit. Prefer targeted patches and existing recoverable versions; keep concurrent-edit checks as hashes rather than extra original-file copies.
+- Create a new rollback backup only when the author requests it or a substantial risky change needs one. Keep that backup in `bak file/` as well.
+- Do not delete historical backup versions automatically.
+
 ## Cache busting
 Bump `?v=N` in index.html for every edited JS/CSS file. List them in the delivery.
 Inline styles are more reliable than stylesheet edits on GitHub Pages.

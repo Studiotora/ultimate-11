@@ -270,6 +270,8 @@
     NOISE,
     'uniform float uTime;',
     'uniform float uEmber;',
+    'uniform vec3  uTint;',
+    'uniform float uTintAmt;',
     'varying float vDist;',
     'varying float vSide;',
     'varying float vRand;',
@@ -284,6 +286,8 @@
     /* the stretch just under the ball is the hottest; the old part only smoulders */
     '  float hot = pow(vDist, 1.7);',
     '  vec3 col = mix(vec3(0.95, 0.20, 0.02), vec3(1.0, 0.74, 0.26), hot);',
+    /* ULTRA burn: the ember takes the shooter's aura colour (white-hot under the ball) */
+    '  col = mix(col, mix(uTint, vec3(1.0), hot * 0.6) * (0.6 + 0.5 * hot), uTintAmt);',
     '  float a = (rim * 0.95 + spine * hot * 0.30) * flick * uEmber * (0.22 + 0.78 * hot);',
     '  if(a <= 0.004) discard;',
     '  gl_FragColor = vec4(col * a, a);',
@@ -300,7 +304,7 @@
       uniforms: { uLife: { value: 1 } },
       fragmentShader: CHAR_FRAG, blending: T.NormalBlending }, common));
     var em = new T.ShaderMaterial(Object.assign({
-      uniforms: { uTime: { value: 0 }, uEmber: { value: 1 } },
+      uniforms: { uTime: { value: 0 }, uEmber: { value: 1 }, uTint: { value: new T.Vector3(1, 0.4, 0.1) }, uTintAmt: { value: 0 } },
       fragmentShader: EMBER_FRAG, blending: T.AdditiveBlending }, common));
     return { char: ch, ember: em };
   }

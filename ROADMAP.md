@@ -1,4 +1,54 @@
 # ULTIMATE ELEVEN — Roadmap v1
+
+### 2026-10-06 Tighter opening kickoff and foreground ball
+
+Opening camera distance reduced from 2.65 to 1.71 world units at the same low height. The renderer supplies a launch point 0.57 world units toward the lens from the kicking player, and the engine uses it for both initial ball placement and the ground-pass path. This puts the sprite in front of the boot without an artificial draw-order change or a jump at release. Normal gameplay placement remains unchanged. Cache: game v265, renderer v190. Syntax and live framing/return checked; no backups created.
+
+
+### 2026-10-06 Lower kickoff camera with ball and player sprites
+
+Opening kickoff camera lowered from ball-radius + 0.78 world units to radius + 0.18, with more side distance to include the player. The opening insert now shows the animated pixel ball sprite and normal player sprites/shadows. If the ball sprite is not yet available, the existing sphere fallback still renders. Kickoff timing and first-kickoff gate unchanged. Renderer cache v189; game remains v264. Syntax and live local preview verified, including restoration of normal play and zero renderer update errors. No new backups.
+
+
+### 2026-10-06 Opening kickoff ball close-up
+
+The initial kickoff confirmation now shows a 1.65-second ball-and-grass macro shot: a short ground pass rolls from the center spot to the nearby kickoff teammate, then play begins with the normal camera. Once per match; later goal and halftime kickoffs retain their flow. Match clock and gameplay hold during the insert, pause freezes progress, and missing renderer falls back to normal kickoff. The textured rolling sphere is used for the macro shot; normal selected ball style and player visibility return afterward. Cache: `game.js?v=264`, `ult11-pitch3d.js?v=188`. Validation: 26 engine checks across 30/60/120fps, repeated kickoff, pause, later/halftime/goal exclusion, fallback and stale generation. Existing 104 carried-ball and 392 super-shot checks passed; syntax passes. Live preview verifies macro framing, grounded roll, restored play and zero renderer update errors. No new backup generated.
+
+
+### 2026-10-06 CPU finishing, keeper smother and fresh duel decisions
+
+CPU attackers shoot earlier from usable angles, cross or pass from wide bylines, and stop advancing into the goal line. A nearby keeper dives to smother an opposing carrier who reaches or crosses the goal line in the goalmouth; catch possession and distribution follow. Human duels consume fresh input after release and remain locked until explicit confirmation or countdown expiry. Pause freezes the countdown, and stale AI, restart, timer and cinematic callbacks cannot resolve a newer duel. Files/cache: `game.js?v=263`, `ult11-pitch3d.js?v=187`, `index.html`. Validation: 80 finishing/keeper checks, 31 duel checks with real keyboard/gamepad input, 28 defense regressions, 104 directional ball checks and 392 cinematic checks. Live local browser verifies first mouse click selects and remains locked, second click confirms; CPU pass/shot decisions and keeper smother animation were also exercised. No new backup generated.
+
+
+### 2026-10-06 Right-foot super-shot and Ultra alignment
+
+Human and CPU super/Ultra shots now preserve the original right-footed artwork throughout run-up, charge, contact and follow-through. Cinematic texture mirroring is disabled; the camera uses one relative side of the shot line for either attacking direction. The forward ball lead is tightened from 0.8*S to 0.45*S so it sits closer to the kicking boot. Files/cache: `ult11-pitch3d.js?v=186`, `index.html`. Validation: 392 geometry, texture-orientation and continuity checks plus syntax; live preview checked for both teams and shot types. No new backup.
+
+
+### 2026-10-06 Super-shot ball ahead of the boot
+
+The cinematic now has a ball launch point ahead of the shooter's sprite anchor along the shot direction (0.8 cine body-scale units S). Charge, impact, flight, ribbon sampling and the defensive block path share it, so the ball does not snap back at release. The player/camera anchor remains at the shooter. Files/cache: `ult11-pitch3d.js?v=185`, `index.html`. Validation: 272 geometry/continuity checks, syntax, and live browser charge views for home, away and Ultra. Remaining: author feel check during the full shot. No new backup.
+
+
+### 2026-10-06 Directional dribble-ball placement
+
+The ball now follows the carrier's actual north/south/east/west or diagonal travel, including backward dribbling, instead of always sitting toward the team's attacking goal. The last travel direction persists while stopped; a new carrier, restart or half clears it. Existing foot spacing, renderer pull-in, keeper holding and physical flight remain unchanged. Files/cache: `game.js?v=262`, `index.html`. Validation: 104 movement/ball checks over eight directions, both halves and 30/60/120 fps, plus all 28 defensive regressions and syntax. Live visual/feel confirmation remains for the author. No new backup generated.
+
+
+### 2026-10-06 Backup organization and policy
+
+Moved 68 existing backup files into `bak file/`, preserving origin subfolders and file hashes; no historical versions deleted. This includes the legacy `backup` / `backup new` snapshots and today's four defensive-fix originals (`bak file/defense-2026-10-06/`). `bak file/backup-index.json` records each move. Routine edits must not create a fresh full backup every time; use targeted patches and hash checks, with new rollback copies only for an author request or a substantial risky change. This policy also lives in `SKILL.md`. Live game file hashes are unchanged; no cache-version change.
+
+
+### 2026-10-06 Defensive tackle responsiveness
+
+Fixed abandoned tackles blocking fresh input, premature cancellation/stun when the CPU chooses an escape pass, and auto-switching while the human steers. The CPU gets one delayed reaction to each tackle, and contact now competes with the actual kick release. Refused tackles report recovery, blocking or distance. Files/cache: `game.js?v=261`, `index.html`; details and validation in `CHANGELOG_SESSION.md`. Remaining: live defense playtest and escape-rate tuning.
+
+### 2026-10-03 Ultra playtest follow-up
+
+Four author matches showed too few meter fills (none in 1–2, CPU in 3, both in 4). `U11_ULTRA.MAX` is provisionally 60. The special-shot input now uses a ready captain's Ultra before the ordinary stamina gate. The two HUD meters have their own space below the team panels. The Ultra opening camera stays with the low charge view through the run-up, and the net/aftermath framing is adjusted toward the mockup. Files/cache: `game.js?v=259`, `ult11-ultra.js?v=3`, `ult11-cine3.js?v=17`, `ult11-pitch3d.js?v=182`, `index.html`. Syntax checks passed. Remaining: inspect the sequence in a visible match, judge the bar spacing on desktop and short landscape, and read `U11_ULTRA.tele()` from the playtest browser before setting the final meter maximum. See `CHANGELOG_SESSION.md` for details.
+
+**Further live feedback, same day:** Ultra was still too close; the ball effect dominated the view; net smoke was absent. The camera has been widened, the 2D and 3D ball effects reduced, and the canvas kept alive through the net hold so steam can render. For immediate repeat tests, home Frisina has a clearly marked temporary always-ready, unlimited Ultra with no range gate (`U11_ULTRA.TEST_FRISINA=true`). Cache: `game.js?v=260`, `ult11-ultra.js?v=4`, `ult11-cine3.js?v=18`, `ult11-ultrafx.js?v=4`, `ult11-pitch3d.js?v=183`. Syntax and focused override checks pass. Live visual review remains open; remove the Frisina override after tuning.
 ### Post-feedback rebuild plan · target look: Octopath Traveler / HD-2D · 2026-09
 
 ---
@@ -4668,3 +4718,5 @@ Each of these also leaves full screen. Replacing them with one in-game confirm p
 - 2026-10-02 (pitch3d v174): Brazil signature shots: Rivao' gold straight, Ferasao green dark-aura straight, Carlito red drive. Curve shots are capped by distance and stay inside the pitch. A drive's arch now scales with distance (straight up close).
 - 2026-10-02 (game v255 / pitch3d v175 / cine3 v14): super shots are named again with original names (signatures + trail families; a plain shot stays SUPER SHOT). Every Captain Tsubasa term is removed from the shipped code: skill tables, fallback moves, club specials, the TSUBASA AIR ad board, meta text and the default profile name. Player names on other teams are still open (0.3).
 - 2026-10-02 (game v256 / pitch3d v177 / sfx v6 / hitfx v4): super dribbles are named after the shot family. Debug pass (DEBUG-CHECKLIST.md): a controller-only session now unlocks the SFX, the home-menu blue bar follows the cursor, and the save flash tracks the glove.
+- 2026-10-02 (game v258 / pitch3d v181 / cine3 v16): ULTRA SHOT built, phases 0-6 (see ULTRA-SHOT-ROADMAP.md and the changelog): the team meter, the captain's once-per-match unstoppable shot, its own low cameras, the aura-tinted lightning VFX, the burn mark and the sound. Phase 7 (tuning U11_ULTRA.MAX from real telemetry) is for the author. The ball sprite lost its swoosh marks (brand sweep).
+- 2026-10-03 (pitch3d v184 / cine3 v19): repeated Ultra playtest correction. The charge centers the captain more clearly and expands his aura; the net camera shows a three-quarter view while the ball holds a visible net bulge for several seconds. Frisina's unlimited Ultra override remains for testing. Visual approval and final meter tuning remain open.

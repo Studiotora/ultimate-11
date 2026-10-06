@@ -36,12 +36,12 @@ const VS=`varying vec2 vUv; void main(){ vUv=uv; gl_Position=projectionMatrix*mo
 const FS_AURA=NOISE+`
 uniform sampler2D map,hmap; uniform vec2 off,rep; uniform float time,amt,tight,front,lick,spd,zap,dark,hon; uniform vec3 col;
 varying vec2 vUv;
-float A(vec2 p){ p=clamp(p,0.002,0.998); vec2 q=off+p*rep; return max(texture2D(map,q).a,hon*texture2D(hmap,q).a); }
+float A(vec2 p){ if(p.x<0.0||p.x>1.0||p.y<0.0||p.y>1.0) return 0.0; vec2 q=off+p*rep; return max(texture2D(map,q).a,hon*texture2D(hmap,q).a); }
 void main(){
-  vec2 p=vUv;
+  vec2 p=(vUv-0.5)*1.30+0.5;  // enlarged aura quad leaves room beyond the sprite silhouette
   float n =fbm(vec2(p.x*7.0,p.y*3.2-time*2.8*spd));
   float n2=fbm(vec2(p.x*13.0+3.1,p.y*6.0-time*4.6*spd));
-  float r=mix(0.018+0.02*amt,0.008,tight)*(1.0+dark*0.9);
+  float r=mix(0.03+0.025*amt,0.012,tight)*(1.0+dark*0.9);
   vec2 jz=zap*vec2((h21(vec2(floor(time*26.0),floor(p.y*30.0)))-0.5)*0.03,0.0);
   float d=0.0;
   for(int i=0;i<8;i++){ float a=float(i)*0.7853982; d=max(d,A(p+jz+vec2(cos(a),sin(a)*0.71)*r)); }
@@ -54,7 +54,7 @@ void main(){
   float edge=max(d,up)*(1.0-core*mix(0.9,0.55,front));
   float flick=0.78+0.22*sin(time*27.0+p.y*38.0+n*6.0);
   flick=mix(flick,0.35+1.1*step(0.45,h21(vec2(floor(time*20.0),floor(p.y*14.0+n*3.0)))),zap*0.7);
-  float I=edge*amt*flick*(0.45+1.0*n)*mix(1.0,0.35,front);
+  float I=edge*amt*flick*(0.7+1.0*n)*mix(1.0,0.6,front);
   if(dark>0.5){ gl_FragColor=vec4(0.0,0.0,0.0,clamp(max(d,up)*amt*(0.6+0.6*n)*(1.0-core),0.0,0.92)); return; }
   vec3 c=mix(col,vec3(1.0),smoothstep(0.5,1.1,I));
   gl_FragColor=vec4(c*I*0.95,1.0);
@@ -334,10 +334,10 @@ function placeShooter(g,cam,S,amt,tight,rimAmt,flash,col){
   const ox=(0.5-cx)*sx, oy=(0.5-cy)*sy, bz=0.02*S;
   const bx=sp.position.x+e[0]*ox+e[4]*oy, by=sp.position.y+e[1]*ox+e[5]*oy, bzz=sp.position.z+e[2]*ox+e[6]*oy;
   auraB.position.set(bx-e[8]*bz,by-e[9]*bz,bzz-e[10]*bz);
-  if(auraD){ auraD.position.set(bx-e[8]*bz*1.5,by-e[9]*bz*1.5,bzz-e[10]*bz*1.5); auraD.quaternion.copy(cam.quaternion); auraD.scale.set(sx,sy,1); auraD.visible=amt>0.001&&!!AP.dark; }
+  if(auraD){ auraD.position.set(bx-e[8]*bz*1.5,by-e[9]*bz*1.5,bzz-e[10]*bz*1.5); auraD.quaternion.copy(cam.quaternion); auraD.scale.set(sx*1.3,sy*1.3,1); auraD.visible=amt>0.001&&!!AP.dark; }
   auraF.position.set(bx+e[8]*bz,by+e[9]*bz,bzz+e[10]*bz);
   body.position.set(bx,by,bzz);
-  for(const m of [auraB,auraF,body]){ m.quaternion.copy(cam.quaternion); m.scale.set(sx,sy,1); m.visible=true; }
+  for(const m of [auraB,auraF,body]){ m.quaternion.copy(cam.quaternion); m.scale.set(m===body?sx:sx*1.3,m===body?sy:sy*1.3,1); m.visible=true; }
   auraB.visible=auraF.visible=amt>0.001;
   sp.visible=false;
   if(g.sil&&g.sil.visible){ g.sil.visible=false; hidSil=g.sil; }
@@ -350,6 +350,70 @@ function setBloom(A,str){ const b=A&&A.bloom; if(!b) return; b.strength=str; b.r
    used to be sized off that diameter as if it were a radius - 2x too wide,
    which is what cut the comet's head off flat.) */
 function mockBall(A,S){ if(A&&A.ballMesh) A.ballMesh.scale.setScalar(0.4*S); }
+
+/* ═══ ULTRA CAMERAS (adapted from the approved ultra-shot mockup) ═══
+   The Ultra Shot uses its own cameras:
+     charge   low 3/4 shot with the captain near the center (fov 40 -> 34)
+     chase    grass-level shot behind the ball (7 cm high, fov 34), tightening in slow-mo
+     net      a 3/4 field-side view showing the net behind the ball, held ~3.8 s
+     aftermath  wide (fov 38) from beside the goal, looking back up the scorched strip
+   Authored in the mockup's metres, where the ball is 0.11 m in radius; the game's ball is 0.2*S, so
+   ball close-ups use KU = scale*S (scale 1.82); the opening uses chargeScale*S
+   to include the shooter, and the aftermath uses pitch scale S.
+   Tunables: P3D.ultra (ult11-pitch3d.js) - chaseDist, chaseHeight, chaseFov, netFov, netHold, afterHold, scale, chargeScale. */
+function UT(){ const u=(window.P3D&&P3D.ultra)||{}; return Object.assign({chaseDist:2.8,chaseHeight:0.07,chaseFov:34,netFov:26,netDist:6,netSide:5,netHold:3.8,afterHold:2.7,scale:1.82,chargeScale:2.4},u); }
+function setFov(cam,f){ if(Math.abs(cam.fov-f)>0.01){ cam.fov=f; cam.updateProjectionMatrix(); } }
+function ultraHoldCam(c,A,cam,S,k,dx,dz,side){
+  const U=UT(), KU=(U.chargeScale||2.4)*S, px=-dz*side, pz=dx*side, u=sm(0.1,0.95,k);
+  const b=c._bw||{x:A.swx,y:0.2*S,z:A.swz};
+  const back=lerp(0.9,0.45,u)*KU, sd=lerp(3.4,2.6,u)*KU, h=lerp(0.95,0.72,u)*S, shk=0.004*sm(0.2,0.9,k)*KU;
+  setFov(cam,lerp(40,34,u));
+  cam.position.set(b.x-dx*back+px*sd+(Math.random()-.5)*shk, Math.max(0.1*S,h)+(Math.random()-.5)*shk*0.5, b.z-dz*back+pz*sd+(Math.random()-.5)*shk);
+  const lz=lerp(0.9,0.25,u)*KU;
+  cam.lookAt(b.x-dx*lz, lerp(1.0,0.92,u)*S, b.z-dz*lz);
+  cam.updateMatrixWorld();
+}
+/* returns true when it placed the camera */
+function ultraFlyCam(c,A,cam,S,dx,dz,px,pz,b,dt,strike){
+  const U=UT(), KU=U.scale*S;
+  if(c.mode==='fly'){
+    // Ultra cuts straight from the charge to its grass-level chase. The
+    // ordinary strike camera used a 42-degree lens and broke that transition.
+    c._ufT=(c._ufT||0)+dt;
+    const ft=Math.min(1,c.ft||0), u=sm(0.64,0.9,ft), fovIn=sm(0,0.3,c._ufT);   // slow-mo tightening / a short push from the strike's fov
+    setFov(cam,lerp(34,lerp(U.chaseFov,U.chaseFov*0.85,u),fovIn));
+    const d=lerp(U.chaseDist,U.chaseDist*0.85,u)*KU, h=lerp(U.chaseHeight,U.chaseHeight+0.04,u)*KU, off=u*0.18*KU;
+    const P=[b.x-dx*d+px*off, Math.max(0.1*S,h), b.z-dz*d+pz*off], Lk=[b.x,b.y,b.z], lag=1-Math.exp(-dt*14);
+    if(!c._c3cam){ c._c3cam={p:P.slice(),l:Lk.slice()}; }
+    else { const q=c._c3cam; for(let i=0;i<3;i++){ q.p[i]+=(P[i]-q.p[i])*lag; q.l[i]+=(Lk[i]-q.l[i])*lag; } }
+    const q=c._c3cam; cam.position.set(q.p[0],q.p[1],q.p[2]); cam.lookAt(q.l[0],q.l[1],q.l[2]); cam.updateMatrixWorld();
+    return true;
+  }
+  if(c.mode==='out'&&c.isGoal){
+    const ot=c.ot||0, netT=Math.max(0,ot-(c._outDur||0)), nH=U.netHold, aH=U.afterHold;
+    if(netT<nH){                                                        // NET: three-quarter view from the field, with the back mesh behind the ball
+      const u=sm(0,nH,netT), lateral=(U.netSide+u*0.45)*S;
+      if(c._impact&&!c._netAim) c._netAim={x:b.x,y:b.y,z:b.z};
+      const aim=c._netAim||b;
+      setFov(cam,lerp(U.netFov,U.netFov*0.93,u));
+      cam.position.set(A.gwx-dx*U.netDist*S+px*lateral, (1.65+u*0.1)*S, A.gwz-dz*U.netDist*S+pz*lateral);
+      cam.lookAt(aim.x+dx*0.45*S,aim.y+0.1*S,aim.z); cam.updateMatrixWorld(); c._c3cam=null; return true;
+    }
+    {                                                                   // AFTERMATH: wide, from beside the goal, looking back up the burn
+      const u=sm(nH,nH+aH,netT);
+      setFov(cam,38);
+      const gx=A.gwx, gz=A.gwz;
+      // This is a view of the pitch, not a ball close-up: world distances use
+      // S alone. Scaling them by the ball-size correction hid the burn strip.
+      cam.position.set(gx-dx*lerp(5,6,u)*S+px*lerp(5.6,4.6,u)*S, lerp(1.7,1.5,u)*S, gz-dz*lerp(5,6,u)*S+pz*lerp(5.6,4.6,u)*S);
+      cam.lookAt(gx-dx*lerp(24,0,u)*S+px*lerp(0.4,2.5,u)*S, lerp(0,0.3,u)*S, gz-dz*lerp(24,0,u)*S+pz*lerp(0.4,2.5,u)*S); cam.updateMatrixWorld(); return true;
+    }
+  }
+  return false;
+}
+/* the ball's radius on screen, in px (the ball sphere is 0.4*S across) */
+function ultraRpx(A,b,S,bp,W,H){ const q=new T.Vector3(0,1,0).applyQuaternion(A.camera.quaternion).multiplyScalar(0.2*S);
+  const p=A.proj(b.x+q.x,b.y+q.y,b.z+q.z,W,H); return Math.abs(p.y-bp.y); }
 function mkAdd(o){ return Object.assign({transparent:true,depthWrite:false,blending:T.AdditiveBlending,side:T.DoubleSide,fog:false},o); }
 
 function build(A){
@@ -490,12 +554,13 @@ C3.holdFrame=function(c,rdt,A){
   fxT+=dt;
   COL.v.set(A.col||'#3ec8ff');
   setAura(A.aura);
+  if(c.ultra&&window.U11_ULTRAFX&&!c._ufx){ c._ufx=true; U11_ULTRAFX.begin('#'+COL.v.getHexString()); }   // the lightning takes the shooter's aura colour
   const HM=Math.max(0.24,((c.o&&c.o.holdMs)||2250)/1000);
   /* mockup: RUN-UP first (side-on, 0.9s), then the charge. The run-up
      only runs when game.js gave the hold room for it (superHoldMs). */
   const RUN=(HM>(C3.runUp||0)+1)?(C3.runUp||0):0, ct=c.t-RUN;
   if(ct<0) return runUpFrame(c,A,cam,S);
-  const k=Math.min(1,ct/(HM-RUN));
+  const k=Math.min(1,ct/(HM-RUN)); c._hmr=HM-RUN;
   const breath=k>=.82&&k<.92, release=k>=.92, tremble=k>=.45&&k<.82;
   const amt=k<.45?0.12+0.33*(k/.45):k<.82?0.45+0.4*((k-.45)/.37):k<.92?0.28:1.15;
   const tight=breath?1:0;
@@ -503,7 +568,7 @@ C3.holdFrame=function(c,rdt,A){
 
   /* ---- camera: orbit from beside him round to a low 3/4 front ---- */
   let dx=A.gwx-A.swx, dz=A.gwz-A.swz; const L=Math.hypot(dx,dz)||1; dx/=L; dz/=L;
-  const side=c._camSide||(c._camSide=(Math.random()<0.5?1:-1));
+  const side=c._camSide||(c._camSide=c.ultra?1:(Math.random()<0.5?1:-1));
   const px=-dz*side, pz=dx*side;
   const ks=sm(0,1,k);
   const a=lerp(1.3,0.7,ks);
@@ -514,6 +579,7 @@ C3.holdFrame=function(c,rdt,A){
                    A.swz+(dz*Math.cos(a)+pz*Math.sin(a))*r+(Math.random()-.5)*shk);
   cam.lookAt(A.swx+dx*0.4*S, lerp(1.35,1.5,k)*S, A.swz+dz*0.4*S);
   cam.updateMatrixWorld();
+  if(c.ultra) ultraHoldCam(c,A,cam,S,k,dx,dz,side);                   // the Ultra's own low side camera
 
   /* ---- shooter tremble (goes still in the held breath) ---- */
   const g=A.g, sp=g&&g.sprite;
@@ -525,7 +591,7 @@ C3.holdFrame=function(c,rdt,A){
 
   /* ---- shooter: mockup body (rim light + release flash) + aura ---- */
   C3._AU.lick.value=AP.lick; C3._AU.spd.value=AP.spd; C3._AU.zap.value=AP.zap;
-  placeShooter(g,cam,S,amt,tight,Math.min(1,amt),release?(k-.92)/.08*0.3:0,-1);
+  placeShooter(g,cam,S,c.ultra?amt*1.35:amt,tight,Math.min(1,amt),release?(k-.92)/.08*0.3:0,-1);
   /* ---- charged ball (mockup: shell 0.4, glow 0.22 x charge) ---- */
   mockBall(A,S);
   const b0=c._bw, chg=sm(.2,.9,k);
@@ -572,7 +638,7 @@ C3.holdFrame=function(c,rdt,A){
 
   /* ---- held breath: the whole frame drains of colour ---- */
   setFilter(breath?'saturate(0.2) brightness(0.78) contrast(1.15)':'');
-  setBloom(A,0.6);
+  setBloom(A,c.ultra?0.3:0.6);
   setVeil(C3.veil*(AP.veil||1)*(AP.dark?lerp(.75,1,k):1)*Math.min(1,c.t/0.3));
 
   drawOverlay(c,A,k,breath,release,tremble,S,ct);
@@ -585,18 +651,28 @@ C3.holdFrame=function(c,rdt,A){
    every frame, so the offset needs no cleanup) and the camera follows. */
 function runUpFrame(c,A,cam,S){
   let dx=A.gwx-A.swx, dz=A.gwz-A.swz; const L=Math.hypot(dx,dz)||1; dx/=L; dz/=L;
-  const side=c._camSide||(c._camSide=(Math.random()<0.5?1:-1));
+  const side=c._camSide||(c._camSide=c.ultra?1:(Math.random()<0.5?1:-1));
   const px=-dz*side, pz=dx*side;
   const r=Math.max(0,Math.min(1,c.t/C3.runUp)), back=6.8*S*Math.pow(1-r,1.6);   // x=lerp(-8,PX,1-(1-r)^1.6)
   const g=A.g, ox=-dx*back, oz=-dz*back;
   if(g&&g.sprite){ g.sprite.position.x+=ox; g.sprite.position.z+=oz;
     for(const o of [g.shadow,g.sil]) if(o){ o.position.x+=ox; o.position.z+=oz; } }
   const hx=A.swx+ox, hz=A.swz+oz;
-  cam.position.set(hx+dx*1.2*S+px*7.2*S, 1.35*S, hz+dz*1.2*S+pz*7.2*S);
-  cam.lookAt(hx+dx*2.6*S, 1.1*S, hz+dz*2.6*S);
+  if(c.ultra){
+    // Continue the mockup's low boot-and-ball shot into the charge without
+    // cutting through the ordinary super-shot camera first.
+    const KU=(UT().chargeScale||2.4)*S, b=c._bw||{x:A.swx,y:0.2*S,z:A.swz};
+    const lead=back;
+    setFov(cam,40);
+    cam.position.set(b.x-dx*(0.9*KU+lead)+px*3.4*KU,0.95*S,b.z-dz*(0.9*KU+lead)+pz*3.4*KU);
+    cam.lookAt(b.x-dx*(0.9*KU+lead),1.0*S,b.z-dz*(0.9*KU+lead));
+  }else{
+    cam.position.set(hx+dx*1.2*S+px*7.2*S, 1.35*S, hz+dz*1.2*S+pz*7.2*S);
+    cam.lookAt(hx+dx*2.6*S, 1.1*S, hz+dz*2.6*S);
+  }
   cam.updateMatrixWorld();
   mockBall(A,S);
-  setFilter(''); setBloom(A,0.6); setVeil(C3.veil*Math.min(1,c.t/0.3));
+  setFilter(''); setBloom(A,c.ultra?0.3:0.6); setVeil(C3.veil*Math.min(1,c.t/0.3));
   if(A.cv&&A.ctx) A.ctx.clearRect(0,0,A.cv.width,A.cv.height);
   return true;
 }
@@ -635,6 +711,8 @@ function drawOverlay(c,A,k,breath,release,tremble,S,ct){
       g.shadowColor=rgba(C,1); g.shadowBlur=12*lw; dr(3,rgba(C,0.85)); g.shadowBlur=0; dr(1.2,'rgba(255,255,255,0.95)'); }
   }
   g.restore();
+  // ULTRA: the lightning flipbook on the ball (under the title)
+  if(c.ultra&&window.U11_ULTRAFX&&c._bw){ const bp=A.proj(c._bw.x,c._bw.y,c._bw.z,W,H); U11_ULTRAFX.hold(c,A,k,c._hmr||2.4,bp,ultraRpx(A,c._bw,S,bp,W,H)); }
   // name slash
   const nk=ct/0.55;
   if(nk>0&&nk<1.6){
@@ -716,7 +794,7 @@ function fireImpact(c,imp){
   auraImpact(A,S,bx,by,bz);
   window.U11DBG&&U11DBG('[C3] impact');
 }
-C3.needsCanvas=function(c){ return !!((imp&&imp.t<0.4)||(c&&c.mode==='fly')||(arr&&arr.t<0.7)||C3._dirty); };
+C3.needsCanvas=function(c){ return !!((imp&&imp.t<0.4)||(c&&c.mode==='fly')||(arr&&arr.t<0.7)||(c&&c.ultra&&c.mode==='out'&&c.isGoal&&c.ot<(c._outDur||0)+UT().netHold)||C3._dirty); };
 
 /* ═══ FLY FRAME ═══ every frame after the kick (fly / wait / out), after the
    camera is placed. Runs the impact aftermath: debris, shockwaves, the
@@ -730,12 +808,14 @@ C3.flyFrame=function(c,rdt,A){
   if(A.cv&&A.ctx){ A.ctx.clearRect(0,0,A.cv.width,A.cv.height); C3._dirty=false; }
   comet(c,dt,A);
   arrival(c,dt,A);
-  if(!imp){ setBloom(A,arr&&arr.goal&&arr.t<0.4?0.9:0.6); mockBall(A,fl?fl.S:A.hh/1.8); return; }
+  if(c.ultra&&window.U11_ULTRAFX&&A.cv&&A.ctx&&c._bw){ C3._dirty=true; const W=A.cv.width,H=A.cv.height, bp=A.proj(c._bw.x,c._bw.y,c._bw.z,W,H);
+    U11_ULTRAFX.fly(c,dt,A,bp,ultraRpx(A,c._bw,fl?fl.S:A.hh/1.8,bp,W,H),{arr}); }
+  if(!imp){ setBloom(A,c.ultra?(arr&&arr.goal&&arr.t<0.4?0.5:0.25):(arr&&arr.goal&&arr.t<0.4?0.9:0.6)); mockBall(A,fl?fl.S:A.hh/1.8); return; }
   const S=imp.S; imp.t+=dt;
   const e=imp.t;
   if(e>=0&&!imp.fired) fireImpact(c,imp);
   mockBall(A,S);
-  setBloom(A,e>=0&&e<0.3?1.0:0.6);
+  setBloom(A,c.ultra?(e>=0&&e<0.3?0.55:0.25):(e>=0&&e<0.3?1.0:0.6));
   /* shooter through the strike: cols 7,8 before contact, then the game's
      own contact/follow-through frames; rim + aura bleed off (mockup) */
   const sa=Math.max(0,0.9-(e+0.2)*3.2);
@@ -786,7 +866,7 @@ function histAt(H,t,out){
 function comet(c,dt,A){
   const b=c._bw; if(!b) return;
   if(!fl){ fl={H:[],now:0,S:A.hh/1.8,prevY:b.y,rising:false,apexDone:false,op:1}; }
-  const S=fl.S, C=COL.v;
+  const S=fl.S, C=COL.v, ultraGain=c.ultra?0.38:1;
   if(c._hitStop>0){ /* freeze: the tail holds its shape */ }
   else fl.now+=dt;
   const H=fl.H, last=H[H.length-1];
@@ -818,7 +898,7 @@ function comet(c,dt,A){
        bigger, so the head reads as a round light round the ball at any angle. */
     trail.update(A.camera,s=>{ const x=Math.min(1,s/0.12), cap=Math.max(0.18,Math.sqrt(Math.max(0,1-(1-x)*(1-x))));
       return BR*(1.9*(1-s)+0.25)*(1+0.12*Math.sin(performance.now()/25+s*12))*cap; });
-    trail.mat.uniforms.op.value=fl.op;
+    trail.mat.uniforms.op.value=fl.op*ultraGain;
     const curve=(c.style&&c.style.kind==='curve')||c.arc==='drive', tt=performance.now()/1000;
     const tv=new T.Vector3(), up=new T.Vector3(), q=new T.Vector3();
     for(let i=0;i<TRN;i++){
@@ -830,14 +910,14 @@ function comet(c,dt,A){
       strandB.pts[i].copy(trail.pts[i]).addScaledVector(up,-Math.cos(ang)*rr).addScaledVector(q,-Math.sin(ang)*rr);
     }
     strandA.update(A.camera,s=>BR*0.35*(1-s)); strandB.update(A.camera,s=>BR*0.35*(1-s));
-    strandA.mat.uniforms.op.value=strandB.mat.uniforms.op.value=fl.op*0.9;
+    strandA.mat.uniforms.op.value=strandB.mat.uniforms.op.value=fl.op*0.9*ultraGain;
   }
   const bd=BR;
   shell.visible=bglow.visible=vis;
-  shell.position.set(b.x,b.y,b.z); shell.scale.setScalar(bd*(1.45+0.15*Math.sin(performance.now()/33)));
-  shell.material.uniforms.op.value=0.9*fl.op;
-  if(c.mode==='fly'&&imp&&imp.t<0){ shell.material.uniforms.op.value=0.4; bglow.material.opacity=0.22; bglow.scale.setScalar(1.0*S); }
-  bglow.material.color.copy(C); bglow.position.set(b.x,b.y,b.z); bglow.scale.setScalar(2.9*S); bglow.material.opacity=0.8*fl.op;
+  shell.position.set(b.x,b.y,b.z); shell.scale.setScalar(bd*(c.ultra?1.0:1.45+0.15*Math.sin(performance.now()/33)));
+  shell.material.uniforms.op.value=0.9*fl.op*ultraGain;
+  bglow.material.color.copy(C); bglow.position.set(b.x,b.y,b.z); bglow.scale.setScalar((c.ultra?1.5:2.9)*S); bglow.material.opacity=0.8*fl.op*ultraGain;
+  if(c.mode==='fly'&&imp&&imp.t<0){ shell.material.uniforms.op.value=0.4*ultraGain; bglow.material.opacity=0.22*ultraGain; bglow.scale.setScalar(1.0*S); }
   // sparks off the comet + dust where it skims the turf
   if(c.mode==='fly'&&!(c._hitStop>0)&&dt>0){
     for(let i=0;i<5;i++){ const w=Math.random()<.4;
@@ -886,6 +966,7 @@ C3.arrive=function(c,A){
   const S=A.hh/1.8, C=COL.v;
   arr={t:0,goal:!!A.isGoal};
   c._hitStop=Math.max(c._hitStop||0,A.isGoal?0.1:0.08);
+  if(c.ultra){ c._hitStop=Math.max(c._hitStop,0.3); try{ window.U11_ULTRAFX&&U11_ULTRAFX.sfx('impact'); }catch(e){} }
   if(A.isGoal){
     try{ A.netHit&&A.netHit(); }catch(e){}
     fireWave(waves[3],A.bx,A.by,A.bz,7*S,0.55,0.1);
@@ -928,6 +1009,7 @@ C3.flyCam=function(c,rdt,A){
   const along=(b.x-A.swx)*dx+(b.z-A.swz)*dz, lat=(b.x-A.swx)*px+(b.z-A.swz)*pz;
   let P,Lk,lag;
   const strike=imp&&imp.t<0.35&&c.mode==='fly';
+  if(c.ultra&&ultraFlyCam(c,A,cam,S,dx,dz,px,pz,b,dt,strike)) return true;   // grass-level chase, long-lens net shot, aftermath
   if(strike){
     P=[b.x-dx*0.3*S+px*3.7*S, 0.55*S, b.z-dz*0.3*S+pz*3.7*S];
     Lk=[b.x+dx*0.5*S, 0.85*S, b.z+dz*0.5*S]; lag=1;
