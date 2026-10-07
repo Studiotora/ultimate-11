@@ -9135,11 +9135,15 @@ function duelPadInput(){
   if(G.D && G.D._qte) return;                  // the keeper QTE reads the buttons itself
   if(G.pm){ duelPadAim(); return; }        // picking a pass target, not a move
   if(_dpAim){ _dpAim=null; duelPadAimPaint(null); }
+  /* the row must be ON OFFER before the press is consumed (2026-10-06, author: "the controller
+     buttons don't work during duels"): duelPressed() uses a press up, and the attacking moves
+     come first in DUEL_ACT_INPUT - so on defence Shoot ate the X meant for Tackle (Pass ate
+     Intercept, Dribble ate Block, and the same for the keeper's Save / Punch). */
   for(const id in DUEL_ACT_INPUT){
-    if(!duelPressed(DUEL_ACT_INPUT[id]))continue;
     const row=document.querySelector('#abtns .dact3d[data-act="'+id+'"],'+
                                      '#dbtns .dact3d[data-act="'+id+'"]');
     if(!row)continue;                      // that move is not on offer this duel
+    if(!duelPressed(DUEL_ACT_INPUT[id]))continue;
     G._duelT=Date.now();                   // input keeps the watchdog warm
     G.D._padClick=true;
     try{row.click();}finally{G.D._padClick=false;} // selA / selD own everything after this
@@ -9762,11 +9766,12 @@ function confirmDuel(){
   if(G.D.ak && G.D.defA){
     G.D._resolveStarted=true;stopAllCountdowns();
     const _v2=!!(window.P3D&&P3D.superCine2&&P3D.superCine2.active());
-    if(isSuperAtk(G.D.ak)&&!_v2){
+    const _ownCine=(G.D.ak==='super-pass'||G.D.ak==='super-dribble'||G.D.ak==='super-one-two')&&!!(window.P3D&&P3D.on&&P3D.superCine2);   // these supers have their own 3D mini cinematics now
+    if(isSuperAtk(G.D.ak)&&!_v2&&!_ownCine){
       const spec=G.D.ak==='special'?getSpecial(G.D.carrier):superMeta(G.D.ak,G.D.carrier);
       if(spec){clearInterval(G.di);showSpecialCutscene(G.D.carrier,spec,()=>{if(G.D===D)gkQteThen(finish);});return;}
     }
-    if(isSuperDef(G.D.defA) && G.D.defA!=='supersave'){
+    if(isSuperDef(G.D.defA) && G.D.defA!=='supersave' && !((G.D.defA==='super-tackle'||G.D.defA==='super-intercept'||G.D.defA==='super-block')&&window.P3D&&P3D.on&&P3D.superCine2)){   // the super tackle has its own 3D cinematic
       const spec=SUPER_NAMES[G.D.defA];
       if(spec){clearInterval(G.di);showSpecialCutscene(G.D.def,spec,finish);return;}
     }
@@ -10356,11 +10361,18 @@ function resDuel(){
           closeDuel();                                          // the v2 cinematic owns it now
         } else afSave(ds);
       }
+      else if(defA==='super-block'&&superBlockFieldCine(as,ds,dk));     // a shot smashed off a super block
       else afTurn(ds);
     }
+    else if(ak==='super-pass'&&win&&superPassCine(as,pk));               // the super pass flies in its own mini cinematic
     else if((ak==='pass'||ak==='super-pass')&&win)afPass(as,pk);
+    else if(ak==='super-one-two'&&win&&superOneTwoCine(as,ds,pk,dk,carrier));   // the super 1-2 plays out in its own mini cinematic
     else if((ak==='one-two'||ak==='super-one-two')&&win)afOneTwo(as,pk,carrier);
+    else if(win&&ak==='super-dribble'&&superDribbleCine(as,ds,dk,carrier));   // the super dribble jumps the tackle in its own mini cinematic
     else if(win)afSucc(as,carrier);
+    else if(defA==='super-block'&&superBlockFieldCine(as,ds,dk));          // the super block: he throws himself in front of it
+    else if(defA==='super-intercept'&&superInterceptCine(as,ds,dk,ak,pk));   // the super intercept: the ball is cut out in flight
+    else if(defA==='super-tackle'&&superTackleCine(as,ds,dk));            // the super tackle plays out in its own short cinematic
     else afTurn(ds);
     }catch(err){
       // RECOVERY: never let a resolution error soft-lock the match
@@ -10625,6 +10637,170 @@ function afSave(ds){
   } else {
     runResolve();
   }
+}
+/* SUPER PASS CINEMATIC (author 2026-10-06: "a small cinematic similar to the super shot so we see
+   the ball actually flying to the designated player" - the first of the supers, one by one).
+   The super-shot cinematic in PASS mode (ult11-pitch3d.js superCine2.start({pass})): a 1.5 s
+   charge in the passer's aura with the move's name, the strike, the ball flying with his trail to
+   the team-mate under a chase camera, a burst as he traps it - then play resumes with him on the
+   ball. Returns false (caller falls back to the normal afPass) when it cannot run: no 3D, a
+   cinematic already on, no receiver, or the receiver is offside (afPass then calls it). */
+function superPassCine(s,tk){
+  if(!(window.P3D&&P3D.on&&P3D.superCine2)||(P3D.cineActive&&P3D.cineActive())) return false;
+  if(!tk||!PP[s]||!PP[s][tk]) tk=bestTeammateFor(s,G.ck,'pass')||validOutfieldKeys(s).find(k=>k!==G.ck)||null;
+  if(!tk||!PP[s][tk]||tk===G.ck) return false;
+  try{ if(checkOffside(s,tk)) return false; }catch(e){}
+  const ds=s==='h'?'a':'h', passer=sq(s)[G.ck], recv=sq(s)[tk], gen=G.goalGen, hold=1500;
+  let nm='SUPER PASS'; try{ nm=String(superMeta('super-pass',passer).l||nm).toUpperCase(); }catch(e){}
+  if(!P3D.superCine2.start({as:s,sk:G.ck,ds,dir:dirFor(s),holdMs:hold,pass:tk,passName:nm,
+      asKey:(s==='h'?selHome:selAway),dsKey:(ds==='h'?selHome:selAway)})) return false;
+  closeDuel(); clearInterval(G.di); G_moveTarget=null; G_laneTarget=null;
+  G.phase='pass_anim'; G._cineHold=true;
+  try{ if(window.SFX&&SFX.windup){ SFX.windupStop&&SFX.windupStop(); SFX.windup(hold/1000+0.1); } }catch(e){}
+  const done=()=>{                                         // he has it: back to play, on his feet
+    G._cineHold=false; if(G.goalGen!==gen) return;
+    const rp=PP[s]&&PP[s][tk]; setC(tk,s);
+    if(rp){ ball.x=rp.x; ball.y=rp.y; ball.tx=rp.x; ball.ty=rp.y; ball.bz=0; }
+    _stat(s,'passA'); _stat(s,'passC');
+    resume(s,((passer&&passer.name)||'').split('.').pop()+' — '+nm+' → '+((recv&&recv.name)||'').split('.').pop()+'!');
+  };
+  setTimeout(()=>{
+    if(G.goalGen!==gen||!G._cineHold){ try{P3D.superCine2.abort();}catch(e){} G._cineHold=false; return; }
+    try{ if(window.SFX){ SFX.windupStop&&SFX.windupStop(); SFX.ballKick(0.9); SFX.whoosh&&SFX.whoosh(0.8); } }catch(e){}
+    P3D.superCine2.fly(()=>{},{decided:true});
+    P3D.superCine2.finish({isGoal:false,onDone:done});
+  },hold);
+  setTimeout(()=>{ if(G.goalGen===gen&&G._cineHold&&G.phase==='pass_anim'){ try{P3D.superCine2.abort();}catch(e){} done(); } },12000);   // watchdog
+  return true;
+}
+/* SUPER DRIBBLE CINEMATIC (author 2026-10-06: "we should see first the opponent arriving in tackle
+   and then our player jump with the ball and avoid him"). DRIBBLE mode on the super cinematic
+   (superCine2.start({dribble})): a 1.1 s charge in his aura with the move's name, the defender slides
+   in from the front, the dribbler jumps him with the ball (slow-mo as they cross, a burst), lands clear.
+   Then afSucc as always (he is put back at the start so afSucc's step forward lands where he landed).
+   Returns false (caller falls back to afSucc) when it cannot run. */
+function superDribbleCine(as,ds,dk,carrier){
+  if(!(window.P3D&&P3D.on&&P3D.superCine2)||(P3D.cineActive&&P3D.cineActive())) return false;
+  const ck=G.ck, cp=PP[as]&&PP[as][ck]; if(!cp||!dk||!PP[ds]||!PP[ds][dk]) return false;
+  const s0={x:cp.x,y:cp.y}, gen=G.goalGen, hold=1100;
+  let nm='SUPER DRIBBLE'; try{ nm=String(superMeta('super-dribble',carrier).l||nm).toUpperCase(); }catch(e){}
+  const done=()=>{
+    G._cineHold=false; if(G.goalGen!==gen) return;
+    const p=PP[as]&&PP[as][ck]; if(p){ p.x=s0.x; p.y=s0.y; }          // afSucc takes him forward from here
+    const dp=PP[ds]&&PP[ds][dk]; if(dp&&PT[ds]) PT[ds][dk]={x:dp.x,y:dp.y};  // the tackler stays where his slide ended
+    G.ck=ck; G.poss=as; afSucc(as,carrier);
+  };
+  if(!P3D.superCine2.start({as,sk:ck,ds,dir:dirFor(as),holdMs:hold,dribble:dk,dribName:nm,onDone:done,
+      asKey:(as==='h'?selHome:selAway),dsKey:(ds==='h'?selHome:selAway)})) return false;
+  closeDuel(); clearInterval(G.di); G_moveTarget=null; G_laneTarget=null;
+  G.phase='pass_anim'; G._cineHold=true;
+  try{ if(window.SFX&&SFX.windup){ SFX.windupStop&&SFX.windupStop(); SFX.windup(hold/1000+0.1); } }catch(e){}
+  setTimeout(()=>{ if(G.goalGen===gen&&G._cineHold&&G.phase==='pass_anim'){ try{P3D.superCine2.abort();}catch(e){} done(); } },12000);   // watchdog
+  return true;
+}
+/* SUPER 1-2 CINEMATIC (author 2026-10-06: "that player passes the ball, the team-mate repasses it right
+   away, we see the player running and surpassing the enemy, the camera slightly from above"). ONE-TWO mode
+   on the super cinematic (superCine2.start({onetwo})): a 1 s charge with the move's name, the pass, the
+   first-time return, the run past the lunging defender (slow-mo), the collect + burst at E - where afOneTwo
+   puts him; then afOneTwo as always (he is put back at the start first). False -> the normal afOneTwo. */
+function superOneTwoCine(as,ds,tk,dk,carrier){
+  if(!(window.P3D&&P3D.on&&P3D.superCine2)||(P3D.cineActive&&P3D.cineActive())) return false;
+  const ck=G.ck, cp=PP[as]&&PP[as][ck];
+  if(!tk||!PP[as][tk]||tk===ck) tk=bestTeammateFor(as,ck,'one-two')||bestTeammateFor(as,ck,'pass')||null;
+  if(!cp||!tk||!PP[as][tk]||!dk||!PP[ds]||!PP[ds][dk]) return false;
+  const c0={x:cp.x,y:cp.y}, gen=G.goalGen, hold=1000;
+  let nm='SUPER 1-2'; try{ nm=String(superMeta('super-one-two',carrier).l||nm).toUpperCase(); }catch(e){}
+  const done=()=>{
+    G._cineHold=false; if(G.goalGen!==gen) return;
+    const p=PP[as]&&PP[as][ck]; if(p){ p.x=c0.x; p.y=c0.y; }          // afOneTwo takes him forward from here
+    const dp=PP[ds]&&PP[ds][dk]; if(dp&&PT[ds]) PT[ds][dk]={x:dp.x,y:dp.y};
+    G.ck=ck; G.poss=as; afOneTwo(as,tk,carrier);
+  };
+  if(!P3D.superCine2.start({as,sk:ck,ds,dir:dirFor(as),holdMs:hold,onetwo:{tk,dk},o12Name:nm,onDone:done,
+      asKey:(as==='h'?selHome:selAway),dsKey:(ds==='h'?selHome:selAway)})) return false;
+  closeDuel(); clearInterval(G.di); G_moveTarget=null; G_laneTarget=null;
+  G.phase='pass_anim'; G._cineHold=true;
+  try{ if(window.SFX&&SFX.windup){ SFX.windupStop&&SFX.windupStop(); SFX.windup(hold/1000+0.1); } }catch(e){}
+  setTimeout(()=>{ if(G.goalGen===gen&&G._cineHold&&G.phase==='pass_anim'){ try{P3D.superCine2.abort();}catch(e){} done(); } },14000);   // watchdog
+  return true;
+}
+/* SUPER TACKLE CINEMATIC (author 2026-10-07: "start directly with the player coming in with the tackle,
+   the defensive ones can be a little faster"). TACKLE mode on the super cinematic, run from the TACKLER's
+   side (superCine2.start({as:ds, sk:dk, tackle:{vk}})): no charge - the name flashes on the banner while he
+   slides in, the contact in a short slow-mo + burst, the carrier pitches onto the grass, the ball is his.
+   ~1.4 s, then afTurn as always. False -> the normal afTurn. */
+/* SUPER INTERCEPT CINEMATIC (author 2026-10-07: "ball already moving, the player jumps in and stops it").
+   INTERCEPT mode, run from the interceptor's side: no charge, the name on the banner; the carrier's pass is
+   already on its way (to the team-mate he picked, else forward), the interceptor jumps across the line and
+   kills it (short slow-mo + burst), it drops at his feet. ~1.4 s, then afTurn. False -> the normal afTurn. */
+/* SUPER BLOCK CINEMATIC (author 2026-10-07: "use the block sprite; make sure the GK is visible too").
+   BLOCK mode, run from the blocker's side: the carrier strikes at goal, the blocker throws himself into the
+   line in the block pose, the ball smashes into him (short slow-mo + burst) and drops at his feet - from
+   behind the shooter with the keeper and goal in shot. ~1.5 s, then afTurn. False -> the normal afTurn. */
+function superBlockFieldCine(as,ds,dk){
+  if(!(window.P3D&&P3D.on&&P3D.superCine2)||(P3D.cineActive&&P3D.cineActive())) return false;
+  const vk=G.ck, vp=PP[as]&&PP[as][vk], dp=PP[ds]&&PP[ds][dk], blocker=sq(ds)[dk];
+  if(!vp||!dp||!blocker) return false;
+  const gen=G.goalGen, kp=PP[ds]&&PP[ds].GK, gx=kp?kp.x:goalXFor(as), gy=kp?kp.y:H*0.5;
+  const L=Math.hypot(gx-vp.x,gy-vp.y)||1, dd=Math.min(W*0.06,L*0.4), bx=vp.x+(gx-vp.x)/L*dd, by=vp.y+(gy-vp.y)/L*dd;
+  const rx=bx-(gx-vp.x)/L*W*0.007, ry=by-(gy-vp.y)/L*W*0.007;   // the ball drops at the blocker's feet
+  let nm='SUPER BLOCK'; try{ nm=String(superMeta('super-block',blocker).l||nm).toUpperCase(); }catch(e){}
+  const done=()=>{
+    G._cineHold=false; if(G.goalGen!==gen) return;
+    const d=PP[ds]&&PP[ds][dk]; if(d){ d.x=bx; d.y=by; if(PT[ds]) PT[ds][dk]={x:bx,y:by}; }   // he has it where it dropped
+    ball.x=rx; ball.y=ry; ball.tx=rx; ball.ty=ry;
+    afTurn(ds);
+  };
+  if(!P3D.superCine2.start({as:ds,sk:dk,ds:as,dir:dirFor(ds),holdMs:240,block:{vk},blkName:nm,onDone:done,
+      asKey:(ds==='h'?selHome:selAway),dsKey:(as==='h'?selHome:selAway)})) return false;
+  closeDuel(); clearInterval(G.di); G_moveTarget=null; G_laneTarget=null;
+  G.phase='pass_anim'; G._cineHold=true;
+  setTimeout(()=>{ if(G.goalGen===gen&&G._cineHold&&G.phase==='pass_anim'){ try{P3D.superCine2.abort();}catch(e){} done(); } },8000);   // watchdog
+  return true;
+}
+function superInterceptCine(as,ds,dk,ak,pk){
+  if(!(window.P3D&&P3D.on&&P3D.superCine2)||(P3D.cineActive&&P3D.cineActive())) return false;
+  const vk=G.ck, vp=PP[as]&&PP[as][vk], dp=PP[ds]&&PP[ds][dk], icpr=sq(ds)[dk];
+  if(!vp||!dp||!icpr) return false;
+  let tp=(pk&&PP[as][pk]&&pk!==vk)?PP[as][pk]:null;
+  if(!tp){ const k=bestTeammateFor(as,vk,'pass'); if(k&&PP[as][k]) tp=PP[as][k]; }
+  const dir=dirFor(as);
+  let tx=tp?tp.x:vp.x+dir*W*0.18, ty=tp?tp.y:vp.y;
+  { const L=Math.hypot(tx-vp.x,ty-vp.y); if(L<W*0.1||L>W*0.35){ const k=(L<W*0.1?W*0.16:W*0.3)/(L||1); tx=vp.x+(tx-vp.x)*k; ty=vp.y+(ty-vp.y)*k; } }
+  const ix=vp.x+(tx-vp.x)*0.55, iy=vp.y+(ty-vp.y)*0.55, gen=G.goalGen;
+  let nm='SUPER INTERCEPT'; try{ nm=String(superMeta('super-intercept',icpr).l||nm).toUpperCase(); }catch(e){}
+  const done=()=>{
+    G._cineHold=false; if(G.goalGen!==gen) return;
+    const d=PP[ds]&&PP[ds][dk]; if(d){ d.x=ix; d.y=iy; if(PT[ds]) PT[ds][dk]={x:ix,y:iy}; }   // he has it where he cut it out
+    ball.x=ix; ball.y=iy; ball.tx=ix; ball.ty=iy;
+    afTurn(ds);
+  };
+  if(!P3D.superCine2.start({as:ds,sk:dk,ds:as,dir:dirFor(ds),holdMs:240,intercept:{vk,tx,ty},icpName:nm,onDone:done,
+      asKey:(ds==='h'?selHome:selAway),dsKey:(as==='h'?selHome:selAway)})) return false;
+  closeDuel(); clearInterval(G.di); G_moveTarget=null; G_laneTarget=null;
+  G.phase='pass_anim'; G._cineHold=true;
+  try{ if(window.SFX&&SFX.shortPass) SFX.shortPass(); }catch(e){}
+  setTimeout(()=>{ if(G.goalGen===gen&&G._cineHold&&G.phase==='pass_anim'){ try{P3D.superCine2.abort();}catch(e){} done(); } },8000);   // watchdog
+  return true;
+}
+function superTackleCine(as,ds,dk){
+  if(!(window.P3D&&P3D.on&&P3D.superCine2)||(P3D.cineActive&&P3D.cineActive())) return false;
+  const vk=G.ck, vp=PP[as]&&PP[as][vk], dp=PP[ds]&&PP[ds][dk], tackler=sq(ds)[dk];
+  if(!vp||!dp||!tackler) return false;
+  const v0={x:vp.x,y:vp.y}, gen=G.goalGen;
+  let nm='SUPER TACKLE'; try{ nm=String(superMeta('super-tackle',tackler).l||nm).toUpperCase(); }catch(e){}
+  const done=()=>{
+    G._cineHold=false; if(G.goalGen!==gen) return;
+    const p=PP[as]&&PP[as][vk]; if(p){ p.x=v0.x; p.y=v0.y; }
+    const d=PP[ds]&&PP[ds][dk]; if(d){ d.x=v0.x+dirFor(as)*W*0.012; d.y=v0.y; if(PT[ds]) PT[ds][dk]={x:d.x,y:d.y}; }   // he comes away with it, at the spot
+    afTurn(ds);
+  };
+  if(!P3D.superCine2.start({as:ds,sk:dk,ds:as,dir:dirFor(ds),holdMs:240,tackle:{vk},tklName:nm,onDone:done,
+      asKey:(ds==='h'?selHome:selAway),dsKey:(as==='h'?selHome:selAway)})) return false;
+  closeDuel(); clearInterval(G.di); G_moveTarget=null; G_laneTarget=null;
+  G.phase='pass_anim'; G._cineHold=true;
+  setTimeout(()=>{ if(G.goalGen===gen&&G._cineHold&&G.phase==='pass_anim'){ try{P3D.superCine2.abort();}catch(e){} done(); } },8000);   // watchdog
+  return true;
 }
 function afPass(s,tk){
   /* launchPass returns early without a target and leaves the phase where it

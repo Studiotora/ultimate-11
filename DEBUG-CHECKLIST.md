@@ -81,6 +81,31 @@ On the top-bar icons no menu item is lit. Coming back to the home screen starts 
 
 **Verified headless:** names resolve for Italy, Germany, Brazil and Japan players.
 
+### 5. Pause → Team Management showed the match busts + a PAD debug line — ✅
+
+The match HUD now hides whenever another screen is up, and the pad readout is debug-only (Settings → PERF OVERLAY). Verified headless.
+
+### 6. Black pitch after pause (Opera GX, during a corner) — 🟡
+
+**Status:** not reproduced headless (pause → Team Management → substitution → resume renders fine).
+
+**Guards added:**
+- WebGL context-loss recovery.
+- World-layer / canvas-size self-heal.
+- Protected frame update.
+
+**Check live:** if it happens again, open the console (F12) and type `P3D.health()`. Send me the line. `contextLost` / `lostCount` will say whether the browser dropped the 3D context.
+
+### 7. Controller buttons dead in duels (after the 2026-10-06 duel-input update) — ✅
+
+**Cause:** a press is now used up once. The attacking moves were checked first, so on defence Shoot / Pass / Dribble ate the press meant for Tackle / Intercept / Block (and Save / Punch for the keeper).
+
+**Fix** (`game.js` v266): only a move that is on the menu uses up the press.
+
+**Verified headless** with a mocked pad: attack, defence and keeper duels all select and confirm.
+
+**Check live:** defend a duel with the controller (X / □ = Tackle, then again to confirm).
+
 ---
 
 ## Open / to watch

@@ -20,15 +20,48 @@ var SH_GLSL='uniform mat4 shInv['+SH_MAX+'];uniform float shN;uniform vec3 shDar
  'vec3 shLight(vec3 w){return shN<0.5?shTint:shDark+shLit*shLitAt(w);}\n';
 var api={status:'idle',error:null};
 api.shaftUniforms=function(T){return shaftUniforms(T);};
+/* SURFACE DETAIL (2026-10-07, author: "texture details of the stadium"). The GLB has no UVs, so the detail is
+   projected in world space from three sides (triplanar) and multiplied into the flat colours:
+   R = poured-concrete grit + stains, G = corrugated roof sheeting, B = panel / expansion-joint seams.
+   Mode per material: 1 concrete + terracing, 2 roof, 3 painted steel (fine grit only), 0 none. */
+var DET_TEX=null;
+function detailTex(T){
+ if(DET_TEX)return DET_TEX;var S=512,c=document.createElement('canvas');c.width=c.height=S;var x=c.getContext('2d');
+ function layer(n,alpha){var t=document.createElement('canvas');t.width=t.height=n;var g=t.getContext('2d'),d=g.createImageData(n,n);
+  for(var i=0;i<d.data.length;i+=4){var v=Math.random()*255;d.data[i]=d.data[i+1]=d.data[i+2]=v;d.data[i+3]=255;}g.putImageData(d,0,0);
+  x.globalAlpha=alpha;x.imageSmoothingEnabled=true;for(var oy=-1;oy<=1;oy++)for(var ox=-1;ox<=1;ox++)x.drawImage(t,ox*S,oy*S,S,S);}
+ x.fillStyle='#808080';x.fillRect(0,0,S,S);layer(8,0.55);layer(32,0.35);layer(128,0.25);layer(512,0.18);   // value noise, tiles
+ var grit=x.getImageData(0,0,S,S);
+ var out=x.createImageData(S,S),o=out.data,gd=grit.data;
+ for(var y=0;y<S;y++)for(var xx=0;xx<S;xx++){var i=(y*S+xx)*4;
+  o[i]=gd[i];                                                       // R: grit
+  var cr=0.5+0.5*Math.cos(xx/S*Math.PI*2*24);o[i+1]=Math.round(90+150*Math.pow(cr,1.6)+(gd[i]-128)*0.2);   // G: corrugation
+  var sx=Math.min(xx%128,128-xx%128),sy=Math.min(y%256,256-y%256),seam=Math.min(sx,sy);
+  o[i+2]=seam<1.5?40:(seam<3?150:255);o[i+3]=255;}                   // B: seams
+ x.putImageData(out,0,0);
+ var t=new T.CanvasTexture(c);t.wrapS=t.wrapT=T.RepeatWrapping;t.generateMipmaps=true;t.minFilter=T.LinearMipmapLinearFilter;t.anisotropy=8;
+ return (DET_TEX=t);
+}
+var DET_GLSL='uniform sampler2D uDet;uniform float uDetMode;varying vec3 vShN;\n'+
+ 'vec3 detAt(vec3 p,vec3 n){vec3 w=pow(abs(n),vec3(4.0));w/=(w.x+w.y+w.z+1e-5);'+
+ 'return texture2D(uDet,p.zy).rgb*w.x+texture2D(uDet,p.xz).rgb*w.y+texture2D(uDet,p.xy).rgb*w.z;}\n'+
+ 'vec3 detail(vec3 wp){if(uDetMode<0.5)return vec3(1.0);vec3 d=detAt(wp*0.22,normalize(vShN));vec3 d2=detAt(wp*0.9,normalize(vShN));'+
+ 'float grit=mix(0.66,1.22,d.r*0.6+d2.r*0.4);'+
+ 'if(uDetMode<1.5)return vec3(grit*mix(0.55,1.0,d.b));'+
+ 'if(uDetMode<2.5)return vec3(mix(0.62,1.2,detAt(wp*vec3(0.55,0.55,0.55),normalize(vShN)).g)*mix(0.9,1.08,d2.r));'+
+ 'return vec3(mix(0.9,1.07,d2.r));}\n';
+function detMode(name){ if(/^(Concrete|Dark concrete)$/.test(name)||name==='terrace_structure')return 1; if(name==='Roof silver')return 2; if(/^(Steel navy|Trim blue)$/.test(name))return 3; return 0; }
 // the bowl's own surfaces (terracing, concrete, roof) take the same sun: shade, or a shaft
 function shaftify(material,T){
   if(!material||material.userData.shaft)return;material.userData.shaft=true;
   material.onBeforeCompile=function(shader){
     var SU=shaftUniforms(T);Object.keys(SU).forEach(function(k){shader.uniforms[k]=SU[k];});
-    shader.vertexShader='varying vec3 vShW;\n'+shader.vertexShader.replace('#include <begin_vertex>','#include <begin_vertex>\n vShW=(modelMatrix*vec4(transformed,1.0)).xyz;');
-    shader.fragmentShader='varying vec3 vShW;\n'+SH_GLSL+shader.fragmentShader.replace('#include <color_fragment>','#include <color_fragment>\n diffuseColor.rgb*=shLight(vShW);');
+    shader.uniforms.uDet={value:detailTex(T)};shader.uniforms.uDetMode={value:detMode(material.name)};
+    shader.vertexShader='varying vec3 vShW;varying vec3 vShN;\n'+shader.vertexShader.replace('#include <begin_vertex>','#include <begin_vertex>\n vShW=(modelMatrix*vec4(transformed,1.0)).xyz;')
+      .replace('#include <beginnormal_vertex>','#include <beginnormal_vertex>\n vShN=mat3(modelMatrix)*objectNormal;');
+    shader.fragmentShader='varying vec3 vShW;\n'+SH_GLSL+DET_GLSL+shader.fragmentShader.replace('#include <color_fragment>','#include <color_fragment>\n diffuseColor.rgb*=shLight(vShW)*detail(vShW);');
   };
-  material.customProgramCacheKey=function(){return 'astra-shaft-v1';};material.needsUpdate=true;
+  material.customProgramCacheKey=function(){return 'astra-shaft-v2-det';};material.needsUpdate=true;
 }
 // Supporter identity is independent of the home/away UI colors.
 var SUPPORTER_PALETTES={
@@ -109,7 +142,7 @@ function buildCrowd(T,model,state){
     for(var row=0;row<t[2];row++){var pts=outline(t[0]+row*t[3]+.43),h=t[1]+row*t[4];
       pts.forEach(function(a,i){var b=pts[(i+1)%pts.length],dx=b[0]-a[0],dy=b[1]-a[1],len=Math.hypot(dx,dy),n=Math.max(1,Math.floor(len/.72));
         for(var k=0;k<n;k++){var u=(k+.5)/n,x=a[0]+dx*u,z=a[1]+dy*u;
-          if((Math.abs(x)<2.4&&z>0)||k%16<2)continue;
+          if((z>0&&Math.abs(x)*2/3<2.3&&(h+.13)*2/3<3.6)||k%16<2)continue;   // the tunnel mouth stays clear (2026-10-07)
           var occupancy=.77+.16*(.5+.5*Math.sin(i*2.7+tier));if(rnd()>occupancy)continue;
           var sector=z<-30?'front_'+String(Math.max(0,Math.min(11,Math.floor((x+96)/16)))).padStart(2,'0'):'bowl_fixed';
           var batch=batches[sector]||(batches[sector]={p:[],a:[],uv:[],f:[],dir:[]});
@@ -130,6 +163,9 @@ function buildCrowd(T,model,state){
 
 }
 
+/* THE PLAYERS' TUNNEL (author 2026-10-07: "it needs to be clear and not colliding with the seats"). Model-space box
+   of the opening + a margin; seats, terracing and spectators inside it are removed, the rows above its roof stay. */
+function inTunnel(x,y,z){ return Math.abs(x)<2.12&&z<-25.3&&z>-37.6&&y<3.35; }
 // Opaque terracing, under-decks and rear walls; front pieces inherit camera clearance.
 function buildStandShell(T,model,state){
   var parents={},batches={};model.traverse(function(o){if(o.name==='bowl_fixed'||/^front_\d\d$/.test(o.name))parents[o.name]=o;});
@@ -140,6 +176,7 @@ function buildStandShell(T,model,state){
     for(var i=0;i<a.length;i++){var j=(i+1)%a.length,n=Math.max(1,Math.ceil(Math.hypot(a[i][0]-a[j][0],a[i][1]-a[j][1])/4));
       for(var k=0;k<n;k++){
         var pts=[[a,i,j,k/n,yi],[a,i,j,(k+1)/n,yi],[b,i,j,(k+1)/n,yo],[b,i,j,k/n,yo]].map(function(q){return [(q[0][q[1]][0]*(1-q[3])+q[0][q[2]][0]*q[3])*2/3,q[4]*2/3,-(q[0][q[1]][1]*(1-q[3])+q[0][q[2]][1]*q[3])*2/3];});
+        if(inTunnel((pts[0][0]+pts[2][0])/2,Math.min(pts[0][1],pts[2][1]),(pts[0][2]+pts[2][2])/2))continue;   // keep the tunnel open
         var cx=(pts[0][0]+pts[2][0])*.75,cz=-(pts[0][2]+pts[2][2])*.75,key=cz<-30?'front_'+String(Math.max(0,Math.min(11,Math.floor((cx+96)/16)))).padStart(2,'0'):'bowl_fixed';
         var batch=batches[key]||(batches[key]={p:[],c:[]});[0,1,2,0,2,3].forEach(function(v){batch.p.push.apply(batch.p,pts[v]);batch.c.push.apply(batch.c,col);});
       }
@@ -265,6 +302,16 @@ api.build=function(T,group,PLEN,PWID){
     discard.forEach(function(o){o.parent.remove(o);});
     state.materials=Array.from(materials.values());state.root.add(model);state.root.updateMatrixWorld(true);
     model.traverse(function(o){if(/^front_\d\d$/.test(o.name))state.sectors.push({node:o,box:new T.Box3().setFromObject(o)});});
+    { const inv=new T.Matrix4().copy(model.matrixWorld).invert(), m=new T.Matrix4(), v=new T.Vector3(); let cut=0;
+      model.traverse(function(o){ if(!o.isMesh||!o.material||/^(Lamp|Amber)$/.test(o.material.name))return;   /* every stand mesh, not only the seats: the steps/risers left dark blocks in the corridor (2026-10-07) */
+        m.multiplyMatrices(inv,o.matrixWorld); const g=o.geometry, P=g.attributes.position, I=g.index;
+        const n=I?I.count:P.count, keep=[];
+        for(let t=0;t<n;t+=3){ let cx=0,cy=0,cz=0;
+          for(let q=0;q<3;q++){ const vi=I?I.getX(t+q):t+q; v.fromBufferAttribute(P,vi).applyMatrix4(m); cx+=v.x; cy+=v.y; cz+=v.z; }
+          if(inTunnel(cx/3,cy/3,cz/3)){ cut++; state.tunnelCutBy=state.tunnelCutBy||{}; state.tunnelCutBy[o.material.name]=(state.tunnelCutBy[o.material.name]||0)+1; continue; }
+          for(let q=0;q<3;q++) keep.push(I?I.getX(t+q):t+q); }
+        g.setIndex(keep); });
+      state.tunnelCut=cut; }
     buildStandShell(T,model,state);
     buildCrowd(T,model,state);
     buildConcourse(T,model,state);
@@ -295,7 +342,7 @@ api.update=function(camera){
     s.node.visible=!(outside&&below&&dir.z<-.05&&b.max.x>cx-reach&&b.min.x<cx+reach);
   });
 };
-api.inspect=function(){return {status:api.status,error:api.error,crowd:active?active.crowdStats:null,shellTriangles:active?active.shellTriangles:0,parts:active?active.sectors.map(function(s){return {name:s.node.name,visible:s.node.visible};}):[],materials:active?active.materials.map(function(m){return {name:m.name,color:m.color.getHexString(),type:m.type};}):[]};};
+api.inspect=function(){return {status:api.status,error:api.error,tunnelCut:active?active.tunnelCutBy:null,tunnelClip:active?active.tunnelClipN:0,ledRings:active&&active.ledRings?active.ledRings.map(function(m){var o=m,r=0;while(o.parent){o=o.parent;}return m.name+':'+(m.material&&m.material.type)+':'+(o.type);}):[],crowd:active?active.crowdStats:null,shellTriangles:active?active.shellTriangles:0,parts:active?active.sectors.map(function(s){return {name:s.node.name,visible:s.node.visible};}):[],materials:active?active.materials.map(function(m){return {name:m.name,color:m.color.getHexString(),type:m.type};}):[]};};
 /* warm lamps under each tier's front edge (night, author target 2026-09-30): world positions */
 api.tierLights=function(step){
   if(!active||!active.ready)return [];var out=[],sc=active.root.scale,st=step||2.6;
@@ -308,6 +355,48 @@ api.tierLights=function(step){
         out.push([x*2/3*sc.x,(t[1]+.42)*2/3*sc.y,-z*2/3*sc.z,tier]);}
       carry=(carry-L)%st;if(carry<0)carry+=st;}});
   return out;
+};
+/* LED RINGS on the tier fronts (author 2026-10-07 reference: a middle ring and an upper ring of LED banners round
+   the bowl). rings = [[outline offset, y low, y high], ...] in the stand's outline units; the band follows the
+   rounded outline, faces the pitch, and is split into the camera sectors (front_00..11 / bowl_fixed) so the
+   near-side pieces hide with their stand. u runs in panel units (panel = 2 x band height) for the LED material. */
+function ringOutline(off){var hx=60+off,hy=40+off,r=12+off*.14,p=[];
+  [[hx-r,hy-r,0],[-hx+r,hy-r,90],[-hx+r,-hy+r,180],[hx-r,-hy+r,270]].forEach(function(q){
+    if(q[2]===270)p.push([-12,-hy],[12,-hy]);for(var i=0;i<9;i++){var a=(q[2]+i*90/8)*Math.PI/180;p.push([q[0]+r*Math.cos(a),q[1]+r*Math.sin(a)]);}});return p;}
+api.buildLedRings=function(T,material,rings){
+  if(!active||!active.ready)return 0; var st=active;
+  (st.ledRings||[]).forEach(function(m){if(m.parent)m.parent.remove(m);m.geometry.dispose();}); st.ledRings=[];
+  var model=st.root.children[0], parents={}; model.traverse(function(o){if(o.name==='bowl_fixed'||/^front_\d\d$/.test(o.name))parents[o.name]=o;});
+  rings.forEach(function(rg){
+    var path=ringOutline(rg[0]),y0=rg[1]*2/3,y1=rg[2]*2/3,panel=2*(y1-y0),s=0,batches={};
+    for(var i=0;i<path.length;i++){var a=path[i],b=path[(i+1)%path.length],L=Math.hypot(b[0]-a[0],b[1]-a[1]),n=Math.max(1,Math.ceil(L/3));
+      for(var k=0;k<n;k++){var u0=k/n,u1=(k+1)/n,ax=a[0]+(b[0]-a[0])*u0,az=a[1]+(b[1]-a[1])*u0,bx=a[0]+(b[0]-a[0])*u1,bz=a[1]+(b[1]-a[1])*u1;
+        var cx=(ax+bx)/2,cz=(az+bz)/2,key=cz<-30?'front_'+String(Math.max(0,Math.min(11,Math.floor((cx+96)/16)))).padStart(2,'0'):'bowl_fixed';
+        var seg=Math.hypot(bx-ax,bz-az)*2/3,s0=-s/panel/8,s1=-(s+seg)/panel/8;s+=seg;/* negative: the outline runs right-to-left seen from the pitch, so the content would read mirrored */
+        var B=batches[key]||(batches[key]={p:[],uv:[]});
+        var A0=[ax*2/3,y0,-az*2/3],A1=[ax*2/3,y1,-az*2/3],B0=[bx*2/3,y0,-bz*2/3],B1=[bx*2/3,y1,-bz*2/3];
+        [[A0,s0,0],[B0,s1,0],[B1,s1,1],[A0,s0,0],[B1,s1,1],[A1,s0,1]].forEach(function(q){B.p.push(q[0][0],q[0][1],q[0][2]);B.uv.push(q[1],q[2]);});}}
+    Object.keys(batches).forEach(function(key){var b=batches[key],g=new T.BufferGeometry();
+      g.setAttribute('position',new T.Float32BufferAttribute(b.p,3));g.setAttribute('uv',new T.Float32BufferAttribute(b.uv,2));
+      var m=new T.Mesh(g,material);m.name='led_ring_'+key;m.frustumCulled=false;(parents[key]||model).add(m);st.ledRings.push(m);});
+  });
+  return st.ledRings.length;
+};
+/* Tunnel clip: big stand triangles (steps, risers) whose centre falls outside the tunnel box survive the cut above and
+   poke into the corridor. Every stand material gets the tunnel box as 6 clip planes with clipIntersection, so any
+   pixel inside the box is dropped, whatever the triangle size. Planes in world space, from the model's current matrix. */
+api.tunnelClip=function(T,renderer){
+  if(!active||!active.ready)return false; var model=active.root.children[0]; model.updateMatrixWorld(true);
+  var b=new T.Box3(new T.Vector3(-2.02,-3,-37.6),new T.Vector3(2.02,3.3,-25.3)).applyMatrix4(model.matrixWorld);
+  var P=[new T.Plane(new T.Vector3(1,0,0),-b.max.x),new T.Plane(new T.Vector3(-1,0,0),b.min.x),
+         new T.Plane(new T.Vector3(0,1,0),-b.max.y),new T.Plane(new T.Vector3(0,-1,0),b.min.y),
+         new T.Plane(new T.Vector3(0,0,1),-b.max.z),new T.Plane(new T.Vector3(0,0,-1),b.min.z)];
+  var seen=new Set(),n=0;
+  model.traverse(function(o){ if(!o.isMesh||!o.material||/^led_ring_/.test(o.name))return;
+    (Array.isArray(o.material)?o.material:[o.material]).forEach(function(m){
+      if(seen.has(m)||m.isShaderMaterial||/^(Lamp|Amber)$/.test(m.name))return; seen.add(m);
+      m.clippingPlanes=P;m.clipIntersection=true;m.needsUpdate=true;n++;});});
+  renderer.localClippingEnabled=true; active.tunnelClipN=n; return n;
 };
 api.flashSpots=function(){if(!active)return [];return active.flashSpots.map(function(p){return [p[0]*active.root.scale.x,p[1]*active.root.scale.y,p[2]*active.root.scale.z];});};
 api.placeFlags=function(T,group,tex,home,PLEN,PWID){

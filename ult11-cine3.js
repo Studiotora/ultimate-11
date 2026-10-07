@@ -350,6 +350,16 @@ function setBloom(A,str){ const b=A&&A.bloom; if(!b) return; b.strength=str; b.r
    used to be sized off that diameter as if it were a radius - 2x too wide,
    which is what cut the comet's head off flat.) */
 function mockBall(A,S){ if(A&&A.ballMesh) A.ballMesh.scale.setScalar(0.4*S); }
+/* the move's name on the same slash banner as the charge (defensive supers skip the charge) */
+function tklBanner(c,A,dt){
+  c._bnT=(c._bnT||0)+dt; const nk=c._bnT/0.5; if(nk<=0||nk>=1.6) return;
+  const g=A.ctx, W=A.cv.width, H=A.cv.height, C=COL.v, inE=sm(0,.25,nk), outE=sm(1.2,1.6,nk);
+  g.save(); g.translate(W*(-0.6+inE*0.6+outE*0.7),H*0.3); g.transform(1,-0.12,0,1,0,0);
+  g.fillStyle=rgba(C,0.9); g.fillRect(0,-H*0.055,W,H*0.11);
+  g.fillStyle='rgba(255,255,255,0.95)'; g.fillRect(0,-H*0.055,W,H*0.008); g.fillRect(0,H*0.047,W,H*0.008);
+  g.fillStyle='#07101e'; const fs=Math.round(H*0.085); g.font='900 '+fs+'px Cinzel, serif'; g.textBaseline='middle';
+  g.transform(1,0,-0.2,1,0,0); g.fillText(c.shotName||'SUPER TACKLE',W*0.12,0); g.restore();
+}
 
 /* ═══ ULTRA CAMERAS (adapted from the approved ultra-shot mockup) ═══
    The Ultra Shot uses its own cameras:
@@ -794,20 +804,23 @@ function fireImpact(c,imp){
   auraImpact(A,S,bx,by,bz);
   window.U11DBG&&U11DBG('[C3] impact');
 }
-C3.needsCanvas=function(c){ return !!((imp&&imp.t<0.4)||(c&&c.mode==='fly')||(arr&&arr.t<0.7)||(c&&c.ultra&&c.mode==='out'&&c.isGoal&&c.ot<(c._outDur||0)+UT().netHold)||C3._dirty); };
+C3.needsCanvas=function(c){ return !!((imp&&imp.t<0.4)||(c&&c.mode==='fly')||(c&&(c.tkl||c.icp||c.blk2)&&(c._bnT||0)<0.9)||(arr&&arr.t<0.7)||(c&&c.ultra&&c.mode==='out'&&c.isGoal&&c.ot<(c._outDur||0)+UT().netHold)||C3._dirty); };
 
 /* ═══ FLY FRAME ═══ every frame after the kick (fly / wait / out), after the
    camera is placed. Runs the impact aftermath: debris, shockwaves, the
    black-and-white impact frame and the manga burst on the 2D layer.
    A = {camera,renderer,gl,cv,ctx,proj} (cv/ctx only while needsCanvas()) */
 C3.flyFrame=function(c,rdt,A){
+  if(C3.on&&!C3.built&&A.T&&A.scene&&(c.tkl||c.icp||c.blk2)) build(A);          // a defensive super has no charge to build the layer first
   if(!C3.on||!C3.built) return;
+  if((c.tkl||c.icp||c.blk2)&&A.col&&!c._colSet){ COL.v.set(A.col); c._colSet=true; }   // ...nor to set its colour
   const dt=Math.min(0.05,rdt||0), cam=A.camera;
   glc=A.gl||glc;
   setVeil(C3.veil);
   if(A.cv&&A.ctx){ A.ctx.clearRect(0,0,A.cv.width,A.cv.height); C3._dirty=false; }
-  comet(c,dt,A);
+  if(!c.tkl&&!c.icp&&!c.blk2) comet(c,dt,A);                     // (a tackle: no comet on the carrier's ball)
   arrival(c,dt,A);
+  if((c.tkl||c.icp||c.blk2)&&A.cv&&A.ctx){ C3._dirty=true; tklBanner(c,A,dt); }
   if(c.ultra&&window.U11_ULTRAFX&&A.cv&&A.ctx&&c._bw){ C3._dirty=true; const W=A.cv.width,H=A.cv.height, bp=A.proj(c._bw.x,c._bw.y,c._bw.z,W,H);
     U11_ULTRAFX.fly(c,dt,A,bp,ultraRpx(A,c._bw,fl?fl.S:A.hh/1.8,bp,W,H),{arr}); }
   if(!imp){ setBloom(A,c.ultra?(arr&&arr.goal&&arr.t<0.4?0.5:0.25):(arr&&arr.goal&&arr.t<0.4?0.9:0.6)); mockBall(A,fl?fl.S:A.hh/1.8); return; }
@@ -1013,6 +1026,40 @@ C3.flyCam=function(c,rdt,A){
   if(strike){
     P=[b.x-dx*0.3*S+px*3.7*S, 0.55*S, b.z-dz*0.3*S+pz*3.7*S];
     Lk=[b.x+dx*0.5*S, 0.85*S, b.z+dz*0.5*S]; lag=1;
+  } else if(c.blk2&&(c.mode==='blk'||c.mode==='blk_end')&&c.blk2.M){
+    /* SUPER BLOCK: over the shooter's shoulder, a little raised, looking down the line at the blocker with
+       the KEEPER and the goal behind him; pushes in on the impact */
+    const M=c.blk2.M, u=c.blk2.u||0, push=sm(0.32,0.5,u)*(1-sm(0.7,1,u));
+    let ux=M.k.x-M.s.x, uz=M.k.z-M.s.z; const L=Math.hypot(ux,uz)||1; ux/=L; uz/=L;
+    const qx=-uz*side, qz=ux*side, sd=Math.hypot(M.d.x-M.s.x,M.d.z-M.s.z);
+    const fwd=-4.4*S+push*Math.max(0,sd-3.2*S)*0.85;                 // on the impact the camera travels down the line toward the blocker
+    P=[M.s.x+ux*fwd+qx*lerp(1.9,1.4,push)*S, (1.9-0.45*push)*S, M.s.z+uz*fwd+qz*lerp(1.9,1.4,push)*S];
+    const kw=Math.min(0.4,(9*S)/L);                                   // lean toward the keeper, less when he is far
+    Lk=[M.d.x*(1-kw)+M.k.x*kw, 0.75*S, M.d.z*(1-kw)+M.k.z*kw]; lag=c._blkCam?1-Math.exp(-dt*8):1; c._blkCam=true;
+  } else if((c.tkl&&(c.mode==='tkl'||c.mode==='tkl_end'))||(c.icp&&(c.mode==='icp'||c.mode==='icp_end'))){
+    /* SUPER TACKLE / INTERCEPT: low and side-on at the contact point, a quick push-in for the hit */
+    const DK=c.tkl||c.icp, u=DK.u||0, push=sm(0.3,0.5,u)*(1-sm(0.7,1,u)), r=lerp(6.0,4.6,push)*S, m=DK.M||b;
+    P=[m.x+px*r-dx*0.6*S, (1.0-0.2*push)*S, m.z+pz*r-dz*0.6*S];
+    Lk=[m.x, 0.7*S, m.z]; lag=c._tklCam?1-Math.exp(-dt*9):1; c._tklCam=true;
+  } else if(c.o12&&(c.mode==='o12'||c.mode==='o12_end')){
+    /* SUPER 1-2 (author: "the camera maybe slightly from above, so we have a better view"): raised,
+       behind-beside the move, on the middle of runner + ball + team-mate; eases in during the slow-mo */
+    /* over his shoulder: behind and above the RUNNER, looking up the pitch at the wall and the space he runs into */
+    const u=c.o12.u||0, m=c.o12.M||{x:b.x,z:b.z}, R=m.r||{x:b.x,z:b.z}, Tm=m.t||R, E=m.e||R;
+    const push=sm(0.32,0.5,u)*(1-sm(0.62,0.95,u));
+    const fit=Math.min(12*S,Math.max(7.5*S,(m.span||0)*0.7)), r=lerp(fit,fit*0.85,push), h=r*0.55;
+    P=[R.x-dx*0.85*r+px*0.35*r, h, R.z-dz*0.85*r+pz*0.35*r];
+    Lk=[R.x*0.45+E.x*0.3+Tm.x*0.25, 0.3*S, R.z*0.45+E.z*0.3+Tm.z*0.25]; lag=1-Math.exp(-dt*6);
+  } else if(c.drib&&(c.mode==='drib'||c.mode==='drib_end')){
+    /* SUPER DRIBBLE: side-on and low on the two of them, pushing in for the slow-mo jump */
+    const u=c.drib.u||0, push=sm(0.3,0.5,u)*(1-sm(0.66,0.95,u)), r=lerp(6.4,4.4,push)*S;
+    const mx=b.x+dx*0.6*S, mz=b.z+dz*0.6*S;
+    P=[mx+px*r-dx*0.8*S, (1.15-0.25*push)*S, mz+pz*r-dz*0.8*S];
+    Lk=[mx, 0.85*S+(c.drib.lift||0)*0.5, mz]; lag=1-Math.exp(-dt*8);
+  } else if(c.pass&&c.mode==='pass_end'){
+    /* SUPER PASS receive beat: low, from the passer's side, on the receiver with the ball at his feet */
+    P=[b.x-dx*4.2*S+px*2.6*S, 1.3*S, b.z-dz*4.2*S+pz*2.6*S];
+    Lk=[b.x+dx*0.4*S, 0.95*S, b.z+dz*0.4*S]; lag=1-Math.exp(-dt*5);
   } else if(c.mode==='out'){
     /* mockup goal frame: 7.5m out from where the ball hits the net (1.45m
        behind the line), 5.4m to the side, drifting in; looking at the hit

@@ -355,7 +355,8 @@
       try{ t.anisotropy=renderer.capabilities.getMaxAnisotropy(); }catch(e){ t.anisotropy=8; }
       return t;
     }
-    const GRASS_U={ gTime:{value:0}, gAmt:{value:new T.Vector4(1,1,0.5,0.3)}, gSun:{value:new T.Vector3(0.5,0.5,0.5)},
+    P3D.pixelGrass={on:true, texel:0.06, levels:5, dither:1.0};   // texel ~ the players' pixel chunk (tested 0.024 / 0.05 / 0.08)
+    const GRASS_U={ pgOn:{value:1}, pgTexel:{value:0.024}, pgLevels:{value:7}, pgDither:{value:0.85}, gTime:{value:0}, gAmt:{value:new T.Vector4(1,1,0.5,0.3)}, gSun:{value:new T.Vector3(0.5,0.5,0.5)},
                     gDetail:{value:makeGrassDetail()}, gStripe:{value:new T.Vector4(5,0.22,0.68,5)}, gX0:{value:-35}, gDet:{value:1},
                     gLight:{value:new T.Color(TURF_LIGHT[0]/255,TURF_LIGHT[1]/255,TURF_LIGHT[2]/255)},
                     gDark:{value:new T.Color(TURF_DARK[0]/255,TURF_DARK[1]/255,TURF_DARK[2]/255)},
@@ -434,16 +435,36 @@
         Object.assign(sh.uniforms,GRASS_U);
         sh.vertexShader='varying vec3 vGW;\n'+sh.vertexShader.replace('#include <begin_vertex>',
           '#include <begin_vertex>\n  vGW=(modelMatrix*vec4(transformed,1.0)).xyz;');
-        sh.fragmentShader='varying vec3 vGW;\n'+GRASS_GLSL+'\n'+sh.fragmentShader
-          .replace('#include <map_fragment>','#include <map_fragment>\n  float gLine=step(0.55,dot(diffuseColor.rgb,vec3(0.299,0.587,0.114)));\n\n#ifdef G_HD\n  diffuseColor.rgb=grassHD(diffuseColor.rgb,vGW,gLine);\n#endif\n  diffuseColor.rgb=grassBase(diffuseColor.rgb,vGW,gLine);')
-          .replace('#include <fog_fragment>','  gl_FragColor.rgb+=grassAdd(vGW,gLine,1.0);\n#include <fog_fragment>');
+        /* PIXEL GRASS (2026-10-07, "even pixel density" step after the Lumina review): the turf is sampled on a
+           WORLD texel grid the size of the players' pixel chunks (snapped world position, and the texture uv moved
+           by the same amount through the uv/world Jacobian), then its brightness is cut to a few tones with an
+           ordered (Bayer 4x4) dither on that grid - crisp pixel-art grass instead of soft photo noise.
+           Painted lines keep full tone. P3D.pixelGrass = {on, texel (world units), levels, dither}. */
+        sh.fragmentShader='varying vec3 vGW;\nuniform float pgOn, pgTexel, pgLevels, pgDither;\n'+GRASS_GLSL+'\n'+
+          'float pgBayer(vec2 c){ vec2 q=mod(floor(c),4.0); int i=int(q.x+q.y*4.0);\n'+
+          ' float m[16]; m[0]=0.;m[1]=8.;m[2]=2.;m[3]=10.;m[4]=12.;m[5]=4.;m[6]=14.;m[7]=6.;m[8]=3.;m[9]=11.;m[10]=1.;m[11]=9.;m[12]=15.;m[13]=7.;m[14]=13.;m[15]=5.;\n'+
+          ' for(int k=0;k<16;k++){ if(k==i) return m[k]/16.0; } return 0.0; }\n'+sh.fragmentShader
+          .replace('void main() {','void main() {\n  vec3 gW=vGW; vec2 gUv=vUv;\n'+
+            '  if(pgOn>0.5){ vec2 cell=floor(vGW.xz/pgTexel); vec2 sw=(cell+0.5)*pgTexel, dw=sw-vGW.xz;\n'+
+            '    vec2 ux=dFdx(vUv), uy=dFdy(vUv), wx=dFdx(vGW.xz), wy=dFdy(vGW.xz); float det=wx.x*wy.y-wx.y*wy.x;\n'+
+            '    if(abs(det)>1e-12){ vec2 a=vec2( wy.y,-wy.x)/det, b=vec2(-wx.y, wx.x)/det;   // inverse of [wx wy]\n'+
+            '      gUv=vUv+ux*dot(a,dw)+uy*dot(b,dw); }\n'+
+            '    gW=vec3(sw.x,vGW.y,sw.y); }\n')
+          .replace('#include <map_fragment>','vec4 texelColor=texture2D(map,gUv); texelColor=mapTexelToLinear(texelColor); diffuseColor*=texelColor;\n  float gLine=step(0.55,dot(diffuseColor.rgb,vec3(0.299,0.587,0.114)));\n\n#ifdef G_HD\n  diffuseColor.rgb=grassHD(diffuseColor.rgb,gW,gLine);\n#endif\n  diffuseColor.rgb=grassBase(diffuseColor.rgb,gW,gLine);')
+          .replace('#include <fog_fragment>','  gl_FragColor.rgb+=grassAdd(gW,gLine,1.0);\n'+
+            '  if(pgOn>0.5&&gLine<0.5){ float L=dot(gl_FragColor.rgb,vec3(0.299,0.587,0.114));\n'+
+            '    float d=(pgBayer(gW.xz/pgTexel)-0.5)*pgDither, q=floor(L*pgLevels+0.5+d)/pgLevels;\n'+
+            '    gl_FragColor.rgb*=clamp(q/max(L,1e-3),0.55,1.6); }\n'+
+            '#include <fog_fragment>');
       };
-      mat.customProgramCacheKey=function(){ return hd?'u11-grass-v2-hd':'u11-grass-v2'; };
+      mat.extensions=Object.assign({},mat.extensions||{},{derivatives:true});
+      mat.customProgramCacheKey=function(){ return hd?'u11-grass-v3-hd':'u11-grass-v3'; };
       mat.needsUpdate=true; return mat;
     }
     const _gs=new T.Vector3();
     function grassFrame(now){
       const G2=P3D.grass, t=(typeof ENV!=='undefined'&&ENV.time)||'classic', a=(G2&&G2.on!==false&&G2[t])||[0,0,0,0];
+      { const PG=P3D.pixelGrass||{}; GRASS_U.pgOn.value=PG.on===false?0:1; GRASS_U.pgTexel.value=(PG.texel||0.06)*(PLEN/70); GRASS_U.pgLevels.value=PG.levels||5; GRASS_U.pgDither.value=PG.dither!=null?PG.dither:1.0; }
       GRASS_U.gTime.value=(now||0)*0.001; GRASS_U.gAmt.value.set(a[0],a[1],a[2],a[3]);
       const TF=P3D.turf||{}, bw=PLEN/14; GRASS_U.gStripe.value.set(bw,TF.contrast!=null?TF.contrast:0.22,TF.swing!=null?TF.swing:0.68,(TF.tile||5)*PLEN/70);
       GRASS_U.gX0.value=-PLEN/2; GRASS_U.gDet.value=TF.detail!=null?TF.detail:1;
@@ -707,19 +728,35 @@
     const NETS={};
     function netEase(a,b,t){ const q=Math.max(0,Math.min(1,(t-a)/(b-a))); return q*q*(3-2*q); }
     function ultraNetPush(t,dep){ return dep*0.8*netEase(0,0.25,t)*(1-netEase(2.7,3.7,t)); }
-    function netHit(side,z,y,ultra){ const N=NETS[side]; if(!N) return; N.t=0; N.hz=z; N.hy=y; N.ultra=!!ultra; if(N.mat) N.mat.opacity=ultra?0.88:0.34; }
+    function netHit(side,z,y,ultra){ const N=NETS[side]; if(!N) return; N.t=0; N.hz=z; N.hy=y; N.ultra=!!ultra; if(N.mat) N.mat.opacity=ultra?1:(N.op0||0.34); }
     P3D.netHit=netHit;
     function tickNets(dt){
       for(const k in NETS){ const N=NETS[k]; if(N.t<0) continue;
         N.t+=dt; const a=N.geo.attributes.position, b=N.base, t=N.t;
-        if(t>4){ for(let i=0;i<b.length;i++) a.array[i]=b[i]; a.needsUpdate=true; N.t=-1; N.ultra=false; if(N.mat) N.mat.opacity=0.34; continue; }
+        if(t>4){ for(let i=0;i<b.length;i++) a.array[i]=b[i]; a.needsUpdate=true; N.t=-1; N.ultra=false; if(N.mat) N.mat.opacity=(N.op0||0.34); continue; }
         const amp=N.ultra?ultraNetPush(t,N.DEP):(1.35*Math.exp(-t*3.2)*Math.cos(t*9)+0.35*Math.exp(-t*1.2))*N.DEP/1.6*(1-Math.min(1,Math.max(0,(t-3)/1)));
-        if(N.ultra&&N.mat) N.mat.opacity=0.34+0.54*(1-netEase(2.7,3.7,t));
+        if(N.ultra&&N.mat) N.mat.opacity=(N.op0||0.34)+(1-(N.op0||0.34))*(1-netEase(2.7,3.7,t));
         const sc=N.HW/(N.ultra?2.3:3.66), s2=sc*sc;
         for(let i=0;i<b.length/3;i++){ const y=b[i*3+1], z=b[i*3+2];
           const d2=((y-N.hy)*(y-N.hy)*1.6+(z-N.hz)*(z-N.hz))/s2;
           a.array[i*3]=b[i*3]+N.side*amp*Math.exp(-d2/1.6); }
         a.needsUpdate=true; }
+    }
+    /* knotted diamond cord, 2x2 cells per tile, alpha = cord (2026-10-07) */
+    let _netTex=null;
+    function netCordTex(){
+      if(_netTex) return _netTex;
+      const S=256, c=document.createElement('canvas'); c.width=c.height=S; const x=c.getContext('2d'); x.clearRect(0,0,S,S);
+      const cord=(w,col)=>{ x.strokeStyle=col; x.lineWidth=w; x.lineCap='round';
+        for(let i=-S;i<=2*S;i+=S/2){ x.beginPath(); x.moveTo(i,0); x.lineTo(i+S,S); x.stroke(); x.beginPath(); x.moveTo(i+S,0); x.lineTo(i,S); x.stroke(); } };
+      cord(11,'rgba(170,176,182,0.5)');                      // soft outer edge (reads as the cord's shading)
+      cord(7,'rgba(246,247,244,1)');                       // the cord
+      cord(1.6,'rgba(255,255,255,1)');                       // its lit ridge
+      x.fillStyle='rgba(236,238,234,1)';                     // knots where the cords cross
+      for(let yy=0;yy<=S;yy+=S/2) for(let xx=0;xx<=S;xx+=S/2){ x.beginPath(); x.arc(xx,yy,6.5,0,6.283); x.fill();
+        x.beginPath(); x.arc(xx+S/4,yy+S/4,6.5,0,6.283); x.fill(); }
+      const t=new T.CanvasTexture(c); t.wrapS=t.wrapT=T.RepeatWrapping; t.anisotropy=Math.min(16,renderer.capabilities.getMaxAnisotropy());
+      t.minFilter=T.LinearMipmapLinearFilter; t.generateMipmaps=true; return (_netTex=t);
     }
     function buildGoals(){
       goalGroup.clear();
@@ -737,7 +774,8 @@
       }
       const netMatFor=(rx,ry)=>new T.MeshBasicMaterial({map:netTex(rx,ry),transparent:true,
         opacity:0.5,side:T.DoubleSide,depthWrite:false});
-      const postMat=new T.MeshLambertMaterial({color:0xe8e8e8});   // shaded, not glow-white
+      /* painted aluminium: a soft specular sheen from the floodlights / sun (lit environment, not a player) */
+      const postMat=new T.MeshStandardMaterial({color:0xf3f4f2,roughness:0.3,metalness:0.08,emissive:0x3a3c3e});
       const HW=PWID*0.052;          // half goal-mouth
       const GH=PWID*0.030;          // crossbar height
       const DEP=PWID*0.030;         // net depth at the ground
@@ -751,10 +789,10 @@
         const g=new T.Group();
         // front uprights + crossbar
         [-HW,HW].forEach(z=>{
-          const p=new T.Mesh(new T.CylinderGeometry(r,r,GH,10),postMat);
+          const p=new T.Mesh(new T.CylinderGeometry(r,r,GH,28),postMat);
           p.position.set(gx,GH/2,z); g.add(p);
         });
-        const cb=new T.Mesh(new T.CylinderGeometry(r,r,HW*2+r*2,10),postMat);
+        const cb=new T.Mesh(new T.CylinderGeometry(r,r,HW*2,28),postMat);
         cb.rotation.x=Math.PI/2; cb.position.set(gx,GH,0); g.add(cb);
         // thin back frame: top-back rail, ground bar, and corner stanchions
         const tb=new T.Mesh(new T.CylinderGeometry(r*0.6,r*0.6,HW*2,8),postMat);
@@ -772,29 +810,45 @@
           l2.rotation.z=side*Math.atan2(DEP-TOPD,GH);
           g.add(l2);
         });
-        // ── NET: white line grid (the approved cine3 mockup look). The back
-        //    panel is a displaceable grid so a goal can bulge it: P3D.netHit.
+        /* ── NET v2 (2026-10-07, author: "goal and net more realistic, detailed and polished").
+           Textured cord panels instead of 1-px lines: a knotted diamond mesh (netCordTex, 12 cm cells)
+           on the roof, back and both sides, mip-mapped + anisotropic so far away it reads as a soft
+           white haze, close up as real cord. The roof sags, the back billows, the sides hang in.
+           The BACK panel keeps the displaceable vertex grid the goal bulge uses (P3D.netHit). */
         {
-          const nm=new T.LineBasicMaterial({color:0xffffff,transparent:true,opacity:0.34,depthWrite:false});
-          const NZ=26, NY=12, base=[], idx=[];
-          for(let j=0;j<=NY;j++){ const f=j/NY, x=bx+(tx-bx)*f, y=GH*f;       // j=0 ground-back .. NY top-back
-            for(let i=0;i<=NZ;i++) base.push(x,y,-HW+2*HW*i/NZ); }
-          for(let j=0;j<=NY;j++) for(let i=0;i<=NZ;i++){ const k=j*(NZ+1)+i;
-            if(i<NZ) idx.push(k,k+1); if(j<NY) idx.push(k,k+NZ+1); }
-          const bgeo=new T.BufferGeometry(); bgeo.setAttribute('position',new T.Float32BufferAttribute(base.slice(),3)); bgeo.setIndex(idx);
-          const backL=new T.LineSegments(bgeo,nm); backL.frustumCulled=false; g.add(backL);
-          const st=[];
-          for(let i=0;i<=NZ;i++){ const z=-HW+2*HW*i/NZ; st.push(gx,GH,z, tx,GH,z); }      // roof
-          for(let k=0;k<=3;k++){ const x=gx+(tx-gx)*k/3; st.push(x,GH,-HW, x,GH,HW); }
-          [-HW,HW].forEach(z=>{                                                       // side profiles
-            for(let k=0;k<=8;k++){ const ax=DEP*k/8, x=gx+side*ax;
-              const h=ax<=TOPD?GH:GH*(1-(ax-TOPD)/(DEP-TOPD)); st.push(x,0,z, x,h,z); }
-            for(let m=0;m<=8;m++){ const y=GH*m/8, xb=bx+(tx-bx)*(y/GH); st.push(gx,y,z, xb,y,z); }
+          const ntex=netCordTex();
+          const nm=new T.MeshBasicMaterial({map:ntex,color:0xeef2f4,transparent:true,opacity:0.8,side:T.DoubleSide,depthWrite:false,alphaTest:0.02});
+          const CELL=0.42;                                     // world units per texture tile (2 cells of ~12 cm)
+          const panel=(fn,nu,nv,lu,lv)=>{                      // fn(u,v) -> [x,y,z]; lu/lv = world length along u/v
+            const pos=[],uv=[],idx=[];
+            for(let j=0;j<=nv;j++) for(let i=0;i<=nu;i++){ const u=i/nu,v=j/nv; pos.push(...fn(u,v)); uv.push(u*lu/CELL,v*lv/CELL); }
+            for(let j=0;j<nv;j++) for(let i=0;i<nu;i++){ const k=j*(nu+1)+i; idx.push(k,k+1,k+nu+1, k+1,k+nu+2,k+nu+1); }
+            const geo=new T.BufferGeometry(); geo.setAttribute('position',new T.Float32BufferAttribute(pos,3));
+            geo.setAttribute('uv',new T.Float32BufferAttribute(uv,2)); geo.setIndex(idx); geo.computeVertexNormals();
+            const m=new T.Mesh(geo,nm); m.renderOrder=2; g.add(m); return {geo,pos}; };
+          const SAG=GH*0.06, BIL=DEP*0.10, IN=HW*0.012, slope=Math.hypot(DEP-TOPD,GH);
+          // roof: crossbar -> top-back rail, sagging between its four edges
+          panel((u,v)=>[gx+side*TOPD*v, GH-SAG*Math.sin(Math.PI*u)*Math.sin(Math.PI*v), -HW+2*HW*u], 26, 6, 2*HW, TOPD);
+          // back: ground bar (v=0) -> top-back rail (v=1), billowing out; keep this grid for the bulge
+          const back=panel((u,v)=>{ const x=bx+(tx-bx)*v+side*BIL*Math.sin(Math.PI*u)*Math.sin(Math.PI*v); return [x, GH*v, -HW+2*HW*u]; }, 34, 16, 2*HW, slope);
+          // sides: front post -> back frame, height follows the frame profile, hanging slightly inward
+          [-1,1].forEach(zs=>{
+            panel((u,v)=>{ const ax=DEP*u, h=ax<=TOPD?GH:GH*(1-(ax-TOPD)/(DEP-TOPD));
+              const z=zs*(HW-IN*Math.sin(Math.PI*u)*Math.sin(Math.PI*Math.min(1,v)));
+              return [gx+side*ax, h*v, z]; }, 12, 10, DEP, GH);
           });
-          const sgeo=new T.BufferGeometry(); sgeo.setAttribute('position',new T.Float32BufferAttribute(st,3));
-          g.add(new T.LineSegments(sgeo,nm));
-          NETS[side]={geo:bgeo,base,mat:nm,t:-1,hy:0,hz:0,HW,DEP,side,ultra:false};
+          // the net's shadow on the grass (a dark copy of the cord pattern under the goal, nudged away from the sun)
+          { const sm=new T.MeshBasicMaterial({map:ntex,color:0x000000,transparent:true,opacity:0.28,depthWrite:false});
+            const sg=new T.PlaneGeometry(DEP*1.15,2*HW*1.02); const uvA=sg.attributes.uv;
+            for(let i=0;i<uvA.count;i++) uvA.setXY(i,uvA.getX(i)*DEP*1.15/CELL,uvA.getY(i)*2*HW*1.02/CELL);
+            const sh=new T.Mesh(sg,sm); sh.rotation.x=-Math.PI/2; sh.position.set(gx+side*DEP*0.62,0.012,0.18*HW); sh.renderOrder=1; g.add(sh); }
+          NETS[side]={geo:back.geo,base:back.pos.slice(),mat:nm,op0:0.8,t:-1,hy:0,hz:0,HW,DEP,side,ultra:false};
         }
+        /* posts: rounded joints where crossbar meets post, a dark anchor collar at each foot */
+        { const jg=new T.SphereGeometry(r*1.02,20,14);
+          [-HW,HW].forEach(z=>{ const j=new T.Mesh(jg,postMat); j.position.set(gx,GH,z); g.add(j);
+            const c=new T.Mesh(new T.CylinderGeometry(r*1.25,r*1.35,r*1.6,20),new T.MeshStandardMaterial({color:0x2a2e34,roughness:0.6,metalness:0.4}));
+            c.position.set(gx,r*0.8,z); g.add(c); }); }
         g.traverse(m=>{ if(m.isMesh) m.castShadow=true; });      // real shadows: the frame on the grass
         goalGroup.add(g);
       });
@@ -1269,14 +1323,30 @@
            still gets its own frame material and phase (that module makes one
            shared static material, which would freeze the wave). */
         if(_bowlInfo && _bowlInfo.type==='classic-upgraded'){
-          const k=PLEN/70,w=PWID/44.87,ov={w:2.2*k,h:1.6*k};
-          // Original animated pixel art, held upright ahead of the first seating row.
-          for(let i=0;i<8;i++){
-            const end=i>=5,m=flagMesh(art,rng,ov);
-            if(!end)m.position.set((homeSide?-1:1)*(6+i*6.7)*k,1.75*k,-26.2*w);
-            else {m.position.set((homeSide?-1:1)*39.5*k,1.75*k,(-16+(i-5)*14)*w);m.rotation.y=homeSide?Math.PI/2:-Math.PI/2;}
-            m.rotation.z=(rng()-.5)*.08;flagGroup.add(m);
-          }
+          /* EVERY TIER (author 2026-10-07: "they are all in a row, only on the lower tier - they should be on every
+             tier, not at the same height, so the stadium feels alive"). Spots come from the stand's own layout
+             (ult11-stadium-classic.js tiers: [offset, base height, rows, row depth, row rise] in its outline units,
+             model = outline*2/3, then the bowl's scale): a random ROW on each tier, held just above the fans'
+             heads, on the far stand (the team's half) and its own end. Lower tier keeps clear of the tunnel. */
+          const k=PLEN/70,w=PWID/44.87, TIERS=[[0,.8,11,.82,.50],[11.7,8.4,8,.83,.57],[20.8,15.7,9,.83,.61]];
+          const sgn=homeSide?-1:1, used=[];
+          const far=(t,X)=>{ const ri=1+Math.floor(rng()*(t[2]-1)), off=t[0]+ri*t[3]+.43, h=t[1]+ri*t[4];
+            return [X*2/3*k, (h+1.25)*2/3*k, -(40+off)*2/3*w]; };
+          const end=(t,Zo)=>{ const ri=1+Math.floor(rng()*(t[2]-1)), off=t[0]+ri*t[3]+.43, h=t[1]+ri*t[4];
+            return [sgn*(60+off)*2/3*k, (h+1.25)*2/3*k, -Zo*2/3*w]; };
+          const ok=(p)=>used.every(q=>Math.hypot(q[0]-p[0],(q[1]-p[1])*1.6,q[2]-p[2])>2.6*k);
+          const put=(p,ry,sz)=>{ if(!ok(p)) return false; used.push(p);
+            const m=flagMesh(art,rng,{w:2.2*k*sz,h:1.6*k*sz}); m.position.set(p[0],p[1],p[2]);
+            m.rotation.order='YXZ'; m.rotation.y=ry; m.rotation.z=(rng()-.5)*.14; flagGroup.add(m); return true; };
+          [[6,0],[5,1],[5,2]].forEach(([n,ti])=>{                 // far stand, own half: 6 low, 5 middle, 5 top
+            const t=TIERS[ti], hx=60+t[0]-(12+t[0]*.14);
+            for(let i=0,tries=0;i<n&&tries<40;tries++){
+              const X=sgn*((ti===0?7:3)+rng()*(hx-(ti===0?7:3)-2));
+              if(put(far(t,X),0,ti===0?1.05:1.35)) i++; } });
+          [[2,0],[2,1],[2,2]].forEach(([n,ti])=>{                 // own end stand
+            for(let i=0,tries=0;i<n&&tries<40;tries++){
+              const Zo=-20+rng()*44;
+              if(put(end(TIERS[ti],Zo),homeSide?Math.PI/2:-Math.PI/2,ti===0?1.05:1.35)) i++; } });
           return;
         }
         if(OV){
@@ -1791,7 +1861,8 @@
       const hc=(flagData&&flagData.homeCol)||'#1e72dc', ac=(flagData&&flagData.awayCol)||'#c22020';
       let hn='HOME', an='AWAY';
       try{ if(typeof HT!=='undefined'&&HT&&HT.name) hn=HT.name; if(typeof AT!=='undefined'&&AT&&AT.name) an=AT.name; }catch(e){}
-      const c=document.createElement('canvas'); c.width=2048; c.height=128; const x=c.getContext('2d');
+      /* 2x resolution (4096x256), drawn in the old 2048x128 units; the LED dot matrix is the shader's job now */
+      const c=document.createElement('canvas'); c.width=4096; c.height=256; const x=c.getContext('2d'); x.scale(2,2);
       const panels=[
         {bg:hc,fg:'#ffffff',txt:hn.toUpperCase()},   {bg:'#0b0e16',fg:'#ffd24a',txt:'ULTIMATE ELEVEN'},
         {bg:ac,fg:'#ffffff',txt:an.toUpperCase()},   {bg:'#101826',fg:'#7fd7ff',txt:'\u26A1 SUPER SHOT'},
@@ -1799,7 +1870,7 @@
          emoji:(flagData&&flagData.homeFlag)||''},   {bg:'#0b0e16',fg:'#ffd24a',txt:'ULTIMATE ELEVEN'},
         {bg:ac,fg:'#ffffff',crest:'a',txt:an.toUpperCase(),
          emoji:(flagData&&flagData.awayFlag)||''},   {bg:'#101826',fg:'#7fd7ff',txt:'\u26A1 SUPER SHOT'}];
-      const pw=c.width/panels.length;
+      const pw=2048/panels.length;
       x.textAlign='center'; x.textBaseline='middle';
       panels.forEach((p,i)=>{
         x.fillStyle=p.bg; x.fillRect(i*pw,0,pw,128);
@@ -1820,10 +1891,34 @@
         }
         x.fillStyle='rgba(0,0,0,0.55)'; x.fillRect(i*pw-3,0,6,128);
       });
-      x.fillStyle='rgba(0,0,0,0.28)';
-      for(let yy=0;yy<128;yy+=4) x.fillRect(0,yy,c.width,1);
-      for(let xx=0;xx<c.width;xx+=4) x.fillRect(xx,0,1,128);
       const t=new T.CanvasTexture(c); t.wrapS=T.RepeatWrapping; t.wrapT=T.ClampToEdgeWrapping; t.anisotropy=8; return t;
+    }
+    /* LED BOARD SHADER (2026-10-07): the board content shown through a real LED matrix - round emitters
+       with a dark gap, a slow refresh band, a matte black bezel top + bottom, a little over-bright so the
+       bloom picks it up. The dot grid fades out with distance (screen-space derivatives), so far boards
+       stay clean instead of moire. Scroll comes from boardTex.offset as before. */
+    let boardMat=null;
+    function ledMaterial(tex){
+      return new T.ShaderMaterial({side:T.DoubleSide,fog:false,extensions:{derivatives:true},
+        uniforms:{map:{value:tex},off:{value:0},time:{value:0},bright:{value:1.18},leds:{value:new T.Vector2(384,24)}}   /* one LED ~0.05 world: the players' pixel size */,
+        vertexShader:'varying vec2 vUv; void main(){ vUv=uv; gl_Position=projectionMatrix*modelViewMatrix*vec4(position,1.0); }',
+        fragmentShader:[
+          'uniform sampler2D map; uniform float off,time,bright; uniform vec2 leds; varying vec2 vUv;',
+          'void main(){',
+          '  float vy=(vUv.y-0.06)/0.88; vec2 uv=vec2(vUv.x+off, clamp(vy,0.0,1.0));',
+          '  vec2 g=uv*leds; vec2 f=fract(g)-0.5; float d=length(f);',
+          '  float w0=max(fwidth(g.x),fwidth(g.y));',
+          '  vec3 c=mix(texture2D(map,(floor(g)+0.5)/leds).rgb, texture2D(map,uv).rgb, smoothstep(0.6,1.4,w0));',
+          '  float led=1.0-smoothstep(0.28,0.5,d);',
+          '  float w=max(fwidth(g.x),fwidth(g.y)); float far=smoothstep(0.10,0.32,w);',
+          '  float m=mix(0.62+led*0.55, 1.0, far);',
+          '  float band=0.10*exp(-pow((fract(vUv.y*0.6-time*0.22)-0.5)*9.0,2.0));',
+          '  vec3 col=c*(m*bright+band);',
+          '  float bez=step(0.06,vUv.y)*step(vUv.y,0.94);',
+          '  float rim=smoothstep(0.94,0.945,vUv.y)*(1.0-smoothstep(0.952,0.96,vUv.y));',
+          '  col=mix(vec3(0.025,0.028,0.034)+rim*0.18, col, bez);',
+          '  gl_FragColor=linearToOutputTexel(vec4(col,1.0));',
+          '}'].join('\n')});
     }
     let _crestImg={h:null,a:null}, _crestKey=null;
     function ensureCrests(){
@@ -1840,23 +1935,228 @@
       if(boardGroup){ scene.remove(boardGroup); boardGroup=null; }
       if(!gfxOn('boards')||!_bowlInfo||_bowlInfo.type==='santa-fede'||_bowlInfo.type==='highschool') return;
       let hl,hw,r,y0;
-      if(_bowlInfo.type==='classic-upgraded'){ hl=PLEN/2+2.4; hw=PWID/2+1.5; r=2.8; y0=0; }
+      if(_bowlInfo.type==='classic-upgraded'){ hl=PLEN/2+2.4; hw=PWID/2+3.0; r=2.8; y0=0; }   // 3.0: room for the dugouts in FRONT of the boards (author reference 2026-10-07)
       else if(_bowlInfo.type==='classic'){ hl=_bowlInfo.baseHL-0.35; hw=_bowlInfo.baseHW-0.35; r=_bowlInfo.r; y0=(P3D.bowl.yOff||0)*_bowlInfo.U; }
       else { const O=window.U11_OVAL&&window.U11_OVAL._last; if(!O) return; const t0=O.TIERS[0]; hl=t0.rx-2.2; hw=t0.rz-2.2; r=Math.min(hl,hw)*0.9; y0=0; }
       boardGroup=new T.Group(); scene.add(boardGroup);
-      boardTex=makeBoardTex();
-      const mat=new T.MeshBasicMaterial({map:boardTex,side:T.DoubleSide,fog:false});
+      boardTex=makeBoardTex(); boardTex.generateMipmaps=true; boardTex.minFilter=T.LinearMipmapLinearFilter;
+      const mat=boardMat=ledMaterial(boardTex);
       const H=1.0;
-      const walls=[[-hl+r,-hw, hl-r,-hw],[hl,-hw+r, hl,hw-r],[hl-r,hw, -hl+r,hw],[-hl,hw-r, -hl,-hw+r]];
+      let walls=[[-hl+r,-hw, hl-r,-hw],[hl,-hw+r, hl,hw-r],[hl-r,hw, -hl+r,hw],[-hl,hw-r, -hl,-hw+r]];
+      /* far side (the side the camera sees): gaps at the players' tunnel and at the two dugouts (2026-10-07) */
+      const DUG=_bowlInfo.type==='classic-upgraded';
+      if(DUG){ const k=PLEN/70;
+        walls=[[-hl+r,-hw,-TPW*k,-hw],[TPW*k,-hw,hl-r,-hw]].concat(walls.slice(1)); }   // the boards run behind the benches; only the tunnel portal breaks them
       walls.forEach(([ax,az,bx,bz])=>{
-        const len=Math.hypot(bx-ax,bz-az), rep=Math.max(1,Math.round(len/(H*16)));
+        const len=Math.hypot(bx-ax,bz-az), rep=DUG?Math.max(1,Math.round(len/(H*2)))/8:Math.max(1,Math.round(len/(H*16)));   // DUG: whole 2-unit panels, no squashed tile on short pieces
         boardGroup.add(buildStraightWall(ax,az,bx,bz, y0+0.04, y0+0.04+H, 0.15, mat, rep));
       });
       const cap=new T.MeshBasicMaterial({color:'#0b0e16',side:T.DoubleSide});
       [[hl-r,-hw+r,-Math.PI/2],[hl-r,hw-r,0],[-hl+r,hw-r,Math.PI/2],[-hl+r,-hw+r,Math.PI]].forEach(([cx,cz,a0])=>{
         boardGroup.add(buildCorner(cx,cz,r,a0, y0+0.04,y0+0.04+H, 0.15, cap, false));
       });
+      if(DUG) try{ buildDugouts(hw); buildTunnel(); ensureLedRings(); }catch(e){ console.warn('[P3D] dugouts/tunnel',e); }
     }
+    /* ── DUGOUTS + COACHES (author 2026-10-07: "add the 2 benches of the substitutes on the side that we can see;
+       the 2 coaches in front of the benches before the white line, a 3x3 sprite with some animation") ──
+       Benches sit behind the far board line (the boards open in front of them), home left, away right.
+       Coaches: assets/coaches/coach_tracksuit.png (home) / coach_suit.png (away), 3x3 poses re-packed with the
+       feet on one line (art/coaches_src/slice_coaches.py): 0 idle 1 point at you 2 arms crossed 3 stop hand
+       4 clap 5 point to the side 6 thinking 7 shout 8 fist pump. Unlit sprites, like the players. */
+    const DUGX0=6.2, DUGX1=11.8, TPW=2.75;              // TPW: half width of the tunnel portal
+    /* LED rings on the middle and upper tier fronts (ult11-stadium-classic buildLedRings), same scrolling content */
+    let ringMat=null;
+    function ensureLedRings(){
+      if(!window.U11_CLASSIC||!U11_CLASSIC.buildLedRings||!boardTex) return;
+      if(U11_CLASSIC.status!=='ready'){ clearTimeout(ensureLedRings._t); ensureLedRings._t=setTimeout(ensureLedRings,500); return; }
+      ringMat=ledMaterial(boardTex); ringMat.uniforms.leds.value.set(256,20);
+      U11_CLASSIC.buildLedRings(T,ringMat,[[11.5,6.25,8.15],[20.6,12.6,15.45]]);
+      if(U11_CLASSIC.tunnelClip) U11_CLASSIC.tunnelClip(T,renderer);   // stand geometry clipped out of the corridor
+    }
+    /* THE TUNNEL (author reference 2026-10-07: "the tunnel should look very well established"): a built portal in front
+       of the stand's opening - concrete side walls with a blue trim, a lit header with the crest, a roof slab - a lit
+       corridor going back into the stand (ceiling lamps, wall light strips, a dark far end) and a blue carpet out to
+       the touchline. Opening matches the model's tunnel (x +-1.93, height 3.02, z -26..-36.7, model units). */
+    let tunnelGroup=null;
+    function tunnelHeaderTex(){
+      const c=document.createElement('canvas'); c.width=512; c.height=128; const x=c.getContext('2d');
+      const g=x.createLinearGradient(0,0,0,128); g.addColorStop(0,'#1d3a8a'); g.addColorStop(1,'#0c1a45'); x.fillStyle=g; x.fillRect(0,0,512,128);
+      x.strokeStyle='rgba(140,190,255,.7)'; x.lineWidth=3; x.strokeRect(6,6,500,116);
+      x.fillStyle='#ffffff'; x.beginPath(); x.moveTo(256,22); x.lineTo(290,34); x.lineTo(286,78); x.lineTo(256,104); x.lineTo(226,78); x.lineTo(222,34); x.closePath(); x.fill();   // the crest shield
+      x.fillStyle='#1d3a8a'; x.font='900 38px Cinzel, serif'; x.textAlign='center'; x.textBaseline='middle'; x.fillText('11',256,62);
+      x.fillStyle='#e8f0ff'; x.font='700 26px Cinzel, serif'; x.fillText('ULTIMATE',130,66); x.fillText('ELEVEN',382,66);
+      const t=new T.CanvasTexture(c); t.anisotropy=8; return t;
+    }
+    /* tunnel surfaces are self-lit (the corridor has its own lamps, the stadium lights do not reach in): a gradient
+       from the bright mouth to the dimmer depth, so the corridor reads as a lit space receding (author reference) */
+    function tunnelSurfTex(kind){
+      const c=document.createElement('canvas'); c.width=512; c.height=128; const x=c.getContext('2d');
+      const g=x.createLinearGradient(0,0,512,0);                        // u: 0 = mouth, 1 = far end
+      if(kind==='wall'){ g.addColorStop(0,'#e4e0d8'); g.addColorStop(0.55,'#b9b3a8'); g.addColorStop(1,'#6f6a62'); }
+      else if(kind==='ceil'){ g.addColorStop(0,'#c9c5bd'); g.addColorStop(0.6,'#8f8a82'); g.addColorStop(1,'#4c4842'); }
+      else { g.addColorStop(0,'#a9adb3'); g.addColorStop(0.6,'#7d8086'); g.addColorStop(1,'#45474b'); }
+      x.fillStyle=g; x.fillRect(0,0,512,128);
+      if(kind==='wall'){
+        x.fillStyle='rgba(0,0,0,.16)'; for(let i=1;i<10;i++) x.fillRect(i*51,0,2,128);           // panel joints
+        x.fillStyle='rgba(30,60,140,.55)'; x.fillRect(0,92,512,7);                                // blue dado band
+        x.fillStyle='rgba(0,0,0,.22)'; x.fillRect(0,99,512,29);                                   // darker skirting
+        const s=x.createLinearGradient(0,0,0,128); s.addColorStop(0,'rgba(255,240,210,.35)'); s.addColorStop(0.25,'rgba(255,240,210,0)');
+        x.fillStyle=s; x.fillRect(0,0,512,128);                                                    // lamp wash at the top
+      } else if(kind==='ceil'){
+        x.fillStyle='rgba(0,0,0,.18)'; for(let i=1;i<16;i++) x.fillRect(i*32,0,2,128);
+      } else {
+        x.fillStyle='rgba(255,255,255,.08)'; for(let i=1;i<16;i++) x.fillRect(i*32,0,1,128);
+      }
+      const t=new T.CanvasTexture(c); t.anisotropy=8; return t;
+    }
+    function tunnelEndTex(){
+      const c=document.createElement('canvas'); c.width=256; c.height=256; const x=c.getContext('2d');
+      x.fillStyle='#3a3732'; x.fillRect(0,0,256,256);
+      const g=x.createRadialGradient(128,150,10,128,150,130); g.addColorStop(0,'rgba(230,205,165,.55)'); g.addColorStop(0.5,'rgba(230,205,165,.2)'); g.addColorStop(1,'rgba(230,205,165,0)');
+      x.fillStyle=g; x.fillRect(0,0,256,256);
+      x.fillStyle='#b8ab94'; x.fillRect(84,70,88,186);                                              // a doorway at the far end (soft, not a hot spot)
+      x.fillStyle='rgba(0,0,0,.25)'; x.fillRect(84,70,88,6);
+      const t=new T.CanvasTexture(c); return t;
+    }
+    function buildTunnel(){
+      const k=PLEN/70, w=PWID/44.87, hw2=1.93*k, H=3.02*k, zF=-26.0*w, zB=-36.6*w, zP=-(PWID/2+3.0)+0.6*k, zS=-26.9*w;
+      const grp=new T.Group(); boardGroup.add(grp); tunnelGroup=grp;
+      const conc=new T.MeshStandardMaterial({color:0xc9ccd2,roughness:0.8,metalness:0.05,emissive:0x3a3d43});   // concrete: reads in the dark stand without glowing
+      const trim=new T.MeshBasicMaterial({color:0x2f6fe0});
+      const dark=new T.MeshStandardMaterial({color:0x2a2e36,roughness:0.9,emissive:0x0d0f13,side:T.DoubleSide});
+      const box=(sx,sy,sz,m,x,y,z)=>{ const o=new T.Mesh(new T.BoxGeometry(sx,sy,sz),m); o.position.set(x,y,z); grp.add(o); return o; };
+      const depth=zP-zS;                                         // portal: from inside the stand to just past the boards line
+      [-1,1].forEach(sx=>{ const xm=sx*(hw2+(TPW*k-hw2)/2);
+        box(TPW*k-hw2,H+0.55*k,Math.abs(depth),conc,xm,(H+0.55*k)/2,(zP+zS)/2);
+        box(0.06*k,0.12*k,Math.abs(depth)+0.02,trim,sx*(hw2+0.03*k),0.9*k,(zP+zS)/2); });   // blue light trim along the inner edge
+      box(TPW*k*2,0.18*k,Math.abs(depth),conc,0,H+0.55*k+0.09*k,(zP+zS)/2);                // roof slab
+      const hdr=new T.Mesh(new T.PlaneGeometry(TPW*k*2-0.2*k,0.85*k),new T.MeshBasicMaterial({map:tunnelHeaderTex()}));
+      hdr.position.set(0,H+0.32*k,zP+0.02); grp.add(hdr);                                    // lit header over the opening
+      box(TPW*k*2,0.08*k,0.1*k,trim,0,H-0.02*k,zP);                                          // lit lintel strip
+      // the corridor: light concrete walls, ceiling and floor falling off with depth, a lit doorway at the far end,
+      // bright ceiling lamps every 1.3 units with a soft glow, warm wall light strips
+      const L=Math.abs(zB-zP);
+      const wallM=new T.MeshBasicMaterial({map:tunnelSurfTex('wall'),side:T.DoubleSide}), TL=grp.userData.look={surf:[wallM],lamp:[],strip:[],glow:null,end:null};
+      [-1,1].forEach(sx=>{ const wl=new T.Mesh(new T.PlaneGeometry(L,H),wallM); wl.rotation.y=sx*Math.PI/2; if(sx<0) wl.scale.x=-1;   // u=0 at the mouth on both walls
+        wl.position.set(sx*(hw2-0.02),H/2,(zP+zB)/2); grp.add(wl);
+        const sm=new T.MeshBasicMaterial({color:0xffe2b0}); TL.strip.push(sm); box(0.04*k,0.05*k,L,sm,sx*(hw2-0.05*k),H-0.25*k,(zP+zB)/2); });
+      const cl=new T.Mesh(new T.PlaneGeometry(L,hw2*2),new T.MeshBasicMaterial({map:tunnelSurfTex('ceil'),side:T.DoubleSide}));
+      cl.rotation.set(Math.PI/2,0,-Math.PI/2); cl.position.set(0,H-0.01,(zP+zB)/2); grp.add(cl); TL.surf.push(cl.material);
+      const end=new T.Mesh(new T.PlaneGeometry(hw2*2,H),new T.MeshBasicMaterial({map:tunnelEndTex()})); end.position.set(0,H/2,zB+0.02); grp.add(end); TL.end=end.material;
+      const lampM=new T.MeshBasicMaterial({color:0xfff6e4}); TL.lamp.push(lampM); const glowM=new T.SpriteMaterial({map:fxGradTex('#ffe8c0'),color:0xffffff,transparent:true,opacity:0.5,blending:T.AdditiveBlending,depthWrite:false,fog:false});
+      for(let z=zP-0.7*k; z>zB+0.5*k; z-=1.3*k){ box(hw2*1.2,0.04*k,0.22*k,lampM,0,H-0.04*k,z);
+        const gl=new T.Sprite(glowM); gl.scale.set(hw2*2.2,0.9*k,1); gl.position.set(0,H-0.3*k,z); gl.renderOrder=4; grp.add(gl); }
+      TL.glow=glowM;
+      const fl=new T.Mesh(new T.PlaneGeometry(L,hw2*2),new T.MeshBasicMaterial({map:tunnelSurfTex('floor')}));
+      fl.rotation.set(-Math.PI/2,0,Math.PI/2); fl.position.set(0,0.012,(zP+zB)/2); grp.add(fl); TL.surf.push(fl.material);
+      // blue carpet from the far end out to the touchline
+      const zT=-(PWID/2+0.15*k), cL=Math.abs(zB-zT);
+      const cp=new T.Mesh(new T.PlaneGeometry(1.7*k,cL),new T.MeshStandardMaterial({color:0x2350c8,roughness:0.85,emissive:0x0b1c4a}));
+      cp.rotation.x=-Math.PI/2; cp.position.set(0,0.02,(zB+zT)/2); grp.add(cp);
+      [-1,1].forEach(sx=>box(0.05*k,0.015*k,cL,new T.MeshBasicMaterial({color:0xdfe8ff}),sx*0.85*k,0.025,(zB+zT)/2));
+      grp.traverse(o=>{ if(o.isMesh) o.castShadow=false; });
+      let lk='classic'; try{ lk=LOOK; }catch(e){} tunnelLook(lk);
+    }
+    /* the tunnel must not pull the eye (author 2026-10-07: "not extremely bright, darker than now, especially at night;
+       during the day the lights are off anyway"). Day: lamps off, a dim unlit corridor (only the mouth catches some
+       daylight through the gradient). Golden / night: lamps on but subdued, a faint glow. P3D.tunnelLight tunes it. */
+    P3D.tunnelLight={ classic:{surf:0.30,lamp:0.30,strip:0.0,glow:0.0,end:0.28},
+                      golden:{surf:0.34,lamp:0.60,strip:0.30,glow:0.08,end:0.34},
+                      night:{surf:0.24,lamp:0.55,strip:0.25,glow:0.06,end:0.26} };
+    function tunnelLook(look){
+      const TL=tunnelGroup&&tunnelGroup.userData.look; if(!TL) return;
+      const c=(P3D.tunnelLight||{})[look]||P3D.tunnelLight.classic;
+      TL.surf.forEach(m=>m.color.setScalar(c.surf));
+      TL.lamp.forEach(m=>m.color.setHex(0xfff6e4).multiplyScalar(c.lamp));
+      TL.strip.forEach(m=>{ m.color.setHex(0xffe2b0).multiplyScalar(c.strip); m.visible=true; });
+      if(TL.glow){ TL.glow.opacity=c.glow; TL.glow.visible=c.glow>0.001; }
+      if(TL.end) TL.end.color.setScalar(c.end);
+    }
+    P3D.coaches={home:'coach_tracksuit', away:'coach_suit', scale:1.0};
+    const COACHES=[];
+    function benchMesh(len,col){
+      const g=new T.Group(), k=PLEN/70;
+      /* the dugout has its own lighting (strip under the canopy), so its parts carry some self-light and do not
+         sink into the dark stand behind them (2026-10-07: they read almost black) */
+      const dark=new T.MeshStandardMaterial({color:0x4a515c,roughness:0.7,metalness:0.2,emissive:0x1c2128});
+      const steel=new T.MeshStandardMaterial({color:0xdfe4ea,roughness:0.3,metalness:0.6,emissive:0x50555c});
+      const seat=new T.MeshStandardMaterial({color:col,roughness:0.4,metalness:0.05,emissive:new T.Color(col).multiplyScalar(0.42)});
+      const base=new T.Mesh(new T.BoxGeometry(len,0.12*k,1.45*k),dark); base.position.y=0.06*k; g.add(base);
+      const stripe=new T.Mesh(new T.BoxGeometry(len,0.07*k,0.02*k),new T.MeshBasicMaterial({color:col})); stripe.position.set(0,0.09*k,0.73*k); g.add(stripe);
+      const wall=new T.Mesh(new T.BoxGeometry(len,1.25*k,0.08*k),dark); wall.position.set(0,0.68*k,-0.66*k); g.add(wall);
+      const n=Math.max(4,Math.floor(len/(0.62*k)));
+      for(let i=0;i<n;i++){ const x=-len/2+(i+0.5)*len/n;
+        const s=new T.Mesh(new T.BoxGeometry(0.5*k,0.1*k,0.48*k),seat); s.position.set(x,0.52*k,-0.12*k); g.add(s);
+        const b=new T.Mesh(new T.BoxGeometry(0.5*k,0.62*k,0.08*k),seat); b.position.set(x,0.86*k,-0.38*k); b.rotation.x=-0.12; g.add(b);
+        const l=new T.Mesh(new T.CylinderGeometry(0.03*k,0.03*k,0.42*k,8),steel); l.position.set(x,0.27*k,-0.12*k); g.add(l); }
+      // curved glass canopy over the seats, steel ribs at the ends and the middle
+      const R=1.15*k, glass=new T.MeshStandardMaterial({color:0xdcecf8,roughness:0.06,metalness:0.1,emissive:0x3a4a58,transparent:true,opacity:0.34,side:T.DoubleSide,depthWrite:false});
+      const can=new T.Mesh(new T.CylinderGeometry(R,R,len,28,1,true,Math.PI*0.11,Math.PI*0.5),glass);   // from the back wall top, arching forward over the seats
+      can.rotation.z=Math.PI/2; can.position.set(0,0.42*k,-0.66*k); can.renderOrder=3; g.add(can);
+      /* ribs: the canopy is the cylinder band at angles 90..201.6 deg around the x axis (y up, z toward the pitch
+         after the rotation) - build each rib from the same points so it sits exactly on the glass edge */
+      const arcPts=[]; for(let i=0;i<=20;i++){ const th=Math.PI*(0.61-0.5*i/20); arcPts.push(new T.Vector3(0,Math.sin(th)*R,Math.cos(th)*R)); }   // back-top -> front edge
+      const arcGeo=new T.TubeGeometry(new T.CatmullRomCurve3(arcPts),24,0.035*k,6,false);
+      [-len/2,0,len/2].forEach(x=>{ const rib=new T.Mesh(arcGeo,steel); rib.position.set(x,0.42*k,-0.66*k); g.add(rib); });
+      { const tip=arcPts[arcPts.length-1];                         // front edge tube + a light strip under it
+        const edge=new T.Mesh(new T.CylinderGeometry(0.04*k,0.04*k,len,8),steel); edge.rotation.z=Math.PI/2; edge.position.set(0,0.42*k+tip.y,-0.66*k+tip.z); g.add(edge);
+        const lamp=new T.Mesh(new T.BoxGeometry(len*0.96,0.03*k,0.06*k),new T.MeshBasicMaterial({color:0xf4f8ff})); lamp.position.set(0,0.42*k+tip.y-0.05*k,-0.66*k+tip.z-0.06*k); g.add(lamp); }
+      g.traverse(o=>{ if(o.isMesh) o.castShadow=true; });
+      return g;
+    }
+    function coachSprite(key){
+      const tex=new T.TextureLoader().load('assets/coaches/'+key+'.png'); tex.repeat.set(1/3,1/3); tex.offset.set(0,2/3);
+      tex.magFilter=T.NearestFilter; tex.minFilter=T.LinearMipmapLinearFilter;
+      const sp=new T.Sprite(new T.SpriteMaterial({map:tex,transparent:true,alphaTest:0.35,fog:false}));
+      sp.center.set(0.5,12/420); return {sp,tex};
+    }
+    function buildDugouts(hw){
+      COACHES.length=0;
+      const k=PLEN/70, len=(DUGX1-DUGX0-0.6)*k, hc=(flagData&&flagData.homeCol)||'#1e72dc', ac=(flagData&&flagData.awayCol)||'#c22020';
+      const bz=-(PWID/2+1.95*k), cz=-(PWID/2+0.48*k);   // the dugouts sit in front of the board line
+      const hh=PLEN*(P3D.spriteFrac!=null?P3D.spriteFrac:0.045)*(P3D.coaches.scale||1);
+      const shTex=fxGradTex('#000000');
+      [['h',-1,hc,P3D.coaches.home],['a',1,ac,P3D.coaches.away]].forEach(([side,sx,col,key])=>{
+        const xm=sx*(DUGX0+DUGX1)/2*k;
+        const b=benchMesh(len,col); b.position.set(xm,0,bz); boardGroup.add(b);
+        const c=coachSprite(key); c.sp.scale.set(hh*400/420,hh,1); c.sp.position.set(xm+sx*0.9*k,0,cz); boardGroup.add(c.sp);
+        const sh=new T.Mesh(new T.PlaneGeometry(hh*0.42,hh*0.16),new T.MeshBasicMaterial({map:shTex,transparent:true,opacity:0.45,depthWrite:false}));
+        sh.rotation.x=-Math.PI/2; sh.position.set(c.sp.position.x,0.02,cz); boardGroup.add(sh);
+        COACHES.push({side,sp:c.sp,tex:c.tex,sh,pose:0,until:0,flip:false,idleAt:performance.now()+1500+Math.random()*3000});
+      });
+      _coachScore=null;
+    }
+    let _coachScore=null;
+    function coachPose(C,p,ms,flip){ C.pose=p; C.until=performance.now()+(ms||0); C.flip=!!flip; }
+    function tickCoaches(){
+      if(!COACHES.length) return;
+      const now=performance.now(), g=(typeof G!=='undefined')?G:null, show=!cine&&!PEN;
+      // events: a goal (scorer's coach celebrates, the other one sinks into thought)
+      if(g){ const sc=[g.hG||0,g.aG||0];
+        if(_coachScore&&(sc[0]>_coachScore[0]||sc[1]>_coachScore[1])){ const sidG=sc[0]>_coachScore[0]?'h':'a';
+          COACHES.forEach(C=>{ if(C.side===sidG){ coachPose(C,8,3200); C.next=[4,1600]; } else coachPose(C,Math.random()<0.5?6:2,4200); }); }
+        _coachScore=sc; }
+      COACHES.forEach(C=>{
+        C.sp.visible=show; C.sh.visible=show; if(!show) return;
+        if(now>=C.until){
+          if(C.next){ coachPose(C,C.next[0],C.next[1]); C.next=null; }
+          else if(g&&g.mt&&!g.paused&&now>=C.idleAt){
+            C.idleAt=now+2600+Math.random()*3400;
+            let p=[0,0,0,2,6][Math.floor(Math.random()*5)], fl=false;
+            try{ const att=g.poss===C.side, cp=PP[g.poss]&&PP[g.poss][g.ck], prog=cp?progressFor(g.poss,cp):0.5;
+              if(g.phase==='moving'||g.phase==='pass_anim'){
+                if(att&&prog>0.62&&Math.random()<0.7){ p=Math.random()<0.6?5:1; fl=dirFor(C.side)<0; }   // urging them on, pointing the way
+                else if(!att&&prog>0.66&&Math.random()<0.7){ p=Math.random()<0.5?7:3; }                // under pressure: shouting, "hold it"
+              } else if(g.phase==='duel_result'&&g.D){ const won=(g.D.as===C.side)===!!g.D._won; if(Math.random()<0.5) p=4; }
+            }catch(e){}
+            coachPose(C,p,p===0?0:1700,fl);
+          } else if(now>=C.until&&C.pose!==0&&C.pose!==2&&C.pose!==6) coachPose(C,0,0);
+        }
+        const c=C.pose%3, r=Math.floor(C.pose/3), t=C.tex;
+        if(C.flip){ t.repeat.set(-1/3,1/3); t.offset.set((c+1)/3,1-(r+1)/3); } else { t.repeat.set(1/3,1/3); t.offset.set(c/3,1-(r+1)/3); }
+      });
+    }
+    P3D.coachState=function(){ return COACHES.map(C=>({side:C.side,pose:C.pose,flip:C.flip,vis:C.sp.visible,x:+C.sp.position.x.toFixed(2),z:+C.sp.position.z.toFixed(2)})); };
     /* corner flags in team colours (home = left end, away = right end) */
     function placeCornerFlags(){
       if(cornerGroup){ scene.remove(cornerGroup); cornerGroup=null; } CFLAGS.length=0;
@@ -2108,6 +2408,7 @@
     function shotArc(kind,fe,stl,c){
       const loft=(stl&&stl.loft!=null)?stl.loft:1;
       if(kind==='straight') return straightArc(fe);
+      if(kind==='pass'){ const lo=(c&&c._ploft)||0; return (1.5+lo)*Math.sin(Math.PI*fe); }   // SUPER PASS: skims, lofted only when long, lands at his feet
       if(kind==='ultra'){ const t=Math.min(1,Math.max(0,(fe-0.86)/0.14)); return 4*t*t*(3-2*t); }   // ULTRA: skims the turf the whole way, lifts into the goal at the very end (ends at 4 = the hover height)
       /* the drive's climb depends on where it is struck from (author 2026-10-02:
          "from inside the box way lower arch, from up close just straight").
@@ -2544,6 +2845,8 @@
       tickAstraVolumetrics(now);
       if(flashPts){ flashPts.material.uniforms.time.value=now*0.001; flashPts.material.uniforms.scale.value=renderer.getPixelRatio(); }
       if(boardTex) boardTex.offset.x-=dt*0.045;
+      if(boardMat&&boardTex){ boardMat.uniforms.off.value=boardTex.offset.x; boardMat.uniforms.time.value+=dt; }
+      if(ringMat&&boardTex){ ringMat.uniforms.off.value=boardTex.offset.x*0.6; ringMat.uniforms.time.value+=dt; }
       for(const f of CFLAGS) f.rotation.y=Math.sin(now*0.003+f.userData.ph)*0.45+(f.position.x<0?0.3:Math.PI-0.3);
       for(const h of MASTS) h.material.opacity=0.6+0.12*Math.sin(now*0.02+h.position.x);
       tickParts(dt); tickRings(dt); tickFlashes(dt);
@@ -3380,7 +3683,13 @@
          stays - he is part of the shot. */
       if(cine&&cine.v2&&_c3on()){
         const b=(typeof G!=='undefined'&&G)?G._ssBlk:null;
-        const keep=[cine.o.as+':'+cine.o.sk, cine.o.ds+':GK', (b&&b.committed)?b.ds+':'+b.k:''];
+        const keep=cine.blk2?[cine.o.as+':'+cine.o.sk, cine.o.ds+':'+cine.blk2.vk, cine.o.as+':GK']   // a super block: blocker + shooter + HIS KEEPER
+                  :cine.icp?[cine.o.as+':'+cine.o.sk, cine.o.ds+':'+cine.icp.vk]   // a super intercept: interceptor + passer
+                  :cine.tkl?[cine.o.as+':'+cine.o.sk, cine.o.ds+':'+cine.tkl.vk]   // a super tackle: tackler + carrier
+                  :cine.o12?[cine.o.as+':'+cine.o.sk, cine.o.as+':'+cine.o12.tk, cine.o.ds+':'+cine.o12.dk]   // a super 1-2: runner + wall + defender
+                  :cine.drib?[cine.o.as+':'+cine.o.sk, cine.o.ds+':'+cine.drib.dk]   // a super dribble: dribbler + tackler
+                  :cine.pass?[cine.o.as+':'+cine.o.sk, cine.o.as+':'+cine.pass]   // a super pass: passer + receiver
+                            :[cine.o.as+':'+cine.o.sk, cine.o.ds+':GK', (b&&b.committed)?b.ds+':'+b.k:''];
         for(const id in sprites){ if(keep.indexOf(id)>-1) continue;
           sprites[id].sprite.visible=false; sprites[id].shadow.visible=false;
           if(sprites[id].sil) sprites[id].sil.visible=false; }
@@ -4185,6 +4494,7 @@
     }
     function applyLookMaterials(){
       try{ nightGoals(LOOK==='night'); }catch(e){}
+      try{ tunnelLook(LOOK); }catch(e){}
       const night=LOOK==='night', N=P3D.night, P=(typeof envPreset==='function')?envPreset():null;
       const W=(typeof ENV!=='undefined'&&P3D.weatherFx)?P3D.weatherFx[ENV.weather]:null;
       if(window.U11_SANTA)U11_SANTA.setTime(LOOK); if(window.U11_SANTA_CITY) U11_SANTA_CITY.setTime(LOOK);
@@ -4998,6 +5308,7 @@
     let refInit=false, _refTexBound=false;
     function syncRef(dt){
       if(PEN){ refMesh.visible=false; refSh.visible=false; return; }   // penalty: taker + keeper only
+      if(cine){ refMesh.visible=false; refSh.visible=false; return; }  // no referee in any cinematic (author 2026-10-07)
       if(!refSheet||!refSheet.img.complete){ refMesh.visible=false; refSh.visible=false; return; }
       if(!_refTexBound){ refTex.image=refSheet.img; refTex.needsUpdate=true; _refTexBound=true; }
       refMesh.visible=true; refSh.visible=true;
@@ -5062,6 +5373,7 @@
     const orbit={theta:0, phi:0.55};
     const camFocus={x:0,z:0,dist:P3D.cam.dist};
     let _camSnap=false;                          // next updateCamera jumps to its target (after a cinematic)
+    let _camLift=0;                              // how far the framing is raised for a ball in the air
     // optional light user look (kept tiny so HD-2D never breaks)
     let drag=false,lx=0,ly=0;
     gl.style.pointerEvents='none';   // canvas itself ignores; we listen on #C's parent for drag
@@ -5196,11 +5508,24 @@
            runner, the ring and the header happened at the edge of the frame. */
         const _bt=(typeof ballTravel!=='undefined')?ballTravel:null;
         if(_bt&&_bt.active&&_bt.kind==='cross'&&_bt.meet){ bx+=(_bt.meet.x-bx)*0.6; by+=(_bt.meet.y-by)*0.6; kMul=1.6; }
+        /* PASS (author 2026-10-06: "the short pass camera barely follows the ball"): lead toward the
+           RECEIVER and catch up faster, so he is in shot before the ball reaches him - chasing the ball
+           from behind let it run to the frame edge with the receiver still out of view. */
+        else if(_bt&&_bt.active&&_bt.physicalPass&&_bt.tx!=null){ const lead=(_bt.kind==='cross'||_bt.arc>0)?0.45:0.4;
+          bx+=(_bt.tx-bx)*lead; by+=(_bt.ty-by)*lead; kMul=2.2; }
         fx=ex2wx(bx); fz=ey2wz(by); cx01=bx/(CV.width||1280);
       } else if(pickT){ fx=ex2wx(pickT.x); fz=ey2wz(pickT.y); cx01=pickT.x/(CV.width||1280); kMul=3.2; }   // glide onto the aimed team-mate
       else if(cp){ fx=ex2wx(cp.x); fz=ey2wz(cp.y); cx01=cp.x/(CV.width||1280); }
       else if(typeof ball!=='undefined'&&ball){ fx=ex2wx(ball.x); fz=ey2wz(ball.y); cx01=ball.x/(CV.width||1280); }
       const k=_camSnap?1:Math.min(1,dt*C.followLerp*kMul); _camSnap=false;
+      /* BALL HEIGHT (2026-10-06): a cross or lofted pass climbed out of the TOP of the frame (measured:
+         7% from the edge at the apex) - the camera only followed the ball along the ground. While a pass
+         or shot is in the air, raise the look point and pull back with the ball's height, then settle. */
+      { let lift=0;
+        if((passing||shotFocus)&&typeof ballTravel!=='undefined'&&ballTravel&&ballTravel.active){
+          const bo=(ballSprite&&ballSprite.visible)?ballSprite:(ballMesh&&ballMesh.visible?ballMesh:null);
+          if(bo) lift=Math.max(0,bo.position.y-0.8); }
+        _camLift+=(lift-_camLift)*Math.min(1,dt*(lift>_camLift?7:3)); }
       camFocus.x+=(fx-camFocus.x)*k;
       camFocus.z+=(fz*C.zFollow-camFocus.z)*k;     // partial Z so view stays sideways
       // AUTO-ZOOM near the SOUTH touchline: as the carrier approaches the near
@@ -5217,10 +5542,11 @@
       const th = (drag? orbit.theta : autoTheta);
       const ph = (drag? orbit.phi   : C.phi);
       const r=camFocus.dist;
-      camera.position.set(camFocus.x + r*Math.cos(ph)*Math.sin(th),
-                          C.height*Math.sin(ph)+C.lift,
-                          camFocus.z + r*Math.cos(ph)*Math.cos(th));
-      camera.lookAt(camFocus.x, C.lookY, camFocus.z);
+      const rr=r+_camLift*1.1;                     // a little wider while the ball is up
+      camera.position.set(camFocus.x + rr*Math.cos(ph)*Math.sin(th),
+                          C.height*Math.sin(ph)+C.lift+_camLift*0.35,
+                          camFocus.z + rr*Math.cos(ph)*Math.cos(th));
+      camera.lookAt(camFocus.x, C.lookY+_camLift*0.75, camFocus.z);
     }
 
     /* ════════ SUPER-SHOT CINEMATIC ════════
@@ -5993,6 +6319,7 @@
                if(r){ og.sprite.material.map=r.map; og.tex=r.map; og.sil.material.map=r.map;
                       r.map.needsUpdate=true; } }}
       clearTrail();
+      if(cine.tkl&&cine.tkl.tilted){ const g=sprites[cine.tkl.tilted]; if(g&&g.sprite&&g.sprite.material){ g.sprite.material.rotation=0; if(g.sil&&g.sil.material) g.sil.material.rotation=0; } }
       const _ds=cine.o.ds, _goal=!!cine.isGoal;
       const cb=cine.o.onDone; cine=null;
       /* back to the match camera (2026-09-26): cut straight to the keeper /
@@ -6020,6 +6347,54 @@
         const dir=(o.dir!=null)?o.dir:((o.as==='h')?1:-1);     // engine attack dir (halves swap!)
         const gx=(o.gx!=null)?o.gx:((dir>0)?W*0.93:W*0.07);
         const stopX=gp.x-dir*W*0.016;                 // hold point just short of the keeper
+        /* SUPER PASS (author 2026-10-06): the same cinematic, aimed at a team-mate - o.pass = his slot */
+        const pr=(o.pass&&PP[o.as]&&PP[o.as][o.pass])||null;
+        /* SUPER DRIBBLE (author 2026-10-06): o.dribble = the defender's slot. He comes in from the front
+           with a slide tackle; the dribbler jumps over him with the ball and lands clear. S0 -> S1 is the
+           dribbler's run (S1 = where afSucc puts him), D0 -> D1 the defender's slide. */
+        /* SUPER 1-2 (author 2026-10-06): o.onetwo={tk,dk}. He passes to the team-mate, who plays it straight
+           back first time; he runs past the defender and collects at E - where afOneTwo puts him. */
+        /* SUPER TACKLE (author 2026-10-07: "start directly with the player coming in with the tackle"; defensive
+           ones shorter). No charge: he slides in from the front-side at the carrier, takes the ball, the carrier
+           is tripped and goes down. The carrier runs toward his goal = screen-right (same convention as the
+           shot), the tackler comes the other way. */
+        let tkl=null;
+        if(o.tackle){ const vp=PP[o.ds]&&PP[o.ds][o.tackle.vk]; if(!vp){window.U11DBG&&U11DBG('[3D] super tackle: no carrier');return false;}
+          const ad=-dir, Hh6=(CV.height||720);                 // ad = the carrier's attacking direction
+          tkl={vk:o.tackle.vk, ad, V0:{x:vp.x-ad*W*0.03,y:vp.y}, V1:{x:vp.x+ad*W*0.012,y:vp.y},
+               D0:{x:vp.x+ad*W*0.12,y:vp.y+dir*Hh6*0.016}, D1:{x:vp.x+ad*W*0.004,y:vp.y+dir*Hh6*0.006}, u:0}; }
+        /* SUPER INTERCEPT (author 2026-10-07: "ball already moving, the player jumps in and stops it").
+           o.intercept={vk, tx, ty}: the carrier's ball is already travelling toward (tx,ty); the interceptor
+           comes from the far side, jumps across the line at I and kills it. Same screen rule as the tackle:
+           the ball travels screen-right. */
+        /* SUPER BLOCK (author 2026-10-07: "I have the perfect sprite for it - the block art, row 5 cols 6-11 -
+           and make sure the GK is visible, the defender will most likely be near the goal"). o.block={vk}: the
+           carrier strikes at goal, the defender throws himself into the line in his block pose and the ball
+           smashes into him and drops at his feet; seen from behind the shooter, toward the goal and keeper. */
+        let blk2=null;
+        if(o.block){ const vp=PP[o.ds]&&PP[o.ds][o.block.vk], kp=PP[o.as]&&PP[o.as].GK; if(!vp){window.U11DBG&&U11DBG('[3D] super block: no carrier');return false;}
+          const ad=-dir, Hh8=(CV.height||720), K0=kp?{x:kp.x,y:kp.y}:{x:(ad>0?W*0.93:W*0.07),y:Hh8*0.5};
+          const L=Math.hypot(K0.x-vp.x,K0.y-vp.y)||1, ux=(K0.x-vp.x)/L, uy=(K0.y-vp.y)/L, dd=Math.min(W*0.06,L*0.4);
+          const B={x:vp.x+ux*dd, y:vp.y+uy*dd};
+          blk2={vk:o.block.vk, ad, V:{x:vp.x,y:vp.y}, K:K0, B, B0:{x:B.x+ux*W*0.01, y:B.y+(uy>=0?-1:1)*Hh8*0.035}, ux, uy, u:0}; }
+        let icp=null;
+        if(o.intercept){ const vp=PP[o.ds]&&PP[o.ds][o.intercept.vk]; if(!vp){window.U11DBG&&U11DBG('[3D] super intercept: no carrier');return false;}
+          const ad=-dir, Hh7=(CV.height||720), T0={x:o.intercept.tx, y:o.intercept.ty};
+          const I={x:vp.x+(T0.x-vp.x)*0.55, y:vp.y+(T0.y-vp.y)*0.55};
+          icp={vk:o.intercept.vk, ad, V:{x:vp.x,y:vp.y}, T:T0, I, D0:{x:I.x+ad*W*0.01,y:I.y+dir*Hh7*0.075}, u:0}; }
+        let o12=null;
+        if(o.onetwo){ const tp=PP[o.as]&&PP[o.as][o.onetwo.tk], dp=PP[o.ds]&&PP[o.ds][o.onetwo.dk];
+          if(!tp||!dp){window.U11DBG&&U11DBG('[3D] super 1-2: no team-mate / defender');return false;}
+          let ex=sp.x+dir*W*0.12; ex=dir>0?Math.min(ex,W*0.88):Math.max(ex,W*0.12); ex=Math.max(W*0.05,Math.min(W*0.95,ex));
+          const Hh5=(CV.height||720), ey=sp.y+(Hh5*0.5-sp.y)*0.15;
+          o12={tk:o.onetwo.tk,dk:o.onetwo.dk,C0:{x:sp.x,y:sp.y},E:{x:ex,y:ey},T:{x:tp.x,y:tp.y},
+               D0:{x:sp.x+dir*W*0.05,y:sp.y-dir*Hh5*0.012},u:0,M:null}; }
+        let drib=null;
+        if(o.dribble){ const dp=PP[o.ds]&&PP[o.ds][o.dribble]; if(!dp){window.U11DBG&&U11DBG('[3D] super dribble: no defender');return false;}
+          let s1x=sp.x+dir*W*0.08; s1x=dir>0?Math.min(s1x,W*0.88):Math.max(s1x,W*0.12); s1x=Math.max(W*0.05,Math.min(W*0.95,s1x));
+          const lat=-dir*(CV.height||720)*0.016;   // his slide line runs on the FAR side of the dribbler from the camera (cine3 shoots from +side): he passes behind and under, never in front
+          drib={dk:o.dribble,S0:{x:sp.x,y:sp.y},S1:{x:s1x,y:sp.y},D0:{x:sp.x+dir*W*0.13,y:sp.y+lat},D1:{x:sp.x+dir*W*0.035,y:sp.y+lat*0.5},u:0,lift:0}; }
+        if(o.pass&&!pr){window.U11DBG&&U11DBG('[3D] super pass: no receiver '+o.pass);return false;}
         try{
           // game.js declares selHome/selAway as top-level `let` — reachable by
           // bare name from a later script, NOT via window.*
@@ -6036,7 +6411,8 @@
         const jumpStart=typeof jumpHeight==='function'?jumpHeight(o.as,o.sk):0;
         const jumpLift=P3D.getJumpLift(o.as,o.sk);
         cine={v2:true,mode:'hold',t:0,ft:0,ot:0,o,dir,arrived:false,gkRestore:null,jumpStart,jumpLift,ultra:!!o.ultra,_camSide:1,_shFlip:false,
-          fx:sp.x,fy:sp.y, tx:stopX,ty:gp.y+dy*0.55, gx,gy:gp.y+dy, kx:gp.x,ky:gp.y,
+          fx:sp.x,fy:sp.y, tx:pr?pr.x:drib?drib.S1.x:o12?o12.E.x:stopX,ty:pr?pr.y:drib?drib.S1.y:o12?o12.E.y:gp.y+dy*0.55,
+          gx:pr?pr.x:drib?drib.S1.x+dir*W*0.05:o12?o12.E.x+dir*W*0.05:gx,gy:pr?pr.y:drib?drib.S1.y:o12?o12.E.y:gp.y+dy, kx:gp.x,ky:gp.y, pass:o.pass||null, drib, o12, tkl, icp, blk2,
           aim, aimDy:dy,
           col:o.color||sideColor(o.as)};
         const launch=cineBallLaunch(cine); cine.bfx=launch.x; cine.bfy=launch.y;
@@ -6049,7 +6425,25 @@
           _trailFx=trailStyleFor(shooter); try{ clearTrail(); scorchClear(); }catch(e){}
           cine.arc=(_trailFx&&_trailFx.sig&&_trailFx.sig.arc)||'normal';
           cine.shotName=P3D.shotName(shooter);   // the title card (ult11-cine3.js)
-          if(cine.ultra){ cine.shotName='ULTRA SHOT'; cine.arc='ultra'; cine.curveAmt=0; }   // the captain's once-per-match shot keeps the shooter's own aura + trail
+          if(cine.ultra){ cine.shotName='ULTRA SHOT'; cine.arc='ultra'; cine.curveAmt=0; }
+          if(cine.drib){ cine.shotName=o.dribName||'SUPER DRIBBLE'; cine.arc='normal'; cine.curveAmt=0; }
+          if(cine.o12){ cine.shotName=o.o12Name||'SUPER 1-2'; cine.arc='normal'; cine.curveAmt=0; }
+          if(cine.blk2){ const Bk=cine.blk2; cine.shotName=o.blkName||'SUPER BLOCK'; cine.arc='normal'; cine.curveAmt=0; cine.mode='blk';
+            cine.bfx=Bk.V.x; cine.bfy=Bk.V.y; cine._bw={x:ex2wx(Bk.V.x),y:0.1,z:ey2wz(Bk.V.y)};
+            cine.gx=Bk.K.x; cine.gy=Bk.K.y; cine.fx=Bk.V.x; cine.fy=Bk.V.y; }
+          if(cine.icp){ const I=cine.icp; cine.shotName=o.icpName||'SUPER INTERCEPT'; cine.arc='normal'; cine.curveAmt=0; cine.mode='icp';
+            cine.bfx=I.V.x; cine.bfy=I.V.y; cine._bw={x:ex2wx(I.V.x),y:0.1,z:ey2wz(I.V.y)};
+            const dl=Math.hypot(I.T.x-I.V.x,I.T.y-I.V.y)||1; cine.gx=I.V.x+(I.T.x-I.V.x)/dl*W*0.25; cine.gy=I.V.y+(I.T.y-I.V.y)/dl*W*0.25;   // screen 'forward' = the ball's way
+            cine.fx=I.V.x-(I.T.x-I.V.x)/dl*W*0.05; cine.fy=I.V.y-(I.T.y-I.V.y)/dl*W*0.05; }
+          if(cine.tkl){ cine.shotName=o.tklName||'SUPER TACKLE'; cine.arc='normal'; cine.curveAmt=0; cine.mode='tkl';
+            const vp=PP[o.ds][cine.tkl.vk]; cine.bfx=vp.x; cine.bfy=vp.y; cine._bw={x:ex2wx(vp.x),y:0.1,z:ey2wz(vp.y)};
+            cine.gx=vp.x+cine.tkl.ad*W*0.25; cine.gy=vp.y; cine.fx=vp.x-cine.tkl.ad*W*0.05; cine.fy=vp.y;   // 'forward' on screen = the CARRIER's way (he runs screen-right, the tackler comes at him)
+          }
+          if(cine.pass){                                // a pass: flight time + loft from the distance, no bend
+            const L=Math.hypot(pr.x-sp.x,pr.y-sp.y);
+            cine.shotName=o.passName||'SUPER PASS'; cine.arc='pass'; cine.curveAmt=0;
+            cine._pdur=Math.max(0.6,Math.min(1.15,L/(W*0.32)));
+            cine._ploft=Math.max(0,Math.min(1,(L-W*0.18)/(W*0.3)))*16; }   // the captain's once-per-match shot keeps the shooter's own aura + trail
           if(cine.arc==='drive') cine.curveAmt*=0.35;   // a drive barely bends
           if(cine.arc==='straight'){ cine.curveAmt=0; cine.style=Object.assign({},st,{kind:'power',curve:0}); }
           cine.curveAmt=curveLimit(cine.curveAmt,cine.bfx,cine.bfy,stopX,gp.y,pp.px,pp.py);
@@ -6144,6 +6538,8 @@
       const frac=(P3D.spriteFrac!=null?P3D.spriteFrac:0.045);
       const d=PLEN*frac*0.21;
       let bx=c.bfx,by=c.bfy,bz=0;
+      if(c.drib&&c.mode==='hold'&&c.t>=Math.max(0.24,((c.o&&c.o.holdMs)||1100)/1000)){ c.mode='drib'; try{ if(window.SFX&&SFX.tackle) SFX.tackle(); }catch(e){} }
+      if(c.o12&&c.mode==='hold'&&c.t>=Math.max(0.24,((c.o&&c.o.holdMs)||1000)/1000)){ c.mode='o12'; try{ if(window.SFX&&SFX.shortPass) SFX.shortPass(); }catch(e){} }
       if(c.mode==='hold'){
         const g=sprites[sid];
         /* SUPER ROW (12x8 sheets, row 6 cols 6-11): frames 0-2 charge,
@@ -6163,7 +6559,8 @@
           const hm=Math.max(240,(c.o&&c.o.holdMs)||2250)/1000;
           /* cine3 holds the FIRST super frame for the whole charge (mockup:
              row 6 col 6); cols 7-8 are the strike, played by impact(). */
-          forceAnim(sid,'side','super',_c3on()?0:Math.min(2,Math.floor(c.t/hm*3)),cineShooterFlip(c));
+          if(c.drib||c.o12) forceAnim(sid,'side','run',2,false);   // a dribble / 1-2 charges in a running stance, not the shot's kick pose
+          else forceAnim(sid,'side','super',_c3on()?0:Math.min(2,Math.floor(c.t/hm*3)),cineShooterFlip(c));
         }
         else if(cineWindupTex&&g&&g.sprite){           // dedicated wind-up sprite
           if(!c.shRestore)c.shRestore={g,map:g.sprite.material.map,silMap:g.sil?g.sil.material.map:null};
@@ -6231,10 +6628,12 @@
             if(r.g.sil&&r.silMap){ r.g.sil.material.map=r.silMap; r.g.sil.material.needsUpdate=true; } }
           c._shBack=true;
         }
+        if(!c.pass){                                  // (a super pass leaves the keeper alone)
         const _gs=gk6On()?GK6_POSE.set:GK_POSE.set;
         if(!(c._diveP>0))                              // once he has gone, never snap back to set
         if(!gkCineCell(c,_gs[0],_gs[1]))forceAnim(c.o.ds+':GK','down','idle',0,false); // keeper set, facing the ball
         cineGkNudge(c);                               // ...a step off his line
+        }
         const stl=c.style||{curve:0,loft:1,speed:1,kind:'normal'}, dur=c.dur||1.6;
         if(c.mode==='fly'){
           // anime-style ramp: hard off the boot, then slides into slow motion
@@ -6243,7 +6642,7 @@
             /* ULTRA: the last quarter of the flight runs at 0.22x (mockup slow-mo before the keeper) */
             let _k=1; if(c.ultra){ const u=Math.min(1,Math.max(0,(c.ft-0.64)/0.10)), a=u*u*(3-2*u); _k=1-(1-((P3D.ultra&&P3D.ultra.slowMo)||0.2))*a;
               if(a>0.05&&!c._ultraSlow){ c._ultraSlow=true; try{ window.U11_ULTRAFX&&U11_ULTRAFX.sfx('slow'); }catch(e){} } }
-            c.ft+=dt*_k/(U11_CINE3.flyDur||1.35);   // mockup: 1.35s
+            c.ft+=dt*_k/(c.pass?(c._pdur||0.9):(U11_CINE3.flyDur||1.35));   // mockup: 1.35s (a pass: by its length)
           }
           else{
           const CCs=P3D.cine||{}, smoMax=(CCs.slowMo||2.4), inAt=(CCs.slowInAt||0.12);
@@ -6263,7 +6662,8 @@
           }
           if(c.ft>=1){
             c.ft=1;
-            if(c._pendOut){                           // decided: straight on into the net / gloves
+            if(c.pass){ c.mode='pass_end'; c.ot=0; if(c._pendOut){ c.o.onDone=c._pendOut.onDone; c._pendOut=null; } c._passArrive=true; }
+            else if(c._pendOut){                           // decided: straight on into the net / gloves
               c.mode='out'; c.ot=0; c.o.onDone=c._pendOut.onDone; c._pendOut=null;
             } else c.mode='wait';
             if(c.onArrive&&!c.arrived){c.arrived=true;const cb=c.onArrive;c.onArrive=null;setTimeout(cb,0);}
@@ -6274,7 +6674,7 @@
         /* decided: the keeper reads it and goes during the flight, as in the
            mockup - a goal gets the full-stretch dive (beaten after it passes),
            a save the whole dive into the ball. */
-        if(c.decided&&c.isGoal!=null&&c.mode==='fly'){
+        if(c.decided&&c.isGoal!=null&&c.mode==='fly'&&!c.pass){
           const k=Math.max(0,Math.min(1,(fe-0.55)/0.45));
           c._diveP=(k*k*(3-2*k))*(c.isGoal?0.6:0.85); gkOutcome(c,c._diveP); cineGkNudge(c);
         }
@@ -6283,6 +6683,174 @@
         bz=shotArc(c.arc,fe,stl,c);
         if(c.mode==='fly'&&c.blk&&!c.blk.done&&fe>=c.blk.fe) blockImpact(c,bx,by);
         if(c.mode==='wait')bz=4+Math.sin(c.t*6)*0.8;  // hover short of the keeper
+      }else if(c.mode==='blk'||c.mode==='blk_end'){
+        if(!c._fxOff){c._fxOff=true;_fxT=0;hideHoldFx();}
+        const K=c.blk2, ts=c.o.as, vs=c.o.ds, vid=vs+':'+K.vk;
+        const lp=(a,b,t)=>a+(b-a)*t, cl=v=>Math.max(0,Math.min(1,v)), Sw=_c3hh()/1.8;
+        if(c.mode==='blk'){
+          /* ~0.9 s, a short slow-mo on the impact (u .42-.58 at 0.3x) */
+          const slow=(K.u>0.42&&K.u<0.58)?0.3:1; K.u=Math.min(1,K.u+dt*slow/0.9);
+          if(K.u>=1){ c.mode='blk_end'; c.ot=0; }
+        } else c.ot+=dt;
+        const u=K.u, kick=0.2, hit=0.46;
+        // the shooter (seen from behind): strikes, then stands
+        if(PP[vs]&&PP[vs][K.vk]){ PP[vs][K.vk].x=K.V.x; PP[vs][K.vk].y=K.V.y; }
+        if(u<kick+0.1) forceAnimT(vid,'up','shoot',cl(u/(kick+0.1)),false); else forceAnim(vid,'up','idle',0,false);
+        // the defender throws himself into the line in the BLOCK pose (row 5 cols 6-11, front-facing art)
+        const mu=cl(u/0.4), me=1-(1-mu)*(1-mu), bu=cl((u-0.04)/0.7);
+        if(PP[ts]&&PP[ts][c.o.sk]){ PP[ts][c.o.sk].x=lp(K.B0.x,K.B.x,me); PP[ts][c.o.sk].y=lp(K.B0.y,K.B.y,me); }
+        forceAnimT(sid,'side','block',bu,false);
+        // the ball: struck at goal, smashes into him at chest height, drops in front of him
+        const chest=0.75*Sw/0.09;
+        if(u<kick){ bx=K.V.x+K.ux*(CV.width||1280)*0.004; by=K.V.y+K.uy*(CV.width||1280)*0.004; bz=0; }
+        else if(u<hit){ const k=(u-kick)/(hit-kick); bx=lp(K.V.x,K.B.x,k); by=lp(K.V.y,K.B.y,k); bz=chest*k; }
+        else { const k=cl((u-hit)/0.4), rx=K.B.x-K.ux*(CV.width||1280)*0.007, ry=K.B.y-K.uy*(CV.width||1280)*0.007;
+          bx=lp(K.B.x,rx,k); by=lp(K.B.y,ry,k); bz=chest*(1-k)*(1-k)+1.6*Math.sin(Math.PI*k)*(1-k); }
+        if(u>=hit&&!c._blkHit){ c._blkHit=true; c._dribBurst=true;
+          try{ if(window.SFX){ SFX.ballKick&&SFX.ballKick(1); SFX.tackle&&SFX.tackle(); } window.U11_ULTRAFX&&U11_ULTRAFX.sfx('release'); }catch(e){} try{ shakeCam(0.1,260); }catch(e){} }
+        if(u<kick+0.05&&!c._blkKick){ c._blkKick=true; try{ if(window.SFX&&SFX.ballKick) SFX.ballKick(1); }catch(e){} }
+        const dp=(PP[ts]&&PP[ts][c.o.sk])||K.B;
+        K.M={s:{x:ex2wx(K.V.x),z:ey2wz(K.V.y)}, d:{x:ex2wx(dp.x),z:ey2wz(dp.y)}, k:{x:ex2wx(K.K.x),z:ey2wz(K.K.y)}};
+        if(c.mode==='blk_end'&&c.ot>=0.45){ cineEnd(); return; }
+      }else if(c.mode==='icp'||c.mode==='icp_end'){
+        if(!c._fxOff){c._fxOff=true;_fxT=0;hideHoldFx();}
+        const K=c.icp, ts=c.o.as, vs=c.o.ds, vid=vs+':'+K.vk;
+        const lp=(a,b,t)=>a+(b-a)*t, cl=v=>Math.max(0,Math.min(1,v));
+        if(c.mode==='icp'){
+          /* ~0.85 s, a short slow-mo as he meets it (u .42-.58 at 0.3x) */
+          const slow=(K.u>0.42&&K.u<0.58)?0.3:1; K.u=Math.min(1,K.u+dt*slow/0.85);
+          if(K.u>=1){ c.mode='icp_end'; c.ot=0; }
+        } else c.ot+=dt;
+        const u=K.u, hit=0.5;
+        // the passer: the pass off his boot, then he watches it go
+        if(PP[vs]&&PP[vs][K.vk]){ PP[vs][K.vk].x=K.V.x; PP[vs][K.vk].y=K.V.y; }
+        if(u<0.12) forceAnimT(vid,'side','shoot',u/0.12,false); else forceAnim(vid,'side','idle',0,false);
+        // the interceptor: runs in from the far side, jumps across the line (row 7 cols 6-11), lands with it
+        const ju=cl((u-0.18)/0.62), mu=cl(u/0.6), me=1-(1-mu)*(1-mu);
+        if(PP[ts]&&PP[ts][c.o.sk]){ PP[ts][c.o.sk].x=lp(K.D0.x,K.I.x,me); PP[ts][c.o.sk].y=lp(K.D0.y,K.I.y,me); }
+        let feet=0, lift=Math.sin(Math.PI*ju)*0.5*(_c3hh()/1.8)*0.35;
+        { const g=sprites[sid];
+          if(g&&g.sprite){ const _L=g._L||GRID, A=g._anchor;
+            if(ju>0&&ju<1){ forceAnimT(sid,'side','jump',ju,true);
+              if(A){ let gp=1; for(let i=0;i<6;i++){ const q=cellOf(_L,'side','jump',i), an=A[q.row*_L.cols+q.col]; if(an) gp=Math.min(gp,an.padB); }
+                const q=cellOf(_L,'side','jump',Math.round(ju*5)), an=A[q.row*_L.cols+q.col];
+                if(an){ feet=Math.max(0,(an.padB-gp)*Math.abs(g.sprite.scale.y)); g.sprite.center.y=gp; } } }
+            else forceAnim(sid,'side','run',Math.floor(c.t*14)%12,true);
+            if(lift>0){ g.sprite.position.y+=lift; if(g.sil) g.sil.position.y+=lift; } } }
+        // the ball: on its way (a low pass), meets him at I at chest height, then drops to his feet
+        if(u<hit){ const k=u/hit; bx=lp(K.V.x,K.I.x,k); by=lp(K.V.y,K.I.y,k);
+          bz=Math.max(0,(lp(0.1,feet+lift+0.55*(_c3hh()/1.8),k*k))/0.09); }
+        else { const k=cl((u-hit)/0.35); bx=K.I.x; by=K.I.y; bz=Math.max(0,((feet+lift+0.55*(_c3hh()/1.8))*(1-k)*(1-k))/0.09); }
+        { const ip=(PP[ts]&&PP[ts][c.o.sk])||{x:bx,y:by}, wv=1-cl(u/0.45);     // opening: the passer in frame too, then ball + interceptor
+          const sx=ex2wx(bx)+ex2wx(ip.x)+wv*ex2wx(K.V.x), sz=ey2wz(by)+ey2wz(ip.y)+wv*ey2wz(K.V.y);
+          K.M={x:sx/(2+wv), z:sz/(2+wv)}; }
+        if(u>=hit&&!c._icpHit){ c._icpHit=true; c._dribBurst=true;
+          try{ if(window.SFX&&SFX.save) SFX.save(); window.U11_ULTRAFX&&U11_ULTRAFX.sfx('release'); }catch(e){} try{ shakeCam(0.06,200); }catch(e){} }
+        if(c.mode==='icp_end'&&c.ot>=0.4){ cineEnd(); return; }
+      }else if(c.mode==='tkl'||c.mode==='tkl_end'){
+        if(!c._fxOff){c._fxOff=true;_fxT=0;hideHoldFx();}
+        const K=c.tkl, ts=c.o.as, vs=c.o.ds, vid=vs+':'+K.vk, W6=(CV.width||1280), ad=K.ad;
+        const lp=(a,b,t)=>a+(b-a)*t, cl=v=>Math.max(0,Math.min(1,v));
+        if(c.mode==='tkl'){
+          /* fast (0.75 s) with a short slow-mo on the contact (u .42-.56 at 0.3x) */
+          const slow=(K.u>0.42&&K.u<0.56)?0.3:1; K.u=Math.min(1,K.u+dt*slow/0.75);
+          if(K.u>=1){ c.mode='tkl_end'; c.ot=0; }
+        } else c.ot+=dt;
+        const u=K.u, hit=0.48;
+        // the tackler slides in (row 7 cols 0-5), mirrored: he comes the other way
+        const su=cl(u/0.62), se=1-(1-su)*(1-su);
+        if(PP[ts]&&PP[ts][c.o.sk]){ PP[ts][c.o.sk].x=lp(K.D0.x,K.D1.x,se); PP[ts][c.o.sk].y=lp(K.D0.y,K.D1.y,se); }
+        forceAnimT(sid,'side','tackle',Math.min(1,su*1.1),true);
+        // the carrier runs on, is caught at `hit`, stumbles forward and goes down (sprite tilts)
+        const vu=cl(u/hit), fall=cl((u-hit)/0.4), vx=u<hit?lp(K.V0.x,K.V1.x,vu):K.V1.x+ad*W6*0.012*fall, vy=K.V1.y;
+        if(PP[vs]&&PP[vs][K.vk]){ PP[vs][K.vk].x=vx; PP[vs][K.vk].y=vy; }
+        if(u<hit) forceAnim(vid,'side','run',Math.floor(c.t*14)%12,false);
+        else forceAnim(vid,'side','run',5,false);
+        { const g=sprites[vid]; if(g&&g.sprite&&g.sprite.material){ const rot=-1.25*fall*fall;   // pitched forward onto the grass
+            g.sprite.material.rotation=rot; if(g.sil&&g.sil.material) g.sil.material.rotation=rot; K.tilted=vid; } }
+        // the ball: at his feet, then poked off to where the slide ends (the tackler has it)
+        if(u<hit){ bx=vx+ad*W6*0.006; by=vy; bz=0; }
+        else { const bu=cl((u-hit)/0.3), ex=K.D1.x-ad*W6*0.012, ey=K.D1.y; bx=lp(K.V1.x,ex,bu); by=lp(K.V1.y,ey,bu); bz=2.6*Math.sin(Math.PI*bu); }
+        K.M={x:(ex2wx(vx)+ex2wx(bx))/2, z:(ey2wz(vy)+ey2wz(by))/2};   // the camera keeps the tripped carrier AND the ball in frame
+        if(u>=hit&&!c._tklHit){ c._tklHit=true; c._dribBurst=true;
+          try{ if(window.SFX&&SFX.tackle) SFX.tackle(); window.U11_ULTRAFX&&U11_ULTRAFX.sfx('release'); }catch(e){} try{ shakeCam(0.08,220); }catch(e){} }
+        if(c.mode==='tkl_end'&&c.ot>=0.4){ cineEnd(); return; }
+      }else if(c.mode==='o12'||c.mode==='o12_end'){
+        if(!c._fxOff){c._fxOff=true;_fxT=0;hideHoldFx();}
+        const O=c.o12, as=c.o.as, ds=c.o.ds, tid=as+':'+O.tk, did=ds+':'+O.dk, dirE=(c.dir!=null)?c.dir:1;
+        const lp=(a,b,t)=>a+(b-a)*t, cl=v=>Math.max(0,Math.min(1,v)), ez=t=>t*t*(3-2*t);
+        if(c.mode==='o12'){
+          /* slow-mo as he goes past the defender and the return is on its way (u .40-.58 at 0.35x) */
+          const slow=(O.u>0.40&&O.u<0.58)?0.35:1; O.u=Math.min(1,O.u+dt*slow/1.7);
+          if(O.u>=1){ c.mode='o12_end'; c.ot=0; }
+        } else c.ot+=dt;
+        const u=O.u, A1=0.30, B0=0.36, B1=0.82;
+        // the runner: C0 -> E, running all the way
+        const ru=ez(cl((u-0.04)/0.84)), rx=lp(O.C0.x,O.E.x,ru), ry=lp(O.C0.y,O.E.y,ru);
+        if(PP[as]&&PP[as][c.o.sk]){ PP[as][c.o.sk].x=rx; PP[as][c.o.sk].y=ry; }
+        if(u<0.05) forceAnimT(sid,'side','shoot',u/0.05,false);           // the pass off his boot
+        else forceAnim(sid,'side','run',Math.floor(c.t*14)%12,false);
+        // the team-mate: plays it back first time (a kick frame on the touch), facing where it goes
+        const tFlip=((O.E.x-O.T.x)*dirE)<0;
+        if(u>=A1-0.04&&u<B0+0.06) forceAnimT(tid,'side','shoot',cl((u-(A1-0.04))/0.16),tFlip);
+        // the defender: lunges at the ball with his standing tackle, too late, mirrored (facing the runner)
+        const du=cl((u-0.12)/0.36), lunge=Math.sin(Math.PI*du)*0.6;
+        if(PP[ds]&&PP[ds][O.dk]){ PP[ds][O.dk].x=O.D0.x-dirE*(CV.width||1280)*0.012*lunge; PP[ds][O.dk].y=lp(O.D0.y,O.C0.y,lunge*0.5); }
+        if(du>0) forceAnimT(did,'side','shoulder',du,true);
+        // the ball: C0 -> T, then T -> where he will be at B1 (E)
+        if(u<A1){ const k=ez(cl(u/A1)); bx=lp(c.bfx,O.T.x,k); by=lp(c.bfy,O.T.y,k); bz=2.2*Math.sin(Math.PI*k); }
+        else if(u<B0){ bx=O.T.x; by=O.T.y; bz=0; }
+        else if(u<B1){ const k=cl((u-B0)/(B1-B0)); bx=lp(O.T.x,O.E.x,k); by=lp(O.T.y,O.E.y,k); bz=2.2*Math.sin(Math.PI*k); }
+        else { bx=rx+dirE*(CV.width||1280)*0.006; by=ry; bz=0; }
+        if(u>=A1&&!c._o12a){ c._o12a=true; try{ if(window.SFX&&SFX.shortPass) SFX.shortPass(); }catch(e){} }     // first-time return
+        if(u>=B1&&!c._o12b){ c._o12b=true; c._dribBurst=true; try{ window.U11_ULTRAFX&&U11_ULTRAFX.sfx('release'); }catch(e){} }   // collected: burst
+        // the camera frames all three: the middle of runner, ball and team-mate (world)
+        { const pts=[[ex2wx(rx),ey2wz(ry)],[ex2wx(O.T.x),ey2wz(O.T.y)],[ex2wx(O.E.x),ey2wz(O.E.y)],[ex2wx(bx),ey2wz(by)]];
+          let x0=1e9,x1=-1e9,z0=1e9,z1=-1e9; pts.forEach(q=>{ x0=Math.min(x0,q[0]); x1=Math.max(x1,q[0]); z0=Math.min(z0,q[1]); z1=Math.max(z1,q[1]); });
+          O.M={x:(x0+x1)/2, z:(z0+z1)/2, span:Math.hypot(x1-x0,z1-z0), r:{x:pts[0][0],z:pts[0][1]}, t:{x:pts[1][0],z:pts[1][1]}, e:{x:pts[2][0],z:pts[2][1]}}; }   // the camera frames runner, wall, landing spot and ball
+        if(c.mode==='o12_end'&&c.ot>=0.4){ cineEnd(); return; }
+      }else if(c.mode==='drib'||c.mode==='drib_end'){
+        if(!c._fxOff){c._fxOff=true;_fxT=0;hideHoldFx();}
+        const D=c.drib, as=c.o.as, ds=c.o.ds, did=ds+':'+D.dk, W5=(CV.width||1280), dirE=(c.dir!=null)?c.dir:1;
+        const lerp5=(a,b,t)=>a+(b-a)*t, cl=(v)=>Math.max(0,Math.min(1,v));
+        if(c.mode==='drib'){
+          /* slow-mo while they cross (u .38-.62 at 0.28x): the jump over the sliding man is the shot */
+          const slow=(D.u>0.38&&D.u<0.62)?0.28:1; D.u=Math.min(1,D.u+dt*slow/1.0);
+          if(D.u>=1){ c.mode='drib_end'; c.ot=0; }
+        } else c.ot+=dt;
+        const u=D.u, ju=cl((u-0.26)/0.5), lift=Math.sin(Math.PI*ju)*0.72*(_c3hh()/1.8);
+        D.lift=lift;
+        // the dribbler runs S0 -> S1 and jumps in the middle
+        const sx=lerp5(D.S0.x,D.S1.x,u), sy=lerp5(D.S0.y,D.S1.y,u);
+        if(PP[as]&&PP[as][c.o.sk]){ PP[as][c.o.sk].x=sx; PP[as][c.o.sk].y=sy; }
+        if(c.mode==='drib'&&ju>0&&ju<1) forceAnimT(sid,'side','jump',ju,false);
+        else forceAnim(sid,'side','run',Math.floor(c.t*14)%12,false);
+        // the defender slides in from the front, the other way (mirrored art), and ends down
+        const du=cl(u/0.72), de=1-(1-du)*(1-du);
+        if(PP[ds]&&PP[ds][D.dk]){ PP[ds][D.dk].x=lerp5(D.D0.x,D.D1.x,de); PP[ds][D.dk].y=lerp5(D.D0.y,D.D1.y,de); }
+        forceAnimT(did,'side','tackle',Math.min(1,du*1.15),true);
+        /* the JUMP art has the leap drawn in (feet ~16% of the cell up at the top), but the sheet anchors
+           every frame by its lowest pixel - the dust-puff frames keep the height, the others drop to the
+           grass and the jump jitters. All jump frames sit on ONE ground line here, the ball rides at the
+           art's feet, and a third of `lift` is added on top for drama. */
+        let feet=0; const xl=lift*0.35;
+        { const g=sprites[sid];
+          if(g&&g.sprite){ const _L=g._L||GRID, A=g._anchor;
+            if(c.mode==='drib'&&ju>0&&ju<1&&A){ let gp=1; for(let i=0;i<6;i++){ const q=cellOf(_L,'side','jump',i), an=A[q.row*_L.cols+q.col]; if(an) gp=Math.min(gp,an.padB); }
+              const q=cellOf(_L,'side','jump',Math.round(ju*5)), an=A[q.row*_L.cols+q.col];
+              if(an){ feet=Math.max(0,(an.padB-gp)*Math.abs(g.sprite.scale.y)); g.sprite.center.y=gp; } }
+            if(xl>0){ g.sprite.position.y+=xl; if(g.sil) g.sil.position.y+=xl; } } }
+        // the ball goes up with him, between his feet
+        bx=sx+dirE*W5*0.006; by=sy; bz=Math.max(0,(feet+xl+d*0.45-0.05)/0.09);
+        // the crossing: a burst in his colour + a crack, once
+        if(c.mode==='drib'&&u>=0.5&&!c._dribHit){ c._dribHit=true; c._dribBurst=true;
+          try{ window.U11_ULTRAFX&&U11_ULTRAFX.sfx('release'); }catch(e){} try{ shakeCam(0.06,200); }catch(e){} }
+        if(c.mode==='drib_end'&&c.ot>=0.45){ cineEnd(); return; }
+      }else if(c.mode==='pass_end'){
+        /* SUPER PASS: the ball is at his feet - a short beat on the receiver, then back to play
+           (cineEnd calls game.js's onDone, which hands him the ball) */
+        c.ot+=dt; bx=c.tx; by=c.ty; bz=0;
+        if(c.ot>=0.65){ cineEnd(); return; }
       }else if(c.mode==='out'){
         c.ot+=dt;
         const gt=Math.min(1,c.ot/cineOutDur(c)); c._gt=gt;
@@ -6375,6 +6943,12 @@
             gwx:_gwx,gwz:_gwz,dx:_dx/_L,dz:_dz/_L,netHit:()=>netHit(Math.sign(_gwx)||1,bwz,bwy,!!c.ultra)});
         }catch(e){ console.error('[C3] arrive',e); } }
         if(!_c3a){ try{ impactBurst(c,bwx,bwy,bwz,d); }catch(e){} } }
+      if(c._dribBurst){ c._dribBurst=false;
+        if(_c3on()) try{ U11_CINE3.arrive(c,{T,scene,camera,hh:_c3hh(),bx:bwx,by:bwy,bz:bwz,isGoal:false,gwx:bwx,gwz:bwz,dx:0,dz:0}); }catch(e){} }
+      if(c.mode==='pass_end'&&c._passArrive){ c._passArrive=false;      // the trap: a burst in the passer's colour
+        if(_c3on()) try{ const _dx=ex2wx(c.tx)-ex2wx(c.fx), _dz=ey2wz(c.ty)-ey2wz(c.fy), _L=Math.hypot(_dx,_dz)||1;
+          U11_CINE3.arrive(c,{T,scene,camera,hh:_c3hh(),bx:bwx,by:bwy,bz:bwz,isGoal:false,gwx:bwx,gwz:bwz,dx:_dx/_L,dz:_dz/_L}); }catch(e){}
+        try{ if(window.SFX&&SFX.shortPass) SFX.shortPass(); }catch(e){} }
       c._bw={x:bwx,y:bwy,z:bwz}; c._bd=d;
     }
     // Cinematic keeper uses the single 4x4 gk sheet (gk_cine.png); the cinematic
@@ -6527,7 +7101,7 @@
       if(c.mode!=='hold'&&_c3on()){ try{
         const _nc=U11_CINE3.needsCanvas(c); if(_nc) ensureHoldFx();
         _c3view();
-        U11_CINE3.flyFrame(c,rdt,{camera,renderer,gl,hh:_c3hh(),ballR:c._bd,
+        U11_CINE3.flyFrame(c,rdt,{T,scene,col:superCol(),camera,renderer,gl,hh:_c3hh(),ballR:c._bd,
           g:sprites[c.o.as+':'+c.o.sk],ballMesh,bloom:bloomPass,
           pathAt:(f)=>cinePathW(c,f),
           cv:_nc?fxCv:null,ctx:_nc?fxCtx:null,proj:projectToScreen});
@@ -6686,6 +7260,7 @@
       try{ tickTele(); }catch(e){}
       try{ tickGfx(dt,now); }catch(e){}
       try{ tickFlags(now); }catch(e){}
+      try{ tickCoaches(); }catch(e){}
       syncRef(dt);
       }catch(e){ P3D._loopErr=String(e&&(e.stack||e.message)||e).slice(0,400); if(!P3D._loopErrN){ console.error('[P3D] frame update error',e); } P3D._loopErrN=(P3D._loopErrN||0)+1; }
       if(_lookPending&&pitchMesh){ _lookPending=null; applyEnv(); }
@@ -6718,6 +7293,16 @@
         const fy=crossing?tiltFocusY(base,0.12,0.8):(_tiltFy=(_tiltFy==null?base:_tiltFy+(base-_tiltFy)*0.16));
         hTilt.uniforms.r.value=fy; vTilt.uniforms.r.value=fy;
       }
+      if(dofPass){ const D=P3D.dof, u=dofPass.uniforms, on=!!(D&&D.on);
+        dofPass.enabled=on; if(hTilt) hTilt.enabled=!on; if(vTilt) vTilt.enabled=!on;
+        if(on){ let fd;
+          if(cine&&cine._bw){ fd=Math.hypot(camera.position.x-cine._bw.x,camera.position.y-cine._bw.y,camera.position.z-cine._bw.z); }
+          else fd=camera.position.distanceTo(_camAim);          // focus on what the camera is aimed at (every camera aims with lookAt)
+          u.focus.value+= (fd-u.focus.value)*Math.min(1,dt*8);
+          u.cn.value=camera.near; u.cf.value=camera.far;
+          const sz=renderer.getDrawingBufferSize(_dofV2); u.res.value.copy(sz);
+          u.maxR.value=D.maxR*(sz.y/720)*(cine?1.25:1); u.nearT.value=D.near; u.ramp.value=D.ramp;
+          u.bokeh.value=D.bokeh; u.bth.value=D.bokehThresh; u.fgMul.value=D.fgMul; } }
       if(composer && P3D.fx && (P3D.fx.on||_c3fx)){ if(_c3fx&&bloomPass) bloomPass.enabled=true; composer.render(dt); }
       else renderer.render(scene,camera);
       drawDebug(); drawHUD();
@@ -6739,18 +7324,20 @@
        Uses stock three.js r128 example passes loaded in index.html. If any are
        missing (scripts blocked/offline) we silently fall back to direct render —
        no black screen. */
+    const _dofV2=new T.Vector2(), _camAim=new T.Vector3(0,0.5,0);
+    { const _la=camera.lookAt.bind(camera); camera.lookAt=function(x,y,z){ if(x&&x.isVector3) _camAim.copy(x); else _camAim.set(x,y,z); return _la(x,y,z); }; }
     let composer=null, bloomPass=null, hTilt=null, vTilt=null, vignettePass=null, rayPass=null, gradePass=null;
     // HD-2D color grade — saturation, contrast, lift, and warm-highlight /
     // cool-shadow split-toning (the Octopath signature look).
     const GradeShader={
       uniforms:{ tDiffuse:{value:null}, sat:{value:1.0}, contrast:{value:1.0},
-                 lift:{value:0.0}, split:{value:0.0},
+                 lift:{value:0.0}, split:{value:0.0}, film:{value:0.0},
                  shadowTint:{value:new T.Color(0.88,0.94,1.10)},
                  highTint:{value:new T.Color(1.10,1.00,0.86)} },
       vertexShader:'varying vec2 vUv; void main(){ vUv=uv; gl_Position=projectionMatrix*modelViewMatrix*vec4(position,1.0); }',
       fragmentShader:[
         'varying vec2 vUv; uniform sampler2D tDiffuse;',
-        'uniform float sat, contrast, lift, split; uniform vec3 shadowTint, highTint;',
+        'uniform float sat, contrast, lift, split, film; uniform vec3 shadowTint, highTint;',
         'void main(){',
         '  vec3 c=texture2D(tDiffuse,vUv).rgb;',
         '  float l=dot(c,vec3(0.299,0.587,0.114));',
@@ -6759,6 +7346,9 @@
         '  float w=smoothstep(0.30,0.75,l);',
         '  vec3 tint=mix(shadowTint,highTint,w);',
         '  c=mix(c,c*tint,split);',
+        '  vec3 f=c*c*(3.0-2.0*c); f=mix(f,c,0.45);',
+        '  float fl=dot(f,vec3(0.299,0.587,0.114)); f=mix(f,vec3(fl),smoothstep(0.72,1.0,fl)*0.35);',
+        '  c=mix(c,f,film);',
         '  gl_FragColor=vec4(clamp(c,0.0,1.0),1.0);',
         '}'
       ].join('\n')
@@ -6785,6 +7375,47 @@
         '}'
       ].join('\n')
     };
+    /* ══ DEPTH OF FIELD v2 (2026-10-07, the Lumina / Octopath reference) ══
+       Real depth: the scene depth is kept in the composer's targets (a DepthTexture on each), and every pixel is
+       blurred by how far it is from the FOCUS distance - not a screen band. Gather blur on a golden-angle disc,
+       each sample weighted by its own circle of confusion (a sharp player is not smeared over the blurred grass
+       behind him) and bright samples boosted, so out-of-focus lights become round bokeh discs.
+       Focus: the match camera's look point; in a cinematic, the ball. Tunables: P3D.dof (on:false = old tilt-shift). */
+    P3D.dof={on:true, maxR:9, near:0.16, ramp:0.5, bokeh:1.8, bokehThresh:0.72, fgMul:1.25};
+    const DofShader={
+      uniforms:{ tDiffuse:{value:null}, tDepth:{value:null}, res:{value:new T.Vector2(1280,720)},
+                 cn:{value:0.1}, cf:{value:2000}, focus:{value:20}, maxR:{value:9}, nearT:{value:0.16}, ramp:{value:0.5},
+                 bokeh:{value:1.8}, bth:{value:0.72}, fgMul:{value:1.25} },
+      vertexShader:'varying vec2 vUv; void main(){ vUv=uv; gl_Position=projectionMatrix*modelViewMatrix*vec4(position,1.0); }',
+      fragmentShader:[
+        'varying vec2 vUv; uniform sampler2D tDiffuse, tDepth; uniform vec2 res;',
+        'uniform float cn, cf, focus, maxR, nearT, ramp, bokeh, bth, fgMul;',
+        'float lin(float d){ float z=d*2.0-1.0; return 2.0*cn*cf/(cf+cn-z*(cf-cn)); }',
+        'float coc(float z){ float c=abs(z-focus)/max(z,0.001); float r=smoothstep(nearT,nearT+ramp,c); return r*(z<focus?fgMul:1.0); }',
+        'void main(){',
+        '  float z0=lin(texture2D(tDepth,vUv).x), c0=coc(z0);',
+        '  vec3 base=texture2D(tDiffuse,vUv).rgb;',
+        '  if(c0<0.02){ gl_FragColor=vec4(base,1.0); return; }',
+        '  float R=c0*maxR; vec3 acc=base; float wsum=1.0;',
+        '  for(int i=0;i<40;i++){',
+        '    float fi=float(i)+0.5, r=sqrt(fi/40.0)*R, a=fi*2.39996;',
+        '    vec2 uv=vUv+vec2(cos(a),sin(a))*r/res;',
+        '    float zs=lin(texture2D(tDepth,uv).x), cs=coc(zs);',
+        '    float w=(zs<z0)?clamp(cs*maxR/max(r,1.0),0.0,1.0):1.0;',      // a nearer sample only counts where IT is blurred over us
+        '    vec3 col=texture2D(tDiffuse,uv).rgb; float l=max(col.r,max(col.g,col.b));',
+        '    w*=1.0+bokeh*smoothstep(bth,1.0,l)*c0;',                          // highlights -> bokeh discs
+        '    acc+=col*w; wsum+=w; }',
+        '  gl_FragColor=vec4(acc/wsum,1.0);',
+        '}'].join('\n') };
+    let dofPass=null;
+    function attachDepth(){
+      if(!composer||!T.DepthTexture) return false;
+      [composer.renderTarget1,composer.renderTarget2].forEach(rt=>{
+        if(rt.depthTexture) return;
+        const dt=new T.DepthTexture(); dt.type=T.UnsignedIntType; dt.format=T.DepthFormat;
+        rt.depthTexture=dt; rt.depthBuffer=true; });
+      return true;
+    }
     function buildComposer(){
       if(!(T.EffectComposer && T.RenderPass && T.ShaderPass && T.UnrealBloomPass)){
         console.warn('[P3D] post-processing scripts not found — running without FX');
@@ -6792,6 +7423,11 @@
       }
       composer=new T.EffectComposer(renderer);
       composer.addPass(new T.RenderPass(scene,camera));
+      if(attachDepth()){                                         // depth of field reads the scene depth: first, before bloom
+        dofPass=new T.ShaderPass(DofShader);
+        const _r=dofPass.render.bind(dofPass);
+        dofPass.render=function(renderer,writeBuffer,readBuffer,dt,mask){ this.uniforms.tDepth.value=readBuffer.depthTexture; return _r(renderer,writeBuffer,readBuffer,dt,mask); };
+        composer.addPass(dofPass); }
       bloomPass=new T.UnrealBloomPass(new T.Vector2(1,1),
         P3D.fx.bloom, P3D.fx.bloomRadius, P3D.fx.bloomThresh);
       composer.addPass(bloomPass);
@@ -6876,9 +7512,9 @@
       if(vignettePass){ vignettePass.uniforms.offset.value=1.0; vignettePass.uniforms.darkness.value=1.0+P3D.fx.vignette*0.9; }
       if(gradePass){ const g=gradePass.uniforms;
         g.sat.value=P3D.fx.sat; g.contrast.value=P3D.fx.contrast;
-        g.lift.value=P3D.fx.lift; g.split.value=P3D.fx.split;
+        g.lift.value=P3D.fx.lift; g.split.value=P3D.fx.split; g.film.value=(P3D.fx.film!=null?P3D.fx.film:0.6);
         gradePass.enabled=(Math.abs(P3D.fx.sat-1)>0.001||Math.abs(P3D.fx.contrast-1)>0.001||
-                           Math.abs(P3D.fx.lift)>0.001||P3D.fx.split>0.001); }
+                           Math.abs(P3D.fx.lift)>0.001||P3D.fx.split>0.001||g.film.value>0.001); }
       if(rayPass){ const u=rayPass.uniforms;
         u.exposure.value=P3D.fx.rays*0.45; u.decay.value=P3D.fx.rayDecay;
         u.samples.value=Math.max(8,Math.min(200,Math.round(P3D.fx.raySamples)));
