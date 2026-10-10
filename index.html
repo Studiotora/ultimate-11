@@ -668,13 +668,9 @@ addEventListener('DOMContentLoaded',function(){
           <span><span class="ue-item-l">FRIENDLY MATCH</span><span class="ue-item-s" style="display:block">PLAY NOW · 11 v 11</span></span>
           <span class="ue-play">&#9654;</span>
         </button>
-        <button class="ue-item" onclick="setStadium('santa-fede');showSc('s-ts')">
-          <svg viewBox="0 0 24 24"><path d="M3 20V10l5-3 5 3v10M15 20V7l3-3 3 3v13M18 1v4M16 3h4M6 20v-5h4v5"></path></svg>
-          <span><span class="ue-item-l">SANTA FEDE</span><span class="ue-item-s" style="display:block">IL CAMPETTO · 5 v 5</span></span>
-        </button>
-        <button class="ue-item" onclick="location.href='marassi-square/index.html?v=1'">
-          <svg viewBox="0 0 24 24"><path d="M3 20V8l6-4 6 4v12M15 10l6-3v13M7 20v-5h4v5M5 11h1M11 11h1M17 12h1M17 16h1"></path></svg>
-          <span><span class="ue-item-l">MARASSI SQUARE</span><span class="ue-item-s" style="display:block">WALK · JUMP · PRACTICE</span></span>
+        <button class="ue-item" onclick="openWorldMap()">
+          <svg viewBox="0 0 24 24"><path d="M9 4L3 6.5v13.5l6-2.5 6 2.5 6-2.5V4l-6 2.5zM9 4v13.5M15 6.5V20"></path></svg>
+          <span><span class="ue-item-l">TEST THE WORLD</span><span class="ue-item-s" style="display:block">WALK THE MAPS · 4 PLACES</span></span>
         </button>
 
         <button class="ue-item" onclick="aeToast('Create Player — coming soon')">
@@ -1953,6 +1949,28 @@ addEventListener('DOMContentLoaded',function(){
     window.showSc=function(id){orig(id);if(id==='s-home')setTimeout(hmStart,50);};
     setTimeout(function(){if(document.querySelector('#s-home.active'))hmStart();},200);
   });
+})();
+</script>
+<!-- TEST THE WORLD: the world map and its four maps run inside this overlay, in the same document, so the browser
+     never leaves fullscreen when you open it (navigating to another page always did). The world page asks to close
+     it with postMessage({u11:'world-exit'}). Game input is suspended while it is open. -->
+<style>#ueWorld{position:fixed;inset:0;z-index:2147483000;background:#000}#ueWorld[hidden]{display:none}#ueWorld iframe{position:absolute;inset:0;width:100%;height:100%;border:0;background:#000}</style>
+<div id="ueWorld" hidden><iframe id="ueWorldFrame" title="Test the World" allow="fullscreen; gamepad; autoplay"></iframe></div>
+<script>
+(function(){
+  var box=document.getElementById('ueWorld'),fr=document.getElementById('ueWorldFrame');
+  function focusFrame(){try{fr.contentWindow.focus()}catch(e){}}
+  window.openWorldMap=function(){
+    try{if(window.UEInput&&UEInput.setEnabled)UEInput.setEnabled(false)}catch(e){}
+    document.body.classList.add('world-open');box.hidden=false;
+    fr.onload=focusFrame;fr.src='world/index.html?v=3';setTimeout(focusFrame,150);
+  };
+  window.closeWorldMap=function(){
+    box.hidden=true;fr.onload=null;fr.src='about:blank';document.body.classList.remove('world-open');
+    try{if(window.UEInput&&UEInput.setEnabled)UEInput.setEnabled(true)}catch(e){}
+    try{window.focus()}catch(e){}
+  };
+  window.addEventListener('message',function(e){if(e.origin===location.origin&&e.data&&e.data.u11==='world-exit')window.closeWorldMap();});
 })();
 </script>
 </body>
