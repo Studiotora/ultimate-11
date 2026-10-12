@@ -1,0 +1,701 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Ultimate Eleven — Sheet Slicer</title>
+<style>
+/* ═══════════════════════════════════════════════════════════════════════════
+   SHEET SLICER — local asset tool, not part of the game build.
+   Takes a front+back character sheet, keys the background, splits it, and
+   re-anchors both halves onto ONE shared canvas so `background-size:contain`
+   scales them identically and their feet land on the same screen line.
+   Palette mirrors tokens.css by hand — this file is deliberately standalone.
+   ═══════════════════════════════════════════════════════════════════════════ */
+*{box-sizing:border-box}
+html,body{margin:0;height:100%}
+body{
+  background:#06080e; color:#f2efe6;
+  font-family:'Rajdhani','Segoe UI',system-ui,sans-serif;
+  font-size:15px; display:flex; flex-direction:column;
+}
+h1{
+  font-family:'Cinzel',Georgia,serif; font-size:1.15rem; font-weight:600;
+  letter-spacing:.18em; margin:0; color:#f0c040; text-transform:uppercase;
+}
+h2{
+  font-family:'Cinzel',Georgia,serif; font-size:.74rem; font-weight:600;
+  letter-spacing:.2em; text-transform:uppercase; color:#f0c040;
+  margin:0 0 .7em; padding-bottom:.45em;
+  border-bottom:1px solid rgba(240,192,64,.24);
+}
+h2+h2,.row+h2,.stat+h2,button+h2{margin-top:1.5em}
+header{
+  display:flex; align-items:center; gap:1.2em; flex:0 0 auto;
+  padding:.85em 1.3em; background:rgba(8,12,20,.88);
+  border-bottom:1px solid rgba(240,192,64,.38);
+}
+header .sub{color:#8fa2bd; font-size:.82rem; letter-spacing:.04em}
+header .spacer{flex:1}
+
+main{flex:1; display:flex; min-height:0}
+.col{padding:1.1em 1.2em; overflow:auto}
+#queue{flex:0 0 246px; border-right:1px solid rgba(255,255,255,.08)}
+#stage{flex:1; min-width:0; display:flex; flex-direction:column; gap:1.1em}
+#side{flex:0 0 292px; border-left:1px solid rgba(255,255,255,.08)}
+
+/* ── drop zone ─────────────────────────────────────────────────────────── */
+#drop{
+  border:1px dashed rgba(240,192,64,.42); border-radius:6px;
+  padding:1.5em .8em; text-align:center; color:#8fa2bd; cursor:pointer;
+  font-size:.86rem; line-height:1.5; transition:.14s cubic-bezier(.3,.8,.4,1);
+}
+#drop:hover,#drop.over{border-color:#f0c040; color:#f2efe6; background:rgba(240,192,64,.07)}
+#drop b{color:#f0c040; display:block; font-size:.95rem; letter-spacing:.06em}
+
+/* ── queue list ────────────────────────────────────────────────────────── */
+.qi{
+  display:flex; align-items:center; gap:.6em; padding:.5em .6em; margin-top:.34em;
+  background:rgba(0,0,0,.28); border:1px solid rgba(255,255,255,.08);
+  border-radius:3px; cursor:pointer; font-size:.85rem;
+}
+.qi:hover{border-color:rgba(240,192,64,.42)}
+.qi.sel{border-color:#f0c040; background:rgba(240,192,64,.12)}
+.qi .th{
+  width:30px; height:30px; flex:0 0 30px; background:rgba(0,0,0,.5);
+  background-size:contain; background-position:center; background-repeat:no-repeat;
+  image-rendering:pixelated; border-radius:2px;
+}
+.qi .nm{flex:1; overflow:hidden; text-overflow:ellipsis; white-space:nowrap}
+.qi .st{font-size:.7rem; color:#48586a; letter-spacing:.08em}
+.qi .st.ok{color:#20c878}
+.qi .st.warn{color:#ffb020}
+
+/* ── canvases ──────────────────────────────────────────────────────────── */
+.canvwrap{
+  position:relative; background:
+    linear-gradient(45deg,#141821 25%,transparent 25%,transparent 75%,#141821 75%),
+    linear-gradient(45deg,#141821 25%,#0a0d14 25%,#0a0d14 75%,#141821 75%);
+  background-size:16px 16px; background-position:0 0,8px 8px;
+  border:1px solid rgba(255,255,255,.08); border-radius:4px; overflow:hidden;
+}
+.canvwrap canvas{display:block; width:100%; height:auto; image-rendering:pixelated}
+#splitline{
+  position:absolute; top:0; bottom:0; width:1px; background:#f0c040;
+  box-shadow:0 0 8px rgba(240,192,64,.9); pointer-events:none;
+}
+.outs{display:flex; gap:1em}
+.outs>div{flex:1; min-width:0}
+.outs .cap{
+  font-size:.68rem; letter-spacing:.18em; text-transform:uppercase;
+  color:#8fa2bd; margin-bottom:.4em; font-family:'Cinzel',Georgia,serif;
+}
+.outs .cap b{color:#f0c040; font-weight:600}
+
+/* ── duel preview ──────────────────────────────────────────────────────── */
+#duelprev{
+  position:relative; height:290px; border-radius:4px; overflow:hidden;
+  border:1px solid rgba(255,255,255,.08);
+  background:radial-gradient(ellipse at 50% 78%,#16233a 0%,#080c15 68%,#04070c 100%);
+}
+#duelprev .hero{
+  position:absolute; width:34%; background-size:contain;
+  background-position:center bottom; background-repeat:no-repeat;
+  image-rendering:pixelated; filter:drop-shadow(0 10px 18px rgba(0,0,0,.75));
+}
+/* mirrors style.css --duel-hero-* so the tool judges the real framing */
+#duelprev .hero.left {height:63%; left:15%;  bottom:8%}
+#duelprev .hero.right{height:73%; right:13%; bottom:0}
+#duelprev .floor{
+  position:absolute; left:0; right:0; bottom:0; height:34%;
+  background:linear-gradient(transparent,rgba(32,80,40,.34));
+}
+#duelprev .base{
+  position:absolute; left:6%; right:6%; bottom:0; height:1px;
+  background:rgba(240,192,64,.30); pointer-events:none;
+}
+
+/* ── controls ──────────────────────────────────────────────────────────── */
+.row{margin-bottom:.9em}
+.row label{
+  display:flex; justify-content:space-between; align-items:baseline;
+  font-size:.72rem; letter-spacing:.14em; text-transform:uppercase;
+  color:#8fa2bd; margin-bottom:.3em;
+}
+.row label span{color:#f2efe6; font-variant-numeric:tabular-nums; letter-spacing:0}
+input[type=range]{width:100%; accent-color:#f0c040; margin:0}
+input[type=text]{
+  width:100%; padding:.42em .6em; background:rgba(0,0,0,.4); color:#f2efe6;
+  border:1px solid rgba(255,255,255,.18); border-radius:3px; font:inherit;
+}
+input[type=text]:focus{outline:none; border-color:#f0c040}
+select{
+  width:100%; padding:.42em .5em; background:#0b1524; color:#f2efe6;
+  border:1px solid rgba(255,255,255,.18); border-radius:3px; font:inherit;
+}
+button{
+  font-family:'Cinzel',Georgia,serif; font-size:.74rem; letter-spacing:.15em;
+  text-transform:uppercase; padding:.62em .9em; width:100%; cursor:pointer;
+  background:rgba(8,12,20,.88); color:#f2efe6; border-radius:3px;
+  border:1px solid rgba(240,192,64,.38); transition:.14s cubic-bezier(.3,.8,.4,1);
+}
+button:hover:not(:disabled){background:rgba(240,192,64,.14); border-color:#f0c040; color:#ffd24a}
+button:disabled{opacity:.34; cursor:default}
+button.primary{border-color:#f0c040; color:#f0c040}
+button+button{margin-top:.44em}
+.hint{font-size:.74rem; color:#48586a; line-height:1.55; margin:.5em 0 0}
+.hint code{color:#8fa2bd; font-family:ui-monospace,Consolas,monospace; font-size:.94em}
+.warnbox{
+  border:1px solid rgba(255,176,32,.44); background:rgba(255,176,32,.09);
+  border-radius:3px; padding:.55em .7em; font-size:.76rem; color:#ffb020;
+  line-height:1.5; margin-top:.6em;
+}
+.stat{display:flex; justify-content:space-between; font-size:.76rem; padding:.2em 0; color:#8fa2bd}
+.stat b{color:#f2efe6; font-weight:600; font-variant-numeric:tabular-nums}
+footer{
+  flex:0 0 auto; padding:.7em 1.3em; font-size:.76rem; color:#48586a;
+  border-top:1px solid rgba(255,255,255,.08); background:rgba(8,12,20,.6);
+}
+footer code{color:#8fa2bd; font-family:ui-monospace,Consolas,monospace}
+footer b{color:#8fa2bd}
+</style>
+</head>
+<body>
+
+<header>
+  <h1>Sheet Slicer</h1>
+  <div class="sub">front + back sheet &rarr; two shared-baseline sprites</div>
+  <div class="spacer"></div>
+  <div class="sub" id="rootlbl">output: browser downloads</div>
+</header>
+
+<main>
+
+  <!-- ── QUEUE ────────────────────────────────────────────────────────── -->
+  <div class="col" id="queue">
+    <h2>Sheets</h2>
+    <div id="drop">
+      <b>Drop sheets here</b>
+      or click to browse<br>PNG &middot; front left, back right
+    </div>
+    <div id="qlist"></div>
+  </div>
+
+  <!-- ── STAGE ────────────────────────────────────────────────────────── -->
+  <div class="col" id="stage">
+    <div>
+      <h2>Source &mdash; keyed &amp; split</h2>
+      <div class="canvwrap" id="srcwrap">
+        <canvas id="src"></canvas>
+        <div id="splitline" style="display:none"></div>
+      </div>
+    </div>
+
+    <div class="outs">
+      <div>
+        <div class="cap"><b>Front</b> &mdash; attacker</div>
+        <div class="canvwrap"><canvas id="outF"></canvas></div>
+      </div>
+      <div>
+        <div class="cap"><b>Back</b> &mdash; defender</div>
+        <div class="canvwrap"><canvas id="outB"></canvas></div>
+      </div>
+    </div>
+
+    <div>
+      <h2>Duel framing &mdash; live style.css values</h2>
+      <div id="duelprev">
+        <div class="floor"></div>
+        <div class="hero left"  id="pvF"></div>
+        <div class="hero right" id="pvB"></div>
+        <div class="base"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── SIDE ─────────────────────────────────────────────────────────── -->
+  <div class="col" id="side">
+    <h2>Output name</h2>
+    <div class="row">
+      <input type="text" id="pname" placeholder="conti" autocomplete="off">
+      <p class="hint">Lowercase, no spaces &mdash; must match
+        <code>playerLastName()</code>, e.g. <code>conti</code>, <code>falkner</code>.</p>
+    </div>
+
+    <h2>Background key</h2>
+    <div class="row">
+      <label>Tolerance <span id="vTolO">42</span></label>
+      <input type="range" id="tolO" min="0" max="140" value="42">
+    </div>
+    <div class="row">
+      <label>Hard cut <span id="vTolI">14</span></label>
+      <input type="range" id="tolI" min="0" max="120" value="14">
+      <p class="hint">Flood-filled inward from the border only, so an enclosed
+        white shirt survives. Raise <em>tolerance</em> until the halo is gone;
+        if colour bleeds INTO the kit, lower it &mdash; that is a leak through a
+        gap in the outline.</p>
+    </div>
+    <div id="leakwarn"></div>
+
+    <h2>Split</h2>
+    <div class="row">
+      <label>Split X <span id="vSplit">0</span></label>
+      <input type="range" id="split" min="0" max="100" value="50">
+    </div>
+    <button id="autosplit">Re-detect valley</button>
+
+    <h2>Anchor</h2>
+    <div class="row">
+      <label>Horizontal</label>
+      <select id="anchor">
+        <option value="bbox">Bounding box centre</option>
+        <option value="feet">Feet centroid</option>
+      </select>
+    </div>
+    <div class="row">
+      <label>Padding <span id="vPad">8</span>px</label>
+      <input type="range" id="pad" min="0" max="64" value="8">
+    </div>
+
+    <h2>Result</h2>
+    <div class="stat"><span>Canvas</span><b id="sCanvas">&mdash;</b></div>
+    <div class="stat"><span>Front figure</span><b id="sF">&mdash;</b></div>
+    <div class="stat"><span>Back figure</span><b id="sB">&mdash;</b></div>
+    <div class="stat"><span>Height delta</span><b id="sD">&mdash;</b></div>
+    <div class="stat"><span>Keyed away</span><b id="sK">&mdash;</b></div>
+
+    <h2>Export</h2>
+    <button id="applyall">Apply settings to all</button>
+    <button id="pickdir">Choose assets/players folder</button>
+    <button id="expone" class="primary">Export this sheet</button>
+    <button id="expall" class="primary">Export all</button>
+    <p class="hint">With a folder chosen, files are written straight to
+      <code>front/</code> and <code>back/</code> inside it. Otherwise they
+      download as <code>name_front.png</code> / <code>name_back.png</code>.</p>
+  </div>
+
+</main>
+
+<footer>
+  Both halves are written at <b>identical canvas dimensions</b>, figure bottom-anchored &mdash;
+  that is what makes <code>background-size:contain</code> scale them equally and land their feet
+  on one line. Nothing is rescaled, so a genuine height difference between the two views survives.
+</footer>
+
+<script>
+'use strict';
+
+/* ── state ─────────────────────────────────────────────────────────────── */
+const S = { files:[], sel:-1, root:null };
+const $ = id => document.getElementById(id);
+
+const DEFAULTS = { tolO:42, tolI:14, pad:8, anchor:'bbox' };
+const ATHRESH  = 8;               // alpha above this counts as "figure"
+
+/* ── file intake ───────────────────────────────────────────────────────── */
+const drop = $('drop');
+const picker = Object.assign(document.createElement('input'),
+  {type:'file', accept:'image/*', multiple:true});
+picker.style.display = 'none';
+document.body.appendChild(picker);
+
+drop.onclick = () => picker.click();
+picker.onchange = () => { addFiles(picker.files); picker.value = ''; };
+['dragenter','dragover'].forEach(e => drop.addEventListener(e, ev => {
+  ev.preventDefault(); drop.classList.add('over'); }));
+['dragleave','drop'].forEach(e => drop.addEventListener(e, ev => {
+  ev.preventDefault(); drop.classList.remove('over'); }));
+drop.addEventListener('drop', ev => addFiles(ev.dataTransfer.files));
+
+/* Strip extension + any "sheet" token, then squash to the lowercase
+   alphanumeric form playerLastName() produces. */
+function deriveName(fn){
+  let n = fn.replace(/\.[^.]+$/, '').toLowerCase();
+  n = n.replace(/[\s_-]*sheet[\s_-]*/g, '');
+  n = n.replace(/[^a-z0-9]/g, '');
+  return n || 'player';
+}
+
+function addFiles(list){
+  const imgs = [...list].filter(f => /^image\//.test(f.type));
+  const firstNew = S.files.length;
+  imgs.forEach(f => {
+    const rec = Object.assign({
+      file:f, name:deriveName(f.name), img:null,
+      splitX:null, keyed:null, keyedFor:null, bF:null, bB:null,
+      outF:null, outB:null, removed:0, ready:false
+    }, DEFAULTS);
+    S.files.push(rec);
+    const url = URL.createObjectURL(f);
+    const im = new Image();
+    im.onload = () => {
+      URL.revokeObjectURL(url);
+      rec.img = im;
+      process(rec);
+      renderQueue();
+      if(S.sel === S.files.indexOf(rec)) showSelected();
+    };
+    im.onerror = () => { URL.revokeObjectURL(url); renderQueue(); };
+    im.src = url;
+  });
+  if(imgs.length && S.sel < 0) S.sel = firstNew;
+}
+
+/* ── background key: flood fill inward from every border pixel ──────────
+   Only regions CONNECTED to the border are removed, which is the whole
+   point: a white shirt enclosed by its own dark outline is unreachable and
+   survives untouched. A naive global white-key would punch through it.    */
+function keyBackground(src, w, h, tolOuter, tolInner){
+  const data  = new Uint8ClampedArray(src);
+  const n     = w * h;
+  const bg    = new Uint8Array(n);
+  const stack = new Int32Array(n);
+  let sp = 0;
+
+  const whiteDist = i => {
+    const p = i * 4;
+    return 255 - Math.min(data[p], data[p+1], data[p+2]);
+  };
+  const push = i => {
+    if(bg[i]) return;
+    // already-transparent pixels are traversable, so a PNG that arrives with
+    // alpha still splits correctly instead of blocking the fill at the border
+    const clear = data[i*4+3] < ATHRESH;
+    if(clear || whiteDist(i) <= tolOuter){ bg[i] = 1; stack[sp++] = i; }
+  };
+
+  for(let x = 0; x < w; x++){ push(x); push((h-1)*w + x); }
+  for(let y = 0; y < h; y++){ push(y*w); push(y*w + w - 1); }
+
+  while(sp > 0){
+    const i = stack[--sp], x = i % w, y = (i / w) | 0;
+    if(x > 0)     push(i - 1);
+    if(x < w - 1) push(i + 1);
+    if(y > 0)     push(i - w);
+    if(y < h - 1) push(i + w);
+  }
+
+  /* Ramp alpha across tolInner..tolOuter rather than a binary cut. The
+     anti-aliased rim is less white than the flat background, so it lands
+     mid-ramp and keeps a soft edge instead of a stair-stepped halo. */
+  const span = Math.max(1, tolOuter - tolInner);
+  let removed = 0;
+  for(let i = 0; i < n; i++){
+    if(!bg[i]) continue;
+    const p = i * 4;
+    if(data[p+3] < ATHRESH){ removed++; continue; }
+    const d = whiteDist(i);
+    const a = d <= tolInner ? 0 : Math.round(255 * (d - tolInner) / span);
+    if(a < data[p+3]) data[p+3] = a;
+    if(data[p+3] < ATHRESH) removed++;
+  }
+  return { data, removed };
+}
+
+/* Column with the fewest opaque pixels near the middle = the gap between the
+   two figures. Tie-breaks toward true centre so a clean sheet splits at 50%. */
+function autoSplit(data, w, h){
+  const col = new Int32Array(w);
+  for(let y = 0; y < h; y++){
+    const row = y * w;
+    for(let x = 0; x < w; x++) if(data[(row+x)*4+3] > ATHRESH) col[x]++;
+  }
+  const lo = Math.floor(w * 0.30), hi = Math.ceil(w * 0.70);
+  let best = (w / 2) | 0, bestV = Infinity;
+  for(let x = lo; x < hi; x++){
+    const v = col[x] + Math.abs(x - w/2) * 0.001;
+    if(v < bestV){ bestV = v; best = x; }
+  }
+  return best;
+}
+
+function bboxOf(data, w, h, x0, x1){
+  let minX = 1e9, maxX = -1, minY = 1e9, maxY = -1;
+  for(let y = 0; y < h; y++){
+    const row = y * w;
+    for(let x = x0; x < x1; x++){
+      if(data[(row+x)*4+3] > ATHRESH){
+        if(x < minX) minX = x;
+        if(x > maxX) maxX = x;
+        if(y < minY) minY = y;
+        if(y > maxY) maxY = y;
+      }
+    }
+  }
+  if(maxX < 0) return null;
+  return { x:minX, y:minY, w:maxX - minX + 1, h:maxY - minY + 1 };
+}
+
+/* Horizontal anchor. "feet" uses the centroid of the bottom 12% of the
+   figure, which plants two different poses on the same spot far better than
+   a bounding box whose width swings with how far the arms are thrown out. */
+function anchorX(data, w, bb, mode){
+  if(mode !== 'feet') return bb.x + bb.w / 2;
+  const from = bb.y + Math.floor(bb.h * 0.88);
+  let sum = 0, cnt = 0;
+  for(let y = from; y < bb.y + bb.h; y++){
+    const row = y * w;
+    for(let x = bb.x; x < bb.x + bb.w; x++){
+      if(data[(row+x)*4+3] > ATHRESH){ sum += x; cnt++; }
+    }
+  }
+  return cnt ? sum / cnt : bb.x + bb.w / 2;
+}
+
+/* ── the actual slice ──────────────────────────────────────────────────── */
+function process(rec){
+  if(!rec.img) return;
+  const w = rec.img.naturalWidth, h = rec.img.naturalHeight;
+
+  // Re-key only when the tolerances actually changed — moving the split
+  // slider must not pay for a 2-megapixel flood fill on every frame.
+  const sig = rec.tolO + '/' + rec.tolI;
+  if(rec.keyedFor !== sig){
+    const c = document.createElement('canvas');
+    c.width = w; c.height = h;
+    const cx = c.getContext('2d', {willReadFrequently:true});
+    cx.drawImage(rec.img, 0, 0);
+    const raw = cx.getImageData(0, 0, w, h);
+    const r = keyBackground(raw.data, w, h, rec.tolO, rec.tolI);
+    rec.keyed    = r.data;
+    rec.removed  = r.removed;
+    rec.keyedFor = sig;
+    rec.splitX   = null;                    // the valley moves when the key moves
+  }
+  if(rec.splitX == null) rec.splitX = autoSplit(rec.keyed, w, h);
+
+  const bF = bboxOf(rec.keyed, w, h, 0, rec.splitX);
+  const bB = bboxOf(rec.keyed, w, h, rec.splitX, w);
+  rec.bF = bF; rec.bB = bB;
+  rec.ready = !!(bF && bB);
+  if(!rec.ready){ rec.outF = rec.outB = null; return; }
+
+  // ONE canvas size for both halves. This is the entire trick: identical
+  // dimensions + bottom-anchored figures means `contain` scales them the
+  // same and their feet resolve to the same screen line, with no per-
+  // character CSS. Nothing is resampled, so a real height difference stays.
+  const pad  = rec.pad;
+  const outW = Math.max(bF.w, bB.w) + pad * 2;
+  const outH = Math.max(bF.h, bB.h) + pad * 2;
+
+  const srcC = document.createElement('canvas');
+  srcC.width = w; srcC.height = h;
+  srcC.getContext('2d').putImageData(new ImageData(rec.keyed, w, h), 0, 0);
+
+  const cut = bb => {
+    const c = document.createElement('canvas');
+    c.width = outW; c.height = outH;
+    const cx = c.getContext('2d');
+    cx.imageSmoothingEnabled = false;
+    const ax = anchorX(rec.keyed, w, bb, rec.anchor);
+    const dx = Math.round(outW / 2 - (ax - bb.x));   // anchor to canvas centre
+    const dy = outH - pad - bb.h;                    // feet to canvas floor
+    cx.drawImage(srcC, bb.x, bb.y, bb.w, bb.h, dx, dy, bb.w, bb.h);
+    return c;
+  };
+  rec.outF = cut(bF);
+  rec.outB = cut(bB);
+}
+
+/* ── rendering ─────────────────────────────────────────────────────────── */
+function renderQueue(){
+  const wrap = $('qlist');
+  wrap.innerHTML = '';
+  S.files.forEach((r, i) => {
+    const el = document.createElement('div');
+    el.className = 'qi' + (i === S.sel ? ' sel' : '');
+    const st = !r.img ? ['...', ''] : !r.ready ? ['no split', 'warn'] : ['ok', 'ok'];
+    el.innerHTML = '<div class="th"></div><div class="nm"></div>' +
+                   '<div class="st ' + st[1] + '">' + st[0] + '</div>';
+    el.querySelector('.nm').textContent = r.name;
+    if(r.outF) el.querySelector('.th').style.backgroundImage =
+      'url(' + r.outF.toDataURL() + ')';
+    el.onclick = () => { S.sel = i; renderQueue(); showSelected(); };
+    wrap.appendChild(el);
+  });
+}
+
+function blit(canvas, from){
+  if(!from){ canvas.width = canvas.height = 1; return; }
+  canvas.width = from.width; canvas.height = from.height;
+  const cx = canvas.getContext('2d');
+  cx.imageSmoothingEnabled = false;
+  cx.drawImage(from, 0, 0);
+}
+
+function showSelected(){
+  const r = S.files[S.sel];
+  const has = !!(r && r.img);
+  ['tolO','tolI','split','pad','anchor','pname','autosplit','expone']
+    .forEach(id => $(id).disabled = !has);
+  if(!has){
+    blit($('src'), null); blit($('outF'), null); blit($('outB'), null);
+    $('splitline').style.display = 'none';
+    $('pvF').style.backgroundImage = $('pvB').style.backgroundImage = '';
+    return;
+  }
+
+  const w = r.img.naturalWidth, h = r.img.naturalHeight;
+
+  const sc = $('src');
+  sc.width = w; sc.height = h;
+  sc.getContext('2d').putImageData(new ImageData(r.keyed, w, h), 0, 0);
+
+  const line = $('splitline');
+  line.style.display = 'block';
+  line.style.left = (r.splitX / w * 100) + '%';
+
+  blit($('outF'), r.outF);
+  blit($('outB'), r.outB);
+
+  const fUrl = r.outF ? r.outF.toDataURL() : '';
+  const bUrl = r.outB ? r.outB.toDataURL() : '';
+  $('pvF').style.backgroundImage = fUrl ? 'url(' + fUrl + ')' : '';
+  $('pvB').style.backgroundImage = bUrl ? 'url(' + bUrl + ')' : '';
+
+  $('pname').value = r.name;
+  $('tolO').value = r.tolO;  $('vTolO').textContent = r.tolO;
+  $('tolI').value = r.tolI;  $('vTolI').textContent = r.tolI;
+  $('pad').value  = r.pad;   $('vPad').textContent  = r.pad;
+  $('anchor').value = r.anchor;
+  $('split').max = w;
+  $('split').value = r.splitX;
+  $('vSplit').textContent = r.splitX + ' / ' + w;
+
+  const pct = r.removed / (w * h) * 100;
+  $('sCanvas').textContent = r.outF ? r.outF.width + ' × ' + r.outF.height : '—';
+  $('sF').textContent = r.bF ? r.bF.w + ' × ' + r.bF.h : '—';
+  $('sB').textContent = r.bB ? r.bB.w + ' × ' + r.bB.h : '—';
+  if(r.bF && r.bB){
+    const d = (r.bB.h - r.bF.h) / r.bF.h * 100;
+    $('sD').textContent = (d >= 0 ? '+' : '') + d.toFixed(1) + '%';
+  } else $('sD').textContent = '—';
+  $('sK').textContent = pct.toFixed(1) + '%';
+
+  // A sheet that is mostly background is normal (~55-75%). Much more than
+  // that and the fill has almost certainly leaked through the outline.
+  const lw = $('leakwarn');
+  if(pct > 86){
+    lw.innerHTML = '<div class="warnbox">' + pct.toFixed(1) + '% of the sheet was ' +
+      'keyed away. The fill has probably leaked through a gap in the outline &mdash; ' +
+      'check the kit for holes and lower the tolerance.</div>';
+  } else if(r.bF && r.bB && Math.abs(r.bB.h - r.bF.h) / r.bF.h > 0.12){
+    lw.innerHTML = '<div class="warnbox">The two figures differ in height by more ' +
+      'than 12%. If that is not a deliberate pose difference, regenerate the sheet ' +
+      '&mdash; both views must be drawn at the same scale.</div>';
+  } else lw.innerHTML = '';
+}
+
+/* ── control wiring ────────────────────────────────────────────────────── */
+function reprocess(){
+  const r = S.files[S.sel];
+  if(!r) return;
+  process(r);
+  showSelected();
+  renderQueue();
+}
+const bind = (id, key, isNum) => {
+  $(id).addEventListener('input', () => {
+    const r = S.files[S.sel]; if(!r) return;
+    r[key] = isNum ? +$(id).value : $(id).value;
+    reprocess();
+  });
+};
+bind('tolO', 'tolO', true);
+bind('tolI', 'tolI', true);
+bind('pad',  'pad',  true);
+bind('split','splitX', true);
+bind('anchor','anchor', false);
+
+$('pname').addEventListener('input', () => {
+  const r = S.files[S.sel]; if(!r) return;
+  r.name = $('pname').value.toLowerCase().replace(/[^a-z0-9]/g, '');
+  renderQueue();
+});
+$('autosplit').onclick = () => {
+  const r = S.files[S.sel]; if(!r) return;
+  r.splitX = null; reprocess();
+};
+$('applyall').onclick = () => {
+  const r = S.files[S.sel]; if(!r) return;
+  S.files.forEach(o => {
+    if(o === r || !o.img) return;
+    o.tolO = r.tolO; o.tolI = r.tolI; o.pad = r.pad; o.anchor = r.anchor;
+    o.splitX = null;                     // each sheet re-detects its own valley
+    process(o);
+  });
+  renderQueue(); showSelected();
+};
+
+/* ── export ────────────────────────────────────────────────────────────── */
+const toBlob = c => new Promise(res => c.toBlob(res, 'image/png'));
+
+$('pickdir').onclick = async () => {
+  if(!window.showDirectoryPicker){
+    alert('This browser has no File System Access API.\n' +
+          'Files will download instead — move them into ' +
+          'assets/players/front and /back by hand.');
+    return;
+  }
+  try{
+    S.root = await window.showDirectoryPicker({mode:'readwrite'});
+    $('rootlbl').textContent = 'output: ' + S.root.name + '/front + /back';
+    $('rootlbl').style.color = '#20c878';
+  }catch(e){ /* user cancelled the picker */ }
+};
+
+async function writeInto(sub, filename, blob){
+  const dir = await S.root.getDirectoryHandle(sub, {create:true});
+  const fh  = await dir.getFileHandle(filename, {create:true});
+  const ws  = await fh.createWritable();
+  await ws.write(blob);
+  await ws.close();
+}
+function download(blob, filename){
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = filename;
+  a.click();
+  setTimeout(() => URL.revokeObjectURL(a.href), 4000);
+}
+
+async function exportRec(rec){
+  if(!rec.ready) return false;
+  const [fb, bb] = await Promise.all([toBlob(rec.outF), toBlob(rec.outB)]);
+  if(S.root){
+    await writeInto('front', rec.name + '.png', fb);
+    await writeInto('back',  rec.name + '.png', bb);
+  } else {
+    download(fb, rec.name + '_front.png');
+    download(bb, rec.name + '_back.png');
+  }
+  return true;
+}
+
+$('expone').onclick = async () => {
+  const r = S.files[S.sel]; if(!r) return;
+  const btn = $('expone');
+  btn.disabled = true;
+  let ok = false;
+  try{ ok = await exportRec(r); }
+  catch(e){ alert('Export failed: ' + e.message); }
+  btn.disabled = false;
+  btn.textContent = ok ? 'Exported ✓' : 'Nothing to export';
+  setTimeout(() => btn.textContent = 'Export this sheet', 1800);
+};
+
+$('expall').onclick = async () => {
+  const btn = $('expall');
+  btn.disabled = true;
+  let n = 0;
+  try{ for(const r of S.files) if(await exportRec(r)) n++; }
+  catch(e){ alert('Export stopped after ' + n + ': ' + e.message); }
+  btn.disabled = false;
+  btn.textContent = 'Exported ' + n + ' ✓';
+  setTimeout(() => btn.textContent = 'Export all', 2200);
+};
+
+showSelected();
+</script>
+</body>
+</html>

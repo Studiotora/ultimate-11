@@ -60,16 +60,16 @@ window.addEventListener('beforeunload', function() {
 const T={
   germany:{name:'Germany',flag:'🇩🇪',p:[
     {id:101,name:'K.Steiner',pos:'GK',spd:66,pwr:74,tec:72,def:93,rar:2,jersey:1,sav:88,ref:80},
-    {id:102,name:'H.Reinhardt',pos:'LB',spd:78,pwr:74,tec:72,def:80,rar:1,jersey:7},
-    {id:103,name:'K.Schmidt',pos:'CB1',spd:68,pwr:82,tec:66,def:86,rar:2},
-    {id:104,name:'E.Schmidt',pos:'CB2',spd:66,pwr:84,tec:64,def:88,rar:2},
-    {id:105,name:'Teigerbran',pos:'RB',spd:76,pwr:80,tec:78,def:80,rar:2,jersey:23},
+    {id:102,name:'N.Hesshardt',pos:'LB',spd:78,pwr:74,tec:72,def:80,rar:1,jersey:7},
+    {id:103,name:'J.Brunbrecht',pos:'CB1',spd:68,pwr:82,tec:66,def:86,rar:2},
+    {id:104,name:'F.Brunbrecht',pos:'CB2',spd:66,pwr:84,tec:64,def:88,rar:2},
+    {id:105,name:'Waldkamp',pos:'RB',spd:76,pwr:80,tec:78,def:80,rar:2,jersey:23},
     {id:106,name:'C.Haine',pos:'CM1',spd:82,pwr:78,tec:86,def:62,rar:2},
-    {id:107,name:'Shester',pos:'CM2',spd:80,pwr:82,tec:88,def:64,rar:2,jersey:10},
-    {id:108,name:'M.Goethe',pos:'LW',spd:84,pwr:80,tec:82,def:56,rar:2},
+    {id:107,name:'Rauchfeld',pos:'CM2',spd:80,pwr:82,tec:88,def:64,rar:2,jersey:10},
+    {id:108,name:'V.Siegberg',pos:'LW',spd:84,pwr:80,tec:82,def:56,rar:2},
     {id:109,name:'K.H.Falkner',pos:'ST',spd:86,pwr:96,tec:84,def:50,rar:2,jersey:11},
-    {id:110,name:'Margus',pos:'RW',spd:84,pwr:82,tec:80,def:54,rar:1,jersey:9},
-    {id:111,name:'Meyer',pos:'CM3',spd:68,pwr:78,tec:66,def:82,rar:1,jersey:4},   // author 2026-09-26: starts as the holding midfielder - Germany had no CM3 and played away games with 10
+    {id:110,name:'Walder',pos:'RW',spd:84,pwr:82,tec:80,def:54,rar:1,jersey:9},
+    {id:111,name:'Engeldorf',pos:'CM3',spd:68,pwr:78,tec:66,def:82,rar:1,jersey:4},   // author 2026-09-26: starts as the holding midfielder - Germany had no CM3 and played away games with 10
   ]},
   // Brazil: original names + duel sheets (author 2026-10-02). `sup` = the super
   // moves this player has (author's list); see canSuper.
@@ -87,134 +87,134 @@ const T={
     {id:1111,name:'Seymarin', pos:'RW', spd:94,pwr:80,tec:92,def:50,rar:2,jersey:9, sho:88,pas:82,dri:95,pow:78, sup:['special','super-dribble']},
   ],reserves:[]},
   spain:{name:'Spain',flag:'🇪🇸',p:[
-    {id:1201,name:'Casillas',pos:'GK',spd:70,pwr:74,tec:76,def:94,rar:3,jersey:1,sav:94,ref:88},
-    {id:1202,name:'Puyol',pos:'LB',spd:76,pwr:80,tec:72,def:88,rar:2,jersey:5},
-    {id:1203,name:'Pique',pos:'CB1',spd:72,pwr:84,tec:74,def:90,rar:2,jersey:3},
-    {id:1204,name:'Ramos',pos:'CB2',spd:78,pwr:86,tec:78,def:92,rar:3,jersey:4},
-    {id:1205,name:'Carvajal',pos:'RB',spd:82,pwr:72,tec:76,def:82,rar:2,jersey:2},
-    {id:1206,name:'Xavi',pos:'CM1',spd:80,pwr:76,tec:96,def:70,rar:3,jersey:8},
-    {id:1207,name:'Hernandez',pos:'CM2',spd:86,pwr:78,tec:90,def:68,rar:2,jersey:14},
-    {id:1208,name:'Raphael',pos:'CM3',spd:84,pwr:80,tec:88,def:64,rar:2,jersey:11},
-    {id:1209,name:'Michael',pos:'LW',spd:88,pwr:82,tec:92,def:58,rar:2,jersey:7},
-    {id:1210,name:'Raul',pos:'RW',spd:84,pwr:86,tec:88,def:54,rar:3,jersey:7},
-    {id:1211,name:'Torres',pos:'ST',spd:90,pwr:88,tec:86,def:52,rar:3,jersey:9},
+    {id:1201,name:'Caladez',pos:'GK',spd:70,pwr:74,tec:76,def:94,rar:3,jersey:1,sav:94,ref:88},
+    {id:1202,name:'Sanado',pos:'LB',spd:76,pwr:80,tec:72,def:88,rar:2,jersey:5},
+    {id:1203,name:'Nereira',pos:'CB1',spd:72,pwr:84,tec:74,def:90,rar:2,jersey:3},
+    {id:1204,name:'Deladez',pos:'CB2',spd:78,pwr:86,tec:78,def:92,rar:3,jersey:4},
+    {id:1205,name:'Domona',pos:'RB',spd:82,pwr:72,tec:76,def:82,rar:2,jersey:2},
+    {id:1206,name:'Nerinez',pos:'CM1',spd:80,pwr:76,tec:96,def:70,rar:3,jersey:8},
+    {id:1207,name:'Nerardo',pos:'CM2',spd:86,pwr:78,tec:90,def:68,rar:2,jersey:14},
+    {id:1208,name:'Vareira',pos:'CM3',spd:84,pwr:80,tec:88,def:64,rar:2,jersey:11},
+    {id:1209,name:'Loboca',pos:'LW',spd:88,pwr:82,tec:92,def:58,rar:2,jersey:7},
+    {id:1210,name:'Rosardo',pos:'RW',spd:84,pwr:86,tec:88,def:54,rar:3,jersey:7},
+    {id:1211,name:'Ferante',pos:'ST',spd:90,pwr:88,tec:86,def:52,rar:3,jersey:9},
   ]},
   france:{name:'France',flag:'🇫🇷',p:[
-    {id:1301,name:'Rechard',pos:'GK',spd:66,pwr:72,tec:72,def:90,rar:2,jersey:1,sav:86,ref:78},
-    {id:1302,name:'Lizarazu',pos:'LB',spd:80,pwr:72,tec:78,def:80,rar:2,jersey:3},
-    {id:1303,name:'Thuram',pos:'CB1',spd:70,pwr:82,tec:70,def:88,rar:2,jersey:5},
-    {id:1304,name:'Desailly',pos:'CB2',spd:68,pwr:84,tec:68,def:90,rar:2,jersey:6},
-    {id:1305,name:'Makelolo',pos:'RB',spd:76,pwr:78,tec:74,def:84,rar:2,jersey:2},
-    {id:1306,name:'Zedane',pos:'CM1',spd:82,pwr:84,tec:94,def:70,rar:2,jersey:5},
-    {id:1307,name:'Pierre',pos:'CM2',spd:80,pwr:80,tec:88,def:62,rar:2,jersey:10},
-    {id:1308,name:'Mbappe',pos:'CM3',spd:96,pwr:82,tec:86,def:54,rar:2,jersey:7},
-    {id:1309,name:'Ribery',pos:'LW',spd:88,pwr:80,tec:86,def:56,rar:2,jersey:11},
-    {id:1310,name:'Napoleon',pos:'ST',spd:84,pwr:90,tec:82,def:52,rar:2,jersey:9},
-    {id:1311,name:'Trezaga',pos:'RW',spd:82,pwr:86,tec:84,def:54,rar:1,jersey:18},
+    {id:1301,name:'Dumil',pos:'GK',spd:66,pwr:72,tec:72,def:90,rar:2,jersey:1,sav:86,ref:78},
+    {id:1302,name:'Martault',pos:'LB',spd:80,pwr:72,tec:78,def:80,rar:2,jersey:3},
+    {id:1303,name:'Grisier',pos:'CB1',spd:70,pwr:82,tec:70,def:88,rar:2,jersey:5},
+    {id:1304,name:'Dubeau',pos:'CB2',spd:68,pwr:84,tec:68,def:90,rar:2,jersey:6},
+    {id:1305,name:'Boulois',pos:'RB',spd:76,pwr:78,tec:74,def:84,rar:2,jersey:2},
+    {id:1306,name:'Turac',pos:'CM1',spd:82,pwr:84,tec:94,def:70,rar:2,jersey:5},
+    {id:1307,name:'Renil',pos:'CM2',spd:80,pwr:80,tec:88,def:62,rar:2,jersey:10},
+    {id:1308,name:'Michault',pos:'CM3',spd:96,pwr:82,tec:86,def:54,rar:2,jersey:7},
+    {id:1309,name:'Lefoux',pos:'LW',spd:88,pwr:80,tec:86,def:56,rar:2,jersey:11},
+    {id:1310,name:'Michain',pos:'ST',spd:84,pwr:90,tec:82,def:52,rar:2,jersey:9},
+    {id:1311,name:'Boulange',pos:'RW',spd:82,pwr:86,tec:84,def:54,rar:1,jersey:18},
   ]},
   ireland:{name:'Ireland',flag:'🇮🇪',p:[
-    {id:1401,name:'O.Brien',pos:'GK',spd:64,pwr:70,tec:68,def:84,rar:1,jersey:1,sav:78,ref:72},
-    {id:1402,name:'Dunne',pos:'LB',spd:74,pwr:72,tec:68,def:78,rar:1,jersey:3},
-    {id:1403,name:'Keane',pos:'CB1',spd:68,pwr:80,tec:66,def:84,rar:1,jersey:5},
-    {id:1404,name:'O.Shea',pos:'CB2',spd:66,pwr:78,tec:64,def:82,rar:1,jersey:6},
-    {id:1405,name:'Kelly',pos:'RB',spd:72,pwr:70,tec:68,def:76,rar:1,jersey:2},
-    {id:1406,name:'McCarthy',pos:'CM1',spd:76,pwr:78,tec:74,def:72,rar:1,jersey:8},
-    {id:1407,name:'Whelan',pos:'CM2',spd:74,pwr:76,tec:76,def:70,rar:1,jersey:4},
-    {id:1408,name:'Kilbane',pos:'CM3',spd:72,pwr:74,tec:72,def:68,rar:1,jersey:7},
-    {id:1409,name:'Duff',pos:'LW',spd:82,pwr:76,tec:78,def:54,rar:1,jersey:11},
-    {id:1410,name:'R.Keane',pos:'ST',spd:80,pwr:82,tec:78,def:52,rar:2,jersey:9},
-    {id:1411,name:'Staunton',pos:'RW',spd:76,pwr:74,tec:76,def:58,rar:1,jersey:10},
+    {id:1401,name:'H.Hallinan',pos:'GK',spd:64,pwr:70,tec:68,def:84,rar:1,jersey:1,sav:78,ref:72},
+    {id:1402,name:'McLennon',pos:'LB',spd:74,pwr:72,tec:68,def:78,rar:1,jersey:3},
+    {id:1403,name:'Fennelly',pos:'CB1',spd:68,pwr:80,tec:66,def:84,rar:1,jersey:5},
+    {id:1404,name:'J.Deveney',pos:'CB2',spd:66,pwr:78,tec:64,def:82,rar:1,jersey:6},
+    {id:1405,name:'McDarragh',pos:'RB',spd:72,pwr:70,tec:68,def:76,rar:1,jersey:2},
+    {id:1406,name:'McKerrin',pos:'CM1',spd:76,pwr:78,tec:74,def:72,rar:1,jersey:8},
+    {id:1407,name:'McBrannock',pos:'CM2',spd:74,pwr:76,tec:76,def:70,rar:1,jersey:4},
+    {id:1408,name:'Scanlen',pos:'CM3',spd:72,pwr:74,tec:72,def:68,rar:1,jersey:7},
+    {id:1409,name:'Calloran',pos:'LW',spd:82,pwr:76,tec:78,def:54,rar:1,jersey:11},
+    {id:1410,name:'J.Fennelly',pos:'ST',spd:80,pwr:82,tec:78,def:52,rar:2,jersey:9},
+    {id:1411,name:'McQuarran',pos:'RW',spd:76,pwr:74,tec:76,def:58,rar:1,jersey:10},
   ]},
   scotland:{name:'Scotland',flag:'🏴󠁧󠁢󠁳󠁣󠁴󠁿',p:[
-    {id:1501,name:'Marshall',pos:'GK',spd:64,pwr:68,tec:68,def:82,rar:1,jersey:1,sav:76,ref:70},
-    {id:1502,name:'Robertson',pos:'LB',spd:82,pwr:72,tec:80,def:76,rar:2,jersey:3},
-    {id:1503,name:'Hanley',pos:'CB1',spd:66,pwr:80,tec:64,def:84,rar:1,jersey:5},
-    {id:1504,name:'Maguire',pos:'CB2',spd:64,pwr:78,tec:62,def:82,rar:1,jersey:6},
-    {id:1505,name:'Hutton',pos:'RB',spd:72,pwr:70,tec:68,def:76,rar:1,jersey:2},
-    {id:1506,name:'Brown',pos:'CM1',spd:76,pwr:80,tec:74,def:76,rar:1,jersey:8},
-    {id:1507,name:'Fergusson',pos:'CM2',spd:74,pwr:76,tec:78,def:68,rar:1,jersey:4},
-    {id:1508,name:'McGregor',pos:'CM3',spd:76,pwr:74,tec:80,def:64,rar:1,jersey:7},
-    {id:1509,name:'Tierney',pos:'LW',spd:80,pwr:74,tec:78,def:58,rar:1,jersey:11},
-    {id:1510,name:'Fletcher',pos:'ST',spd:78,pwr:80,tec:76,def:54,rar:1,jersey:9},
-    {id:1511,name:'McGinn',pos:'RW',spd:80,pwr:76,tec:82,def:52,rar:2,jersey:10},
+    {id:1501,name:'Elgarth',pos:'GK',spd:64,pwr:68,tec:68,def:82,rar:1,jersey:1,sav:76,ref:70},
+    {id:1502,name:'Lennoch',pos:'LB',spd:82,pwr:72,tec:80,def:76,rar:2,jersey:3},
+    {id:1503,name:'Brodrick',pos:'CB1',spd:66,pwr:80,tec:64,def:84,rar:1,jersey:5},
+    {id:1504,name:'Carrowan',pos:'CB2',spd:64,pwr:78,tec:62,def:82,rar:1,jersey:6},
+    {id:1505,name:'Urquen',pos:'RB',spd:72,pwr:70,tec:68,def:76,rar:1,jersey:2},
+    {id:1506,name:'Dunmuir',pos:'CM1',spd:76,pwr:80,tec:74,def:76,rar:1,jersey:8},
+    {id:1507,name:'Balfarge',pos:'CM2',spd:74,pwr:76,tec:78,def:68,rar:1,jersey:4},
+    {id:1508,name:'Glenorrin',pos:'CM3',spd:76,pwr:74,tec:80,def:64,rar:1,jersey:7},
+    {id:1509,name:'Kinlochan',pos:'LW',spd:80,pwr:74,tec:78,def:58,rar:1,jersey:11},
+    {id:1510,name:'McNaught',pos:'ST',spd:78,pwr:80,tec:76,def:54,rar:1,jersey:9},
+    {id:1511,name:'Auldmuir',pos:'RW',spd:80,pwr:76,tec:82,def:52,rar:2,jersey:10},
   ]},
   belgium:{name:'Belgium',flag:'🇧🇪',p:[
-    {id:1601,name:'Courtois',pos:'GK',spd:68,pwr:76,tec:74,def:92,rar:2,jersey:1,sav:88,ref:82},
-    {id:1602,name:'Vertonghen',pos:'LB',spd:76,pwr:78,tec:76,def:84,rar:2,jersey:3},
-    {id:1603,name:'Kompany',pos:'CB1',spd:70,pwr:86,tec:72,def:90,rar:2,jersey:5},
-    {id:1604,name:'Alderweireld',pos:'CB2',spd:68,pwr:82,tec:74,def:88,rar:2,jersey:6},
-    {id:1605,name:'Meunier',pos:'RB',spd:78,pwr:74,tec:76,def:78,rar:1,jersey:2},
-    {id:1606,name:'Witsel',pos:'CM1',spd:78,pwr:82,tec:80,def:76,rar:2,jersey:8},
-    {id:1607,name:'Fellaini',pos:'CM2',spd:76,pwr:86,tec:74,def:72,rar:1,jersey:4},
-    {id:1608,name:'De.Bruyne',pos:'CM3',spd:84,pwr:84,tec:92,def:62,rar:2,jersey:7},
-    {id:1609,name:'Mertens',pos:'LW',spd:82,pwr:78,tec:86,def:54,rar:2,jersey:11},
-    {id:1610,name:'Lukaku',pos:'ST',spd:82,pwr:90,tec:80,def:52,rar:2,jersey:9},
-    {id:1611,name:'Hazard',pos:'RW',spd:86,pwr:82,tec:92,def:50,rar:2,jersey:10},
+    {id:1601,name:'Nuyttens',pos:'GK',spd:68,pwr:76,tec:74,def:92,rar:2,jersey:1,sav:88,ref:82},
+    {id:1602,name:'Struyven',pos:'LB',spd:76,pwr:78,tec:76,def:84,rar:2,jersey:3},
+    {id:1603,name:'Rombouts',pos:'CB1',spd:70,pwr:86,tec:72,def:90,rar:2,jersey:5},
+    {id:1604,name:'Gevaerts',pos:'CB2',spd:68,pwr:82,tec:74,def:88,rar:2,jersey:6},
+    {id:1605,name:'Heymans',pos:'RB',spd:78,pwr:74,tec:76,def:78,rar:1,jersey:2},
+    {id:1606,name:'Vandenbulck',pos:'CM1',spd:78,pwr:82,tec:80,def:76,rar:2,jersey:8},
+    {id:1607,name:'Beirens',pos:'CM2',spd:76,pwr:86,tec:74,def:72,rar:1,jersey:4},
+    {id:1608,name:'S.Coolens',pos:'CM3',spd:84,pwr:84,tec:92,def:62,rar:2,jersey:7},
+    {id:1609,name:'Maertens',pos:'LW',spd:82,pwr:78,tec:86,def:54,rar:2,jersey:11},
+    {id:1610,name:'Wouters',pos:'ST',spd:82,pwr:90,tec:80,def:52,rar:2,jersey:9},
+    {id:1611,name:'Ooms',pos:'RW',spd:86,pwr:82,tec:92,def:50,rar:2,jersey:10},
   ]},
   austria:{name:'Austria',flag:'🇦🇹',p:[
-    {id:1701,name:'Lindner',pos:'GK',spd:64,pwr:68,tec:68,def:82,rar:1,jersey:1,sav:76,ref:70},
-    {id:1702,name:'Alaba',pos:'LB',spd:82,pwr:78,tec:82,def:80,rar:2,jersey:3},
-    {id:1703,name:'Hinteregger',pos:'CB1',spd:68,pwr:82,tec:68,def:86,rar:1,jersey:5},
-    {id:1704,name:'Dragovic',pos:'CB2',spd:66,pwr:80,tec:66,def:84,rar:1,jersey:6},
-    {id:1705,name:'Lainer',pos:'RB',spd:74,pwr:72,tec:72,def:76,rar:1,jersey:2},
-    {id:1706,name:'Baumgartner',pos:'CM1',spd:76,pwr:76,tec:80,def:68,rar:1,jersey:8},
-    {id:1707,name:'Grillitsch',pos:'CM2',spd:74,pwr:78,tec:76,def:72,rar:1,jersey:4},
-    {id:1708,name:'Laimer',pos:'CM3',spd:78,pwr:76,tec:78,def:68,rar:1,jersey:7},
-    {id:1709,name:'Sabitzer',pos:'LW',spd:80,pwr:78,tec:82,def:58,rar:2,jersey:11},
-    {id:1710,name:'Arnautovic',pos:'ST',spd:80,pwr:86,tec:80,def:54,rar:2,jersey:9},
-    {id:1711,name:'Schopf',pos:'RW',spd:78,pwr:76,tec:80,def:56,rar:1,jersey:10},
+    {id:1701,name:'Jungau',pos:'GK',spd:64,pwr:68,tec:68,def:82,rar:1,jersey:1,sav:76,ref:70},
+    {id:1702,name:'Langau',pos:'LB',spd:82,pwr:78,tec:82,def:80,rar:2,jersey:3},
+    {id:1703,name:'Weinrich',pos:'CB1',spd:68,pwr:82,tec:68,def:86,rar:1,jersey:5},
+    {id:1704,name:'Finkke',pos:'CB2',spd:66,pwr:80,tec:66,def:84,rar:1,jersey:6},
+    {id:1705,name:'Gerstke',pos:'RB',spd:74,pwr:72,tec:72,def:76,rar:1,jersey:2},
+    {id:1706,name:'Bohlbrecht',pos:'CM1',spd:76,pwr:76,tec:80,def:68,rar:1,jersey:8},
+    {id:1707,name:'Steinstein',pos:'CM2',spd:74,pwr:78,tec:76,def:72,rar:1,jersey:4},
+    {id:1708,name:'Drexmer',pos:'CM3',spd:78,pwr:76,tec:78,def:68,rar:1,jersey:7},
+    {id:1709,name:'Branding',pos:'LW',spd:80,pwr:78,tec:82,def:58,rar:2,jersey:11},
+    {id:1710,name:'Haupter',pos:'ST',spd:80,pwr:86,tec:80,def:54,rar:2,jersey:9},
+    {id:1711,name:'Melldorf',pos:'RW',spd:78,pwr:76,tec:80,def:56,rar:1,jersey:10},
   ]},
   croatia:{name:'Croatia',flag:'🇭🇷',p:[
-    {id:1801,name:'Subasic',pos:'GK',spd:66,pwr:72,tec:70,def:88,rar:2,jersey:1,sav:84,ref:78},
-    {id:1802,name:'Strinic',pos:'LB',spd:76,pwr:72,tec:74,def:78,rar:1,jersey:3},
-    {id:1803,name:'Lovren',pos:'CB1',spd:68,pwr:82,tec:68,def:86,rar:2,jersey:5},
-    {id:1804,name:'Vida',pos:'CB2',spd:66,pwr:80,tec:66,def:84,rar:1,jersey:6},
-    {id:1805,name:'Vrsaljko',pos:'RB',spd:78,pwr:74,tec:74,def:78,rar:1,jersey:2},
-    {id:1806,name:'Rakitic',pos:'CM1',spd:80,pwr:80,tec:86,def:72,rar:2,jersey:8},
-    {id:1807,name:'Brozovic',pos:'CM2',spd:78,pwr:78,tec:84,def:74,rar:2,jersey:4},
-    {id:1808,name:'Modric',pos:'CM3',spd:82,pwr:78,tec:92,def:66,rar:2,jersey:10},
-    {id:1809,name:'Rebic',pos:'LW',spd:82,pwr:82,tec:80,def:56,rar:1,jersey:11},
-    {id:1810,name:'Mandzukic',pos:'ST',spd:80,pwr:88,tec:78,def:54,rar:2,jersey:9},
-    {id:1811,name:'Perisic',pos:'RW',spd:82,pwr:80,tec:82,def:56,rar:2,jersey:7},
+    {id:1801,name:'Simovic',pos:'GK',spd:66,pwr:72,tec:70,def:88,rar:2,jersey:1,sav:84,ref:78},
+    {id:1802,name:'Jakulic',pos:'LB',spd:76,pwr:72,tec:74,def:78,rar:1,jersey:3},
+    {id:1803,name:'Radovac',pos:'CB1',spd:68,pwr:82,tec:68,def:86,rar:2,jersey:5},
+    {id:1804,name:'Vukljak',pos:'CB2',spd:66,pwr:80,tec:66,def:84,rar:1,jersey:6},
+    {id:1805,name:'Petovic',pos:'RB',spd:78,pwr:74,tec:74,def:78,rar:1,jersey:2},
+    {id:1806,name:'Jelinic',pos:'CM1',spd:80,pwr:80,tec:86,def:72,rar:2,jersey:8},
+    {id:1807,name:'Lovrek',pos:'CM2',spd:78,pwr:78,tec:84,def:74,rar:2,jersey:4},
+    {id:1808,name:'Novakov',pos:'CM3',spd:82,pwr:78,tec:92,def:66,rar:2,jersey:10},
+    {id:1809,name:'Matijac',pos:'LW',spd:82,pwr:82,tec:80,def:56,rar:1,jersey:11},
+    {id:1810,name:'Zorovic',pos:'ST',spd:80,pwr:88,tec:78,def:54,rar:2,jersey:9},
+    {id:1811,name:'Tomasek',pos:'RW',spd:82,pwr:80,tec:82,def:56,rar:2,jersey:7},
   ]},
   wales:{name:'Wales',flag:'🏴󠁧󠁢󠁷󠁬󠁳󠁿',p:[
-    {id:1901,name:'Hennessey',pos:'GK',spd:64,pwr:68,tec:66,def:82,rar:1,jersey:1,sav:76,ref:68},
-    {id:1902,name:'Davies',pos:'LB',spd:78,pwr:70,tec:76,def:76,rar:1,jersey:3},
-    {id:1903,name:'Williams',pos:'CB1',spd:66,pwr:78,tec:66,def:84,rar:1,jersey:5},
-    {id:1904,name:'Mepham',pos:'CB2',spd:64,pwr:76,tec:64,def:82,rar:1,jersey:6},
-    {id:1905,name:'Roberts',pos:'RB',spd:74,pwr:70,tec:72,def:74,rar:1,jersey:2},
-    {id:1906,name:'Allen',pos:'CM1',spd:74,pwr:74,tec:78,def:72,rar:1,jersey:8},
-    {id:1907,name:'Ramsey',pos:'CM2',spd:78,pwr:78,tec:84,def:66,rar:2,jersey:4},
-    {id:1908,name:'Wilson',pos:'CM3',spd:76,pwr:76,tec:78,def:64,rar:1,jersey:7},
-    {id:1909,name:'James',pos:'LW',spd:86,pwr:74,tec:80,def:54,rar:2,jersey:11},
-    {id:1910,name:'Bale',pos:'ST',spd:88,pwr:88,tec:84,def:52,rar:2,jersey:9},
-    {id:1911,name:'Vokes',pos:'RW',spd:76,pwr:80,tec:74,def:56,rar:1,jersey:10},
+    {id:1901,name:'Madogan',pos:'GK',spd:64,pwr:68,tec:66,def:82,rar:1,jersey:1,sav:76,ref:68},
+    {id:1902,name:'Tudwal',pos:'LB',spd:78,pwr:70,tec:76,def:76,rar:1,jersey:3},
+    {id:1903,name:'Ellynor',pos:'CB1',spd:66,pwr:78,tec:66,def:84,rar:1,jersey:5},
+    {id:1904,name:'Penrhys',pos:'CB2',spd:64,pwr:76,tec:64,def:82,rar:1,jersey:6},
+    {id:1905,name:'Llanwyn',pos:'RB',spd:74,pwr:70,tec:72,def:74,rar:1,jersey:2},
+    {id:1906,name:'Ceredan',pos:'CM1',spd:74,pwr:74,tec:78,def:72,rar:1,jersey:8},
+    {id:1907,name:'Rhodwyn',pos:'CM2',spd:78,pwr:78,tec:84,def:66,rar:2,jersey:4},
+    {id:1908,name:'Gwynnor',pos:'CM3',spd:76,pwr:76,tec:78,def:64,rar:1,jersey:7},
+    {id:1909,name:'Pryderch',pos:'LW',spd:86,pwr:74,tec:80,def:54,rar:2,jersey:11},
+    {id:1910,name:'Maelgon',pos:'ST',spd:88,pwr:88,tec:84,def:52,rar:2,jersey:9},
+    {id:1911,name:'Trevellan',pos:'RW',spd:76,pwr:80,tec:74,def:56,rar:1,jersey:10},
   ]},
   switzerland:{name:'Switzerland',flag:'🇨🇭',p:[
-    {id:2001,name:'Sommer',pos:'GK',spd:66,pwr:70,tec:72,def:88,rar:2,jersey:1,sav:84,ref:78},
-    {id:2002,name:'Rodriguez',pos:'LB',spd:78,pwr:74,tec:76,def:78,rar:1,jersey:3},
-    {id:2003,name:'Schar',pos:'CB1',spd:68,pwr:80,tec:70,def:86,rar:1,jersey:5},
-    {id:2004,name:'Akanji',pos:'CB2',spd:70,pwr:78,tec:70,def:84,rar:1,jersey:6},
-    {id:2005,name:'Lichtsteiner',pos:'RB',spd:76,pwr:74,tec:74,def:78,rar:1,jersey:2},
-    {id:2006,name:'Freuler',pos:'CM1',spd:76,pwr:78,tec:78,def:74,rar:1,jersey:8},
-    {id:2007,name:'Zakaria',pos:'CM2',spd:78,pwr:82,tec:76,def:76,rar:1,jersey:4},
-    {id:2008,name:'Xhaka',pos:'CM3',spd:76,pwr:80,tec:82,def:70,rar:2,jersey:7},
-    {id:2009,name:'Embolo',pos:'LW',spd:80,pwr:82,tec:78,def:56,rar:1,jersey:11},
-    {id:2010,name:'Seferovic',pos:'ST',spd:78,pwr:80,tec:76,def:54,rar:1,jersey:9},
-    {id:2011,name:'Shaqiri',pos:'RW',spd:80,pwr:80,tec:84,def:54,rar:2,jersey:10},
+    {id:2001,name:'Hochuli',pos:'GK',spd:66,pwr:70,tec:72,def:88,rar:2,jersey:1,sav:84,ref:78},
+    {id:2002,name:'Niederer',pos:'LB',spd:78,pwr:74,tec:76,def:78,rar:1,jersey:3},
+    {id:2003,name:'Schlaepfer',pos:'CB1',spd:68,pwr:80,tec:70,def:86,rar:1,jersey:5},
+    {id:2004,name:'Camenzind',pos:'CB2',spd:70,pwr:78,tec:70,def:84,rar:1,jersey:6},
+    {id:2005,name:'Eggimann',pos:'RB',spd:76,pwr:74,tec:74,def:78,rar:1,jersey:2},
+    {id:2006,name:'Mettler',pos:'CM1',spd:76,pwr:78,tec:78,def:74,rar:1,jersey:8},
+    {id:2007,name:'Oberholz',pos:'CM2',spd:78,pwr:82,tec:76,def:76,rar:1,jersey:4},
+    {id:2008,name:'Amstad',pos:'CM3',spd:76,pwr:80,tec:82,def:70,rar:2,jersey:7},
+    {id:2009,name:'Bruggisser',pos:'LW',spd:80,pwr:82,tec:78,def:56,rar:1,jersey:11},
+    {id:2010,name:'Tschanz',pos:'ST',spd:78,pwr:80,tec:76,def:54,rar:1,jersey:9},
+    {id:2011,name:'Vogeli',pos:'RW',spd:80,pwr:80,tec:84,def:54,rar:2,jersey:10},
   ]},
   uruguay:{name:'Uruguay',flag:'🇺🇾',p:[
-    {id:2101,name:'Muslera',pos:'GK',spd:66,pwr:70,tec:70,def:86,rar:2,jersey:1,sav:82,ref:76},
-    {id:2102,name:'Caceres',pos:'LB',spd:74,pwr:74,tec:72,def:80,rar:1,jersey:3},
-    {id:2103,name:'Godin',pos:'CB1',spd:68,pwr:84,tec:70,def:90,rar:2,jersey:5},
-    {id:2104,name:'Gimenez',pos:'CB2',spd:70,pwr:82,tec:68,def:88,rar:2,jersey:6},
-    {id:2105,name:'Laxalt',pos:'RB',spd:76,pwr:72,tec:72,def:76,rar:1,jersey:2},
-    {id:2106,name:'Torreira',pos:'CM1',spd:76,pwr:78,tec:80,def:76,rar:1,jersey:8},
-    {id:2107,name:'Bentancur',pos:'CM2',spd:78,pwr:78,tec:82,def:72,rar:2,jersey:4},
-    {id:2108,name:'Nandez',pos:'CM3',spd:80,pwr:78,tec:78,def:70,rar:1,jersey:7},
-    {id:2109,name:'Victorino',pos:'LW',spd:88,pwr:92,tec:86,def:54,rar:2,jersey:10},
-    {id:2110,name:'Hino',pos:'ST',spd:86,pwr:88,tec:84,def:52,rar:2,jersey:9},
-    {id:2111,name:'Suarez',pos:'RW',spd:84,pwr:86,tec:84,def:54,rar:2,jersey:11},
+    {id:2101,name:'Galardo',pos:'GK',spd:66,pwr:70,tec:70,def:86,rar:2,jersey:1,sav:82,ref:76},
+    {id:2102,name:'Barez',pos:'LB',spd:74,pwr:74,tec:72,def:80,rar:1,jersey:3},
+    {id:2103,name:'Valido',pos:'CB1',spd:68,pwr:84,tec:70,def:90,rar:2,jersey:5},
+    {id:2104,name:'Lorona',pos:'CB2',spd:70,pwr:82,tec:68,def:88,rar:2,jersey:6},
+    {id:2105,name:'Cabares',pos:'RB',spd:76,pwr:72,tec:72,def:76,rar:1,jersey:2},
+    {id:2106,name:'Rodero',pos:'CM1',spd:76,pwr:78,tec:80,def:76,rar:1,jersey:8},
+    {id:2107,name:'Alveira',pos:'CM2',spd:78,pwr:78,tec:82,def:72,rar:2,jersey:4},
+    {id:2108,name:'Sanero',pos:'CM3',spd:80,pwr:78,tec:78,def:70,rar:1,jersey:7},
+    {id:2109,name:'Tabuela',pos:'LW',spd:88,pwr:92,tec:86,def:54,rar:2,jersey:10},
+    {id:2110,name:'Ozugawa',pos:'ST',spd:86,pwr:88,tec:84,def:52,rar:2,jersey:9},
+    {id:2111,name:'Escano',pos:'RW',spd:84,pwr:86,tec:84,def:54,rar:2,jersey:11},
   ]},
   china:{name:'China',flag:'🇨🇳',p:[
     {id:2201,name:'Zhang',pos:'GK',spd:64,pwr:68,tec:68,def:84,rar:1,jersey:1,sav:78,ref:72},
@@ -230,17 +230,17 @@ const T={
     {id:2211,name:'Zhou',pos:'RW',spd:76,pwr:78,tec:78,def:54,rar:1,jersey:10},
   ]},
   sweden:{name:'Sweden',flag:'🇸🇪',p:[
-    {id:2301,name:'Olsen',pos:'GK',spd:66,pwr:70,tec:70,def:86,rar:1,jersey:1,sav:82,ref:76},
-    {id:2302,name:'Augustinsson',pos:'LB',spd:78,pwr:72,tec:76,def:78,rar:1,jersey:3},
-    {id:2303,name:'Lindelof',pos:'CB1',spd:70,pwr:80,tec:72,def:86,rar:2,jersey:5},
-    {id:2304,name:'Granqvist',pos:'CB2',spd:68,pwr:82,tec:68,def:88,rar:1,jersey:6},
-    {id:2305,name:'Lustig',pos:'RB',spd:74,pwr:72,tec:72,def:78,rar:1,jersey:2},
-    {id:2306,name:'Ekdal',pos:'CM1',spd:76,pwr:78,tec:78,def:74,rar:1,jersey:8},
-    {id:2307,name:'S.Levi',pos:'CM3',spd:84,pwr:86,tec:96,def:64,rar:3,jersey:12},
-    {id:2308,name:'Forsberg',pos:'CM2',spd:82,pwr:80,tec:86,def:68,rar:2,jersey:7},
-    {id:2309,name:'Claesson',pos:'LW',spd:80,pwr:76,tec:78,def:56,rar:1,jersey:11},
-    {id:2310,name:'Berg',pos:'ST',spd:78,pwr:82,tec:76,def:54,rar:1,jersey:9},
-    {id:2311,name:'Ibrahimovic',pos:'RW',spd:84,pwr:90,tec:86,def:52,rar:2,jersey:10},
+    {id:2301,name:'Ulvestad',pos:'GK',spd:66,pwr:70,tec:70,def:86,rar:1,jersey:1,sav:82,ref:76},
+    {id:2302,name:'Bjornvik',pos:'LB',spd:78,pwr:72,tec:76,def:78,rar:1,jersey:3},
+    {id:2303,name:'Olofsen',pos:'CB1',spd:70,pwr:80,tec:72,def:86,rar:2,jersey:5},
+    {id:2304,name:'Dahlgard',pos:'CB2',spd:68,pwr:82,tec:68,def:88,rar:1,jersey:6},
+    {id:2305,name:'Aldenvik',pos:'RB',spd:74,pwr:72,tec:72,def:78,rar:1,jersey:2},
+    {id:2306,name:'Vikstrand',pos:'CM1',spd:76,pwr:78,tec:78,def:74,rar:1,jersey:8},
+    {id:2307,name:'T.Bergroth',pos:'CM3',spd:84,pwr:86,tec:96,def:64,rar:3,jersey:12},
+    {id:2308,name:'Sandblad',pos:'CM2',spd:82,pwr:80,tec:86,def:68,rar:2,jersey:7},
+    {id:2309,name:'Sundvall',pos:'LW',spd:80,pwr:76,tec:78,def:56,rar:1,jersey:11},
+    {id:2310,name:'Fridlund',pos:'ST',spd:78,pwr:82,tec:76,def:54,rar:1,jersey:9},
+    {id:2311,name:'Slatanovich',pos:'RW',spd:84,pwr:90,tec:86,def:52,rar:2,jersey:10},
   ]},
   northkorea:{name:'North Korea',flag:'🇰🇵',p:[
     {id:2401,name:'Ri.Myong',pos:'GK',spd:64,pwr:68,tec:66,def:84,rar:1,jersey:1,sav:78,ref:70},
@@ -256,30 +256,30 @@ const T={
     {id:2411,name:'Chol.Man',pos:'RW',spd:78,pwr:80,tec:80,def:56,rar:1,jersey:10},
   ]},
   usa:{name:'USA',flag:'🇺🇸',p:[
-    {id:2501,name:'Turner',pos:'GK',spd:64,pwr:68,tec:68,def:82,rar:1,jersey:1,sav:76,ref:70},
-    {id:2502,name:'Robinson',pos:'LB',spd:80,pwr:72,tec:76,def:76,rar:1,jersey:3},
-    {id:2503,name:'Zimmerman',pos:'CB1',spd:68,pwr:78,tec:68,def:84,rar:1,jersey:5},
-    {id:2504,name:'Long',pos:'CB2',spd:66,pwr:76,tec:66,def:82,rar:1,jersey:6},
-    {id:2505,name:'Dest',pos:'RB',spd:82,pwr:72,tec:78,def:72,rar:1,jersey:2},
-    {id:2506,name:'Adams',pos:'CM1',spd:78,pwr:80,tec:78,def:76,rar:1,jersey:8},
-    {id:2507,name:'McKennie',pos:'CM2',spd:80,pwr:82,tec:80,def:70,rar:1,jersey:4},
-    {id:2508,name:'Musah',pos:'CM3',spd:80,pwr:78,tec:82,def:64,rar:1,jersey:7},
-    {id:2509,name:'Weah',pos:'LW',spd:84,pwr:76,tec:80,def:56,rar:1,jersey:11},
-    {id:2510,name:'Altidore',pos:'ST',spd:78,pwr:84,tec:76,def:54,rar:1,jersey:9},
-    {id:2511,name:'Pulisic',pos:'RW',spd:86,pwr:80,tec:86,def:54,rar:2,jersey:10},
+    {id:2501,name:'Quimby',pos:'GK',spd:64,pwr:68,tec:68,def:82,rar:1,jersey:1,sav:76,ref:70},
+    {id:2502,name:'Dexter',pos:'LB',spd:80,pwr:72,tec:76,def:76,rar:1,jersey:3},
+    {id:2503,name:'Kessling',pos:'CB1',spd:68,pwr:78,tec:68,def:84,rar:1,jersey:5},
+    {id:2504,name:'Dalworth',pos:'CB2',spd:66,pwr:76,tec:66,def:82,rar:1,jersey:6},
+    {id:2505,name:'Coltrane',pos:'RB',spd:82,pwr:72,tec:78,def:72,rar:1,jersey:2},
+    {id:2506,name:'Lowell',pos:'CM1',spd:78,pwr:80,tec:78,def:76,rar:1,jersey:8},
+    {id:2507,name:'Fenmore',pos:'CM2',spd:80,pwr:82,tec:80,def:70,rar:1,jersey:4},
+    {id:2508,name:'Vance',pos:'CM3',spd:80,pwr:78,tec:82,def:64,rar:1,jersey:7},
+    {id:2509,name:'Wardell',pos:'LW',spd:84,pwr:76,tec:80,def:56,rar:1,jersey:11},
+    {id:2510,name:'Rudolf',pos:'ST',spd:78,pwr:84,tec:76,def:54,rar:1,jersey:9},
+    {id:2511,name:'Merrick',pos:'RW',spd:86,pwr:80,tec:86,def:54,rar:2,jersey:10},
   ]},
   morocco:{name:'Morocco',flag:'🇲🇦',p:[
-    {id:2601,name:'Bono',pos:'GK',spd:66,pwr:70,tec:72,def:90,rar:2,jersey:1,sav:86,ref:80},
-    {id:2602,name:'Mazraoui',pos:'LB',spd:80,pwr:74,tec:78,def:78,rar:2,jersey:3},
-    {id:2603,name:'Aguerd',pos:'CB1',spd:70,pwr:82,tec:70,def:88,rar:1,jersey:5},
-    {id:2604,name:'Saiss',pos:'CB2',spd:68,pwr:84,tec:70,def:90,rar:2,jersey:6},
-    {id:2605,name:'Hakimi',pos:'RB',spd:88,pwr:76,tec:82,def:76,rar:2,jersey:2},
-    {id:2606,name:'Amrabat',pos:'CM1',spd:80,pwr:82,tec:80,def:82,rar:2,jersey:8},
-    {id:2607,name:'Ounahi',pos:'CM2',spd:78,pwr:78,tec:82,def:70,rar:1,jersey:4},
-    {id:2608,name:'Ziyech',pos:'CM3',spd:82,pwr:78,tec:88,def:60,rar:2,jersey:7},
-    {id:2609,name:'Boufal',pos:'LW',spd:84,pwr:76,tec:84,def:56,rar:2,jersey:11},
-    {id:2610,name:'En.Nesyri',pos:'ST',spd:82,pwr:86,tec:80,def:54,rar:2,jersey:9},
-    {id:2611,name:'Hamdallah',pos:'RW',spd:80,pwr:84,tec:82,def:54,rar:2,jersey:10},
+    {id:2601,name:'Alrhazi',pos:'GK',spd:66,pwr:70,tec:72,def:90,rar:2,jersey:1,sav:86,ref:80},
+    {id:2602,name:'Dahmani',pos:'LB',spd:80,pwr:74,tec:78,def:78,rar:2,jersey:3},
+    {id:2603,name:'Sabiri',pos:'CB1',spd:70,pwr:82,tec:70,def:88,rar:1,jersey:5},
+    {id:2604,name:'Benhadi',pos:'CB2',spd:68,pwr:84,tec:70,def:90,rar:2,jersey:6},
+    {id:2605,name:'Mouhtadi',pos:'RB',spd:88,pwr:76,tec:82,def:76,rar:2,jersey:2},
+    {id:2606,name:'Kaddouri',pos:'CM1',spd:80,pwr:82,tec:80,def:82,rar:2,jersey:8},
+    {id:2607,name:'Naciri',pos:'CM2',spd:78,pwr:78,tec:82,def:70,rar:1,jersey:4},
+    {id:2608,name:'Moussaid',pos:'CM3',spd:82,pwr:78,tec:88,def:60,rar:2,jersey:7},
+    {id:2609,name:'Boukhari',pos:'LW',spd:84,pwr:76,tec:84,def:56,rar:2,jersey:11},
+    {id:2610,name:'H.Chafai',pos:'ST',spd:82,pwr:86,tec:80,def:54,rar:2,jersey:9},
+    {id:2611,name:'Elmansour',pos:'RW',spd:80,pwr:84,tec:82,def:54,rar:2,jersey:10},
   ]},
   japan:{name:'Japan',flag:'🇯🇵',p:[
     {id:201,name:'G.Kenzo',pos:'GK',spd:68,pwr:72,tec:74,def:92,rar:2,jersey:1,sav:92,ref:86},
@@ -291,15 +291,15 @@ const T={
     {id:207,name:'S.Shinta',pos:'CM2',spd:78,pwr:72,tec:82,def:68,rar:2,jersey:20},
     {id:208,name:'T.Seizuke',pos:'CM3',spd:84,pwr:68,tec:90,def:66,rar:2,jersey:11},
     {id:209,name:'S.Kenta',pos:'LW',spd:82,pwr:76,tec:80,def:54,rar:1,jersey:18},
-    {id:210,name:'T.Aozora',pos:'CM2',spd:86,pwr:82,tec:92,def:54,rar:2,jersey:10},
+    {id:210,name:'R.Kitazaki',pos:'CM2',spd:86,pwr:82,tec:92,def:54,rar:2,jersey:10},
     {id:211,name:'K.Ryuga',pos:'ST',spd:84,pwr:90,tec:82,def:52,rar:2,jersey:9},
     // Reserves
-    {id:212,name:'K.Wakashimazu',pos:'GK',spd:66,pwr:70,tec:72,def:84,rar:1,jersey:17,sav:82,ref:78},
-    {id:213,name:'K.Jito',pos:'RB',spd:76,pwr:68,tec:70,def:76,rar:1,jersey:5},
-    {id:214,name:'M.Tachibana',pos:'LB',spd:78,pwr:66,tec:74,def:72,rar:1,jersey:2},
-    {id:215,name:'K.Tachibana',pos:'CB1',spd:74,pwr:70,tec:72,def:74,rar:1,jersey:3},
-    {id:216,name:'S.Sawada',pos:'CM1',spd:74,pwr:72,tec:76,def:64,rar:1,jersey:15},
-    {id:217,name:'Y.Isagi',pos:'LW',spd:86,pwr:76,tec:82,def:56,rar:2,jersey:19},
+    {id:212,name:'N.Tonogawa',pos:'GK',spd:66,pwr:70,tec:72,def:84,rar:1,jersey:17,sav:82,ref:78},
+    {id:213,name:'N.Inabadate',pos:'RB',spd:76,pwr:68,tec:70,def:76,rar:1,jersey:5},
+    {id:214,name:'F.Inabayama',pos:'LB',spd:78,pwr:66,tec:74,def:72,rar:1,jersey:2},
+    {id:215,name:'L.Inabayama',pos:'CB1',spd:74,pwr:70,tec:72,def:74,rar:1,jersey:3},
+    {id:216,name:'H.Ichidate',pos:'CM1',spd:74,pwr:72,tec:76,def:64,rar:1,jersey:15},
+    {id:217,name:'M.Kitamura',pos:'LW',spd:86,pwr:76,tec:82,def:56,rar:2,jersey:19},
   ],reserves:[212,213,214,215,216,217]},
   italy:{name:'Italy',flag:'🇮🇹',formation:'4-1-3-2',p:[
     {id:301,name:'G.Donati',   pos:'GK', spd:66,pwr:74,tec:72,def:92,rar:2,jersey:1, sav:90,ref:82},
@@ -319,65 +319,65 @@ const T={
     {id:314,name:'G.Gino',     pos:'GK', spd:64,pwr:68,tec:66,def:82,rar:1,jersey:24,sav:78,ref:70}],
   reserves:[308,313,314]},
   argentina:{name:'Argentina',flag:'🇦🇷',p:[
-    {id:701,name:'S.Goyco',pos:'GK',spd:66,pwr:72,tec:70,def:88,rar:2,sav:86,ref:80},
-    {id:702,name:'J.Zanetti',pos:'LB',spd:82,pwr:72,tec:78,def:80,rar:2},
-    {id:703,name:'R.Ayala',pos:'CB1',spd:70,pwr:80,tec:72,def:88,rar:2},
-    {id:704,name:'W.Samuel',pos:'CB2',spd:66,pwr:82,tec:68,def:88,rar:2},
-    {id:705,name:'P.Sorin',pos:'RB',spd:80,pwr:70,tec:76,def:78,rar:1},
-    {id:706,name:'J.Riquelme',pos:'CM1',spd:74,pwr:78,tec:92,def:62,rar:2},
-    {id:707,name:'J.Diaz',pos:'CM2',spd:82,pwr:88,tec:90,def:62,rar:2,jersey:8},
-    {id:708,name:'D.Simeone',pos:'CM3',spd:72,pwr:80,tec:78,def:80,rar:1},
-    {id:709,name:'C.Tevez',pos:'LW',spd:86,pwr:84,tec:82,def:56,rar:2},
-    {id:710,name:'G.Batistuta',pos:'ST',spd:80,pwr:92,tec:78,def:48,rar:2},
-    {id:711,name:'L.Messi',pos:'RW',spd:92,pwr:84,tec:96,def:52,rar:2}]},
+    {id:701,name:'O.Ortino',pos:'GK',spd:66,pwr:72,tec:70,def:88,rar:2,sav:86,ref:80},
+    {id:702,name:'A.Zamido',pos:'LB',spd:82,pwr:72,tec:78,def:80,rar:2},
+    {id:703,name:'H.Cobanza',pos:'CB1',spd:70,pwr:80,tec:72,def:88,rar:2},
+    {id:704,name:'K.Miroza',pos:'CB2',spd:66,pwr:82,tec:68,def:88,rar:2},
+    {id:705,name:'L.Varoza',pos:'RB',spd:80,pwr:70,tec:76,def:78,rar:1},
+    {id:706,name:'G.Salano',pos:'CM1',spd:74,pwr:78,tec:92,def:62,rar:2},
+    {id:707,name:'L.Torero',pos:'CM2',spd:82,pwr:88,tec:90,def:62,rar:2,jersey:8},
+    {id:708,name:'P.Pedinez',pos:'CM3',spd:72,pwr:80,tec:78,def:80,rar:1},
+    {id:709,name:'F.Caledo',pos:'LW',spd:86,pwr:84,tec:82,def:56,rar:2},
+    {id:710,name:'J.Corado',pos:'ST',spd:80,pwr:92,tec:78,def:48,rar:2},
+    {id:711,name:'L.Liones',pos:'RW',spd:92,pwr:84,tec:96,def:52,rar:2}]},
   holland:{name:'Holland',flag:'🇳🇱',p:[
-    {id:801,name:'E.vanDerSar',pos:'GK',spd:66,pwr:72,tec:74,def:90,rar:2,sav:88,ref:82},
-    {id:802,name:'G.vBronck',pos:'LB',spd:80,pwr:72,tec:78,def:78,rar:1},
-    {id:803,name:'J.Stam',pos:'CB1',spd:68,pwr:86,tec:68,def:90,rar:2},
-    {id:804,name:'F.deBoer',pos:'CB2',spd:66,pwr:78,tec:80,def:86,rar:2},
-    {id:805,name:'M.Reiziger',pos:'RB',spd:78,pwr:70,tec:76,def:78,rar:1},
-    {id:806,name:'E.Davids',pos:'CM1',spd:82,pwr:78,tec:84,def:78,rar:2},
-    {id:807,name:'W.Sneijder',pos:'CM2',spd:78,pwr:82,tec:90,def:64,rar:2},
-    {id:808,name:'C.Seedorf',pos:'CM3',spd:80,pwr:84,tec:86,def:72,rar:2},
-    {id:809,name:'A.Robben',pos:'LW',spd:92,pwr:82,tec:90,def:50,rar:2},
-    {id:810,name:'R.vNistelrooy',pos:'ST',spd:80,pwr:90,tec:82,def:48,rar:2},
-    {id:811,name:'M.Overmars',pos:'RW',spd:90,pwr:78,tec:86,def:48,rar:1}]},
+    {id:801,name:'A.vanDerPol',pos:'GK',spd:66,pwr:72,tec:74,def:90,rar:2,sav:88,ref:82},
+    {id:802,name:'V.vNaald',pos:'LB',spd:80,pwr:72,tec:78,def:78,rar:1},
+    {id:803,name:'L.Smitdal',pos:'CB1',spd:68,pwr:86,tec:68,def:90,rar:2},
+    {id:804,name:'R.deSmit',pos:'CB2',spd:66,pwr:78,tec:80,def:86,rar:2},
+    {id:805,name:'T.Dijkvliet',pos:'RB',spd:78,pwr:70,tec:76,def:78,rar:1},
+    {id:806,name:'O.Vliestra',pos:'CM1',spd:82,pwr:78,tec:84,def:78,rar:2},
+    {id:807,name:'H.Zwartma',pos:'CM2',spd:78,pwr:82,tec:90,def:64,rar:2},
+    {id:808,name:'D.Brinkma',pos:'CM3',spd:80,pwr:84,tec:86,def:72,rar:2},
+    {id:809,name:'H.Laanberg',pos:'LW',spd:92,pwr:82,tec:90,def:50,rar:2},
+    {id:810,name:'A.vVeen',pos:'ST',spd:80,pwr:90,tec:82,def:48,rar:2},
+    {id:811,name:'A.Kuipkamp',pos:'RW',spd:90,pwr:78,tec:86,def:48,rar:1}]},
   england:{name:'England',flag:'🏴',p:[
-    {id:901,name:'D.Seaman',pos:'GK',spd:64,pwr:70,tec:72,def:88,rar:2,sav:86,ref:80},
-    {id:902,name:'A.Cole',pos:'LB',spd:82,pwr:70,tec:78,def:80,rar:1},
-    {id:903,name:'J.Terry',pos:'CB1',spd:64,pwr:84,tec:70,def:90,rar:2},
-    {id:904,name:'R.Ferdinand',pos:'CB2',spd:72,pwr:82,tec:76,def:88,rar:2},
-    {id:905,name:'G.Neville',pos:'RB',spd:76,pwr:70,tec:74,def:80,rar:1},
-    {id:906,name:'S.Gerrard',pos:'CM1',spd:82,pwr:88,tec:84,def:76,rar:2},
-    {id:907,name:'F.Lampard',pos:'CM2',spd:78,pwr:84,tec:84,def:72,rar:2},
-    {id:908,name:'D.Beckham',pos:'CM3',spd:76,pwr:80,tec:92,def:64,rar:2},
-    {id:909,name:'M.Owen',pos:'LW',spd:90,pwr:82,tec:84,def:50,rar:2},
-    {id:910,name:'W.Rooney',pos:'ST',spd:84,pwr:88,tec:84,def:58,rar:2},
-    {id:911,name:'R.Sterling',pos:'RW',spd:92,pwr:76,tec:86,def:48,rar:1}]},
+    {id:901,name:'H.Darby',pos:'GK',spd:64,pwr:70,tec:72,def:88,rar:2,sav:86,ref:80},
+    {id:902,name:'C.Wexman',pos:'LB',spd:82,pwr:70,tec:78,def:80,rar:1},
+    {id:903,name:'M.Whitshaw',pos:'CB1',spd:64,pwr:84,tec:70,def:90,rar:2},
+    {id:904,name:'W.Ashman',pos:'CB2',spd:72,pwr:82,tec:76,def:88,rar:2},
+    {id:905,name:'J.Calley',pos:'RB',spd:76,pwr:70,tec:74,def:80,rar:1},
+    {id:906,name:'P.Baxmore',pos:'CM1',spd:82,pwr:88,tec:84,def:76,rar:2},
+    {id:907,name:'N.Stanford',pos:'CM2',spd:78,pwr:84,tec:84,def:72,rar:2},
+    {id:908,name:'P.Pellford',pos:'CM3',spd:76,pwr:80,tec:92,def:64,rar:2},
+    {id:909,name:'M.Calstead',pos:'LW',spd:90,pwr:82,tec:84,def:50,rar:2},
+    {id:910,name:'F.Radhurst',pos:'ST',spd:84,pwr:88,tec:84,def:58,rar:2},
+    {id:911,name:'R.Everton',pos:'RW',spd:92,pwr:76,tec:86,def:48,rar:1}]},
   portugal:{name:'Portugal',flag:'🇵🇹',p:[
-    {id:1001,name:'R.Patricio',pos:'GK',spd:66,pwr:72,tec:72,def:88,rar:2,sav:86,ref:80},
-    {id:1002,name:'P.Ferreira',pos:'LB',spd:78,pwr:70,tec:76,def:78,rar:1},
-    {id:1003,name:'P.Pepe',pos:'CB1',spd:70,pwr:84,tec:72,def:88,rar:2},
-    {id:1004,name:'R.Carvalho',pos:'CB2',spd:66,pwr:80,tec:78,def:86,rar:2},
-    {id:1005,name:'J.Cancelo',pos:'RB',spd:84,pwr:72,tec:84,def:76,rar:1},
-    {id:1006,name:'L.Figo',pos:'CM1',spd:84,pwr:80,tec:90,def:62,rar:2},
-    {id:1007,name:'B.Fernandes',pos:'CM2',spd:80,pwr:84,tec:90,def:66,rar:2},
-    {id:1008,name:'R.Costa',pos:'CM3',spd:78,pwr:78,tec:92,def:64,rar:2},
-    {id:1009,name:'N.Nani',pos:'LW',spd:88,pwr:80,tec:86,def:50,rar:1},
-    {id:1010,name:'C.Ronaldo',pos:'ST',spd:90,pwr:94,tec:88,def:52,rar:2},
-    {id:1011,name:'R.Leao',pos:'RW',spd:90,pwr:84,tec:84,def:46,rar:1}]},
+    {id:1001,name:'G.Vasade',pos:'GK',spd:66,pwr:72,tec:72,def:88,rar:2,sav:86,ref:80},
+    {id:1002,name:'W.Falalho',pos:'LB',spd:78,pwr:70,tec:76,def:78,rar:1},
+    {id:1003,name:'E.Sobinho',pos:'CB1',spd:70,pwr:84,tec:72,def:88,rar:2},
+    {id:1004,name:'C.Perelo',pos:'CB2',spd:66,pwr:80,tec:78,def:86,rar:2},
+    {id:1005,name:'V.Coroso',pos:'RB',spd:84,pwr:72,tec:84,def:76,rar:1},
+    {id:1006,name:'G.Borundo',pos:'CM1',spd:84,pwr:80,tec:90,def:62,rar:2},
+    {id:1007,name:'S.Corinho',pos:'CM2',spd:80,pwr:84,tec:90,def:66,rar:2},
+    {id:1008,name:'M.Limano',pos:'CM3',spd:78,pwr:78,tec:92,def:64,rar:2},
+    {id:1009,name:'K.Espinho',pos:'LW',spd:88,pwr:80,tec:86,def:50,rar:1},
+    {id:1010,name:'C.Senaldo',pos:'ST',spd:90,pwr:94,tec:88,def:52,rar:2},
+    {id:1011,name:'L.Rodano',pos:'RW',spd:90,pwr:84,tec:84,def:46,rar:1}]},
   allstar:{name:'All Stars',flag:'⭐',p:[
-    {id:101, name:'K.Muller',      pos:'GK', spd:66,pwr:74,tec:72,def:93,rar:3,jersey:1,sav:88,ref:80},
-    {id:102, name:'H.Kaltz',       pos:'RB', spd:78,pwr:74,tec:72,def:80,rar:2,jersey:2},
-    {id:9901,name:'R.Carlos',      pos:'LB', spd:90,pwr:82,tec:82,def:78,rar:3,jersey:3},
-    {id:1202,name:'Puyol',         pos:'CB1',spd:76,pwr:80,tec:72,def:88,rar:3,jersey:5},
-    {id:1203,name:'Pique',         pos:'CB2',spd:72,pwr:84,tec:74,def:90,rar:3,jersey:4},
-    {id:1209,name:'Michael',       pos:'CM1',spd:88,pwr:82,tec:92,def:58,rar:3,jersey:6},
-    {id:711, name:'L.Messi',       pos:'CM2',spd:92,pwr:84,tec:96,def:52,rar:3,jersey:10},
-    {id:9902,name:'Z.Zidane',      pos:'CM3',spd:78,pwr:82,tec:96,def:64,rar:3,jersey:5},
-    {id:1208,name:'Raphael',       pos:'LW', spd:84,pwr:80,tec:88,def:64,rar:2,jersey:11},
-    {id:109, name:'K.H.Schneider', pos:'ST', spd:86,pwr:96,tec:84,def:50,rar:3,jersey:9},
-    {id:1010,name:'C.Ronaldo',     pos:'RW', spd:90,pwr:94,tec:88,def:52,rar:3,jersey:7},
+    {id:101, name:'W.Holstein',      pos:'GK', spd:66,pwr:74,tec:72,def:93,rar:3,jersey:1,sav:88,ref:80},
+    {id:102, name:'N.Gruhlfeld',       pos:'RB', spd:78,pwr:74,tec:72,def:80,rar:2,jersey:2},
+    {id:9901,name:'K.Tarton',      pos:'LB', spd:90,pwr:82,tec:82,def:78,rar:3,jersey:3},
+    {id:1202,name:'Sanado',         pos:'CB1',spd:76,pwr:80,tec:72,def:88,rar:3,jersey:5},
+    {id:1203,name:'Nereira',         pos:'CB2',spd:72,pwr:84,tec:74,def:90,rar:3,jersey:4},
+    {id:1209,name:'Loboca',       pos:'CM1',spd:88,pwr:82,tec:92,def:58,rar:3,jersey:6},
+    {id:711, name:'L.Liones',       pos:'CM2',spd:92,pwr:84,tec:96,def:52,rar:3,jersey:10},
+    {id:9902,name:'M.Pencroft',      pos:'CM3',spd:78,pwr:82,tec:96,def:64,rar:3,jersey:5},
+    {id:1208,name:'Vareira',       pos:'LW', spd:84,pwr:80,tec:88,def:64,rar:2,jersey:11},
+    {id:109, name:'F.T.Hauptholz', pos:'ST', spd:86,pwr:96,tec:84,def:50,rar:3,jersey:9},
+    {id:1010,name:'C.Senaldo',     pos:'RW', spd:90,pwr:94,tec:88,def:52,rar:3,jersey:7},
   ]}
 };
 const TEAM_KEYS=Object.keys(T);
@@ -455,7 +455,7 @@ const ENGINE_CONFIG={
 };
 
 const PLAYER_ARCHETYPES={
-  'T.Aozora':      {passBias:1.30,dribbleBias:1.20,shootBias:1.00,oneTwoBias:1.25,longShotBias:0.95,pressResistance:1.20,wideRunBias:0.90,specialBias:1.05,defensiveAggression:0.90},
+  'R.Kitazaki':      {passBias:1.30,dribbleBias:1.20,shootBias:1.00,oneTwoBias:1.25,longShotBias:0.95,pressResistance:1.20,wideRunBias:0.90,specialBias:1.05,defensiveAggression:0.90},
   'T.Seizuke':     {passBias:1.28,dribbleBias:0.95,shootBias:0.86,oneTwoBias:1.35,longShotBias:0.80,pressResistance:1.10,wideRunBias:0.95,specialBias:0.95,defensiveAggression:0.85},
   'K.Ryuga':      {passBias:0.78,dribbleBias:1.00,shootBias:1.35,oneTwoBias:0.80,longShotBias:1.20,pressResistance:1.08,wideRunBias:0.85,specialBias:1.25,defensiveAggression:1.05},
   'J.Risugi':     {passBias:1.20,dribbleBias:0.90,shootBias:1.15,oneTwoBias:1.10,longShotBias:1.05,pressResistance:1.15,wideRunBias:0.90,specialBias:1.10,defensiveAggression:0.80},
@@ -463,29 +463,29 @@ const PLAYER_ARCHETYPES={
   'S.Kenta':      {passBias:1.00,dribbleBias:1.10,shootBias:1.15,oneTwoBias:1.00,longShotBias:1.00,pressResistance:1.05,wideRunBias:1.10,specialBias:1.10,defensiveAggression:0.90},
   'M.Matsuda':       {passBias:0.90,dribbleBias:1.05,shootBias:1.10,oneTwoBias:0.90,longShotBias:1.08,pressResistance:1.00,wideRunBias:1.05,specialBias:1.05,defensiveAggression:1.05},
   'S.Shinta':        {passBias:1.15,dribbleBias:1.15,shootBias:1.10,oneTwoBias:1.10,longShotBias:0.95,pressResistance:1.10,wideRunBias:1.05,specialBias:1.10,defensiveAggression:0.88},
-  'K.H.Schneider':{passBias:0.82,dribbleBias:1.05,shootBias:1.35,oneTwoBias:0.82,longShotBias:1.20,pressResistance:1.10,wideRunBias:0.92,specialBias:1.18,defensiveAggression:1.02},
+  'F.T.Hauptholz':{passBias:0.82,dribbleBias:1.05,shootBias:1.35,oneTwoBias:0.82,longShotBias:1.20,pressResistance:1.10,wideRunBias:0.92,specialBias:1.18,defensiveAggression:1.02},
   'K.H.Falkner'  :{passBias:0.82,dribbleBias:1.05,shootBias:1.35,oneTwoBias:0.82,longShotBias:1.20,pressResistance:1.10,wideRunBias:0.92,specialBias:1.18,defensiveAggression:1.02},
   'Ferasao':      {passBias:1.00,dribbleBias:1.35,shootBias:1.20,oneTwoBias:1.00,longShotBias:1.08,pressResistance:1.25,wideRunBias:1.08,specialBias:1.15,defensiveAggression:0.92},
   "Rivao'":       {passBias:1.18,dribbleBias:1.10,shootBias:1.08,oneTwoBias:1.12,longShotBias:1.10,pressResistance:1.14,wideRunBias:0.94,specialBias:1.08,defensiveAggression:0.95},
   'Carlito':      {passBias:0.92,dribbleBias:1.08,shootBias:1.22,oneTwoBias:0.94,longShotBias:1.08,pressResistance:1.10,wideRunBias:0.96,specialBias:1.10,defensiveAggression:1.00},
-  'Michael':      {passBias:1.20,dribbleBias:1.10,shootBias:1.18,oneTwoBias:1.05,longShotBias:1.08,pressResistance:1.14,wideRunBias:0.92,specialBias:1.12,defensiveAggression:0.98},
-  'A.Pirlo':      {passBias:1.28,dribbleBias:0.82,shootBias:0.88,oneTwoBias:1.10,longShotBias:1.12,pressResistance:1.00,wideRunBias:0.90,specialBias:0.95,defensiveAggression:0.82},
+  'Loboca':      {passBias:1.20,dribbleBias:1.10,shootBias:1.18,oneTwoBias:1.05,longShotBias:1.08,pressResistance:1.14,wideRunBias:0.92,specialBias:1.12,defensiveAggression:0.98},
+  'J.Pelino':      {passBias:1.28,dribbleBias:0.82,shootBias:0.88,oneTwoBias:1.10,longShotBias:1.12,pressResistance:1.00,wideRunBias:0.90,specialBias:0.95,defensiveAggression:0.82},
   'A.Sereni' :      {passBias:1.28,dribbleBias:0.82,shootBias:0.88,oneTwoBias:1.10,longShotBias:1.12,pressResistance:1.00,wideRunBias:0.90,specialBias:0.95,defensiveAggression:0.82},
-  'F.Totti':      {passBias:1.12,dribbleBias:1.00,shootBias:1.15,oneTwoBias:1.02,longShotBias:1.10,pressResistance:1.04,wideRunBias:0.90,specialBias:1.08,defensiveAggression:0.90},
+  'S.Valorez':      {passBias:1.12,dribbleBias:1.00,shootBias:1.15,oneTwoBias:1.02,longShotBias:1.10,pressResistance:1.04,wideRunBias:0.90,specialBias:1.08,defensiveAggression:0.90},
   'F.Conti' :      {passBias:1.12,dribbleBias:1.00,shootBias:1.15,oneTwoBias:1.02,longShotBias:1.10,pressResistance:1.04,wideRunBias:0.90,specialBias:1.08,defensiveAggression:0.90},
-  'R.Baggio':     {passBias:1.15,dribbleBias:1.15,shootBias:1.05,oneTwoBias:1.10,longShotBias:0.98,pressResistance:1.12,wideRunBias:0.94,specialBias:1.05,defensiveAggression:0.82},
+  'G.Ortadez':     {passBias:1.15,dribbleBias:1.15,shootBias:1.05,oneTwoBias:1.10,longShotBias:0.98,pressResistance:1.12,wideRunBias:0.94,specialBias:1.05,defensiveAggression:0.82},
   'R.Manzini' :     {passBias:1.15,dribbleBias:1.15,shootBias:1.05,oneTwoBias:1.10,longShotBias:0.98,pressResistance:1.12,wideRunBias:0.94,specialBias:1.05,defensiveAggression:0.82},
-  'L.Messi':      {passBias:1.18,dribbleBias:1.35,shootBias:1.18,oneTwoBias:1.12,longShotBias:1.00,pressResistance:1.26,wideRunBias:0.92,specialBias:1.08,defensiveAggression:0.80},
-  'R.Carlos':     {passBias:1.00,dribbleBias:1.10,shootBias:1.20,oneTwoBias:0.95,longShotBias:1.25,pressResistance:1.15,wideRunBias:1.30,specialBias:1.00,defensiveAggression:1.10},
-  'Z.Zidane':     {passBias:1.25,dribbleBias:1.20,shootBias:1.10,oneTwoBias:1.15,longShotBias:1.05,pressResistance:1.30,wideRunBias:0.88,specialBias:1.05,defensiveAggression:0.85},
-  'C.Ronaldo':    {passBias:0.90,dribbleBias:1.05,shootBias:1.34,oneTwoBias:0.88,longShotBias:1.15,pressResistance:1.10,wideRunBias:1.05,specialBias:1.20,defensiveAggression:0.92}
+  'L.Liones':      {passBias:1.18,dribbleBias:1.35,shootBias:1.18,oneTwoBias:1.12,longShotBias:1.00,pressResistance:1.26,wideRunBias:0.92,specialBias:1.08,defensiveAggression:0.80},
+  'K.Tarton':     {passBias:1.00,dribbleBias:1.10,shootBias:1.20,oneTwoBias:0.95,longShotBias:1.25,pressResistance:1.15,wideRunBias:1.30,specialBias:1.00,defensiveAggression:1.10},
+  'M.Pencroft':     {passBias:1.25,dribbleBias:1.20,shootBias:1.10,oneTwoBias:1.15,longShotBias:1.05,pressResistance:1.30,wideRunBias:0.88,specialBias:1.05,defensiveAggression:0.85},
+  'C.Senaldo':    {passBias:0.90,dribbleBias:1.05,shootBias:1.34,oneTwoBias:0.88,longShotBias:1.15,pressResistance:1.10,wideRunBias:1.05,specialBias:1.20,defensiveAggression:0.92}
 };
 
 
 const DEFAULT_BEHAVIOR_PROFILE={passBias:1.0,dribbleBias:1.0,shootBias:1.0,oneTwoBias:1.0,longShotBias:1.0,pressResistance:1.0,wideRunBias:1.0,specialBias:1.0,defensiveAggression:1.0};
 
 const STAR_STAT_OVERRIDES={
-  'T.Aozora':       {spd:86,dri:95,pas:96,sho:87,def:58,pow:84},
+  'R.Kitazaki':       {spd:86,dri:95,pas:96,sho:87,def:58,pow:84},
   'T.Seizuke':      {spd:84,dri:91,pas:94,sho:78,def:68,pow:66},
   'K.Ryuga':       {spd:84,dri:83,pas:72,sho:95,def:54,pow:94},
   'J.Risugi':      {spd:70,dri:82,pas:86,sho:88,def:76,pow:70},
@@ -493,41 +493,41 @@ const STAR_STAT_OVERRIDES={
   'S.Kenta':       {spd:82,dri:80,pas:76,sho:84,def:54,pow:78},
   'M.Matsuda':        {spd:76,dri:74,pas:72,sho:82,def:74,pow:70},
   'S.Shinta':         {spd:78,dri:84,pas:80,sho:84,def:68,pow:74},
-  'K.H.Schneider': {spd:87,dri:84,pas:76,sho:96,def:52,pow:95},
+  'F.T.Hauptholz': {spd:87,dri:84,pas:76,sho:96,def:52,pow:95},
   'K.H.Falkner'  : {spd:87,dri:84,pas:76,sho:96,def:52,pow:95},
   // author 2026-09-26: Germany's other super shooters. Falkner stays the top
   // striker (SHO 96); these three are the technical ones - SHO 86-88 unlocks
   // the super shot (85+), high DRI/PAS on the technical side.
-  'Shester'      : {spd:80,dri:88,pas:90,sho:86,def:64,pow:82},
-  'M.Goethe'     : {spd:85,dri:89,pas:82,sho:86,def:56,pow:80},
-  'Margus'       : {spd:85,dri:86,pas:80,sho:88,def:54,pow:83},
-  'Michael':       {spd:89,dri:95,pas:94,sho:97,def:72,pow:94},
-  'A.Pirlo':       {spd:70,dri:84,pas:98,sho:84,def:70,pow:74},
+  'Rauchfeld'      : {spd:80,dri:88,pas:90,sho:86,def:64,pow:82},
+  'V.Siegberg'     : {spd:85,dri:89,pas:82,sho:86,def:56,pow:80},
+  'Walder'       : {spd:85,dri:86,pas:80,sho:88,def:54,pow:83},
+  'Loboca':       {spd:89,dri:95,pas:94,sho:97,def:72,pow:94},
+  'J.Pelino':       {spd:70,dri:84,pas:98,sho:84,def:70,pow:74},
   'A.Sereni' :       {spd:70,dri:84,pas:98,sho:84,def:70,pow:74},
-  'F.Totti':       {spd:79,dri:88,pas:91,sho:92,def:68,pow:86},
+  'S.Valorez':       {spd:79,dri:88,pas:91,sho:92,def:68,pow:86},
   'F.Conti' :       {spd:79,dri:88,pas:91,sho:92,def:68,pow:86},
-  'R.Baggio':      {spd:84,dri:94,pas:93,sho:88,def:52,pow:80},
+  'G.Ortadez':      {spd:84,dri:94,pas:93,sho:88,def:52,pow:80},
   'R.Manzini' :      {spd:84,dri:94,pas:93,sho:88,def:52,pow:80},
   'T.Frisina':     {spd:76,dri:82,pas:83,sho:96,def:82,pow:90},
   'M.Mancuso':     {spd:84,dri:86,pas:78,sho:91,def:54,pow:87},
   'E.Vella':       {spd:96,dri:84,pas:74,sho:86,def:52,pow:86},
   'A.Ferlora':     {spd:78,dri:78,pas:76,sho:72,def:78,pow:74},
   'C.Impero':      {spd:76,dri:80,pas:82,sho:74,def:70,pow:76},
-  'G.Hernandez':   {spd:64,dri:62,pas:60,sho:58,def:82,pow:68}, // Spain
+  'R.Nerardo':   {spd:64,dri:62,pas:60,sho:58,def:82,pow:68}, // Spain
   'G.Gino':        {spd:64,dri:62,pas:60,sho:58,def:82,pow:68}, // Italy bench GK
-  'Y.Isagi':       {spd:86,dri:84,pas:80,sho:88,def:56,pow:78},
-  'L.Messi':       {spd:93,dri:99,pas:94,sho:92,def:54,pow:80},
-  'C.Ronaldo':     {spd:92,dri:90,pas:82,sho:97,def:54,pow:96},
-  'R.Carlos':      {spd:90,dri:82,pas:80,sho:84,def:78,pow:86},
-  'Z.Zidane':      {spd:78,dri:94,pas:96,sho:82,def:66,pow:82},
-  'J.Riquelme':    {spd:72,dri:89,pas:96,sho:84,def:64,pow:78},
-  'P.Aimar':       {spd:84,dri:93,pas:92,sho:82,def:60,pow:76},
-  'D.Beckham':     {spd:78,dri:84,pas:97,sho:86,def:66,pow:82},
-  'W.Sneijder':    {spd:79,dri:86,pas:94,sho:90,def:66,pow:84},
-  'A.Robben':      {spd:96,dri:95,pas:84,sho:88,def:50,pow:80},
-  'R.vNistelrooy': {spd:81,dri:84,pas:74,sho:94,def:48,pow:92},
-  'F.Lampard':     {spd:79,dri:82,pas:90,sho:90,def:74,pow:86},
-  'S.Gerrard':     {spd:84,dri:84,pas:91,sho:91,def:78,pow:90}
+  'M.Kitamura':       {spd:86,dri:84,pas:80,sho:88,def:56,pow:78},
+  'L.Liones':       {spd:93,dri:99,pas:94,sho:92,def:54,pow:80},
+  'C.Senaldo':     {spd:92,dri:90,pas:82,sho:97,def:54,pow:96},
+  'K.Tarton':      {spd:90,dri:82,pas:80,sho:84,def:78,pow:86},
+  'M.Pencroft':      {spd:78,dri:94,pas:96,sho:82,def:66,pow:82},
+  'G.Salano':    {spd:72,dri:89,pas:96,sho:84,def:64,pow:78},
+  'P.Domero':       {spd:84,dri:93,pas:92,sho:82,def:60,pow:76},
+  'P.Pellford':     {spd:78,dri:84,pas:97,sho:86,def:66,pow:82},
+  'H.Zwartma':    {spd:79,dri:86,pas:94,sho:90,def:66,pow:84},
+  'H.Laanberg':      {spd:96,dri:95,pas:84,sho:88,def:50,pow:80},
+  'A.vVeen': {spd:81,dri:84,pas:74,sho:94,def:48,pow:92},
+  'N.Stanford':     {spd:79,dri:82,pas:90,sho:90,def:74,pow:86},
+  'P.Baxmore':     {spd:84,dri:84,pas:91,sho:91,def:78,pow:90}
 };
 
 function applyTeamBehaviorProfiles(){
@@ -741,8 +741,8 @@ function setTeamEmblem(el, teamKey, flagEmoji){
 // Returns the correct emblem PNG path for either a national team or a club.
 // Clubs are identified by being keys of CR_CLUBS; everything else is treated
 // as a national team and uses assets/team/{key}.png.
-// For clubs, the future PNG path is `club{key}.png` (e.g. `clubbarcelona.png`)
-// — keeping it distinct from `barcelona.png` which is a generic placeholder.
+// For clubs, the future PNG path is `club{key}.png` (e.g. `clubcatalunablau.png`)
+// — keeping it distinct from `catalunablau.png` which is a generic placeholder.
 function teamEmblemPath(key){
   if(!key)return '';
   const k=String(key).toLowerCase();
@@ -1565,7 +1565,7 @@ function moveMomentum(cur,ph,tx,ty,maxStep,pl,dt=1,accel,turnPen){
 
 
 // Elite movement using player SPD stat — natural speed variation
-// Robben (SPD 92) visibly faster than a CB (SPD 64) off-ball
+// Laanberg (SPD 92) visibly faster than a CB (SPD 64) off-ball
 // moveElite replaced by glide() inside moveOffBall
 
 // rsz defined below in fullscreen block
@@ -5200,6 +5200,7 @@ function _splashStart(){
 }
 function _navConfirm(){
   const _own=[window.UEDialog,window.TS2,window.TM2,window.PM2,window.FT2].find(m=>m&&m.owns()); if(_own) return _own.confirm();
+  if(_introAdvance()) return true;
   if(_splashStart()) return true;
   if(!_navSync() || !_navEls.length) return false;
   if(_navIdx<0){ _navStep(0); return true; }
@@ -8115,8 +8116,8 @@ let _cutinTimers=[],_cutinDone=null;
 /* ── STORY HERO/RIVAL fixed duel-card path ──────────────────
    pl._hero / pl._rival are set by ult11-story.js.
    Paths (fixed regardless of typed name):
-     assets/career/clubs/hero_{fw|ca}_{school|genoa|doria|italy}.png
-     assets/career/clubs/rival_{fw|ca}_{school|genoa|doria|italy}.png   */
+     assets/career/clubs/hero_{fw|ca}_{school|genova|doria|italy}.png
+     assets/career/clubs/rival_{fw|ca}_{school|genova|doria|italy}.png   */
 function _storyHeroCardPath(pl){
   try{
     if(!pl||(!pl._hero&&!pl._rival))return null;
@@ -8124,7 +8125,7 @@ function _storyHeroCardPath(pl){
     var who=pl._hero?'hero':'rival';
     var role=(who==='hero'?S.hero.role:(S.hero.role==='FW'?'CA':'FW')).toLowerCase();
     var ph=S.phase==='fr3'?'sb':S.phase==='fr4'?'wc':S.phase;
-    var ctx=(ph==='hs')?'school':(ph==='wc'||ph==='done')?'italy':(role==='fw'?'genoa':'doria');
+    var ctx=(ph==='hs')?'school':(ph==='wc'||ph==='done')?'italy':(role==='fw'?'genova':'doria');
     return 'assets/career/clubs/'+who+'_'+role+'_'+ctx+'.png';
   }catch(e){return null;}
 }
@@ -9976,7 +9977,7 @@ function calcAttackPower(carrier,ak,side){
     // Pressure penalty — harder to shoot under pressure at all ranges
     mAction *= (1 - pressure * ENGINE_CONFIG.duel.pressureAttackPenalty * (2-(bh.pressResistance||1)));
 
-    // Long shot specialist bonus (Ryuga, Schneider etc have longShotBias > 1)
+    // Long shot specialist bonus (Ryuga, Hauptholz etc have longShotBias > 1)
     if(prog < Z.longRange) mAction *= (bh.longShotBias||1) * 1.15; // extra reward for specialists
     else if(prog < Z.midRange) mAction *= (bh.longShotBias||1);
 
@@ -10166,11 +10167,11 @@ function resDuel(){
   }
   const win=atkPow>defPow;
   G.D.lastDefPow=defPow;            // afSave reuses the duel's own verdict (GK roadmap step 2)
-  /* FOUL - decided HERE, at the verdict (author 2026-09-30: "Mancuso vs Shester,
+  /* FOUL - decided HERE, at the verdict (author 2026-09-30: "Mancuso vs Rauchfeld,
      it said foul, it said it was Feo who was not even there, and then I got the
      ball"). It used to be rolled AFTER the result screen had already said
-     "Shester wins it!", overturning it, and the defender-won path passed the
-     ATTACKER's side as the fouling team - so Shester's slot was looked up in
+     "Rauchfeld wins it!", overturning it, and the defender-won path passed the
+     ATTACKER's side as the fouling team - so Rauchfeld's slot was looked up in
      Italy's squad (Feo), who was booked and counted instead. Now the result
      screen itself says FOUL, with the right names, and the free kick follows.
      Same rates as before: attacker beats a tackle 8%, defender wins with a
@@ -12472,6 +12473,15 @@ function enterGame(){
   }catch(e){}
 }
 
+/* intro: studio card -> disclaimer -> splash. Click, Enter or pad A advance the first two screens. */
+function studioContinue(){showSc('s-disclaimer');const b=document.getElementById('dscBtn');if(b)try{b.focus({preventScroll:true})}catch(e){}}
+function _introAdvance(){
+  const sc=document.querySelector('.screen.active');
+  if(!sc)return false;
+  if(sc.id==='s-studio'){studioContinue();return true;}
+  if(sc.id==='s-disclaimer'){acceptDisclaimer();return true;}
+  return false;
+}
 function acceptDisclaimer(){
   // Move from disclaimer/preloader to splash. Critical wallpapers were
   // preloaded in the background while the user was reading.
@@ -12640,24 +12650,24 @@ if(window.visualViewport){
 // CAREER MODE ENGINE
 // ═══════════════════════════════════════════════════════
 const CR_CLUBS={
-  barcelona:{name:'FC Barcelona',div:1,ovr:91,star:'Messi',special:'ZEPHYR CUTTER',colors:['#a50044','#004d98'],abbr:'FCB'},
-  madrid:{name:'Real Madrid',div:1,ovr:92,star:'C.Ronaldo',special:null,colors:['#ffffff','#00529f'],abbr:'RMA'},
-  manutd:{name:'Man United',div:1,ovr:88,star:'T.Frisina',special:'RYUJIN TORNADO',colors:['#da291c','#fbe122'],abbr:'MUN'},
-  mancity:{name:'Man City',div:1,ovr:87,star:'De Bruyne',special:null,colors:['#6cabdd','#1c2c5b'],abbr:'MCI'},
-  juventus:{name:'Juventus',div:1,ovr:86,star:'Del Piero',special:'METEOR DRIVE',colors:['#000000','#ffffff'],abbr:'JUV'},
-  inter:{name:'Inter Milan',div:1,ovr:85,star:'Ibrahimovic',special:null,colors:['#003f8a','#000000'],abbr:'INT'},
-  chelsea:{name:'Chelsea FC',div:1,ovr:84,star:'Drogba',special:null,colors:['#034694','#ffffff'],abbr:'CHE'},
-  napoli:{name:'Napoli',div:1,ovr:83,star:'R.Hino',special:'TYPHOON SPIRAL',colors:['#12a0c7','#ffffff'],abbr:'NAP'},
-  psg:{name:'Paris SG',div:1,ovr:84,star:'Pierre',special:'ASTRAL NEBULA',colors:['#004170','#da291c'],abbr:'PSG'},
-  bayern:{name:'Bayern Munich',div:1,ovr:90,star:'S.Levi',special:'STORM SPEAR',colors:['#dc052d','#0066b2'],abbr:'BAY'},
-  ajax:{name:'Ajax',div:2,ovr:78,star:'Robben',special:null,colors:['#d2122e','#ffffff'],abbr:'AJX'},
-  feyenoord:{name:'Feyenoord',div:2,ovr:75,star:'Kuyt',special:null,colors:['#cc0000','#000000'],abbr:'FEY'},
-  atletico:{name:'Atletico Madrid',div:2,ovr:77,star:'Torres',special:null,colors:['#ce3524','#272e61'],abbr:'ATM'},
-  genoa:{name:'Genoa CFC',div:2,ovr:72,star:'M.Mancuso',special:'RAIJIN DRIVE',colors:['#cc0000','#003087'],abbr:'GEN'},
-  hamburg:{name:'SV Hamburg',div:2,ovr:74,star:'K.H.Schneider',special:'INFERNO LANCE',colors:['#0033a0','#ffffff'],abbr:'HSV'},
-  tokyo:{name:'FC Tokyo',div:2,ovr:71,star:'T.Aozora',special:'AZURE SKYBREAK',colors:['#003087','#e60012'],abbr:'FCT'},
-  marseille:{name:'Olympique Marseille',div:2,ovr:76,star:'Cantona',special:null,colors:['#2faee0','#ffffff'],abbr:'OM'},
-  bremen:{name:'Werder Bremen',div:2,ovr:73,star:'Klose',special:null,colors:['#1d9053','#ffffff'],abbr:'WER'},
+  catalunablau:{name:'Cataluna Blau',div:1,ovr:91,star:'Liones',special:'ZEPHYR CUTTER',colors:['#a50044','#004d98'],abbr:'CAB'},
+  alcazar:{name:'Alcazar Royal',div:1,ovr:92,star:'C.Senaldo',special:null,colors:['#ffffff','#00529f'],abbr:'ALR'},
+  marlowe:{name:'Marlowe United',div:1,ovr:88,star:'T.Frisina',special:'RYUJIN TORNADO',colors:['#da291c','#fbe122'],abbr:'MAU'},
+  aldermoor:{name:'Aldermoor City',div:1,ovr:87,star:'De Claeysen',special:null,colors:['#6cabdd','#1c2c5b'],abbr:'ALC'},
+  torrefiore:{name:'Torrefiore',div:1,ovr:86,star:'Del Palese',special:'METEOR DRIVE',colors:['#000000','#ffffff'],abbr:'TRF'},
+  sanmarco:{name:'Sanmarco FC',div:1,ovr:85,star:'Slatanovich',special:null,colors:['#003f8a','#000000'],abbr:'SMA'},
+  westbridge:{name:'Westbridge FC',div:1,ovr:84,star:'Kesmore',special:null,colors:['#034694','#ffffff'],abbr:'WBR'},
+  valmora:{name:'Valmora',div:1,ovr:83,star:'H.Ozugawa',special:'TYPHOON SPIRAL',colors:['#12a0c7','#ffffff'],abbr:'VAL'},
+  lumiere:{name:'Lumiere FC',div:1,ovr:84,star:'Renil',special:'ASTRAL NEBULA',colors:['#004170','#da291c'],abbr:'LUM'},
+  adlerburg:{name:'Adlerburg',div:1,ovr:90,star:'T.Bergroth',special:'STORM SPEAR',colors:['#dc052d','#0066b2'],abbr:'ADB'},
+  argosnoord:{name:'Argos Noord',div:2,ovr:78,star:'Laanberg',special:null,colors:['#d2122e','#ffffff'],abbr:'ARN'},
+  rijnhaven:{name:'Rijnhaven',div:2,ovr:75,star:'Dijkdal',special:null,colors:['#cc0000','#000000'],abbr:'RHV'},
+  deportivosierra:{name:'Deportivo Sierra',div:2,ovr:77,star:'Ferante',special:null,colors:['#ce3524','#272e61'],abbr:'DSI'},
+  genovarossoblu:{name:'Genova Rossoblu',div:2,ovr:72,star:'M.Mancuso',special:'RAIJIN DRIVE',colors:['#cc0000','#003087'],abbr:'GEN'},
+  nordhafen:{name:'Nordhafen SV',div:2,ovr:74,star:'F.T.Hauptholz',special:'INFERNO LANCE',colors:['#0033a0','#ffffff'],abbr:'NHS'},
+  edogawa:{name:'FC Edogawa',div:2,ovr:71,star:'R.Kitazaki',special:'AZURE SKYBREAK',colors:['#003087','#e60012'],abbr:'EDO'},
+  calanque:{name:'Olympique Calanque',div:2,ovr:76,star:'Marchaux',special:null,colors:['#2faee0','#ffffff'],abbr:'OCA'},
+  hansaweser:{name:'Hansa Weser',div:2,ovr:73,star:'Rauchrich',special:null,colors:['#1d9053','#ffffff'],abbr:'HWE'},
 };
 function crBadgeSvg(club,size=44){
   const c=club.colors||["#333","#666"],a=club.abbr||"??",s=size;
@@ -12670,24 +12680,24 @@ const CR_REP=['UNKNOWN','PROMISING','RESPECTED','ESTABLISHED','ELITE','LEGENDARY
 const CR_NAMES={
   // Slot order: GK, LB, CB1, CB2, RB, CM1, CM2, CM3, LW, ST, RW
   // After 11 starters, additional names = bench (reserves get them too).
-  barcelona:['Valdes','Puyol','Pique','Abidal','Alves','Busquets','T.Aozora','Xavi','Iniesta',"Rivao'",'Messi','Pinto','Mascherano','Adriano','Thiago','Cesc','Pedro','Villa'],
-  madrid:['Casillas','R.Carlos','Pepe','Ramos','Marcelo','Alonso','Z.Zidane','Higuain','Ferasao','Raul','C.Ronaldo','Diego Lopez','Albiol','Coentrao','Khedira','Modric','Di Maria','Benzema'],
-  manutd:['VanderSar','Evra','Ferdinand','Vidic','G.Neville','T.Frisina','Scholes','Rooney','Giggs','Anderson','Nani','Lindegaard','Smalling','Fabio','Carrick','Cleverley','Welbeck','Hernandez'],
-  mancity:['Hart','Clichy','Lescott','Kompany','Richards','Barry','De Bruyne','Silva','Milner','Tevez','Dzeko','Pantilimon','Nastasic','Zabaleta','Yaya Toure','Nasri','Aguero','Jovetic'],
-  juventus:['Buffon','S.Gentile','Bonucci','Chiellini','Barzagli','E.Davids','Pirlo','Nedved','Del Piero','K.Ryuga','Camoranesi','Storari','Caceres','Lichtsteiner','Marchisio','Vidal','Quagliarella','Trezeguet'],
-  inter:['Julio Cesar','Maicon','Lucio','Samuel','Zanetti','Cambiasso','S.Shinta','Vieira','R.Igami','Milito','Ibrahimovic','Castellazzi','Ranocchia','Chivu','Stankovic','Sneijder','Pandev','Eto\'o'],
-  chelsea:['Cech','Cole','Terry','Carvalho','Bosingwa','Ballack','Lampard','Mikel','Malouda','Drogba','Anelka','Hilario','Ivanovic','Bertrand','Essien','Ramires','Sturridge','Torres'],
-  napoli:['De Sanctis','Contini','Cannavaro','Campagnaro','Maggio','Gargano','J.Diaz','Hamsik','Lavezzi','R.Hino','Callejon','Rafael','Britos','Dossena','Inler','Insigne','Mertens','Cavani'],
-  psg:['Sirigu','Camara','Sakho','Kombouare','Cissse','Makelele','Pierre','T.Seizuke','Mbappe','Hoarau','Seymarin','Douchez','Alex','Maxwell','Verratti','Matuidi','Lavezzi','Ibrahimovic'],
-  bayern:['G.Kenzo','Lahm','Xiao','Van Buyten','Lizarazu','Schweinsteiger','Ballack','S.Levi','Ribery','K.H.Schneider','Makaay','Kraft','Boateng','Alaba','Kroos','Robben','Mandzukic','Klose'],
-  ajax:['Stekelenburg','Vertonghen','Heitinga','Vermaelen','Van der Wiel','Van der Vaart','Sneijder','Bojan','Babel','Huntelaar','Suarez','Cillessen','Alderweireld','Anita','Eriksen','De Jong','El Hamdaoui','Lukaku'],
-  feyenoord:['Timmer','Mathijsen','Loovens','De Guzman','Bosvelt','Kuyt','Kalou','Van Persie','Castelen','Tomasson','Emnes','Lobont','Bahia','Wijnaldum','Clasie','Vilhena','Schaken','Boetius'],
-  atletico:['Aranzubia','Filipe Luis','Perea','Ujfalusi','Juanito','Tiago','Garcia','Seitaridis','Simao','Torres','Forlan','Courtois','Godin','Insua','Mario Suarez','Koke','Adrian','Falcao'],
-  genoa:['Rubinho','Criscito','Moretti','Bocchetti','Juric','Mesto','Milanetto','Rossi','Palacio','M.Mancuso','Sculli','Frey','Antonelli','Granqvist','Veloso','Kucka','Floccari','Borriello'],
-  hamburg:['Rost','Aogo','De Jong','Mathijsen','Boateng','Demel','Jarolim','Van der Vaart','Guerrero','Olic','Petric','Drobny','Westermann','Tesche','Rincon','Calhanoglu','Beister','Son'],
-  tokyo:['Harakawa','Baba','Enomoto','Naotaka','Hayashi','Fujimoto','Tokita','Miyazawa','Hasebe','Nishizawa','Amano','Gonda','Morishige','Tokunaga','Yonemoto','Lucas','Watanabe','Edu'],
-  marseille:['Mandanda','Taiwo','Bonnart','Cesar','Heinze','Diawara','Valbuena','Koite','Niang','Cisse','Brandao','Andrade','Diarra','Fanni','Cheyrou','Ayew','Remy','Gignac'],
-  bremen:['Wiese','Pasanen','Naldo','Mertesacker','Borowski','Diego','Hunt','Jensen','Almeida','Klose','Hugo','Wolfermann','Prodl','Schmitz','Frings','Marin','Pizarro','Rosenberg'],
+  catalunablau:['Cobillo','Sanado','Nereira','Narano','Varido','Quinales','R.Kitazaki','Nerinez','Galellano',"Rivao'",'Liones','Zamellano','Barellano','Escona','Venero','Cabero','Sanares','Moneda'],
+  alcazar:['Caladez','K.Tarton','Sobinho','Deladez','Escuela','Domeda','M.Pencroft','Quinoza','Ferasao','Rosardo','C.Senaldo','Nico Salado','Navellano','Loredo','Beluela','Novakov','Di Torano','Alvardo'],
+  marlowe:['VanderPol','Shercroft','Ashman','Langton','J.Calley','T.Frisina','Shermore','Radhurst','Tarbury','Langridge','Espinho','Penhurst','Keston','Norby','Foxstead','Langley','Marshaw','Nerardo'],
+  aldermoor:['Granley','Laurier','Ashford','Rombouts','Whitwick','Everfield','De Claeysen','Albato','Dunhurst','Caledo','Gravac','Horulic','Marinac','Whitridge','Rachid Tahiri','Favil','Fairridge','Vukovac'],
+  torrefiore:['Galino','S.Zanucci','Ranello','Rubello','Berieri','O.Vliestra','Pelino','Monese','Del Palese','K.Ryuga','Paleri','Sasuzzi','Barez','Eggimann','Moneri','Feruzzi','Berola','Trello'],
+  sanmarco:['Dinis Ravoca','Torieri','Favello','Miroza','Zamido','Trezzi','S.Shinta','Nareri','R.Igami','Sasini','Slatanovich','Salante','Toretti','Orloni','Coreri','Zwartma','Marucci','Palizzi'],
+  westbridge:['Fairshaw','Wexman','Whitshaw','Perelo','Foxford','Lohmmann','Stanford','Tarworth','Sherridge','Kesmore','Sherby','Thornman','Baxridge','Dunshaw','Norbury','Thornbury','Kesby','Ferante'],
+  valmora:['De Rubaldi','Danardo','Pizieri','Galese','Venucci','Lomieri','L.Torero','Granello','Torini','H.Ozugawa','Rubano','Favieri','Danato','Ruboni','Danocco','Latano','Maertens','Berelli'],
+  lumiere:['Lefier','Verdelle','Sautte','Boulil','Dubard','Sabac','Renil','T.Seizuke','Michault','Pichoux','Seymarin','Gautet','Gauteau','Perraud','Trefain','Clarot','Torini','Slatanovich'],
+  adlerburg:['G.Kenzo','Schmler','Xiao','Van Lambrecht','Martault','Engelmer','Lohmmann','T.Bergroth','Lefoux','F.T.Hauptholz','Zimmwald','Rottner','Dornberg','Langau','Lohmbach','Laanberg','Zorovic','Rauchrich'],
+  argosnoord:['Rijnhoek','Struyven','Polberg','Hartman','Van der Maasaar','Van der Rijnstra','Zwartma','Vosland','Rijngaard','Stamman','Escano','Tuinma','Gevaerts','Kloosaar','Laansen','De Oosthuis','El Jabrani','Wouters'],
+  rijnhaven:['Vlievliet','Vliehoek','Bosveld','De Rodinez','Laanhuis','Dijkdal','Bossen','Van Oostma','Smithoek','Hoekstra','Maassen','Oostdal','Bosma','Zwartgaard','Oostveld','Naaldkamp','Stamgaard','Vosman'],
+  deportivosierra:['Moluela','Joel Casardo','Herido','Moloza','Fereda','Hereda','Coboza','Monez','Palinez','Ferante','Marorez','Nuyttens','Valido','Sanesa','Ivan Maroza','Valeda','Garillo','Cabante'],
+  genovarossoblu:['Pizante','Marano','Saluzzi','Fereri','Treni','Marante','Trecci','Monetti','Roseri','M.Mancuso','Orlola','Veneri','Boraldi','Dahlgard','Beruzzi','Ranola','Trecco','Galante'],
+  nordhafen:['Holholz','Rauchmann','De Oosthuis','Vliehoek','Dornberg','Brandholz','Gerststein','Van der Rijnstra','Bohlmer','Lohming','Mellhardt','Rotting','Vossfeld','Mellstein','Waldrich','Lohmner','Rottrich','Kessner'],
+  edogawa:['Ichihara','Nakakawa','Kuronishi','Sugihara','Takekura','Kogaka','Takekawa','Kurohara','Takehara','Nomukura','Kogahara','Inomoto','Shiraka','Takagawa','Ozukura','Nakagawa','Kimubara','Marutani'],
+  calanque:['Durier','Pichard','Renois','Rocheau','Rochange','Boulette','Charard','Belet','Rochier','Durac','Durois','Renaud','Renelle','Favet','Lauraud','Grisard','Beleau','Charelle'],
+  hansaweser:['Falkbach','Langner','Neuhmer','Krebel','Kessau','Gruhldorf','Siegholz','Langer','Kessmer','Rauchrich','Gruhlke','Engelhardt','Walddorf','Vossholz','Fahrbach','Meiswald','Dornler','Mellmann'],
 };
 let CAR={active:false,myClub:null,season:1,d1:[...CR_D1],d2:[...CR_D2],d1Fix:[],d2Fix:[],d1Tab:{},d2Tab:{},matchday:0,myResults:[],pendingMatch:null,budget:2000000,reputation:1,trophies:[],formation:'4-3-3'};
 function crMyDiv(){return CR_CLUBS[CAR.myClub]?.div||1;}
@@ -12703,7 +12713,7 @@ function crCalcOvr(pl){if(!pl)return 60;const s=pl.spd||70,p=pl.pwr||70,t=pl.tec
 // ── BUILD CAREER CLUB AS A FULL TEAM OBJECT IN T[] ─────────────────
 // Creates a team in the exact same shape as T.germany etc: {name, flag, p:[18 players], reserves:[7 ids]}
 // Look up a player's stats across all national teams by surname match.
-// E.g. 'Pirlo' → finds 'A.Pirlo' in T.italy and returns their stats.
+// E.g. 'Pelino' → finds 'J.Pelino' in T.italy and returns their stats.
 // Returns null if no match. Cached across calls.
 const _NATIONAL_PLAYER_INDEX = (()=>{
   const idx={};
@@ -12787,7 +12797,7 @@ function crBuildClubTeam(clubKey){
     const name = rosterName || ('P.'+clubKey.slice(0,3).toUpperCase()+(i+1));
 
     // ── Try to find this player in the existing national-team data first.
-    // If they exist (e.g. Pirlo, Buffon, Messi, Aozora, Ryuga), copy their
+    // If they exist (e.g. Pelino, Galino, Liones, Kitazaki, Ryuga), copy their
     // proven stats so the club version actually plays like the national one.
     const nationalStats = findNationalPlayerStats(name);
 
@@ -13434,7 +13444,7 @@ function _txRenderLog(){
 
 
 /* ============================================================================
-   FIFA-STYLE TEAM SELECT  —  added (rebuilds #s-ts from JS)
+   ARCADE-STYLE TEAM SELECT  —  added (rebuilds #s-ts from JS)
    • Three categories: Nationals / Clubs / Special Teams (All Stars).
    • Cross-category selection (e.g. a national vs a club vs All Stars).
    • OFF / MID / DEF / OVR computed live from the real rosters via calcOvr().

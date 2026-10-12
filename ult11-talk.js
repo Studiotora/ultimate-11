@@ -24,7 +24,7 @@ window.U11Talk=TK;
 
 /* ─── CAPTAINS (author: "Frisina is Italy's captain and Falkner Germany's") ───
    Other teams: the best-rated outfield player on the pitch. */
-TK.CAPTAINS={ italy:'frisina', germany:'falkner', japan:'aozora', brazil:'ferasao' };
+TK.CAPTAINS={ italy:'frisina', germany:'falkner', japan:'kitazaki', brazil:'ferasao' };
 const surname=n=>String(n||'').split('.').pop().trim().toLowerCase();
 TK.captainOf=function(side){
   try{

@@ -1,6 +1,6 @@
 /* ════════════════════════════════════════════════════════════
    LA NUOVA STELLA · STORY SCRIPT v2 (game integration)
-   ─ Per-club casts: Genoa staff ≠ Sampdoria staff (aliases resolve
+   ─ Per-club casts: Genova Rossoblu staff ≠ Doria Azzurra staff (aliases resolve
      to YOUR club; the other club's staff appears in the derby).
    ─ Rival's school (San Giorgio) has its own coach & captain.
    ─ CH.4: the rival is ALSO called up — rivals become teammates.
@@ -18,9 +18,9 @@ window.STORY_CAST={
   'coach-sgiorgio':{name:'MISTER ORLANDO'},
   'captain-sgiorgio':{name:'MAURO'},
   scout:{name:'SIG. MARCHETTI'},
-  'coach-genoa':{name:'MISTER CATTANEO'},
-  'captain-genoa':{name:'CAPITAN FERRI'},
-  'gk-genoa':{name:'BASSI'},
+  'coach-genova':{name:'MISTER CATTANEO'},
+  'captain-genova':{name:'CAPITAN FERRI'},
+  'gk-genova':{name:'BASSI'},
   'coach-doria':{name:'MISTER LANZA'},
   'captain-doria':{name:'CAPITAN SERRA'},
   'gk-doria':{name:'PALUMBO'},
@@ -29,10 +29,10 @@ window.STORY_CAST={
   kaito:{name:'KAITO AOYAMA'}
 };
 window.STORY_ALIAS={
-  FW:{'coach-club':'coach-genoa','captain-club':'captain-genoa','gk-club':'gk-genoa',
+  FW:{'coach-club':'coach-genova','captain-club':'captain-genova','gk-club':'gk-genova',
       'coach-opp':'coach-doria','captain-opp':'captain-doria','gk-opp':'gk-doria'},
   CA:{'coach-club':'coach-doria','captain-club':'captain-doria','gk-club':'gk-doria',
-      'coach-opp':'coach-genoa','captain-opp':'captain-genoa','gk-opp':'gk-genoa'}
+      'coach-opp':'coach-genova','captain-opp':'captain-genova','gk-opp':'gk-genova'}
 };
 
 window.STORY_SCRIPT={
@@ -84,13 +84,13 @@ ch1_post_final_loss:{title:'FINALE · A TESTA ALTA',lines:[
 ch1_scout:{title:'L\'UOMO COL CAPPOTTO GRIGIO',lines:[
  {who:'scout',text:'{HERO}, giusto? Marchetti. Osservatore. Ti seguo da tre partite.'},
  {who:'hero',text:'Osservatore... di chi?'},
- {who:'scout',text:'Del {CLUB}. Serie B. Squadra vera, stadio vero, tifosi che non perdonano. Vogliamo farti firmare.'},
+ {who:'scout',text:'Del {CLUB}. Lega Seconda. Squadra vera, stadio vero, tifosi che non perdonano. Vogliamo farti firmare.'},
  {who:'hero',text:'Io... sì. SÌ. Dove devo firmare? Posso firmare adesso?'},
  {who:'scout',text:'Ah, i giovani. Prima una cosa: anche la {RIVALSCHOOL} ha avuto visite. Il tuo amico {RIVAL} firma per il {RIVALCLUB}.'},
  {who:'hero',text:'...Certo che firma. Non sarebbe divertente, altrimenti.'},
- {who:'scout',text:'Benvenuto nel calcio vero, ragazzo. La Serie B ti aspetta.'}]},
+ {who:'scout',text:'Benvenuto nel calcio vero, ragazzo. La Lega Seconda ti aspetta.'}]},
 
-/* ═══ CAPITOLO 2 · SERIE B ═══ */
+/* ═══ CAPITOLO 2 · LEGA SECONDA ═══ */
 ch2_arrival:{title:'CAPITOLO 2 · PRIMO GIORNO AL {CLUB}',lines:[
  {who:'coach-club',text:'Quindi tu saresti il fenomeno del torneo scolastico. Qui i fenomeni li mando a raccogliere i coni.'},
  {who:'hero',text:'Allora raccoglierò i coni più in fretta di chiunque, Mister.'},
@@ -104,7 +104,7 @@ ch2_training:{title:'ALLENAMENTO · IL PORTIERE',lines:[
  {who:'gk-club',text:'...L\'hai messa all\'incrocio. Al primo tiro. Chi diavolo sei?'},
  {who:'hero',text:'Quello che ti farà diventare il portiere più forte della B. Da domani, ogni allenamento, tiro finché non mi pari tutto.'},
  {who:'gk-club',text:'...Affare fatto, scolaretto. Ma quando ti paro tutto, mi paghi la cena.'}]},
-ch2_pre_md1:{title:'ESORDIO IN SERIE B',lines:[
+ch2_pre_md1:{title:'ESORDIO IN LEGA SECONDA',lines:[
  {who:'captain-club',text:'Senti il rumore? Quello è uno stadio vero. Quindicimila persone che oggi giudicano ogni tuo tocco.'},
  {who:'hero',text:'Il cuore mi esce dal petto, capitano.'},
  {who:'captain-club',text:'Bene. Il giorno che non succede più, smetti. Ora ascolta: primo pallone, gioca semplice. Il resto viene da sé.'},
@@ -125,23 +125,23 @@ ch2_phone_mid:{title:'TELEFONATA · NOTTE',lines:[
  {who:'rival',text:'Ho visto il tuo gol in TV stasera. Non riattaccare.'},
  {who:'hero',text:'...Tu che mi chiami per un complimento? Chi è morto?'},
  {who:'rival',text:'Nessuno, idiota. Ti chiamo per dirti di non rallentare. Se molli adesso, batterti non varrà niente.'},
- {who:'hero',text:'Serie A, {RIVAL}. Tutti e due. Poi facciamo i conti.'},
- {who:'rival',text:'Serie A. Tutti e due. Ora dormi, che domani ti alleni male e mi fai sfigurare.'}]},
+ {who:'hero',text:'Lega Prima, {RIVAL}. Tutti e due. Poi facciamo i conti.'},
+ {who:'rival',text:'Lega Prima. Tutti e due. Ora dormi, che domani ti alleni male e mi fai sfigurare.'}]},
 ch2_promotion:{title:'PROMOZIONE!',lines:[
- {who:'captain-club',text:'Quindici anni... quindici anni ho aspettato questo momento. SERIE A! E ce l\'hai portata tu, numero cento.'},
+ {who:'captain-club',text:'Quindici anni... quindici anni ho aspettato questo momento. LEGA PRIMA! E ce l\'hai portata tu, numero cento.'},
  {who:'hero',text:'Ce l\'abbiamo portata insieme, capitano. Tu mi hai spezzato e rimesso insieme, ricordi?'},
- {who:'coach-club',text:'Basta abbracci. La Serie A non perdona NIENTE. Ma stasera... stasera si festeggia.'},
+ {who:'coach-club',text:'Basta abbracci. La Lega Prima non perdona NIENTE. Ma stasera... stasera si festeggia.'},
  {who:'gk-club',text:'E mi devi ancora una cena, scolaretto! Stasera paghi tu!'}]},
 
-/* ═══ CAPITOLO 3 · SERIE A ═══ */
+/* ═══ CAPITOLO 3 · LEGA PRIMA ═══ */
 ch3_arrival:{title:'CAPITOLO 3 · IL GRANDE PALCOSCENICO',lines:[
- {who:'coach-club',text:'Serie A. San Siro, l\'Olimpico, lo Stadium. I difensori qui leggono il tuo primo controllo prima che tu pensi di farlo.'},
+ {who:'coach-club',text:'Lega Prima. il Gran Teatro, la Rocca, lo Stadio dei Cedri. I difensori qui leggono il tuo primo controllo prima che tu pensi di farlo.'},
  {who:'hero',text:'Allora penserò più veloce di loro.'},
  {who:'coach-club',text:'E c\'è un\'altra cosa. Prima del campionato giochiamo un\'amichevole internazionale. Contro una nazionale vera. Il mondo ti guarda, ragazzo.'},
  {who:'hero',text:'Una nazionale... Mister, è quello che aspetto da tutta la vita.'},
  {who:'captain-club',text:'Allora smetti di sorridere e inizia a correre, numero cento. Il mondo non aspetta nessuno.'}]},
 ch3_friendly_pre:{title:'AMICHEVOLE INTERNAZIONALE',lines:[
- {who:'captain-club',text:'Guardali. Una nazionale intera dall\'altra parte. Ognuno di loro ha giocato un Mondiale.'},
+ {who:'captain-club',text:'Guardali. Una nazionale intera dall\'altra parte. Ognuno di loro ha giocato una Coppa delle Nazioni.'},
  {who:'hero',text:'E ognuno di loro stasera si ricorderà il mio nome.'},
  {who:'captain-club',text:'Heh. Una volta quella frase l\'avrei chiamata arroganza. Adesso la chiamo {HERO}. Vai e fatti vedere dal mondo.'}]},
 ch3_press:{title:'DOPO LA PARTITA · I GIORNALI',lines:[
@@ -152,7 +152,7 @@ ch3_press:{title:'DOPO LA PARTITA · I GIORNALI',lines:[
 ch3_callup:{title:'LA CHIAMATA',lines:[
  {who:'ct',text:'{HERO}. Sono Romano. Sai perché ti chiamo.'},
  {who:'hero',text:'...Lo so. Ma ho bisogno di sentirlo dire, CT.'},
- {who:'ct',text:'Il Mondiale. Maglia azzurra. Voglio il ragazzo che ha zittito una nazionale intera in amichevole. Ci sei?'},
+ {who:'ct',text:'La Coppa delle Nazioni. Maglia azzurra. Voglio il ragazzo che ha zittito una nazionale intera in amichevole. Ci sei?'},
  {who:'hero',text:'CT... ci sono da quando avevo sei anni e calciavo contro il muro del porto.'},
  {who:'ct',text:'Bene. Ritiro a Coverciano, lunedì. Ah, un\'ultima cosa. Non sarai l\'unico genovese in ritiro: convoco anche {RIVAL}.'},
  {who:'hero',text:'...{RIVAL}?! Dopo tutti questi anni... compagni di squadra?'},

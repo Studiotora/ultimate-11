@@ -1,10 +1,10 @@
 /* ============================================================
    ULT11-CUP · tournaments
-   - WORLD CUP : 24 nations · 6 groups of 4 · top2 + 4 best 3rds
+   - NATIONS CUP : 24 nations · 6 groups of 4 · top2 + 4 best 3rds
                  → R16 → QF → SF → FINAL
    - EURO CUP  : 16 teams (15 European nations + All Stars wildcard)
                  · 4 groups of 4 · top2 → QF → SF → FINAL
-   - CHAMPIONS LEAGUE : all 18 clubs · full double round-robin
+   - MASTERS LEAGUE : all 18 clubs · full double round-robin
                  league (34 MDs) · top of the table is champion
    User plays their own fixtures via the match engine, everything
    else is simulated. State persists in localStorage 'ue_cup_v1'.
@@ -14,7 +14,7 @@
 const KEY='ue_cup_v1';
 const EURO_NATIONS=['germany','spain','france','ireland','scotland','belgium','austria','croatia','wales','switzerland','sweden','italy','holland','england','portugal','allstar'];
 const KO_LABEL={r16:'ROUND OF 16',qf:'QUARTER-FINALS',sf:'SEMI-FINALS',f:'FINAL'};
-const COMP_NAME={wc:'WORLD CUP',euro:'EUROPEAN CUP',ucl:'CHAMPIONS LEAGUE'};
+const COMP_NAME={wc:'NATIONS CUP',euro:'CONTINENTAL CUP',ucl:'MASTERS LEAGUE'};
 
 window.CUP=null;
 function save(){try{localStorage.setItem(KEY,JSON.stringify(CUP));}catch(e){}}
@@ -146,7 +146,7 @@ function buildKO(){
     C.ko.qf=[{home:A[0],away:B[1]},{home:Cc[0],away:D[1]},{home:B[0],away:A[1]},{home:D[0],away:Cc[1]}].map(m=>({...m,played:false}));
     C.stage='qf';return;
   }
-  // World Cup: winners + runners-up + 4 best thirds → seeded R16
+  // Nations Cup: winners + runners-up + 4 best thirds → seeded R16
   const ranked=C.groups.map(g=>({g,order:sortKeys(g.teams,g.tab)}));
   const firsts=ranked.map(r=>r.order[0]),seconds=ranked.map(r=>r.order[1]);
   const thirds=ranked.map(r=>r.order[2]);
@@ -202,9 +202,9 @@ window.cupRenderSelect=function(){
   const el=document.getElementById('cup-body');if(!el)return;
   el.innerHTML=`<div class="cup-sec-t">SELECT COMPETITION</div>
   <div class="cup-comps">
-    <button class="cup-comp" style="--cc:#ffd24a" onclick="cupChoose('wc')"><b>🏆</b><span>WORLD CUP</span><i>24 nations · groups → knockout</i></button>
-    <button class="cup-comp" style="--cc:#4ea0ff" onclick="cupChoose('euro')"><b>🏆</b><span>EUROPEAN CUP</span><i>16 teams · groups → knockout</i></button>
-    <button class="cup-comp" style="--cc:#b06cff" onclick="cupChoose('ucl')"><b>⭐</b><span>CHAMPIONS LEAGUE</span><i>18 clubs · full league season</i></button>
+    <button class="cup-comp" style="--cc:#ffd24a" onclick="cupChoose('wc')"><b>🏆</b><span>NATIONS CUP</span><i>24 nations · groups → knockout</i></button>
+    <button class="cup-comp" style="--cc:#4ea0ff" onclick="cupChoose('euro')"><b>🏆</b><span>CONTINENTAL CUP</span><i>16 teams · groups → knockout</i></button>
+    <button class="cup-comp" style="--cc:#b06cff" onclick="cupChoose('ucl')"><b>⭐</b><span>MASTERS LEAGUE</span><i>18 clubs · full league season</i></button>
   </div>`;
 };
 function rowHtml(k,r,hl){return `<tr class="${hl?'me':''}"><td class="tt">${badge(k,18)}<span>${tName(k)}</span></td><td>${r.p}</td><td>${r.w}</td><td>${r.d}</td><td>${r.l}</td><td>${r.gf-r.ga>0?'+':''}${r.gf-r.ga}</td><td class="pt">${pts(r)}</td></tr>`;}

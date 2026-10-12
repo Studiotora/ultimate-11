@@ -3,7 +3,7 @@
    The Team Select screen, from the approved lab mockup
    (lab/lab-teamselect.html). Load AFTER game.js: it takes over
    syncTeamSelections(), so showSc('s-ts') draws this screen. The old
-   FIFA-style block at the end of game.js is now dead code.
+   arcade-style block at the end of game.js is now dead code.
 
    Layout (1920x1080 design, scaled to fit #s-ts): stadium background,
    a waving flag behind each side (two open wings), captain art, team

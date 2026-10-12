@@ -2,9 +2,9 @@
    ULT11-STORY · "LA NUOVA STELLA" — New Hero story mode
    Pick FW or CA (both Italian), name hero + rival, then:
      CH.1  Last year of high school — national schools cup (8 schools)
-     CH.2  Scouted: FW → Genoa CFC · CA → Sampdoria (Serie B, 20 clubs)
-     CH.3  Promotion → Serie A (20 clubs, fake names except existing ones)
-     CH.4  Top-4 finish → AZZURRI call-up → World Cup KO (16 nations)
+     CH.2  Scouted: FW → Genova Rossoblu · CA → Doria Azzurra (Lega Seconda, 20 clubs)
+     CH.3  Promotion → Lega Prima (20 clubs, fake names except existing ones)
+     CH.4  Top-4 finish → AZZURRI call-up → Nations Cup KO (16 nations)
    Leveling: hero gains XP from his own matches; rival is ALWAYS
    hero level +1 and follows the parallel path at the other club.
    All new club/player names are fictional; everything is also
@@ -35,9 +35,9 @@ function sr(seed){let a=seed;return()=>{a|=0;a=a+0x6D2B79F5|0;let t=Math.imul(a^
 
 /* ── FICTIONAL ITALIAN LEAGUE ─────────────────────────────── */
 // Existing CR clubs keep their names (user rule). Everything new is invented.
-const SA_EXISTING=['juventus','inter','napoli'];
+const SA_EXISTING=['torrefiore','sanmarco','valmora'];
 const ST_CLUBS={
-  // Serie A (17 new + 3 existing = 20)
+  // Lega Prima (17 new + 3 existing = 20)
   milrossa:   {name:'Milano Rossa',      colors:['#fb090b','#000000'],abbr:'MRO',ovr:88},
   romalupa:   {name:'Roma Lupa',         colors:['#8e1f2f','#f0bc42'],abbr:'LUP',ovr:84},
   lazaquile:  {name:'Lazio Aquile',      colors:['#87d8f7','#ffffff'],abbr:'AQU',ovr:82},
@@ -55,8 +55,8 @@ const ST_CLUBS={
   salippo:    {name:'Salerno Ippocampi', colors:['#7a1f2b','#e8c34f'],abbr:'IPP',ovr:72},
   comlariana: {name:'Como Lariana',      colors:['#16335f','#ffffff'],abbr:'LAR',ovr:76},
   parducale:  {name:'Parma Ducale',      colors:['#fff200','#003a70'],abbr:'DUC',ovr:77},
-  // Serie B (18 new + genoa existing + sampdoria = 20)
-  sampdoria:  {name:'Sampdoria',         colors:['#1e2f97','#d40000'],abbr:'SAM',ovr:73},
+  // Lega Seconda (18 new + genovarossoblu existing + doriaazzurra = 20)
+  doriaazzurra: {name:'Doria Azzurra',         colors:['#1e2f97','#d40000'],abbr:'DOR',ovr:73},
   barigall:   {name:'Bari Galletti',     colors:['#ffffff','#d40000'],abbr:'GAL',ovr:70},
   palaquile:  {name:'Palermo Rosa',      colors:['#f8a8c2','#000000'],abbr:'PAL',ovr:71},
   venlaguna:  {name:'Venezia Laguna',    colors:['#0c1a24','#ff7d00'],abbr:'LAG',ovr:69},
@@ -85,8 +85,8 @@ const ST_CLUBS={
   hs_adriatica:{name:'Scuola Adriatica', colors:['#ffffff','#d40000'],abbr:'ADR',ovr:53,school:true},
 };
 window.ST_CLUBS=ST_CLUBS;
-const SERIE_A=[...SA_EXISTING,...Object.keys(ST_CLUBS).filter(k=>!ST_CLUBS[k].school&&ST_CLUBS[k].ovr>=72&&k!=='sampdoria'&&!['barigall','palaquile'].includes(k))].slice(0,20);
-const SERIE_B=['genoa','sampdoria','barigall','palaquile','venlaguna','cregrigia','spegolfo','breleonessa','pistorre','modgialloblu','cattrecolli','coslupi','citmura','regtricolore','terrosse','ascpicchi','frociociaria','pergrifoni','trialabarda','monbrianza'];
+const SERIE_A=[...SA_EXISTING,...Object.keys(ST_CLUBS).filter(k=>!ST_CLUBS[k].school&&ST_CLUBS[k].ovr>=72&&k!=='doriaazzurra'&&!['barigall','palaquile'].includes(k))].slice(0,20);
+const SERIE_B=['genovarossoblu','doriaazzurra','barigall','palaquile','venlaguna','cregrigia','spegolfo','breleonessa','pistorre','modgialloblu','cattrecolli','coslupi','citmura','regtricolore','terrosse','ascpicchi','frociociaria','pergrifoni','trialabarda','monbrianza'];
 const SCHOOLS=['hs_garibaldi','hs_meneghino','hs_dante','hs_adriatica','hs_capitolino','hs_sabaudo','hs_vesuvio','hs_sangiorgio'];
 
 /* ════ SCHOOL ROSTERS & CAST · ★ EDIT PLAYER NAMES HERE ════
@@ -104,7 +104,7 @@ const ST_ROSTERS={
   {pos:'CB2',n:'S.Monti',  j:4},
   {pos:'LB', n:'F.Riva',   j:3},
   {pos:'CM1',n:'G.Donati', j:6},
-  {pos:'CM2',n:'L.Villa',  j:8},
+  {pos:'CM2',n:'L.Vallone',  j:8},
   {pos:'CM3',n:'E.Bellini',j:10}, // ← replaced by CA hero / CA rival
   {pos:'LW', n:'D.Neri',   j:11},
   {pos:'ST', n:'R.Carbone',j:9},
@@ -239,13 +239,13 @@ function singleRR(teams){return crMakeFixtures(teams).slice(0,teams.length-1);}
 function tName(k){return (T[k]&&T[k].name)||(ST_CLUBS[k]&&ST_CLUBS[k].name)||(CR_CLUBS[k]&&CR_CLUBS[k].name)||k;}
 // Fixed art slots so portraits work regardless of the chosen name:
 //   assets/players/hero-{fw|ca}-school.png  · high-school chapter
-//   assets/players/hero-fw-genoa.png / hero-ca-doria.png · club chapters
-//   assets/players/hero-{fw|ca}-ita.png     · world cup & epilogue
+//   assets/players/hero-fw-genova.png / hero-ca-doria.png · club chapters
+//   assets/players/hero-{fw|ca}-ita.png     · nations cup & epilogue
 // Falls back to assets/players/{chosenlastname}.png, then the silhouette.
 function charCtx(role,phase){
   if(phase==='hs')return 'school';
   if(phase==='wc'||phase==='done')return 'ita';
-  return role==='FW'?'genoa':'doria';
+  return role==='FW'?'genova':'doria';
 }
 function charFace(who,cls){
   const H=STORY&&STORY.hero;
@@ -445,13 +445,13 @@ window.maybeStoryBeat=function maybeStoryBeat(){
     {who:'rv',t:R+': "Don\'t hang up. I saw your goal on TV today."'},
     {who:'me',t:M+': "...You called to say that?"'},
     {who:'rv',t:R+': "I called to say keep going. If you stop now, beating you means nothing."'},
-    {who:'rv',t:R+': "Serie A, '+M+'. Both of us. Then we settle it."'}]);
+    {who:'rv',t:R+': "Lega Prima, '+M+'. Both of us. Then we settle it."'}]);
   if(S.phase==='sb'&&L&&L.md===L.fix.length-1)return fireBeat('sbEve','msg',[
     {who:'rv',t:'Last matchday. Scared?'},
     {who:'me',t:'Counting points. You?'},
     {who:'rv',t:'Counting the days until I prove I was always better. Don\'t choke.'}]);
   if(S.phase==='sa'&&L&&L.md===5)return fireBeat('sa5','msg',[
-    {who:'rv',t:'Serie A defenders hit different, huh 🩹'},
+    {who:'rv',t:'Lega Prima defenders hit different, huh 🩹'},
     {who:'me',t:'I like it. They fall harder too.'},
     {who:'rv',t:'Ha! There he is. See you at the derby.'}]);
   if(S.phase==='sa'&&L&&L.md===14)return fireBeat('sa14','call',[
@@ -459,7 +459,7 @@ window.maybeStoryBeat=function maybeStoryBeat(){
     {who:'me',t:M+': "Then we both know what these last matchdays are."'},
     {who:'rv',t:R+': "Auditions. Don\'t you dare get called up without me."'}]);
   if(S.phase==='wc'&&S.wc&&S.wc.stage==='sf')return fireBeat('wcsf','msg',[
-    {who:'rv',t:'Semifinal of a WORLD CUP. From our dusty pitch in Genova.'},
+    {who:'rv',t:'Semifinal of a NATIONS CUP. From our dusty pitch in Genova.'},
     {who:'me',t:'You watching?'},
     {who:'rv',t:'Front row. Whole country is. Win it — or I will never let you forget.'}]);
   if(S.phase==='wc'&&S.wc&&S.wc.stage==='f')return fireBeat('wcf','call',[
@@ -514,11 +514,11 @@ function stRenderCreate(){
     <div class="split">
       <div class="half fw" id="h-fw" onclick="stPickRole('FW')">
         <div class="hbg"></div>
-        <div class="bigcrest l">${badge('genoa',230)}</div>
+        <div class="bigcrest l">${badge('genovarossoblu',230)}</div>
         <img class="char" src="assets/story/char-fw.png" onerror="this.style.display='none';this.nextElementSibling.style.display='flex'">
         <span class="char fb"><i></i></span>
         <div class="role fw">
-          <div class="rname">IL BOMBER</div><div class="rpos">FW</div><div class="rclub">GENOA</div>
+          <div class="rname">IL BOMBER</div><div class="rpos">FW</div><div class="rclub">GENOVA ROSSOBLU</div>
           <div class="stats">
             <div class="srow"><span>POTENZA</span><div class="segs">${seg(8)}</div></div>
             <div class="srow"><span>VELOCITÀ</span><div class="segs">${seg(8)}</div></div>
@@ -530,11 +530,11 @@ function stRenderCreate(){
       </div>
       <div class="half ca" id="h-ca" onclick="stPickRole('CA')">
         <div class="hbg"></div>
-        <div class="bigcrest r">${badge('sampdoria',230)}</div>
+        <div class="bigcrest r">${badge('doriaazzurra',230)}</div>
         <img class="char" src="assets/story/char-ca.png" onerror="this.style.display='none';this.nextElementSibling.style.display='flex'">
         <span class="char fb"><i></i></span>
         <div class="role ca">
-          <div class="rname">IL REGISTA</div><div class="rpos">CA</div><div class="rclub">SAMPDORIA</div>
+          <div class="rname">IL REGISTA</div><div class="rpos">CA</div><div class="rclub">DORIA AZZURRA</div>
           <div class="stats">
             <div class="srow"><span>TECNICA</span><div class="segs">${seg(8)}</div></div>
             <div class="srow"><span>VELOCITÀ</span><div class="segs">${seg(7)}</div></div>
@@ -601,7 +601,7 @@ window.stBegin=function(){
   const n1=nome[0].toUpperCase()+'.'+cognome;
   const n2=(document.getElementById('f-rival').value||'').trim()||'D.Falco';
   const role=window._stRole||'FW';
-  const club=role==='FW'?'genoa':'sampdoria',rivalClub=role==='FW'?'sampdoria':'genoa';
+  const club=role==='FW'?'genovarossoblu':'doriaazzurra',rivalClub=role==='FW'?'doriaazzurra':'genovarossoblu';
   // hero school depends on role: CA → Liceo Garibaldi, FW → Ist. San Giorgio (rival gets the other)
   const hsSchool=role==='CA'?'hs_garibaldi':'hs_sangiorgio';
   const rivalSchool=role==='CA'?'hs_sangiorgio':'hs_garibaldi';
@@ -833,7 +833,7 @@ window.storyOnFullTime=function(engHg,engAg){
 window.stQuit=function(){ueAsk('Delete your story progress and start over?',{title:'NEW STORY',ok:'DELETE',danger:true}).then(function(y){if(!y)return;wipe();stRenderCreate();});};
 
 /* ── RENDER · STORY HUB / EDIT (1920×1080 scaled stage) ───── */
-const PHASE_T={hs:'CH.1 · NATIONAL SCHOOLS CUP',sb:'CH.2 · SERIE B',fr3:'CH.3 · AMICHEVOLE INTERNAZIONALE',sa:'CH.3 · SERIE A',fr4:'CH.4 · RITIRO AZZURRO',wc:'CH.4 · WORLD CUP',done:'EPILOGUE'};
+const PHASE_T={hs:'CH.1 · NATIONAL SCHOOLS CUP',sb:'CH.2 · LEGA SECONDA',fr3:'CH.3 · AMICHEVOLE INTERNAZIONALE',sa:'CH.3 · LEGA PRIMA',fr4:'CH.4 · RITIRO AZZURRO',wc:'CH.4 · NATIONS CUP',done:'EPILOGUE'};
 const KO_L={qf:'QUARTI DI FINALE',sf:'SEMIFINALI',f:'FINALE',r16:'OTTAVI DI FINALE'};
 function stFit(){
   const sc=document.getElementById('st-scaler');if(!sc)return;
@@ -845,11 +845,11 @@ function myTeamKey(){const S=STORY;return S.phase==='hs'?S.hsSchool:(S.phase==='
 function chapInfo(){
   const S=STORY,k=myTeamKey();
   const M={hs:{cap:'CAPITOLO 1',dream:'IL TUO SOGNO INIZIA QUI.',p:'Il torneo interscolastico di Genova è il primo passo verso la gloria.'},
-    sb:{cap:'CAPITOLO 2',dream:'LA PORTA DEL CALCIO PRO.',p:'Serie B · Stagione '+S.seasonB+' — chiudi tra le prime 2 per la promozione.'},
-    fr3:{cap:'CAPITOLO 3',dream:'IL GRANDE SALTO.',p:'Amichevole internazionale prima del debutto in Serie A.'},
-    sa:{cap:'CAPITOLO 3',dream:'IL GRANDE PALCOSCENICO.',p:'Serie A · Stagione '+S.seasonA+' — chiudi tra le prime 4 per la convocazione azzurra.'},
+    sb:{cap:'CAPITOLO 2',dream:'LA PORTA DEL CALCIO PRO.',p:'Lega Seconda · Stagione '+S.seasonB+' — chiudi tra le prime 2 per la promozione.'},
+    fr3:{cap:'CAPITOLO 3',dream:'IL GRANDE SALTO.',p:'Amichevole internazionale prima del debutto in Lega Prima.'},
+    sa:{cap:'CAPITOLO 3',dream:'IL GRANDE PALCOSCENICO.',p:'Lega Prima · Stagione '+S.seasonA+' — chiudi tra le prime 4 per la convocazione azzurra.'},
     fr4:{cap:'CAPITOLO 4',dream:'RITIRO AZZURRO.',p:'Amichevole con la nazionale prima del Mondiale.'},
-    wc:{cap:'CAPITOLO 4',dream:'IL MONDO TI GUARDA.',p:'Fase a eliminazione diretta della Coppa del Mondo.'},
+    wc:{cap:'CAPITOLO 4',dream:'IL MONDO TI GUARDA.',p:'Fase a eliminazione diretta della Coppa delle Nazioni.'},
     done:{cap:'EPILOGO',dream:'LA LEGGENDA È SCRITTA.',p:'La tua storia è completa.'}};
   return{...M[S.phase],team:k,tn:tName(k)};
 }
@@ -892,14 +892,14 @@ function svRightSub(){
 }
 function svRightTitle(){
   const S=STORY;
-  return{hs:'TORNEO INTERSCOLASTICO DI GENOVA',sb:'SERIE B · CAMPIONATO',fr3:'AMICHEVOLE INTERNAZIONALE',sa:'SERIE A · CAMPIONATO',fr4:'RITIRO AZZURRO',wc:'COPPA DEL MONDO',done:'EPILOGO'}[S.phase]||'';
+  return{hs:'TORNEO INTERSCOLASTICO DI GENOVA',sb:'LEGA SECONDA · CAMPIONATO',fr3:'AMICHEVOLE INTERNAZIONALE',sa:'LEGA PRIMA · CAMPIONATO',fr4:'RITIRO AZZURRO',wc:'COPPA DELLE NAZIONI',done:'EPILOGO'}[S.phase]||'';
 }
 function svNextPanel(){
   const S=STORY,my=myTeamKey(),m=myFixture();
   if(S.phase==='done'){
     return `<div class="next done"><div class="top"><span class="pp">${S.wcLost?'🥈 FINALISTA MONDIALE':'🏆 CAMPIONE DEL MONDO'}</span></div>
       <div class="champname">${STORY.hero.name}${STORY.hero.nick?' “'+STORY.hero.nick.toUpperCase()+'”':''}</div>
-      <div class="btns"><button class="st-play" onclick="stReplayWC()">🔁 REPLAY WORLD CUP</button><button class="st-sim" onclick="stQuit()">NUOVA STORIA</button></div></div>`;
+      <div class="btns"><button class="st-play" onclick="stReplayWC()">🔁 REPLAY NATIONS CUP</button><button class="st-sim" onclick="stQuit()">NUOVA STORIA</button></div></div>`;
   }
   if(!m){
     return `<div class="next"><div class="top"><span class="pp">PROSSIMA PARTITA</span><span class="st2">${svRightSub()}</span></div>

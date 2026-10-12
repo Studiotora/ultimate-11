@@ -4151,7 +4151,7 @@ html.ue-phone #vjoy-base{transform:scale(calc(0.5 + 0.5*var(--tb)));transform-or
 #duel-ov .dact3d-img,.duel-aaa .dact3d-img{display:none!important;}
 
 /* ══ DUEL SPRITES — new pixel art (2026-09-08) ═════════════════════════
-   conti.png 338x499 (front, attacker) and shester.png 400x477 (back, defender)
+   conti.png 338x499 (front, attacker) and rauchfeld.png 400x477 (back, defender)
    replace the 1023x1537 illustrations. They are LOW-RES PIXEL ART with
    different aspect ratios, so: never stretch (contain, bottom-anchored, each
    keeps its own ratio) and never smooth (image-rendering:pixelated).

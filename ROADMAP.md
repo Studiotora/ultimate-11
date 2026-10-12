@@ -1,5 +1,17 @@
 # ULTIMATE ELEVEN — Roadmap v1
 
+### 2026-10-10 (night) Borgo grows: canal district, lamp-lit nights
+
+The Borgo now continues east into a canal district (second piazza with a fountain, eight shopfronts, a hump-backed bridge you walk over, bunting, boats, a south-bank market, a low water gate) and has a proper lamp-lit night (navy ambient, lamp pools and halos, lit windows, bloom). The two playable fields got new turf / asphalt, Marassi Square wears the Borgo materials, and the orbit camera is capped at +-90 degrees. Next: unify the colour grade across the four maps, give the south bank more life, decide whether the canal district gets places to visit.
+
+### 2026-10-10 (later) Test the World, demo pass
+
+The world now opens as an overlay inside the game page (fullscreen is kept). The four places are connected: two glowing exit pads per map lead on, the overworld shows the hero walking the road, and you arrive at the matching pad of the next place. Day / golden hour / night (N), weather (H: clear, rain, snow, fog, storm) and shadows (Z) are one shared setting across the overworld and all four maps, matching the match's own time and weather keys. Every map has an orbit camera (Q / E or drag, wheel, Home), a title card on arrival, and real cast shadows. Marassi Square lost its extra menu page. Shared code: `world/env.js`. Details in `CHANGELOG_SESSION.md`; usage in `world/README.md`. Next: sound for the overworld and the maps, NPCs and events per map.
+
+### 2026-10-10 Test the World: overworld, four walkable maps, frontal cameras
+
+The main menu now has TEST THE WORLD (replacing the Santa Fede and Marassi Square entries) leading to `world/index.html`: an old-school overworld where the hero walks road-to-road between Marassi Square, Santa Fede, the High School ground and the Borgo del Mare; Enter visits a map, each map's exit returns to the same point. Walking only: no NPCs, no events. The Borgo camera is frontal and the Borgo is walk-only by default (`?story=1` restores the interlude). Santa Fede and the high school are walkable through `world/walk.html?map=...`, which reuses the match scenery modules unchanged. The wallpaper goes in `world/assets/world-map.png`; `world/index.html?edit=1` places the four points on it. Details and verification in `CHANGELOG_SESSION.md`; usage in `world/README.md`. Next: the wallpaper, then NPCs and events per map.
+
 ### 2026-10-06 Tighter opening kickoff and foreground ball
 
 Opening camera distance reduced from 2.65 to 1.71 world units at the same low height. The renderer supplies a launch point 0.57 world units toward the lens from the kicking player, and the engine uses it for both initial ball placement and the ground-pass path. This puts the sprite in front of the boot without an artificial draw-order change or a jump at release. Normal gameplay placement remains unchanged. Cache: game v265, renderer v190. Syntax and live framing/return checked; no backups created.
@@ -3498,15 +3510,15 @@ Image: `lab/lightrig/author_night_defaults.png`. Backups `*.pre-authorvals*`.
 
 ## Germany's super shooters (2026-09-26 · game.js v207)
 
-The author ruled that Margus, Shester and Goethe should have the super shot, with Falkner staying the top striker and the other two the more technical ones. None of the three had a SHO stat, so `canSuper` always failed for them. New `STAR_STAT_OVERRIDES`:
+The author ruled that Margus, Rauchfeld and Goethe should have the super shot, with Falkner staying the top striker and the other two the more technical ones. None of the three had a SHO stat, so `canSuper` always failed for them. New `STAR_STAT_OVERRIDES`:
 
 | Player | SPD | DRI | PAS | SHO | DEF | POW | Unlocks |
 |---|---|---|---|---|---|---|---|
-| Shester | 80 | 88 | 90 | 86 | 64 | 82 | super shot, super pass, super dribble |
+| Rauchfeld | 80 | 88 | 90 | 86 | 64 | 82 | super shot, super pass, super dribble |
 | M.Goethe | 85 | 89 | 82 | 86 | 56 | 80 | super shot, super dribble |
 | Margus | 85 | 86 | 80 | 88 | 54 | 83 | super shot, super dribble; thunder aura + yellow now reachable |
 
-Falkner is unchanged at SHO 96. Shester and Goethe are not signatures, so they use the generic cyan and the base aura. Verified with `canSuper` on the Germany roster. Backup: `game.js.pre-gersuper-v206.bak`.
+Falkner is unchanged at SHO 96. Rauchfeld and Goethe are not signatures, so they use the generic cyan and the base aura. Verified with `canSuper` on the Germany roster. Backup: `game.js.pre-gersuper-v206.bak`.
 
 ## 2026-09-26 — Marassi atmosphere: wear, pixel foliage, warm night (Codex / Astra)
 

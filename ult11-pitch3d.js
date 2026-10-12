@@ -2521,7 +2521,7 @@
       frisina:{ trail:'dragon', arc:'normal', label:'RYUJIN TORNADO',  aura:'dragon'  },
       // author 2026-09-24: Germany's two - every other player is the generic cyan
       falkner:{ trail:'flame',  arc:'normal', label:'PHOENIX BLAZE',   col:'#ff6a1e', aura:'flame' },
-      margus: { trail:'lightning', arc:'normal', label:'MJOLNIR BREAKER', col:'#ffd21f', aura:'thunder' },
+      walder: { trail:'lightning', arc:'normal', label:'MJOLNIR BREAKER', col:'#ffd21f', aura:'thunder' },
       // author 2026-10-02: Brazil's three
       rivao:  { trail:'standard', arc:'straight', label:'SOLAR LANCE', col:'#ffc23a', aura:'base' },    // golden aura, straight
       ferasao:{ trail:'shadow',   arc:'straight', label:'DARK NOVA',   col:'#2ee06a', aura:'shadow' },  // the dark aura in green, straight
@@ -2563,7 +2563,7 @@
     /* SUPER DRIBBLE names follow the shot (author 2026-10-02: "same concept for
        the dribbling ... connected to the super shot"): a signature's own, else the
        trail family's; a plain shooter's is just Super Dribble. */
-    const SIG_DRIBBLE={mancuso:'Raijin Flash',frisina:'Ryujin Coil',falkner:'Phoenix Dash',margus:'Mjolnir Charge',
+    const SIG_DRIBBLE={mancuso:'Raijin Flash',frisina:'Ryujin Coil',falkner:'Phoenix Dash',walder:'Mjolnir Charge',
       vella:'Jade Slither',rivao:'Solar Stride',ferasao:'Dark Nova Step',carlito:'Crimson Rush'};
     const TRAIL_DRIBBLE={standard:'Super Dribble',flame:'Inferno Dash',lightning:'Storm Step',wind:'Zephyr Glide',
       shadow:'Abyss Shade',aura:'Seraph Wings',tiger:'Byakko Prowl',after:'Mirage Step',dragon:'Seiryu Coil',
@@ -2581,7 +2581,7 @@
       return null;
     }
     // players who always get the dragon
-    const DRAGON_NAMES=['xiao','michael','micheal'];
+    const DRAGON_NAMES=['xiao','loboca','loboca'];
     const TECH_POOL=['lightning','wind','ice','galaxy','aura','nature','after','shadow'];
     const ALL_POOL=Object.keys(TRAIL_STYLES);
     function _hash(str){ let h=0; str=String(str||'');
@@ -3270,8 +3270,8 @@
     const HAIR_LOOK={                                  // assets/players/front/<name>.png, sampled
       aldini:['spiky','#eeb75b'], bertoldi:['buzz','#8e6a52'], conti:['spiky','#522c1b'], corsaro:['spiky','#2a1d18'],
       falkner:['spiky','#e6a84a'], feo:['buzz','#e2a47a'], ferlora:['buzz','#5d3c2a'], frisina:['spiky','#573b28'],
-      goethe:['spiky','#f7db90'], mancuso:['buzz','#241f24'], manzini:['spiky','#43291e'], margus:['spiky','#5c2d16'],
-      meyer:['spiky','#e5a661'], reinhardt:['spiky','#fac160'], schmidt:['spiky','#fb8621'], shester:['spiky','#c48c56'],
+      siegberg:['spiky','#f7db90'], mancuso:['buzz','#241f24'], manzini:['spiky','#43291e'], walder:['spiky','#5c2d16'],
+      engeldorf:['spiky','#e5a661'], hesshardt:['spiky','#fac160'], brunbrecht:['spiky','#fb8621'], rauchfeld:['spiky','#c48c56'],
       vella:['spiky','#593927'],
       // Brazil (sampled from the 2026-10-02 duel sheets; Robuertos is bald = a skin-tone buzz)
       rivao:['buzz','#30221b'], ferasao:['spiky','#4c2514'], carlito:['spiky','#29201d'], singao:['buzz','#2a1d18'],

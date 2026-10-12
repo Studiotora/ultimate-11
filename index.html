@@ -600,21 +600,45 @@ addEventListener('DOMContentLoaded',function(){
   </div>
 
 <!-- DISCLAIMER (first screen, also acts as preloader) -->
-<div id="s-disclaimer" class="screen active" style="background:radial-gradient(ellipse at center,#0c1428 0%,#04060c 100%);color:#fff;align-items:center;justify-content:center;padding:43.2px 102.4px;text-align:center;font-family:'Rajdhani',sans-serif;overflow:hidden;">
-  <div style="max-width:780px;position:relative;z-index:2;">
-    <div style="font-family:var(--u-font-display);font-size:clamp(28px,64px,52px);letter-spacing:.08em;color:#f0c040;margin-bottom:8px;text-shadow:0 0 28px rgba(240,192,64,.35);text-transform:uppercase;">DISCLAIMER</div>
-    <div style="font-family:var(--u-font-ui);font-size:9px;letter-spacing:.4em;color:#48586a;margin-bottom:26px;">FAN-MADE PROJECT · NON-COMMERCIAL</div>
-    <div style="font-size:clamp(12px,17.92px,16px);line-height:1.6;color:#cfd8e3;margin-bottom:30px;text-align:left;">
-      This is an <b style="color:#fff;">unofficial, non-commercial fan project</b> created for entertainment and educational purposes only. It is not affiliated with, endorsed by, or sponsored by any real-world player, football club, league, broadcaster, or governing body.
-      <br><br>
-      All team names, player names, jersey designs, crests, and likenesses appearing in this game are <b style="color:#fff;">placeholders and original stand-ins</b>. Any resemblance to real persons, clubs, or trademarks is coincidental or used as parody and homage in the spirit of fan tribute. No official assets, copyrighted artwork, or licensed audio are reproduced.
-      <br><br>
-      If you are a rights holder and believe content should be modified or removed, please reach out and it will be addressed promptly.
-      <br><br>
-      By continuing, you acknowledge that this is a fan-made experience and that all references are fictional or used in good faith under fair-use principles.
-    </div>
-    <button id="dscBtn" onclick="acceptDisclaimer()" style="padding:14px 44px;background:linear-gradient(180deg,#ffd566 0%,#f0c040 50%,#a8771a 100%);color:#1a0f00;border:2px solid #ffe28a;border-radius:8px;font-family:var(--u-font-display);font-size:22px;letter-spacing:.08em;cursor:pointer;box-shadow:0 0 28px rgba(240,192,64,.45),inset 0 1px 0 rgba(255,255,255,.4);transition:transform .15s;text-transform:uppercase;">I UNDERSTAND</button>
-    <div id="dscLoad" style="margin-top:18px;font-family:var(--u-font-ui);font-size:9px;letter-spacing:.3em;color:#48586a;">PREPARING ASSETS…</div>
+<style>
+/* intro: two black screens, white type, the game's own fonts (Cinzel / Rajdhani). Sizes are stage pixels (the game runs in a scaled 1280x720 stage), not vw. */
+#s-studio,#s-disclaimer{background:#000;color:#fff;align-items:center;justify-content:center;text-align:center;overflow:hidden}
+#s-studio{cursor:pointer}
+.in-studio{font-family:var(--u-font-display);font-weight:700;font-size:34px;letter-spacing:.34em;text-indent:.34em;text-transform:uppercase;color:#fff;animation:inFade 1.8s ease both}
+.in-rule{width:300px;height:1px;margin:22px auto;background:linear-gradient(90deg,transparent,rgba(255,255,255,.75),transparent);animation:inFade 1.8s .3s ease both}
+.in-hint{position:absolute;left:0;right:0;bottom:64px;font-family:var(--u-font-ui);font-weight:600;font-size:15px;letter-spacing:.42em;text-indent:.42em;color:rgba(255,255,255,.7);animation:inHint 2.6s 1.4s ease-in-out infinite both}
+.in-dsc{width:820px;max-width:92%;animation:inFade .9s ease both}
+.in-dsc h2{margin:0;font-family:var(--u-font-display);font-weight:700;font-size:38px;letter-spacing:.22em;text-indent:.22em;color:#fff;text-transform:uppercase}
+.in-dsc .in-rule{width:300px;margin:18px auto 28px;animation:none}
+.in-dsc p{margin:0 0 20px;font-family:var(--u-font-ui);font-weight:500;font-size:21px;line-height:1.6;letter-spacing:.03em;color:rgba(255,255,255,.92)}
+.in-dsc p.in-warn{font-weight:700;letter-spacing:.05em;color:#fff}
+.in-dsc p.in-fine{margin-top:26px;font-size:13px;letter-spacing:.16em;text-transform:uppercase;color:rgba(255,255,255,.55)}
+.in-btn{margin-top:6px;padding:13px 52px;background:transparent;color:#fff;border:1.5px solid rgba(255,255,255,.85);font-family:var(--u-font-display);font-weight:700;font-size:19px;letter-spacing:.26em;text-indent:.26em;text-transform:uppercase;cursor:pointer;transition:background .18s,color .18s,box-shadow .18s}
+.in-btn:hover,.in-btn:focus-visible{background:#fff;color:#000;outline:none;box-shadow:0 0 28px rgba(255,255,255,.35)}
+.in-load{margin-top:22px;font-family:var(--u-font-ui);font-size:12px;letter-spacing:.34em;text-indent:.34em;color:rgba(255,255,255,.42)}
+@keyframes inFade{from{opacity:0}to{opacity:1}}
+@keyframes inHint{0%,100%{opacity:.25}50%{opacity:.85}}
+</style>
+<!-- STUDIO CARD (first screen): click, Enter or pad A continues to the disclaimer -->
+<div id="s-studio" class="screen active" onclick="studioContinue()" role="button" aria-label="Continue">
+  <div style="position:relative;z-index:2;">
+    <div class="in-studio">Studio Tora Production</div>
+    <div class="in-rule"></div>
+  </div>
+  <div class="in-hint">CLICK TO CONTINUE</div>
+</div>
+
+<!-- DISCLAIMER (second screen, also acts as preloader) -->
+<div id="s-disclaimer" class="screen">
+  <div class="in-dsc" style="position:relative;z-index:2;">
+    <h2>Disclaimer</h2>
+    <div class="in-rule"></div>
+    <p>This game uses AI-generated material, including images. It has been built by one person alone, with the help of artificial intelligence.</p>
+    <p>All names, emblems, places and locations are works of imagination. Any resemblance to real persons, clubs, nations or organisations is purely coincidental and unintended.</p>
+    <p class="in-warn">If this game may offend your sensibilities in any way, please do not continue.</p>
+    <p class="in-fine">By continuing, you confirm that you have read and understood this notice.</p>
+    <button id="dscBtn" class="in-btn" onclick="acceptDisclaimer()">I Understand</button>
+    <div id="dscLoad" class="in-load">PREPARING ASSETS…</div>
   </div>
   <!-- silent preload of critical wallpapers (browser will cache while the user reads) -->
   <div aria-hidden="true" style="position:absolute;width:1px;height:1px;overflow:hidden;opacity:0;pointer-events:none;">
