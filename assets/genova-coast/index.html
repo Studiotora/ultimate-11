@@ -1,0 +1,26 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+  <meta name="theme-color" content="#030a18"><link rel="icon" href="data:,">
+  <title>Ultimate Eleven · Borgo del Mare</title>
+  <link href="https://fonts.googleapis.com/css2?family=Rajdhani:wght@500;600;700&family=Cinzel:wght@500;700;900&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="../tokens.css">
+  <link rel="stylesheet" href="coast.css?v=4">
+</head>
+<body>
+  <main id="view" aria-label="Playable coastal story map"></main>
+  <div id="loading" role="status">Opening the Ligurian coast…</div>
+  <header class="place hud"><div class="eyebrow">ULTIMATE ELEVEN / EXPLORATION</div><h1>Borgo del Mare</h1><p>GENOVA, LIGURIA <span>·</span> THE HARBOUR</p></header>
+  <aside class="quest hud"><span class="eyebrow">COASTAL INTERLUDE · STORY TEST</span><p id="objective">Meet your teammate on the waterfront.</p><div class="progress"><i id="progress"></i></div></aside>
+  <button id="prompt" hidden></button>
+  <section id="dialogue" hidden aria-live="polite" aria-label="Story dialogue"><span id="speaker" class="eyebrow"></span><p id="line"></p><button id="next">Continue <span>↵</span></button></section>
+  <footer class="hud" id="u11-hint"><span><b>WASD / ↑↓←→</b> Walk &nbsp; <b>SHIFT</b> Run<span class="story-only"> &nbsp; <b>E</b> Talk</span></span><span><b>Q / E</b> or drag Turn the camera &nbsp; <b>WHEEL</b> Zoom &nbsp; <b>HOME</b> Reset view &nbsp; <b>T</b> Hide UI &nbsp; <b>BACKSPACE</b> World map</span></footer>
+  <div id="touch" class="hud"><div id="stick" aria-label="Movement joystick"><i id="nub"></i></div><button id="touch-talk" aria-label="Interact">E</button></div>
+  <script src="../marassi-square/assets/three.min.js"></script>
+  <script src="../marassi-square/hero-sprite.js?v=1"></script>
+  <script src="art.js?v=4"></script><script src="details.js?v=3"></script><script src="finish.js?v=6"></script>
+  <script src="../world/env.js?v=4"></script>
+  <script src="canal.js?v=4"></script><script src="hd2d-water.js?v=1"></script><script src="water.js?v=9"></script><script src="world.js?v=12"></script><script src="scene.js?v=11"></script>
+</body>
+</html>
