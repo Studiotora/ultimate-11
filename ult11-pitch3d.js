@@ -3612,6 +3612,7 @@
             let g=0; try{ g=(typeof stunLevel==='function')?stunLevel(s,k):0; }catch(e){}
             o._gray.u.value=g;
           }
+          knockStep(id,o);
           // sprite height = fixed fraction of world pitch LENGTH (HD-2D scale).
           // P3D.spriteFrac defaults to ~0.045 of PLEN — tune in Camera Lab.
           const frac=(P3D.spriteFrac!=null?P3D.spriteFrac:0.045);
@@ -3711,6 +3712,31 @@
     function projectToScreen(wx,wy,wz, w,h){
       _v3.set(wx,wy,wz).project(camera);
       return { x:(_v3.x*0.5+0.5)*w, y:(-_v3.y*0.5+0.5)*h, z:_v3.z };
+    }
+    /* KNOCK-BACK (2026-10-13, reference study §2): a blocker hit by the ball
+       is tipped back AWAY from the shot - the same whole-sprite rotation the
+       tackle cinematic uses for the fall - holds, then gets up.
+       P3D.knock(side,key,{lean, ms, dx, dy}) - lean in radians (0.35 stagger,
+       ~1.3 flat on his back), ms total, dx/dy the shot direction in engine px. */
+    const KNOCK={};
+    P3D.flashAt=function(ex,ey){ const hh=PLEN*(P3D.spriteFrac||0.045);   // white pop on a superheavy block
+      try{ spawnFlash(ex2wx(ex),hh*0.5,ey2wz(ey),hh*1.4,'#ffffff'); }catch(e){} };
+    P3D.knock=function(side,key,o){
+      const id=side+':'+key, p=PP[side]&&PP[side][key]; if(!p||!o) return;
+      let sgn=1;
+      try{ const a=projectToScreen(ex2wx(p.x),0,ey2wz(p.y),1,1), b=projectToScreen(ex2wx(p.x+(o.dx||1)),0,ey2wz(p.y+(o.dy||0)),1,1);
+        sgn=(b.x>=a.x)?1:-1; }catch(e){}
+      const ms=Math.max(300,o.ms||900);
+      KNOCK[id]={t0:performance.now(),ms,lean:(o.lean||1.25)*sgn,fallMs:Math.min(160,ms*0.2),upMs:Math.min(320,ms*0.35)};
+    };
+    function knockStep(id,o){
+      const kn=KNOCK[id]; if(!kn||!o||!o.sprite||!o.sprite.material) return;
+      const t=performance.now()-kn.t0;
+      let r=0;
+      if(t<kn.ms){ const down=Math.min(1,t/kn.fallMs), up=Math.min(1,(kn.ms-t)/kn.upMs);
+        r=kn.lean*(1-(1-down)*(1-down))*(up*up*(3-2*up)); }
+      else delete KNOCK[id];
+      o.sprite.material.rotation=r; if(o.sil&&o.sil.material) o.sil.material.rotation=r;
     }
     P3D.playerScreenPos=function(side,key){
       const o=sprites[side+':'+key]; if(!o||!o.sprite||!o.sprite.visible)return null;

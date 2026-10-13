@@ -3354,9 +3354,45 @@ function moveOffBallV2(s,ds,dt=1){
       cur.x=lerp(cur.x,gx,1-Math.pow(.92,dt));
       cur.y=lerp(cur.y,clamp(p.y*H+(threat.y-H*.5)*.06,H*.12,H*.88),1-Math.pow(.94,dt));return;
     }
-    const t=defensiveTarget(s,ds,k,threat,plan);
+    let t=defensiveTarget(s,ds,k,threat,plan);
+    const at=alertTarget(ds,k,pl,cur,threat,threatProg,t); if(at) t=at;
     aiMoveTo(cur,t.x,t.y,t.gait,pl,ds,k,dt);
   });
+}
+/* ══ DEFENDER ALERT LADDER (2026-10-13, reference study §3) ══════════════════
+   A defender off the ball holds his shape far from goal and gets twitchier
+   the closer the threat comes: every `ms` he rolls `pct`% to go ALERT, and an
+   alert defender steps out of his slot toward the carrier for `hold` ms, then
+   drops back in. The randomness is the point - the line breathes instead of
+   moving as one block. Only the engager can open a duel, so stepping out
+   never starts one; he stops `stopAt` x ENGAGE short of the carrier.
+   steps: [threat distance to his goal (1 - progress) at or below, ms, pct]
+   pct is scaled by the player's defensiveAggression and, for the CPU, by
+   the difficulty (U11_DIFF.*.alert). ALERT_LADDER.on=false turns it off. */
+var ALERT_LADDER={on:true,
+  steps:[[1,2500,5],[0.5,2000,10],[0.4,1500,20],[0.3,1000,30],[0.2,500,40]],
+  detect:0.22, hold:[900,1500], step:0.55, stopAt:1.5,
+  max:2};          // at most this many alert at once per team - the line behind them keeps its shape
+var _ALERT={};
+function alertTarget(ds,k,pl,cur,threat,threatProg,base){
+  const A=ALERT_LADDER; if(!A.on||!threat) return null;
+  const id=ds+':'+k, now=Date.now(), d=Math.hypot(threat.x-cur.x,threat.y-cur.y);
+  const st=_ALERT[id]||(_ALERT[id]={next:0,until:0});
+  if(d>W*A.detect*(now<st.until?1.3:1)){ st.until=0; return null; }   // out of range: calm, and an alert lapses
+  if(now>=st.until&&now>=st.next){
+    const v=1-threatProg; let step=A.steps[0];
+    A.steps.forEach(s=>{ if(v<=s[0]) step=s; });
+    st.next=now+step[1]*(0.8+0.4*Math.random());
+    const bh=getBehaviorProfile(pl), dm=isCpuSide(ds)?(diffCfg().alert||1):1;
+    let live=0; for(const key in _ALERT){ if(key.charAt(0)===ds&&now<_ALERT[key].until) live++; }
+    if(live<A.max&&Math.random()*100<step[2]*(bh.defensiveAggression||1)*dm)
+      st.until=now+A.hold[0]+Math.random()*(A.hold[1]-A.hold[0]);
+  }
+  if(now>=st.until) return null;
+  let tx=base.x+(threat.x-base.x)*A.step, ty=base.y+(threat.y-base.y)*A.step;
+  const min=ENGAGE()*A.stopAt, dx=tx-threat.x, dy=ty-threat.y, dd=Math.hypot(dx,dy)||1;
+  if(dd<min){ tx=threat.x+dx/dd*min; ty=threat.y+dy/dd*min; }
+  return {x:tx,y:ty,gait:'run'};
 }
 function moveOffBallV1(s,ds,dt=1){
   const cp=PP[s][G.ck]; if(!cp)return;
@@ -5605,12 +5641,12 @@ function showSaveBanner(gk,callback){
    chasing → GK duel menu at arrival → 3D finish → result (goal / save
    banner). No video or PNG cutscene anywhere in it since 2026-09-11. Returns false to let
    manualShot fall back to the legacy path. */
-function superShotCine(){
+function superShotCine(noMissRoll){   // noMissRoll: the shot's miss roll was already made (launchShot)
   if(G.phase!=='moving'||!G.ck||G._scoringGoal)return true;
   const s=G.poss,ds=s==='h'?'a':'h';
   const carrier=sq(s)[G.ck],cp=PP[s]&&PP[s][G.ck];
   if(!carrier||!cp){U11DBG('SSC: no carrier/pos → legacy');return false;}
-  if(rollShotMiss(s,'special')){U11DBG('SSC: miss roll');clearInterval(G.di);G_moveTarget=null;shotMissed(s);return true;}
+  if(!noMissRoll&&rollShotMiss(s,'special')){U11DBG('SSC: miss roll');clearInterval(G.di);G_moveTarget=null;shotMissed(s);return true;}
   /* WIND-UP HOLD — halved from 4500ms. The hold is only a camera/charge beat
      before the skill banner; 4.5s made every super shot feel like a loading
      screen. Declared here (not at the timer below) because the 3D side needs
@@ -5760,9 +5796,36 @@ function shotArrival(bt){
   }
   return {x,y,bz,ms:n*1000/60};
 }
+/* Runs the CPU attacker's keeper-duel choice (aiAtk, unchanged) on a probe
+   duel, so the pick and its odds are exactly what the real duel would make.
+   True = it chose SUPER SHOT. G.D / G.phase are restored. */
+function cpuDuelPicksSpecial(side){
+  const carrier=sq(side)[G.ck];
+  if(!carrier||!getSpecial(carrier)||!canSuper(carrier,'special')) return false;
+  if(!(window.P3D&&P3D.on&&P3D.superCine2)||(P3D.cineActive&&P3D.cineActive())) return false;
+  const ds=side==='h'?'a':'h', saveD=G.D, savePh=G.phase;
+  let pick=null;
+  try{
+    G.phase='duel';
+    G.D={carrier,def:sq(ds).GK,dk:'GK',as:side,ds:'probe',isShot:true,ak:null,pk:null,defA:null,duelStage:1};
+    aiAtk(); pick=G.D.ak;
+  }catch(e){ pick=null; }
+  G.D=saveD; G.phase=savePh;
+  return pick==='special';
+}
 // Fire a NORMAL shot: outfield block check first, then the keeper duel.
 function launchShot(fx,fy,gx,gy,side,ak,dur){
   const isSuper=(ak==='special'||ak==='super'||ak==='super-shot'||ak==='super-pass');
+  /* The CPU's keeper-duel pick (shoot or SUPER) used to be made at the keeper,
+     after the ball had already flown - a SUPER then replayed the charge
+     cinematic for a ball kicked long ago. The same pick is now made HERE, with
+     the same weights: SUPER plays its cinematic right away, then the keeper
+     duel (author 2026-10-13: same frequency, just never the animation twice). */
+  if(!isSuper&&isCpuSide(side)&&cpuDuelPicksSpecial(side)){
+    const ph=G.phase; G.phase='moving';                // superShotCine() gates on this
+    if(superShotCine(true)) return;
+    G.phase=ph;                                        // could not start: a normal shot after all
+  }
   const shooter=sq(side)[G.ck];
   const pw=shooter?(gs(shooter,'sho')||75):75;
   let b=null;
@@ -5780,7 +5843,7 @@ function launchShot(fx,fy,gx,gy,side,ak,dur){
     const _off=Math.random()<0.25?0:(Math.random()<0.5?-1:1)*_m*(0.30+0.50*_acc*Math.random());
     const ty=clamp(gy+_off,H*0.5-_m*0.85,H*0.5+_m*0.85);
     G._shotTrail=true;
-    animateBallTo(fx,fy,gx,ty,()=>{G._shotTrail=false;G.phase='idle';opDuel(true,ak);},dur,true);
+    animateBallTo(fx,fy,gx,ty,()=>{G._shotTrail=false;G.phase='idle';G._normalShotIn=!isSuper;opDuel(true,ak);},dur,true);
     try{ const a=shotArrival(ballTravel); gkAnim(_ds,'dive',{tx:gx,ty,bz:a.bz,ms:a.ms}); }catch(e){}
     return;
   }
@@ -5789,11 +5852,36 @@ function launchShot(fx,fy,gx,gy,side,ak,dur){
   G._shotTrail=true;
   animateBallTo(fx,fy,b.x,b.y,()=>{
     G._shotTrail=false;
-    say(nm+(b.outcome==='block'?' blocks it!':' gets a block — loose!'));
-    try{ if(typeof shakeScreen==='function') shakeScreen(5,90); }catch(e){}
+    const tier=blockKnock(side==='h'?'a':'h',b.key,pw,gx-fx,gy-fy);
+    say(nm+(b.outcome==='block'?' blocks it!':' gets a block — loose!')+(tier>=2?' He is sent flying!':''));
     const spd=(b.outcome==='block')?(2+Math.random()*3):(6+Math.random()*5), ang=Math.random()*Math.PI*2;
     goLoose(b.x,b.y,Math.cos(ang)*spd,Math.sin(ang)*spd, side==='h'?'a':'h');
   },Math.max(10,Math.round(dur*0.65)),true);
+}
+/* BLOCK KNOCK-BACK (2026-10-13, reference study §2). How hard a blocker is hit
+   follows shot power minus his DEF; the block ODDS are untouched, this is only
+   the reaction. Tiers: 0 light (flinch) · 1 middle (a step back) · 2 heavy
+   (knocked down) · 3 superheavy (launched, knocked flat).
+   push: fraction of W along the shot · stun: STUN kind · lean/ms: P3D.knock */
+const BLOCK_KNOCK=[
+  {at:-Infinity, push:0.004, stun:null,    lean:0,    ms:0,    shake:[3,80]},
+  {at:0,         push:0.012, stun:'blockM',lean:0.35, ms:600,  shake:[5,100]},
+  {at:10,        push:0.022, stun:'blockH',lean:1.30, ms:1100, shake:[7,140]},
+  {at:20,        push:0.035, stun:'blockS',lean:1.45, ms:1600, shake:[9,180]}
+];
+function blockKnock(ds,key,pw,dx,dy,forceTier){
+  const pl=sq(ds)[key], p=PP[ds]&&PP[ds][key]; if(!pl||!p) return 0;
+  const gap=pw-(gs(pl,'def')||60);
+  let tier=0; BLOCK_KNOCK.forEach((t,i)=>{ if(gap>=t.at) tier=i; });
+  if(forceTier!=null) tier=forceTier;
+  const K=BLOCK_KNOCK[tier], L=Math.hypot(dx,dy)||1, R=W*K.push, x0=p.x, y0=p.y, t0=Date.now();
+  (function step(){ const k=Math.min(1,(Date.now()-t0)/260), e=1-(1-k)*(1-k);
+    p.x=clamp(x0+dx/L*R*e,W*.02,W*.98); p.y=clamp(y0+dy/L*R*e,H*.02,H*.98); if(k<1) setTimeout(step,16); })();
+  if(K.stun) stunPlayer(ds,key,K.stun);
+  if(K.lean) try{ if(window.P3D&&P3D.knock) P3D.knock(ds,key,{lean:K.lean,ms:K.ms,dx,dy}); }catch(e){}
+  try{ if(typeof shakeScreen==='function') shakeScreen(K.shake[0],K.shake[1]); }catch(e){}
+  if(tier===3) try{ if(window.P3D&&P3D.flashAt) P3D.flashAt(p.x,p.y); }catch(e){}
+  return tier;
 }
 function manualShot(kind){
   if(window.P3D&&P3D.superCine2&&P3D.superCine2.active())return; // cinematic running — ignore
@@ -6253,7 +6341,10 @@ function staminaDenied(m){ sayThrottled(m); try{ if(window.SFX&&SFX.error) SFX.e
 const STUN={
   duel : { stun:2000, slow:1800, slowMult:0.55 },   // lost a field duel, either side
   whiff: { stun:1400, slow:1200, slowMult:0.60 },   // standing tackle missed or jumped
-  slide: { stun:2000, slow:1200, slowMult:0.60 }    // slide missed or jumped
+  slide: { stun:2000, slow:1200, slowMult:0.60 },   // slide missed or jumped
+  blockM:{ stun:600,  slow:600,  slowMult:0.70 },   // hit by a shot he blocked (BLOCK_KNOCK tiers)
+  blockH:{ stun:1100, slow:800,  slowMult:0.65 },
+  blockS:{ stun:1600, slow:1000, slowMult:0.60 }
 };
 function stunPlayer(side,k,kind){
   const pl=sq(side)&&sq(side)[k]; const S=STUN[kind]||STUN.duel;
@@ -6511,6 +6602,7 @@ function superBlockHit(b){
   (function step(){ const k=Math.min(1,(Date.now()-t0)/360), e=1-(1-k)*(1-k);
     p.x=clamp(x0+dx/L*R*e,W*.02,W*.98); p.y=clamp(y0+dy/L*R*e,H*.02,H*.98); if(k<1) setTimeout(step,16); })();
   stunPlayer(b.ds,b.k,'duel');
+  try{ if(window.P3D&&P3D.knock) P3D.knock(b.ds,b.k,{lean:BLOCK_KNOCK[3].lean,ms:BLOCK_KNOCK[3].ms,dx,dy}); }catch(e){}   // a super shot always knocks him flat
   G._ssWeaken=clamp(1-(0.15+0.25*clamp(b.str/b.power,0,1)),0.55,0.85);
   say('💥 '+nm+' is blown away — the shot loses power!');
 }
@@ -6991,8 +7083,8 @@ const CPU_CINE_COOLDOWN=20000;   // min ms between CPU super-shot cinematics
      gkRef  added to the CPU keeper's reflex for its simulated save QTE
      pace   CPU running speed (carrier, chasers, off-ball) - 2026-09-29
      think  CPU reaction / first-touch / look-up time multiplier (<1 = quicker) */
-const U11_DIFF={rookie:{cpu:0.88,sup:0.55,cool:1.6,gkRef:-12,pace:0.92,think:1.40},pro:{cpu:1,sup:1,cool:1,gkRef:0,pace:1,think:1},
-  champion:{cpu:1.08,sup:1.3,cool:0.8,gkRef:6,pace:1.04,think:0.80},legend:{cpu:1.16,sup:1.6,cool:0.6,gkRef:12,pace:1.08,think:0.65}};
+const U11_DIFF={rookie:{cpu:0.88,sup:0.55,cool:1.6,gkRef:-12,pace:0.92,think:1.40,alert:0.6},pro:{cpu:1,sup:1,cool:1,gkRef:0,pace:1,think:1,alert:1},
+  champion:{cpu:1.08,sup:1.3,cool:0.8,gkRef:6,pace:1.04,think:0.80,alert:1.25},legend:{cpu:1.16,sup:1.6,cool:0.6,gkRef:12,pace:1.08,think:0.65,alert:1.5}};
 function cpuPace(s){ return (typeof isCpuSide==='function'&&isCpuSide(s))?diffCfg().pace:1; }
 function cpuThink(s){ return (typeof isCpuSide==='function'&&isCpuSide(s))?diffCfg().think:1; }
 function diffCfg(){ let k='pro'; try{ k=(window.U11Settings&&U11Settings.get('diff'))||'pro'; }catch(e){} return U11_DIFF[k]||U11_DIFF.pro; }
@@ -7841,6 +7933,32 @@ function goLoose(x,y,vx,vy,touch){
   G.phase='loose';
   try{ if(typeof say==='function') say('Loose ball!'); }catch(e){}
 }
+/* keeper on a loose ball in his area (tickLoose). delay: frames (60 fps) he
+   needs to get up after the save; pounce: dive reach, fraction of W; edge: how
+   much further than the nearest outfielder he may be and still win it (hands);
+   speed: multiplier on the outfield chase speed */
+var GK_LOOSE={delay:30, pounce:0.022, edge:0.006, speed:0.95};
+function keeperLooseClaim(side){
+  const kp=PP[side].GK, keeper=sq(side).GK;
+  looseBall=null; ballTravel.active=false;
+  G.goalGen++; const gen=G.goalGen;
+  const target={x:ball.x,y:ball.y}; clampKeeperToArea(side,target);
+  G.phase='idle'; G._idleAt=0;
+  ball.tx=ball.x; ball.ty=ball.y; ball.bz=0;
+  gkAnim(side,'dive',{tx:target.x,ty:target.y,bz:0,ms:380,smother:true});
+  say(keeper.name+' pounces on the loose ball!');
+  const finish=()=>{
+    if(G.over||G.goalGen!==gen) return;
+    if(G.paused){ setTimeout(finish,100); return; }
+    PP[side].GK={...target}; PT[side].GK={...target};
+    gkAnim(side,'catch');
+    G.poss=side; G.ck='GK'; G.chk=null; G.tP++; if(side==='h')G.hP++;
+    ball.x=ball.tx=target.x; ball.y=ball.ty=target.y; ball.bz=GK_HAND_BZ;
+    G._gkHoldAt=0; G._gkGoalKick=false; G._cpuHoldUntil=0; G._idleAt=0;
+    G.phase='moving'; G.kickoffUntil=Date.now()+400; updP(); asnC();
+  };
+  setTimeout(finish,380);
+}
 function _assignLoose(side,key){
   looseBall=null;
   const k=key||validOutfieldKeys(side).find(x=>!ocd(side,x))||'CM2';
@@ -7981,6 +8099,21 @@ function tickLoose(dt){
     });
     if(cands[0]){ nearest[side]=cands[0].k; nd[side]=Math.hypot(PP[side][cands[0].k].x-ball.x,PP[side][cands[0].k].y-ball.y); }
   });
+  // KEEPER ON THE LOOSE BALL (author 2026-10-13: "make sure the gk will also try
+  // to get the ball after a parry, not only the players"). Inside his own area
+  // he comes off his line for it after a short get-up; close enough, he
+  // smothers it - he can use his hands, so he wins a ball he is level with.
+  for(const side of ['h','a']){
+    const kp=PP[side]&&PP[side].GK, gk=sq(side)&&sq(side).GK;
+    if(!kp||!gk||isStunned(gk)||lb.t<GK_LOOSE.delay) continue;
+    const inArea={x:ball.x,y:ball.y}; clampKeeperToArea(side,inArea);
+    if(Math.hypot(inArea.x-ball.x,inArea.y-ball.y)>0.5) continue;      // outside his area: he holds his ground
+    const dx=ball.x-kp.x, dy=ball.y-kp.y, d=Math.hypot(dx,dy)||1;
+    const rival=Math.min(nd.h,nd.a);
+    if(d<W*GK_LOOSE.pounce&&(ball.bz||0)<6&&d<=rival+W*GK_LOOSE.edge){ keeperLooseClaim(side); return; }
+    const sp=speed*GK_LOOSE.speed*fieldSpdMult(gk);
+    kp.x+=(dx/d)*Math.min(sp,d); kp.y+=(dy/d)*Math.min(sp,d); clampKeeperToArea(side,kp);
+  }
   // pickup
   const PICK=W*.010;
   if((ball.bz||0)<3&&(nd.h<PICK||nd.a<PICK)){ _assignLoose(nd.h<=nd.a?'h':'a', nd.h<=nd.a?nearest.h:nearest.a); return; }
@@ -8422,6 +8555,11 @@ function opDuel(isShot, committedAk){
   // so the old 2v1/1v2 second-defender path is gone entirely.
   // committedAk: shot already decided in field duel — attacker gets no second choice, no extra stamina cost
   G.D={carrier,def,dk,as,ds,isShot,ak:committedAk||null,pk:null,defA:null,duelStage:1};
+  /* a NORMAL shot is already in the keeper's face: it can't turn into a super
+     shot now - that would replay the charge cinematic for a ball that was
+     kicked long ago (author 2026-10-13). Super shots are chosen BEFORE the
+     kick: open play (superShotCine) or a field duel won with SPECIAL. */
+  G.D._noSuper=!!(isShot&&G._normalShotIn); G._normalShotIn=false;
   duelArmInput(G.D,committedAk);
   // a header's jump grade rides into ITS duel only (G.D is rebuilt per duel)
   if(committedAk==='header'){ G.D.headerEdge=G._pendingHeaderEdge||1; G._pendingHeaderEdge=null; }
@@ -9280,7 +9418,7 @@ function bldA(carrier,isShot){
   if(isShot){
     normals=[{id:'shoot',l:'Shoot',i:'⚽'}];
     const spec=getSpecial(carrier);
-    if(spec)specials=[{id:'special',l:spec.l,i:spec.i}];
+    if(spec&&!G.D._noSuper)specials=[{id:'special',l:spec.l,i:spec.i}];
   }else{
     normals=[{id:'pass',l:'Pass',i:'↑'},{id:'dribble',l:'Dribble',i:'▶'}];
     if(prog0>.50)normals.push({id:'shoot',l:'Shoot',i:'⚽'});
@@ -9472,7 +9610,7 @@ function aiAtk(){
   }
   const spec=getSpecial(carrier);
   const specialWindow = ENGINE_CONFIG.ai.specialWindowBase - Math.max(0, (bh.specialBias||1)-1)*0.05 - urg*0.06;
-  if(spec&&canAfford('special')&&(G.D.isShot||(cpuGoodShotAngle(side,cp)&&prog>specialWindow))){
+  if(spec&&canAfford('special')&&!G.D._noSuper&&(G.D.isShot||(cpuGoodShotAngle(side,cp)&&prog>specialWindow))){
     let specW=(G.D.isShot?6.0:1.6)+prog*5.0-pressure*0.6;
     specW *= (bh.specialBias||1) * (1+urg*0.65);
     // Specials are worth using from any range — they're powerful enough
@@ -10107,7 +10245,7 @@ function resDuel(){
   if(!duelResolveAllowed())return;
   // stat-gate safety net — no unearned supers regardless of input path
   if(G.D){
-    if(G.D.ak==='special'&&!canSuper(G.D.carrier,'special'))G.D.ak='shoot';
+    if(G.D.ak==='special'&&(G.D._noSuper||!canSuper(G.D.carrier,'special')))G.D.ak='shoot';   // _noSuper: a normal shot already in flight (opDuel)
     else if(G.D.ak&&isSuperAtk(G.D.ak)&&!canSuper(G.D.carrier,G.D.ak))
       G.D.ak={'super-pass':'pass','super-dribble':'dribble','super-one-two':'one-two'}[G.D.ak]||G.D.ak;
     if(G.D.defA&&isSuperDef(G.D.defA)&&!canSuper(G.D.def,G.D.defA))
@@ -10499,6 +10637,9 @@ function showActionCaption(title,sub,col){
   el.style.opacity='1'; el.style.transform='translateX(-50%) scale(1)';
   clearTimeout(el._t); el._t=setTimeout(()=>{ el.style.opacity='0'; },1400);
 }
+/* a narrow save (keeper wins by less than this) against a power shot is
+   FUMBLED instead of parried - console-tunable, 0 turns it off */
+var FUMBLE_MARGIN=8;
 function afSave(ds){
   if(duelLocked()) return;
   G._cineHold=false;
@@ -10539,13 +10680,20 @@ function afSave(ds){
   if(outcome==='goal')outcome=_cineFlow?'parry':'spill';   // the duel said save: never a goal here
   // A PUNCH never holds the ball — it knocks it back into play (loose rebound).
   if(gkDefA==='punch'&&outcome==='catch')outcome='spill';
+  /* FUMBLE (2026-10-13, reference study §1): a keeper who only JUST beats a
+     power shot can't hold it - the ball drops loose at his feet, a scramble
+     right in front of goal (a REBOUND is pushed out into play instead).
+     Power shot = the shooter's PWR >= TEC, the same split as the shot style. */
+  const _shooter=sq(ds==='h'?'a':'h')[G.D.carrier];
+  if(outcome==='parry'&&!isSuper&&gkDefA!=='punch'&&diff>=-FUMBLE_MARGIN&&_shooter&&(_shooter.pwr||0)>=(_shooter.tec||0))outcome='fumble';
   if(outcome==='catch')try{if(window.SFX&&SFX.save)SFX.save();}catch(e){}
   const superName=isSuper&&gk?getGKSuper(gk).l:'';
-  const outcomeText={catch:'CAUGHT!',parry:'PARRIED!',spill:'REBOUND!',goal:'GOAL!'};
+  const outcomeText={catch:'CAUGHT!',parry:'PARRIED!',spill:'REBOUND!',fumble:'FUMBLED!',goal:'GOAL!'};
   const outcomeDetail={
     catch:gk?(isSuper?gk.name.split('.').pop()+' — '+superName+'!':gk.name+' catches it cleanly!'):'Clean catch!',
     parry:gk?(isSuper?gk.name.split('.').pop()+' — '+superName+'!':gk.name+' parries it away!'):'Parried away!',
     spill:gk?gk.name+' spills it — loose!':'Loose ball!',
+    fumble:gk?gk.name+' can\'t hold it — loose in the box!':'Fumbled — loose in the box!',
     goal:'Unstoppable — GOAL!'
   };
 
@@ -10610,15 +10758,18 @@ function afSave(ds){
     }
     // spill / punch → real loose REBOUND: both sides scramble (goLoose). Keeper
     // touched it last, so if it rolls over the byline it's a CORNER.
-    const spillX=clamp(gkX+(dirFor(ds)>0?W*0.09:-W*0.09)+(Math.random()-.5)*W*0.06,W*0.05,W*0.95);
-    const spillY=clamp(gkY+(Math.random()-.5)*H*0.24,H*0.10,H*0.90);
+    // fumble → the same scramble, but the ball only drops a step from his feet.
+    const fum=outcome==='fumble';
+    const spillX=fum?clamp(gkX+(dirFor(ds)>0?W*0.025:-W*0.025)+(Math.random()-.5)*W*0.015,W*0.03,W*0.97)
+                    :clamp(gkX+(dirFor(ds)>0?W*0.09:-W*0.09)+(Math.random()-.5)*W*0.06,W*0.05,W*0.95);
+    const spillY=clamp(gkY+(Math.random()-.5)*H*(fum?0.08:0.24),H*0.10,H*0.90);
     if(!_cineFlow&&!_sm) gkAnim(ds,'parry',{ty:spillY});
     G.phase='pass_anim';
     animateBallTo(_sm?_sm.ex:gkX,_sm?_sm.ey:gkY,spillX,spillY,()=>{
       ro.classList.remove('show');
-      const ang=Math.atan2(spillY-gkY,spillX-gkX)+(Math.random()-.5)*1.0, spd=6+Math.random()*5;
+      const ang=Math.atan2(spillY-gkY,spillX-gkX)+(Math.random()-.5)*1.0, spd=fum?(1.5+Math.random()*2):(6+Math.random()*5);
       goLoose(spillX,spillY,Math.cos(ang)*spd,Math.sin(ang)*spd, ds);
-    },26);
+    },fum?14:26);
   }; // end doResolve
 
   // Supersave: the keeper's call + shake first, then resolve.

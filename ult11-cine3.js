@@ -18,6 +18,7 @@
 (function(){
 'use strict';
 const C3={on:true, built:false, chaseMul:1.0, veil:0.6,   // chaseMul 1.0 = mockup framing; veil = night-stage darkness
+  burst:{on:true, white:7, lines:6, ink:5},   // contact impact frame, frames @60fps (console: U11_CINE3.burst.on=false)
   /* mockup timeline (s): run-up 0.9 · charge 2.4 · flight 1.35 · goal shot ~1.6.
      game.js asks superHoldMs() for runUp+charge; pitch3d reads the rest. */
   runUp:0.9, charge:2.4, flyDur:1.35, goalHold:1.6, saveHold:1.0};
@@ -823,7 +824,7 @@ C3.flyFrame=function(c,rdt,A){
   if((c.tkl||c.icp||c.blk2)&&A.cv&&A.ctx){ C3._dirty=true; tklBanner(c,A,dt); }
   if(c.ultra&&window.U11_ULTRAFX&&A.cv&&A.ctx&&c._bw){ C3._dirty=true; const W=A.cv.width,H=A.cv.height, bp=A.proj(c._bw.x,c._bw.y,c._bw.z,W,H);
     U11_ULTRAFX.fly(c,dt,A,bp,ultraRpx(A,c._bw,fl?fl.S:A.hh/1.8,bp,W,H),{arr}); }
-  if(!imp){ setBloom(A,c.ultra?(arr&&arr.goal&&arr.t<0.4?0.5:0.25):(arr&&arr.goal&&arr.t<0.4?0.9:0.6)); mockBall(A,fl?fl.S:A.hh/1.8); return; }
+  if(!imp){ setBloom(A,c.ultra?(arr&&arr.goal&&arr.t<0.4?0.5:0.25):(arr&&arr.goal&&arr.t<0.4?0.9:0.6)); mockBall(A,fl?fl.S:A.hh/1.8); burstPost(A); return; }
   const S=imp.S; imp.t+=dt;
   const e=imp.t;
   if(e>=0&&!imp.fired) fireImpact(c,imp);
@@ -864,6 +865,7 @@ C3.flyFrame=function(c,rdt,A){
     g.restore();
   }
   if(e>2.2){ imp=null; setFilter(''); if(!fl){ glow.pts.visible=rocks.pts.visible=false; } }
+  burstPost(A);
 };
 
 /* ── ball path history → the comet is sampled from where the ball WAS over
@@ -977,7 +979,9 @@ C3.arrive=function(c,A){
   if(!C3.on) return false;
   build(A);
   const S=A.hh/1.8, C=COL.v;
-  arr={t:0,goal:!!A.isGoal};
+  /* burst only on a SHOT's arrival (it is the only caller that passes netHit);
+     the pass trap and the dribble burst reuse arrive() and must not flash */
+  arr={t:0,goal:!!A.isGoal,burst:!!(C3.burst.on&&A.netHit),bx:A.bx,by:A.by,bz:A.bz};
   c._hitStop=Math.max(c._hitStop||0,A.isGoal?0.1:0.08);
   if(c.ultra){ c._hitStop=Math.max(c._hitStop,0.3); try{ window.U11_ULTRAFX&&U11_ULTRAFX.sfx('impact'); }catch(e){} }
   if(A.isGoal){
@@ -993,6 +997,40 @@ C3.arrive=function(c,A){
   window.U11DBG&&U11DBG('[C3] arrive '+(A.isGoal?'goal':'save'));
   return true;
 };
+/* CONTACT BURST (2026-10-13, reference study §5): the second impact frame, on
+   the keeper's gloves / the net. White -> white with dark speed lines into the
+   contact point -> ink negative -> colour, ~0.3s. Frame counts are at 60 fps. */
+function burstStage(){
+  if(!arr||!arr.burst) return '';
+  const B=C3.burst, f=arr.t*60;
+  return f<B.white?'white':f<B.white+B.lines?'lines':f<B.white+B.lines+B.ink?'ink':'';
+}
+function burstFilter(){ return burstStage()==='ink'?'invert(1) grayscale(1) contrast(5)':''; }
+/* runs LAST in flyFrame (every exit), so the white sits over the comet and the
+   Ultra overlay, and the ink filter wins over the strike's own setFilter */
+function burstPost(A){
+  if(!arr||!arr.burst) return;
+  burstDraw(A);
+  const f=burstFilter();
+  if(f){ setFilter(f); arr._ink=true; }
+  else if(arr._ink){ setFilter(''); arr._ink=false; }
+}
+function burstDraw(A){
+  const st=burstStage(); if(!st||st==='ink'||!A.cv||!A.ctx) return;
+  C3._dirty=true;
+  const g=A.ctx,W=A.cv.width,H=A.cv.height;
+  g.save(); g.globalCompositeOperation='source-over';
+  g.fillStyle='#fff'; g.fillRect(0,0,W,H);
+  if(st==='lines'){
+    const bp=A.proj(arr.bx,arr.by,arr.bz,W,H), Rr=Math.hypot(W,H);
+    g.fillStyle='#111';
+    for(let i=0;i<48;i++){ const a=i/48*Math.PI*2+((i*7)%3)*0.03, w=0.010+((i*37)%5)*0.005;
+      const r0=Rr*(0.10+0.08*((i*13)%5)/5), r1=Rr*1.2;
+      g.beginPath(); g.moveTo(bp.x+Math.cos(a)*r0,bp.y+Math.sin(a)*r0);
+      g.lineTo(bp.x+Math.cos(a-w)*r1,bp.y+Math.sin(a-w)*r1); g.lineTo(bp.x+Math.cos(a+w)*r1,bp.y+Math.sin(a+w)*r1); g.closePath(); g.fill(); }
+  }
+  g.restore();
+}
 function arrival(c,dt,A){
   if(!arr) return;
   arr.t+=dt;
